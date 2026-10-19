@@ -232,7 +232,6 @@ public sealed class SdfSampledLattice {
     private readonly int m_samplesZ;
     private readonly float[] m_values;
     private readonly int[] m_materials;
-    private readonly Func<int, bool>? m_owns;
     private readonly Vector3[] m_gradients;
 
     private int m_factor = 1;
@@ -261,14 +260,11 @@ public sealed class SdfSampledLattice {
     /// <param name="samplesZ">The samples along Z, at least two.</param>
     /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array.</param>
     /// <param name="materials">One material per sample. The lattice keeps the array.</param>
-    /// <param name="owns">Whether a material belongs to the surface being contoured, or <see langword="null"/> when every
-    /// material does: a sample reporting a material the surface does not own reads as outside, and a quad whose outside
-    /// sample reports one takes its inside sample's.</param>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">An axis has fewer than two samples, a spacing is not positive, or an array's
     /// length does not match the lattice.</exception>
-    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, float[] values, int[] materials, Func<int, bool>? owns = null) {
+    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, float[] values, int[] materials) {
         ArgumentNullException.ThrowIfNull(argument: values);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
@@ -292,12 +288,7 @@ public sealed class SdfSampledLattice {
         m_samplesZ = samplesZ;
         m_values = values;
         m_materials = materials;
-        m_owns = owns;
         m_gradients = new Vector3[count];
-
-        for (var index = 0; (index < count); index++) {
-            m_values[index] = Owned(material: materials[index], value: values[index]);
-        }
     }
 
     /// <summary>Gets the fine cells along each axis of a coarse cell: one until <see cref="Refine"/> refines the
@@ -380,7 +371,7 @@ public sealed class SdfSampledLattice {
 
                         if (m_values[index] < 0f) {
                             mask |= (1 << offset);
-                        } else if (Owns(material: m_materials[index])) {
+                        } else {
                             mixed |= ((material != int.MinValue) && (material != m_materials[index]));
                             material = m_materials[index];
                         }
@@ -650,7 +641,7 @@ public sealed class SdfSampledLattice {
         }
 
         for (var index = 0; (index < values.Length); index++) {
-            m_fineValues[(first + index)] = Owned(material: materials[index], value: values[index]);
+            m_fineValues[(first + index)] = values[index];
             m_fineMaterials[(first + index)] = materials[index];
         }
     }
@@ -1129,9 +1120,7 @@ public sealed class SdfSampledLattice {
         var materials = new int[surface.QuadCount];
 
         for (var quad = 0; (quad < materials.Length); quad++) {
-            var outside = MaterialAt(key: surface.QuadCorners[quad]);
-
-            materials[quad] = (Owns(material: outside) ? outside : MaterialAt(key: surface.QuadInsideCorners[quad]));
+            materials[quad] = MaterialAt(key: surface.QuadCorners[quad]);
         }
 
         float[] normals = [.. surface.Normals.Select(selector: static value => ((float)value))];
@@ -1282,9 +1271,6 @@ public sealed class SdfSampledLattice {
         return ([.. keptQuads], [.. keptMaterials]);
     }
 
-    private bool Owns(int material) => ((m_owns is null) || m_owns(arg: material));
-    // A sample whose material the surface does not own reads as outside.
-    private float Owned(int material, float value) => (Owns(material: material) ? value : MathF.Abs(value));
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);

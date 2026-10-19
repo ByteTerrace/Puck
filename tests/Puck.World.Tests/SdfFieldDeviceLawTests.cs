@@ -43,6 +43,10 @@ public sealed partial class SdfFieldDeviceLawTests {
     private const uint WordsBinding = 0U;
     private const uint CasesBinding = 60U;
     private const uint ResultsBinding = 61U;
+    // The world interface's bindings of the instance masks (in the pass group) and the dynamic transforms (in the world
+    // group), which the per-instance probe reads.
+    private const uint MasksBinding = 1U;
+    private const uint TransformsBinding = 1U;
     // The results image's width, the kernel's FieldResultsWidth.
     private const uint ResultsWidth = 256U;
     private const uint GroupWidth = 64U;
@@ -118,9 +122,10 @@ public sealed partial class SdfFieldDeviceLawTests {
         );
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
-    // results back, one per case in leg order.
+    // results back, one per case in leg order. The per-instance probe also reads the legs' instance masks and the dynamic
+    // transforms, bound where the world interface binds them.
     private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector3[]? points = null,
-        Vector4[]? parameters = null) {
+        Vector4[]? parameters = null, string name = KernelName, uint[]? masks = null, Vector4[]? transforms = null) {
         points ??= Points;
         var caseCount = checked((legs.Count * points.Length));
 
@@ -130,11 +135,15 @@ public sealed partial class SdfFieldDeviceLawTests {
 
         var height = ((((uint)caseCount) + (ResultsWidth - 1U)) / ResultsWidth);
         var worldGroup = new GpuGroupLayoutDescription(
-            bindings: [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)],
+            bindings: [
+                new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: TransformsBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
+            ],
             ordinal: WorldGroup
         );
         var passGroup = new GpuGroupLayoutDescription(
             bindings: [
+                .. ((masks is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: MasksBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
                 new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                 new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
             ],
@@ -147,7 +156,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 pushesIndex: true,
                 stages: GpuShaderStage.Compute
             ),
-            Name: KernelName,
+            Name: name,
             PushConstantBinding: null
         );
         var caseWords = new uint[((caseCount + (parameters?.Length ?? 0)) * 4)];
@@ -189,8 +198,20 @@ public sealed partial class SdfFieldDeviceLawTests {
             usage: GpuBufferUsage.Storage
         );
         var programs = new List<IGpuStorageBuffer>(capacity: legs.Count);
+        using var maskBuffer = ((masks is null) ? null : services.BufferFactory.CreateHostVisible(
+            name: default,
+            sizeBytes: ((ulong)(masks.Length * sizeof(uint))),
+            usage: GpuBufferUsage.Storage
+        ));
+        using var transformBuffer = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
+            name: default,
+            sizeBytes: ((ulong)(transforms.Length * 4 * sizeof(float))),
+            usage: GpuBufferUsage.Storage
+        ));
 
         cases.Write<uint>(data: caseWords);
+        maskBuffer?.Write<uint>(data: masks);
+        transformBuffer?.Write<float>(data: MemoryMarshal.Cast<Vector4, float>(span: transforms));
 
         var bindings = services.Bindings;
         var pool = bindings.CreatePool(
@@ -228,6 +249,16 @@ public sealed partial class SdfFieldDeviceLawTests {
                 descriptorSetHandle: passSet,
                 imageViewHandle: output.ImageViewHandle
             );
+            if (maskBuffer is not null) {
+                bindings.WriteBuffer(
+                    binding: MasksBinding,
+                    bufferHandle: maskBuffer.BufferHandle,
+                    bufferSize: maskBuffer.SizeBytes,
+                    descriptorSetHandle: passSet,
+                    elementStride: sizeof(uint),
+                    kind: GpuBindingKind.ReadOnlyBuffer
+                );
+            }
             recorder.BeginCommandBuffer(commandBufferHandle: command);
             recorder.TransitionImageLayout(
                 commandBufferHandle: command,
@@ -264,6 +295,16 @@ public sealed partial class SdfFieldDeviceLawTests {
                     elementStride: (4U * sizeof(uint)),
                     kind: GpuBindingKind.ReadOnlyBuffer
                 );
+                if (transformBuffer is not null) {
+                    bindings.WriteBuffer(
+                        binding: TransformsBinding,
+                        bufferHandle: transformBuffer.BufferHandle,
+                        bufferSize: transformBuffer.SizeBytes,
+                        descriptorSetHandle: worldSet,
+                        elementStride: (4U * sizeof(float)),
+                        kind: GpuBindingKind.ReadOnlyBuffer
+                    );
+                }
                 ReadOnlySpan<uint> pushed = [(((uint)(index * points.Length)) | (((uint)points.Length) << 16))];
 
                 recorder.BindPipeline(

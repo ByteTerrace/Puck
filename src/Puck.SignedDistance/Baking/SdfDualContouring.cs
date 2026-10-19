@@ -16,8 +16,6 @@ internal sealed class SdfSurface {
     // nearest the surface the edge crosses, so its winning shape is that surface's, where the inside end of a shell thinner
     // than a cell can lie in the shape beneath.
     public required int[] QuadCorners { get; init; }
-    // Per quad, the corner at the inside end of the same edge.
-    public required int[] QuadInsideCorners { get; init; }
     // Per vertex, whether it lies on a crease or corner of the surface (Place's feature): empty where no vertex does.
     public bool[] Features { get; init; } = [];
     // Per vertex, whether its crossings' tangent planes drew it away from their mean (Place), as to a crease or to the
@@ -193,7 +191,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        var (quads, quadCorners, quadInsideCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
+        var (quads, quadCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
         return new SdfSurface {
             Features = [.. features],
@@ -201,7 +199,6 @@ internal static class SdfDualContouring {
             Normals = [.. normals],
             Positions = [.. positions],
             QuadCorners = quadCorners,
-            QuadInsideCorners = quadInsideCorners,
             Quads = quads,
         };
     }
@@ -335,7 +332,6 @@ internal static class SdfDualContouring {
 
         var quads = new List<int>();
         var quadCorners = new List<int>();
-        var quadInsideCorners = new List<int>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -365,7 +361,6 @@ internal static class SdfDualContouring {
             quads.Add(item: distinct[2]);
             quads.Add(item: distinct[((count == 4) ? 3 : 2)]);
             quadCorners.Add(item: (firstInside ? secondCorner : firstCorner));
-            quadInsideCorners.Add(item: (firstInside ? firstCorner : secondCorner));
         }
         // The patch of a whole cell nearest a point in fine coordinates: among its sign-changing coarse edges on one face
         // (faceAxis, faceSide), or on any face when faceAxis is negative or the face holds none.
@@ -566,7 +561,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(features: features, solveds: solveds, grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quadInsideCorners: quadInsideCorners, quads: quads, vertexPlanes: vertexPlanes);
+        return Merge(features: features, solveds: solveds, grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quads: quads, vertexPlanes: vertexPlanes);
     }
     // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at the feature
     // point their crossings' planes meet at (MergedFeature) or else their mean, with their mean normal, and drops the quads
@@ -606,7 +601,7 @@ internal static class SdfDualContouring {
             ? (x, y, z)
             : null);
     }
-    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, List<int> quadInsideCorners, Dictionary<int, double[]> vertexPlanes) where TLattice : ISdfRefinedContourLattice {
+    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, double[]> vertexPlanes) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
         var parent = new int[vertexCount];
 
@@ -716,7 +711,6 @@ internal static class SdfDualContouring {
 
         var mergedQuads = new List<int>(capacity: quads.Count);
         var mergedCorners = new List<int>(capacity: quadCorners.Count);
-        var mergedInsideCorners = new List<int>(capacity: quadInsideCorners.Count);
         Span<int> distinct = stackalloc int[4];
 
         for (var quad = 0; (quad < quadCorners.Count); quad++) {
@@ -741,7 +735,6 @@ internal static class SdfDualContouring {
             mergedQuads.Add(item: distinct[2]);
             mergedQuads.Add(item: distinct[((count == 4) ? 3 : 2)]);
             mergedCorners.Add(item: quadCorners[quad]);
-            mergedInsideCorners.Add(item: quadInsideCorners[quad]);
         }
 
         return new SdfSurface {
@@ -750,7 +743,6 @@ internal static class SdfDualContouring {
             Normals = [.. mergedNormals],
             Positions = [.. mergedPositions],
             QuadCorners = [.. mergedCorners],
-            QuadInsideCorners = [.. mergedInsideCorners],
             Quads = [.. mergedQuads],
         };
     }
@@ -1218,11 +1210,10 @@ internal static class SdfDualContouring {
     // edge along axis a are visited counter-clockwise about +a, which faces +a; the quad is reversed when the edge runs
     // from outside to inside, so every quad faces out of the surface. Each cell lends the vertex of the patch the edge
     // belongs to.
-    private static (int[] Quads, int[] QuadCorners, int[] QuadInsideCorners) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
+    private static (int[] Quads, int[] QuadCorners) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
         Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         var quads = new List<int>();
         var quadCorners = new List<int>();
-        var quadInsideCorners = new List<int>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -1282,12 +1273,11 @@ internal static class SdfDualContouring {
                         }
 
                         quadCorners.Add(item: (first ? secondCorner : firstCorner));
-                        quadInsideCorners.Add(item: (first ? firstCorner : secondCorner));
                     }
                 }
             }
         }
 
-        return ([.. quads], [.. quadCorners], [.. quadInsideCorners]);
+        return ([.. quads], [.. quadCorners]);
     }
 }

@@ -28,7 +28,6 @@ internal sealed class SdfMeshMaterialCut {
     private static readonly Vector2[] Quarters = [new(x: 0.25f, y: 0.25f), new(x: 0.75f, y: 0.25f), new(x: 0.75f, y: 0.75f), new(x: 0.25f, y: 0.75f)];
 
     private readonly SdfContour m_contour;
-    private readonly HashSet<int> m_owns;
     private int[] m_quarters = [];
     private int[] m_vertices = [];
     // The edges searched, keyed by their two vertices (lower first), each with the interval its boundary lies in, as a
@@ -41,11 +40,8 @@ internal sealed class SdfMeshMaterialCut {
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshMaterialCut"/> class.</summary>
     /// <param name="contour">The contour, split at its creases, in the frame its group bakes in.</param>
-    /// <param name="owns">The materials the group's shapes carry; a sample of any other reads as its quad's contour
-    /// material. Empty when every material is the group's.</param>
-    public SdfMeshMaterialCut(SdfContour contour, HashSet<int> owns) {
+    public SdfMeshMaterialCut(SdfContour contour) {
         m_contour = contour;
-        m_owns = owns;
     }
 
     /// <summary>Gets the mesh edges the cut searches for a boundary.</summary>
@@ -99,7 +95,7 @@ internal sealed class SdfMeshMaterialCut {
             for (var edge = 0; (edge < m_edges.Count); edge++) {
                 var middle = (0.5f * (m_from[edge] + m_to[edge]));
 
-                if (Resolve(material: materials[edge], fallback: m_vertices[m_edges[edge].Low]) == m_vertices[m_edges[edge].Low]) {
+                if (materials[edge] == m_vertices[m_edges[edge].Low]) {
                     m_from[edge] = middle;
                 } else {
                     m_to[edge] = middle;
@@ -108,8 +104,7 @@ internal sealed class SdfMeshMaterialCut {
         }
         m_round++;
     }
-    // The first round's answer: each quarter's and vertex's material, a material no shape of the group carries reading as
-    // the quad's (a vertex's, the first quad's around it), and the edges whose ends disagree.
+    // The first round's answer: each quarter's and vertex's material, and the edges whose ends disagree.
     private void AnswerFirst(ReadOnlySpan<int> materials) {
         var contour = m_contour;
         var quadCount = contour.QuadCount;
@@ -118,14 +113,12 @@ internal sealed class SdfMeshMaterialCut {
         m_vertices = new int[contour.VertexCount];
         Array.Fill(array: m_vertices, value: int.MinValue);
         for (var quad = 0; (quad < quadCount); quad++) {
-            var own = contour.QuadMaterials[quad];
-
             for (var index = 0; (index < 4); index++) {
                 var vertex = contour.Quads[((4 * quad) + index)];
 
-                m_quarters[((4 * quad) + index)] = Resolve(fallback: own, material: materials[((4 * quad) + index)]);
+                m_quarters[((4 * quad) + index)] = materials[((4 * quad) + index)];
                 if (m_vertices[vertex] == int.MinValue) {
-                    m_vertices[vertex] = Resolve(fallback: own, material: materials[((4 * quadCount) + vertex)]);
+                    m_vertices[vertex] = materials[((4 * quadCount) + vertex)];
                 }
             }
         }
@@ -294,7 +287,6 @@ internal sealed class SdfMeshMaterialCut {
         triangle[1] = corners[(1 + half)];
         triangle[2] = corners[(2 + half)];
     }
-    private int Resolve(int material, int fallback) => (((m_owns.Count == 0) || m_owns.Contains(item: material)) ? material : fallback);
     private static (int Low, int High) Key(int a, int b) => ((a < b) ? (a, b) : (b, a));
     // The point a fraction `t` along a searched edge from its lower vertex, and the normal there.
     private (Vector3 Position, Vector3 Normal) Along(int edge, float t) {

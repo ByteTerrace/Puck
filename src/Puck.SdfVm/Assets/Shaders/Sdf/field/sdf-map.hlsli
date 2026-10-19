@@ -213,7 +213,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         // already been reduced to direct local poses. The authored instruction stream remains intact for every
         // non-rigid segment and the CPU SdfFieldEvaluator, but the walk pays no opcode loop/switch/PHI lattice for
         // common articulated geometry. One dynamic slot is shared by the run, so a multi-primitive bone loads once.
-#ifndef SDF_VM_DISABLE_RIGID_PLAN
         [branch]
         if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) != 0u) {
             if (!sdfProgramRange(rigidPlanOffset, segmentCount, 1u)) { return sdfIsaErrorHit(); }
@@ -294,7 +293,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 continue;
             }
         }
-#endif
 
         [loop]
         for (uint index = segmentMeta.z; index < min(segmentMeta.w, sdfProgramLayout.instructionCount); index++) {

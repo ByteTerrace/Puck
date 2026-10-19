@@ -103,8 +103,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfWorkSteps += 1u;
         }
 
-        // The four taps sum to four times the spacing times the gradient.
-        gradient *= (0.25 / spacing);
+        // The four taps sum to four times the spacing times the gradient. mapCore scales what it returns by the program's
+        // step scale, a bound every instance's warps lower for the whole program; the group's own field is that answer
+        // over the step scale (SdfFieldDeviceLawTests.Instances).
+        float unscale = (1.0 / sdfProgramLayout.stepScale);
+
+        value *= unscale;
+        gradient *= ((0.25 / spacing) * unscale);
 
         uint word = (sample * 5u);
 

@@ -473,15 +473,6 @@ public sealed class SdfMeshPathBake {
             return;
         }
 
-        // The interpreter's walk can answer with a shape outside the group where it shares compiled parts with another
-        // instance; a sample whose winning material no shape of the group carries reads as outside, so the group meshes
-        // its own surface alone.
-        if (group.Materials.Count > 0) {
-            for (var index = 0; (index < count); index++) {
-                if (!group.Materials.Contains(item: materials[index])) { values[index] = MathF.Abs(values[index]); }
-            }
-        }
-
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
@@ -893,7 +884,6 @@ public sealed class SdfMeshPathBake {
                 cell: lattice.Cell,
                 materials: final.Materials,
                 origin: lattice.Origin,
-                owns: ((group.Materials.Count > 0) ? group.Materials.Contains : null),
                 samplesX: lattice.Dims.X,
                 samplesY: lattice.Dims.Y,
                 samplesZ: lattice.Dims.Z,
@@ -1102,7 +1092,7 @@ public sealed class SdfMeshPathBake {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
             group.Contour = contour;
-            group.Cut = new SdfMeshMaterialCut(contour: contour, owns: group.Materials);
+            group.Cut = new SdfMeshMaterialCut(contour: contour);
             group.Points = group.Cut.Points();
             group.PointMaterials = new int[group.Points.Length];
             group.PointsAnswered = 0;
@@ -1292,8 +1282,7 @@ public sealed class SdfMeshPathBake {
         // materials as they are, an instance group's by their place in MaterialOrder.
         public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
         public SdfMeshGeometry Sealed { get; private set; }
-        // The materials the group's shapes carry, and the same in the order its geometry numbers them.
-        public HashSet<int> Materials { get; } = [];
+        // The materials the group's shapes carry, in the order its geometry numbers them.
         public int[] MaterialOrder { get; private set; } = [];
 
         // The poses the group bakes through: the turn from world axes into its frame, then from its first slot three rows a
@@ -1308,7 +1297,6 @@ public sealed class SdfMeshPathBake {
         public void Seal() {
             Sealed = Geometry.Geometry;
             MaterialOrder = [.. Geometry.Materials];
-            Materials.UnionWith(other: MaterialOrder);
 
             var poses = Geometry.Poses;
 

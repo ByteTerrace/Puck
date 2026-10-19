@@ -677,9 +677,13 @@ the eight corner signs alone by joining the sign-changing cube edges along each
 face's marching-squares segments, so a cell two sheets cross holds a vertex for
 each and no edge of the mesh is shared by more than two quads. A face whose
 diagonal corners agree is cut to separate its inside corners whichever cell
-reads it, so the two cells that share a face agree and the mesh has no crack. A sample whose material no shape of the group carries reads as
-outside, since the walk can answer with a shape of another instance where
-compiled parts are shared.
+reads it, so the two cells that share a face agree and the mesh has no crack. The
+walk a group samples through answers that group's instances alone, compiled
+parts and rigid plans included, and each sample is the group's own field: the
+kernel divides out the program-wide step scale another instance's warps lower
+(`SdfFieldDeviceLawTests.Instances` holds both to the CPU evaluator over the
+instance alone, on Vulkan and Direct3D 12). A shape under a non-uniform `Scale`
+still samples a lower bound of its distance.
 
 A 1.5 cm cell cannot hold what the Moth's armour is made of: shells that thin to
 a knife edge (the top of a shin, the helmet's rim), paint layers a millimetre
