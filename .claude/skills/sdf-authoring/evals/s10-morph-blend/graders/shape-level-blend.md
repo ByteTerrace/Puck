@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response tells the author to use a shape-level blend instead.
+The response points the author to a blend that composes on a shape (such as Union, SmoothUnion, or a chamfer, groove or pipe blend) in place of Morph.

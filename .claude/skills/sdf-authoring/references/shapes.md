@@ -92,10 +92,13 @@ chamfered `Box` emits as an extruded ChamferedRectangle and a chamfered
 path in static and animated emission and in the deterministic contact field, and
 a `Convex` profile is the exact iq polygon SDF.
 
-`Superellipsoid` is exact and 1-Lipschitz over the whole admitted exponent range:
-`SdfProgramBuilder.Superellipsoid`'s remarks carry the derivation and
-`SuperellipsoidLawTests` the numeric proof. Every ellipsoid, and every
-non-uniformly scaled sphere, emits it at exponent 2.
+`Superellipsoid` is 1-Lipschitz over the whole admitted exponent range, so it
+never oversteps: `SdfProgramBuilder.Superellipsoid`'s remarks carry the
+derivation and `SuperellipsoidLawTests` the numeric proof. It is exact only at
+exponent 2 under a uniform scale; any other exponent or a per-axis scale is a
+bound, whose gain `creation shape` prints (`distance=bound gain=0.832` for
+exponent 3). Every ellipsoid, and every non-uniformly scaled sphere, emits it
+at exponent 2.
 
 Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
 `SdfTrapezoidProfileLawTests`.
@@ -208,7 +211,7 @@ are the authored ones. Strands closer than twice their radius fuse.
 
 | Field | Range | Null default |
 |---|---|---|
-| `material` | palette slot, clamped to [0, 16) | 0 |
+| `material` | palette slot, clamped to [0, 32) | 0 |
 | `blend` | see `composition.md` | `Union` |
 | `smooth` | blend radius, clamped [0, 0.5] | 0 |
 | `group` | ≥ 0 | 0, ungrouped |
@@ -223,8 +226,8 @@ are the authored ones. Strands closer than twice their radius fuse.
 
 ### Motion
 
-`swings` and `slides`, up to 4 each; see `rig.md`. A shape carrying `domain`
-folds may not carry either.
+`swings` (up to 8) and `slides` (up to 4); see `rig.md`. A shape carrying
+`domain` folds may not carry either.
 
 ## Contact admission
 
