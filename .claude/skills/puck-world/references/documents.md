@@ -30,10 +30,8 @@ shape is what it is, an ordering rule, a refusal condition, a worked trap.
 
 **`.puck` is the authoring surface; JSON is the compiled wire form.** Every
 JSON block in this reference and its split files is what a `.puck` source
-compiles to, not the recommended way to type it — except the flagship live
-world (`Assets/worlds/puck.world.json`) and one AGB cartridge, which are
-authored and shipped as raw JSON today with no `.puck` source in the tree; say
-so plainly rather than treating DSL authorship as already universal. The `.puck`
+compiles to, not the recommended way to type it; every live world under
+`src/Puck.World/Assets/worlds/` is `.puck` source. The `.puck`
 language itself — grammar, `let`/`template`/`import`/`export`, units, the
 compile-time collection builtins, string/indexing forms, and the
 `compile`/`decompile`/`lint`/`format`/`lsp` CLI verbs and `PUCKnnn` diagnostics —
@@ -135,7 +133,7 @@ schema cannot state on its own:
 | [documents-state.md](documents-state.md) | The `state` section: rows/cells, kinds, envelopes, the `advance`/`dynamics`/`cycle` traits, keyed-row eviction, reserved `$` names, `state.lattices` + the `lattice` trait, authored randomness (source/site/moment), `search`, `navigation`, the tabletop primitive, discrete-board patterns, records, pools, and retained turns. |
 | [documents-render.md](documents-render.md) | `render` defaults, `dynamics` (the personality table), `curves`, `views.graphs`, kit producer `flock`, crowd-scale policies, render validation and stamp capacity, the `rigid`/`carry`/`tether` facets. |
 | [documents-motion.md](documents-motion.md) | A kit's `motion` row: `holds` (the only spelling of a vertical channel), `shaping` (velocity response), behaviour as program operations and their parameters (`planarTarget`), the worked kart example, body facts on the wire, `views.seatRig`. |
-| [documents-composition.md](documents-composition.md) | Boot-authored topology/timing members (`References`, `Gravity`, `Portals`, `Simulation`, `Adjacencies`, `Metadata`); the districts; the worked `puck.world.json` walkthrough (debugRoom, chessBoard, drinkMe/eatMe); the sculpting library; `basis`/`imports` composition and merge rules; the validator; serialization conventions. |
+| [documents-composition.md](documents-composition.md) | Boot-authored topology/timing members (`References`, `Gravity`, `Portals`, `Simulation`, `Adjacencies`, `Metadata`); engine facts the quarantined worlds exercised (placement primitives, derived limits, author frame, body scale, contact); the sculpting library; `basis`/`imports` composition and merge rules; the validator; serialization conventions. |
 | [documents-identity.md](documents-identity.md) | Owned-world identity documents: the catalog, seeding, discard/refusal classes, `WorldIdentity`, facts, seating, cross-document durable-state writes. |
 | [documents-binding.md](documents-binding.md) | `WorldBindingComposer`: layer merge rules, context rows, wheel rows, the binding bar. |
 
@@ -204,14 +202,14 @@ its whole authority surface.
 - `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 4096`,
   `LocalSeatCount = 4` (indices 0–3) — single-sourced against
   `WorldClient.EntityCapacity` (see
-  [SKILL.md](../SKILL.md)'s "Boundaries worth knowing" section). The client reserves full
+  [SKILL.md](../SKILL.md)'s "Limits worth knowing" section). The client reserves full
   catalog detail for the first `DetailedRenderBand` (128) indices and emits
   later active bodies as one-instance coarse capsules. That hybrid bounds
   storage and SDF inputs; it
   does not establish dense-crowd frame time. Hard presentation targets require
   a non-per-creature SDF lane (for example raster impostors or an authored
-  aggregate). Existing shipped worlds may still author
-  `networkPlayers: 124` as ordinary document data, not an engine ceiling.
+  aggregate). A world's `bodies.networkPlayers` is ordinary document data, not
+  an engine ceiling.
 - `WorldLookSource.Catalog.RigCount` is the reusable appearance count, not
   body capacity. `DefaultIndex` cycles fresh slot picks through that catalog;
   an admitted occupant carries its pick across transfers. The client reserves
@@ -235,15 +233,13 @@ its whole authority surface.
   independent value), `TimelineSecondsPerFrame = 8f/60f`, and the reserved
   derived-face screen band. The stamp pool's worst-case instance draw is
   `MaxStampRegistrations x MaxShapesPerStamp` against
-  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`. `MaxShapesPerStamp`
-  is sized so the shipped overworld's whole COMPOSED boot probe (the
-  presenter's four emitters: the scene — stamp pool, avatar catalog, static
-  placements, screens — plus the SDF-document, adjacency-band, and field
-  reservations) stays at least 4096 instances under that cap; the scene
+  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`. A world's whole
+  COMPOSED boot probe (the presenter's four emitters: the scene — stamp pool,
+  avatar catalog, static placements, screens — plus the SDF-document,
+  adjacency-band, and field reservations) must fit under that cap; the scene
   emitter alone under-counts by the adjacency and field reservations.
-  `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`
-  enforces the floor and prints the current figures on its
-  `world.budget probe:` output line.
+  `world.budget` reports the composed render figures where a render probe is
+  attached (windowed composition fills them).
 - `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".

@@ -1,12 +1,15 @@
 {
   "seed": 722372733,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the 3 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the first 3 cases, on case counts only, before any case had been run. Every later case is assigned by the rule alone.",
   "train": [
     "e02-gba-siocnt-partner-ready",
-    "e03-mode0-interrupt-delay"
+    "e03-mode0-interrupt-delay",
+    "e04-cosim-short-run-proves-nothing",
+    "e05-snapshot-layout-law-fails"
   ],
   "test": [
-    "e01-stop-with-pending-interrupt"
+    "e01-stop-with-pending-interrupt",
+    "e06-idle-fast-path-equivalence"
   ]
 }

@@ -56,7 +56,8 @@ README's presentation inspection section owns the user contract.
 To aim a view from the console (frame a spot, orbit, restore) use the operator
 camera, `view.override camera pose|look|orbit|turn|swing|move|fov`
 ([views.md](views.md#verbs)), never `player.look`: that is a seat input and
-turns nothing while `seatLook` sensitivity is zero. It is a composition leaf
+turns nothing while the seat camera feel's (`seatCameraFeel`) stick rate is
+zero. It is a composition leaf
 (`WorldComposition.SetOperatorCamera`), so it works in a headless boot, answers
 with the absolute pose it set, and `world.view.state` reads it back.
 
@@ -649,7 +650,8 @@ Immediate composition of `WorldStateDisclosure.Compose` for an EXPLICITLY named
 principal (`PrincipalTokens.TryParse`'s token grammar, the same
 `world.grant`/`world.why` take), so the operator's console can inspect what
 seat1 sees and what seat2 sees without submitting as either — the read-back
-side of a hidden-hand table (see `games/poker.puck`). Any other principal may
+side of a hidden-hand table (the quarantined
+`experimental/src/Puck.World/Assets/worlds/games/poker.puck`). Any other principal may
 name only itself; naming another is refused by name.
 
 **Disclosure chokepoint.** A seat's own console session reaches every verb, so a
@@ -679,7 +681,8 @@ screen: the author chooses what that screen shows, and a binding to a restricted
 row shows it to everyone in the room. The disclosure boundary for a remote peer is
 the wire projection (`WorldProjection.Compose` → `WorldStateDisclosure.Disclose`, which
 carries the dealt and responsive placements too), and for a local seat's console it is
-the read view above; `LineupDealLawTests` holds both for lineup's hidden galleries and
+the read view above; the quarantined `LineupDealLawTests`
+(`experimental/tests/Puck.World.Games.Tests/`) held both for lineup's hidden galleries, and
 `PlacementResponseDisclosureLawTests` for a gate swapped on a hidden slot. On the
 federation lanes a traveler's route answer and its `ObserveTraveler` stream compose for
 the traveler's own peer principal (`WorldFederationCodec.EncodeRoute` derives it from the

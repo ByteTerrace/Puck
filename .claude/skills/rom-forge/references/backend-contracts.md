@@ -13,25 +13,23 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
   add through `add hl, de` and subtract through a borrow chain, and the comparison
   walks a byte at a time with `>`/`<=` swapping their operands. Seeding writes both
   bytes.
-- CGB variables: `0xC200..0xC27F`; `0xC280` retains the prior held byte before
-  `InputModule.EmitTick`, whose own previous field is advanced inside its call;
-  `0xC281` stages a value for a step that needs one address at a time, `0xC282` is the out-of-range discard sink, and
-  arrays pack upward from `0xC283` to `0xDFFF`. AGB mirrors this with the sink at
-  `0x020000C0` and arrays from `0x02000900`.
-  The compiler uses `FrameworkKernel` and input primitives directly, with no
-  save, victory or C# game-state callbacks in generated player cartridges.
+- The memory maps are stated once, in the class summaries of `HgbCartridgeCompiler` and
+  `AgbCartridgeCompiler` and in `FrameworkMemoryMap` and `AgbForgeMemoryMap`. Read a cartridge
+  variable at the address `CartridgeCompilation.Variables` reports, never a copied number. The
+  window layout has three hazards: a discard sink absorbs an out-of-range array write, one byte
+  holds the previous held-input value that `InputModule.EmitTick` advances inside its own call, and
+  arrays pack upward from just above the variable window (the `scene` snapshot byte moves them).
+  The compiler uses `FrameworkKernel` and input primitives directly, with no save, victory or C#
+  game-state callbacks in generated player cartridges.
 - A `$light` read on CGB writes RP (`0xFF56`) with `0xC0` — both data-read-enable
   bits, lamp off — then reads it back: bit 1 is low while light arrives, and a lit
   lamp would read as its own light. Nothing else in a generated cartridge writes RP.
 - CGB shadow OAM: `0xC100`; the VBlank handler invokes the HRAM DMA trampoline
   and advances the frame counter. Fixed code/data windows are 0x0150..0x3FFF
   and 0x4000..0x7FFF. The header is Color-required MBC1+RAM+battery.
-- AGB variables: `0x02000040..0x020000BF`; kernel state is the preceding 64
-  bytes. Above them: `0x020000C4` queue count, `0x020000C8` the queue's 24
-  entries of (row, column, tile, palette), `0x02000130` the four voices' state,
-  `0x02000200` the save mirror. Mode-0 background map uses screenblock 31; tiles and object graphics
-  use their native VRAM regions. Code starts at `0x080000D8`, data at
-  `0x0800C000`; the image is at least 64 KiB and grows with its data blob.
+- The AGB image is at least 64 KiB and grows with its data blob; code and data sit in fixed
+  windows (`AgbForgeCartridge.CodeOffset`, `DataOffset`, `MaxRoutineBytes`), and the mode-0
+  background map uses screenblock 31.
 - The AGB frame wait halts: the boot prologue sets DISPSTAT's V-blank enable
   (bit 3) and IE's V-blank bit, IME stays clear, and each frame sync writes 1 to
   IF to drop a stale request, then a zero byte to HALTCNT (`0x04000301`). The

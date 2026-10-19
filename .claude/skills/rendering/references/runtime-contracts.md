@@ -22,7 +22,7 @@ and each lease retires exactly once.
   (`src/Puck.Hosting/GpuImageLease.cs`). A recording holds it in its frame
   slot's `LeaseRetireList` (`Hold`, `MoveTo`, `RetireAll`), which retires it
   after that slot's fence.
-- A node's own published image (`HeldImage` in
+- A node's own published image (a `HeldResource` in
   `ShaderPipelineRenderNode.Retirement.cs`) is disposed at the fence of the
   submission made `RetirementLag` (2) submissions after it stopped being
   published. A replaced graph is retired once the queue finishes the node's
@@ -102,8 +102,9 @@ yields an empty, default or stale result that the frame presents as success.
 `RenderGraphRuntimeLawTests.Alias`
 (`APassWhoseOutputAnotherPassReadsIsRefusedByNameWhenItDrawsNothing`,
 `AnOutputCannotStandForAPreviousFrameInputAndIsRefusedByName`),
-`RenderGraphRuntimeLawTests.UnboundReads`, and the `pipeline-package` and
-`no-device-compile` canaries.
+`RenderGraphRuntimeLawTests.UnboundReads`. The `pipeline-package` and
+`no-device-compile` canaries that held it on the real World are quarantined
+under `experimental/tests/Puck.World.Canaries` with every other canary.
 
 **Violations to hunt.** A path that returns null, empty or a default handle and
 lets the frame present; a stand-in bound without being recorded; a refusal
@@ -229,8 +230,10 @@ descriptors by their bound handles as well as their slot and tables.
 and `RenderGraphSchedulerLawTests.History`.
 
 **Verification boundary.** CPU laws hold scheduling, cursor recovery and
-submission callbacks on a fake device. Temporal and device-loss canaries and
-parity hold the backend recordings and pixels on Vulkan and Direct3D 12.
+submission callbacks on a fake device. Nothing automated holds the backend
+recordings and pixels while the temporal and device-loss canaries are
+quarantined and no parity world exists; a change here shows its backends'
+captures.
 
 **Violations to hunt.** History reset every refresh period by a divisor (the
 view never converges); history kept across a cut, a crossing into another

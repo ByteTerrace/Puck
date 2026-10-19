@@ -1,0 +1,15 @@
+{
+  "seed": 1971485776,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 2 of the first 3 cases (f01 to f03), on case counts only, before any case had been run. Every later case is assigned by the rule alone.",
+  "train": [
+    "f02-effect-on-a-music-voice",
+    "f03-verifier-reads-ff-from-wram",
+    "f04-cost-weight-tuned-to-fit",
+    "f06-agb-display-control-second-writer"
+  ],
+  "test": [
+    "f01-forge-play-a-puck-source",
+    "f05-world-rule-refuses-cartridge-forms"
+  ]
+}

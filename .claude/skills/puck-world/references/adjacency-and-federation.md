@@ -151,9 +151,11 @@ proof. What a verified diamond proves is authenticated consistency of the
 signed statements within a signed validity window, not real-world truth and not
 equality to any document the reader never saw.
 
-The five quilt documents are the worked stress example: four coloured ground
-worlds meet at one corner and `quilt-island` is vertically adjacent to all
-four. They are test content, not charter game worlds.
+The five quilt documents (quarantined under
+`experimental/src/Puck.World/Assets/worlds/shards/`) are the worked stress
+example: four coloured ground worlds meet at one corner and `quilt-island` is
+vertically adjacent to all four. No live world authors an adjacency; the debug
+world reaches the garden through a portal instead.
 
 ## Runtime ownership and handoff
 
@@ -568,16 +570,18 @@ dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release 
 dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 
-To watch a crossing run end to end, use `puck canary seamless-adjacency` for
+No live canary exercises a crossing: the canary manifests and quilt worlds are
+quarantined under `experimental/`, so `puck canary` finds none of the ids
+below. They record what the crossing proofs covered: `seamless-adjacency` for
 the driven crossing on NW's east face
 (its tape set pairs NW's departure with NE's own taped arrival and names the
 crossing verified),
-`puck canary quilt-nw-gap-edge-carry` for the undriven one (a body placed past
+`quilt-nw-gap-edge-carry` for the undriven one (a body placed past
 NW's own ground on the `south` face's centre line is minted a crossing by the
 per-tick scan alone; quilt-nw-gap drops that adjacency, so the identical body
-falls the full sixteen units instead), `puck canary
-seamless-four-corners-circuit` for the colocated four-hop ring, and `puck
-canary four-corners-sharded` for the federated hop: five real `Puck.World`
+falls the full sixteen units instead),
+`seamless-four-corners-circuit` for the colocated four-hop ring, and
+`four-corners-sharded` for the federated hop: five real `Puck.World`
 processes (four ground worlds and the floating island), each binding its own
 dynamic loopback endpoint and trusting the others' generated federation
 identity, with one driven body crossing NW's east face onto NE's own process.

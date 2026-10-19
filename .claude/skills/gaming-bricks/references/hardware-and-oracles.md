@@ -386,9 +386,12 @@ self-checking Post stage or golden replay is a gate.
 - The SingleStepTests/sm83 corpus has documented conflicts for STOP (`10`) and
   EI (`fb`). The corpus models STOP as a flat one-byte instruction, while the
   core consumes the pad byte when no interrupt is pending and leaves it when
-  one is pending. The corpus also re-arms EI when IME is already enabled,
-  while the acceptance `ei_sequence` behavior pins the core's no-op. Keep
-  these as explicit oracle-conflict skips, not silent exclusions.
+  one is pending (`ExecuteStop` in `Sm83.Decode.cs`; the pending test is
+  `IE & IF`, independent of IME). The Tier-A `sm83-stop-pending-interrupt`
+  stage covers the pending edge the corpus cannot. The corpus also re-arms EI
+  when IME is already enabled, while the acceptance `ei_sequence` behavior
+  pins the core's no-op. Keep these as explicit oracle-conflict skips in the
+  `sst-sm83` stage, not silent exclusions.
 - BESS import/export is diagnostic cross-emulator evidence. Its
   self-consistency checks do not turn a foreign emulator into a gate.
 - The Advanced commercial link-game stage currently documents an unmodeled

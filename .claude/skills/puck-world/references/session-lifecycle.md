@@ -144,7 +144,7 @@ body reference. **Value semantics:** the remaining grace ticks
 A body that is not parked, or a reference that resolves to no live body at
 all, reads `0` (the ordinary "absent/inapplicable reads as the neutral falsy
 value" convention `$region:`/`$machine:` already set — NOT the inverted
-`s_noBodyDistance` sentinel `$distance:` uses, since `0` is the correct
+`NoBodyDistance` sentinel (`WorldRuleHost`) `$distance:` uses, since `0` is the correct
 "never gate open on a body that was never parked" answer here).
 `WorldRuleHost.Read(ParkedOperand)` over `WorldPopulation.ParkedRemainingTicks` is
 the runtime read; `WorldFactsCompiler`'s `ResolveOperand` is the compile-time
@@ -172,7 +172,7 @@ window; and a `$parked:body:<n>` threshold gate (`Edge` mode, paired with
 its own clear-on-resume `Edge` rule) demonstrates a rule reacting to the
 LIVE remaining-grace value, not just its parked/unparked boolean. Nothing
 here is a new predicate, effect, or reserved channel — it is the SAME
-substrate the arena district's targeting and attack rules
+substrate the quarantined arena district's targeting and attack rules
 already exercise, aimed at `$parked:` instead of `$distance:`/`$argmax:`
 alone. `reconnectGraceSeconds: 0` is the standing break-once control: the
 SAME document with that one field zeroed tears the body down immediately on
