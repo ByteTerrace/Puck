@@ -1855,6 +1855,13 @@ dynamics [
     r: 0
     zeta: 0.5
   }
+  // The boot jets' flame: lit within a few frames of the air jump and out within a quarter second of its cut.
+  {
+    f: 6
+    name: "boot-boost"
+    r: 0
+    zeta: 1
+  }
 ]
 
 gravity {
@@ -1982,7 +1989,7 @@ kits {
         }
       }
       // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
-      // makes of the holds' 28:46 arc, a second press in the air jumps again, and letting go while still rising cuts the
+      // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
       // arc short. North or F switches flight mode.
       actions {
         jump {
@@ -2009,6 +2016,18 @@ kits {
               scaleVerticalVelocity(factor: 0.45)
             ]
           }
+          // Leaving the ground without jumping (walking off a ledge) spends the ground jump, so the one left is the
+          // air jump her boot jets push.
+          onFact [
+            {
+              fact: "Airborne"
+              mode: "Edge"
+              gate: compareState(state: jumps, comparison: Equal, value: 2)
+              effects [
+                addState(state: jumps, value: -1)
+              ]
+            }
+          ]
         }
         // A press is counted, then flipped on the next tick whether she stands or flies: on to 1000, or off to 0.
         flight {
@@ -2098,11 +2117,13 @@ looks {
         replayFrames: false
         secondsPerFrame: 0
         // Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she
-        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights.
+        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the
+        // boot jets' flame under the air jump.
         lanes [
           0
           bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body])
           bodyState($body, flightFuel) / 1000
+          bootBoost[$body]
         ]
         poses {
           blink: "state.blink.$body"
@@ -7860,6 +7881,85 @@ prototypes {
             }
           ]
         }
+        // The boot jets under each sole, dark but for the air jump's boost.
+        {
+          kind: "flow"
+          parent: "boot-left"
+          position [0, -0.41, 0]
+          rotation [0, 0, 0, 1]
+          halfExtent [0.1, 0.22, 0.1]
+          axis: 0.44
+          width: 0.06
+          spread: 1.5
+          fade: 0.8
+          noiseScale: 0.05
+          noiseDepth: 0.4
+          speed: 2.5
+          seed: 53
+          steps: 32
+          intensity: 320
+          extinction: 1.2
+          pulseAmplitude: 0.06
+          pulseFrequency: 18
+          intensityLane: 3
+          ramp [
+            {
+              density: 0
+              color: "#134D8B"
+            }
+            {
+              density: 0.3
+              color: "#238EDB"
+            }
+            {
+              density: 0.65
+              color: "#57DCEE"
+            }
+            {
+              density: 1
+              color: "#DCFCFF"
+            }
+          ]
+        }
+        {
+          kind: "flow"
+          parent: "boot-right"
+          position [0, -0.41, 0]
+          rotation [0, 0, 0, 1]
+          halfExtent [0.1, 0.22, 0.1]
+          axis: 0.44
+          width: 0.06
+          spread: 1.5
+          fade: 0.8
+          noiseScale: 0.05
+          noiseDepth: 0.4
+          speed: 2.5
+          seed: 59
+          steps: 32
+          intensity: 320
+          extinction: 1.2
+          pulseAmplitude: 0.06
+          pulseFrequency: 18
+          intensityLane: 3
+          ramp [
+            {
+              density: 0
+              color: "#134D8B"
+            }
+            {
+              density: 0.3
+              color: "#238EDB"
+            }
+            {
+              density: 0.65
+              color: "#57DCEE"
+            }
+            {
+              density: 1
+              color: "#DCFCFF"
+            }
+          ]
+        }
       ]
       effectors [
         {
@@ -8003,6 +8103,22 @@ rule "airborne-off" {
   airWings[$each] = 0
 }
 
+// The air jump spends her last jump: the boot jets fire for a quarter second, then ease out.
+rule "boot-boost-on" {
+  when bodyState(each, jumps) == 0 and fact(each, Airborne) == 1 and bodyState(each, flightFuel) == 0
+  mode: Edge
+  forEach: bootBoost
+  bootBoost[$each] = 1
+  schedule bootBoostEnd[$each] in 0.25s
+}
+
+rule "boot-boost-off" {
+  when bootBoost[$each] == 1 and $tick >= bootBoostEnd[$each]
+  mode: Level
+  forEach: bootBoost
+  bootBoost[$each] = 0
+}
+
 rule "blink-close" {
   when blink[$each] == 0 and $tick >= blinkAt[$each]
   mode: Level
@@ -8098,6 +8214,22 @@ state {
       ]
       kind: "Fixed"
       name: "airWings"
+    }
+    row {
+      cells [
+        {
+          dynamics {
+            row: "boot-boost"
+          }
+          key: "0"
+          value: "0"
+        }
+      ]
+      kind: "Fixed"
+      name: "bootBoost"
+    }
+    table bootBoostEnd {
+      "0" = 0
     }
     table blink {
       "0" = 0
