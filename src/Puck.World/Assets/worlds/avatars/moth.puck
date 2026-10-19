@@ -5146,7 +5146,7 @@ prototypes {
       shape Cylinder "heelHousing-left" {
         id: 202
         position [0.2, 0.15, -0.15]
-        rotation [diagonal, 0, 0, diagonal]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
         blend: "SmoothUnion"
@@ -5158,8 +5158,8 @@ prototypes {
 
       shape Cylinder "heelRing-left" {
         id: 203
-        position [0.2, 0.15, -0.172]
-        rotation [diagonal, 0, 0, diagonal]
+        position [0.2, 0.130947, -0.161]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.085, 0.016, 0.085]
         material: steel
         blend: "Union"
@@ -5170,8 +5170,8 @@ prototypes {
 
       shape Cylinder "heelInset-left" {
         id: 204
-        position [0.2, 0.15, -0.181]
-        rotation [diagonal, 0, 0, diagonal]
+        position [0.2, 0.123153, -0.1655]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.066, 0.016, 0.066]
         material: jet
         parent: "boot-left"
@@ -5180,7 +5180,8 @@ prototypes {
 
       shape Superellipsoid "heelLight-left" {
         id: 205
-        position [0.2, 0.15, -0.19]
+        position [0.2, 0.115359, -0.17]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.05, 0.05, 0.012]
         material: thrusterCyan
         parent: "boot-left"
@@ -5189,7 +5190,8 @@ prototypes {
 
       shape Superellipsoid "heelCore-left" {
         id: 980
-        position [0.2, 0.15, -0.196]
+        position [0.2, 0.110163, -0.173]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.022, 0.022, 0.01]
         material: thrusterGlow
         parent: "boot-left"
@@ -6878,7 +6880,7 @@ prototypes {
       shape Cylinder "heelHousing-right" {
         id: 270
         position [-0.2, 0.15, -0.15]
-        rotation [diagonal, 0, 0, diagonal]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
         blend: "SmoothUnion"
@@ -6890,8 +6892,8 @@ prototypes {
 
       shape Cylinder "heelRing-right" {
         id: 271
-        position [-0.2, 0.15, -0.172]
-        rotation [diagonal, 0, 0, diagonal]
+        position [-0.2, 0.130947, -0.161]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.085, 0.016, 0.085]
         material: steel
         blend: "Union"
@@ -6902,8 +6904,8 @@ prototypes {
 
       shape Cylinder "heelInset-right" {
         id: 272
-        position [-0.2, 0.15, -0.181]
-        rotation [diagonal, 0, 0, diagonal]
+        position [-0.2, 0.123153, -0.1655]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.066, 0.016, 0.066]
         material: jet
         parent: "boot-right"
@@ -6912,7 +6914,8 @@ prototypes {
 
       shape Superellipsoid "heelLight-right" {
         id: 273
-        position [-0.2, 0.15, -0.19]
+        position [-0.2, 0.115359, -0.17]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.05, 0.05, 0.012]
         material: thrusterCyan
         parent: "boot-right"
@@ -6921,7 +6924,8 @@ prototypes {
 
       shape Superellipsoid "heelCore-right" {
         id: 981
-        position [-0.2, 0.15, -0.196]
+        position [-0.2, 0.110163, -0.173]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.022, 0.022, 0.01]
         material: thrusterGlow
         parent: "boot-right"
@@ -7881,12 +7885,12 @@ prototypes {
             }
           ]
         }
-        // The boot jets under each sole, dark but for the air jump's boost.
+        // The boot jets, one out of each heel thruster's lens, dark but for the air jump's boost.
         {
           kind: "flow"
-          parent: "boot-left"
-          position [0, -0.37, 0]
-          rotation [0, 0, 0, 1]
+          parent: "heelLight-left"
+          position [0, 0, -0.19]
+          rotation [0.707107, 0, 0, 0.707107]
           halfExtent [0.08, 0.18, 0.08]
           axis: 0.36
           width: 0.045
@@ -7923,9 +7927,9 @@ prototypes {
         }
         {
           kind: "flow"
-          parent: "boot-right"
-          position [0, -0.37, 0]
-          rotation [0, 0, 0, 1]
+          parent: "heelLight-right"
+          position [0, 0, -0.19]
+          rotation [0.707107, 0, 0, 0.707107]
           halfExtent [0.08, 0.18, 0.08]
           axis: 0.36
           width: 0.045
