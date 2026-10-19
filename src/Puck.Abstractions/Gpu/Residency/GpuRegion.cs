@@ -496,6 +496,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     public bool OwesCarry => (m_carrySource is not null);
     /// <summary>Gets the retained CPU upload-header scratch payload bytes, excluding managed array overhead.</summary>
     public ulong CpuScratchBytes => (((ulong)m_header.LongLength) * sizeof(uint));
+    /// <summary>Gets the handle of the pipeline <see cref="RecordCopy"/> dispatches, or zero for a region that copies
+    /// nothing.</summary>
+    public nint CopyPipelineHandle => (m_copyPipeline?.Handle ?? 0);
     /// <summary>Gets whether the next <see cref="RecordCopy"/> records a copy: the region is staged and owes words.</summary>
     public bool OwesCopy => (
         (Policy == GpuResidencyPolicy.Staged) &&
@@ -743,12 +746,14 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// nothing.</summary>
     /// <param name="commandBuffer">The command buffer being recorded.</param>
     /// <param name="slot">The frame slot the command buffer belongs to, flushed since the last write.</param>
+    /// <param name="pipelineBound">Whether the command buffer already has the copy pipeline (<see cref="CopyPipelineHandle"/>)
+    /// bound, as after an earlier region's copy in one recording, so the copy binds only its set.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative or not below
     /// <see cref="SlotCount"/>.</exception>
     /// <exception cref="InvalidOperationException">The staged region owes words that <paramref name="slot"/>'s staging
     /// buffer does not hold, because the slot was not flushed after the last write.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
-    public void RecordCopy(nint commandBuffer, int slot) {
+    public void RecordCopy(nint commandBuffer, int slot, bool pipelineBound = false) {
         RequireSlot(slot: slot);
 
         if (!OwesCopy) {
@@ -770,11 +775,13 @@ public sealed unsafe class GpuRegion : IDisposable {
             WriteCopySet(slot: slot);
         }
 
-        m_recorder.BindPipeline(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            pipelineHandle: m_copyPipeline!.Handle
-        );
+        if (!pipelineBound) {
+            m_recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: commandBuffer,
+                pipelineHandle: m_copyPipeline!.Handle
+            );
+        }
         m_recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,

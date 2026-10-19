@@ -1,6 +1,4 @@
 using System.Buffers.Binary;
-using Puck.Abstractions.Gpu;
-using Puck.Vulkan.Factories;
 using Xunit;
 
 namespace Puck.Vulkan.Tests;
@@ -8,8 +6,7 @@ namespace Puck.Vulkan.Tests;
 /// <summary>Laws for the SPIR-V capabilities a Vulkan device runs (<see cref="VulkanShaderCapabilities"/>): a module's
 /// declared capabilities read in order, a capability outside <see cref="VulkanShaderCapabilities.Enabled"/> refused by
 /// name before the module is created, and a malformed module refused. Every module the World ships declares only enabled
-/// capabilities, and every device is created with the feature <c>DemoteToHelperInvocation</c> needs
-/// (<c>shaderDemoteToHelperInvocation</c>) or refused naming it.</summary>
+/// capabilities.</summary>
 public sealed class VulkanShaderCapabilitiesLawTests {
     // OpCapability, OpMemoryModel and the Logical addressing and GLSL450 memory models.
     private const uint CapabilityOpcode = 17u;
@@ -17,11 +14,11 @@ public sealed class VulkanShaderCapabilitiesLawTests {
 
     [Fact]
     public void A_modules_capabilities_read_in_declaration_order() {
-        var module = Module(VulkanShaderCapabilities.Shader, VulkanShaderCapabilities.DemoteToHelperInvocation);
+        var module = Module(VulkanShaderCapabilities.Shader, VulkanShaderCapabilities.GroupNonUniform);
 
         Assert.Equal(
             actual: VulkanShaderCapabilities.Declared(spirv: module),
-            expected: [VulkanShaderCapabilities.Shader, VulkanShaderCapabilities.DemoteToHelperInvocation]
+            expected: [VulkanShaderCapabilities.Shader, VulkanShaderCapabilities.GroupNonUniform]
         );
     }
     [Fact]
@@ -74,16 +71,6 @@ public sealed class VulkanShaderCapabilitiesLawTests {
 
             VulkanShaderCapabilities.Require(module: name, spirv: spirv);
         }
-    }
-    [Fact]
-    public void Every_device_is_created_with_shaderDemoteToHelperInvocation_or_refused_naming_it() {
-        var chained = VulkanLogicalDeviceFactory.RequiredFeatureStructureTypesOf(supported: static _ => true);
-
-        // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES.
-        Assert.Contains(collection: chained, expected: 1000276000u);
-        var refusal = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => VulkanLogicalDeviceFactory.RequiredFeatureStructureTypesOf(supported: static structureType => (structureType != 1000276000u)));
-
-        Assert.Contains(actualString: refusal.Message, expectedSubstring: "shaderDemoteToHelperInvocation");
     }
 
     // A minimal module: the header, one OpCapability per capability, and OpMemoryModel Logical GLSL450.

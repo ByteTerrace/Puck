@@ -375,10 +375,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             false;
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
-        // A Vulkan 1.3 device: it reports shaderDemoteToHelperInvocation, which every device is created with, and no
-        // optional feature.
+        // A device reporting no optional feature.
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
-            (structureType == 1000276000u);
+            false;
         public VkResult WaitIdle(VulkanDeviceCommands device) =>
             VkResult.Success;
     }
