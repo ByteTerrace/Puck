@@ -167,9 +167,6 @@ public sealed class SdfMeshPathBake {
     private const int MaxRefinements = 5;
     // The finest spacing, in metres, of a final lattice along its longest axis.
     private const float MinimumCell = 0.015f;
-    // The selector of the group of segments no instance owns, which the bake kernel samples with every instance masked
-    // out and the world segments kept. KEEP IN SYNC with sdf-mesh-bake.comp.hlsl.
-    private const int WorldSelector = int.MinValue;
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
     // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
@@ -514,83 +511,12 @@ public sealed class SdfMeshPathBake {
         m_program = frame.Program;
         m_groups.Clear();
 
-        var bySlot = new Dictionary<int, Group>();
-        var instances = frame.Program.Instances;
-        var reach = MathF.Max(1f, frame.FarDistance);
-        // The static group the last instance joined, which a following instance that bakes with its previous one
-        // extends while the run stays unbroken.
-        Group? staticRun = null;
-
-        for (var index = 0; (index < instances.Count); index++) {
-            var instance = instances[index];
-
-            if (!instance.Active) { continue; }
-
-            var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
-            // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
-            // own frame, its center is that offset turned back by the slot's orientation in this frame.
-            var orientation = ((instance.IsDynamic && (instance.Slot < frame.DynamicTransforms.Count)) ? frame.DynamicTransforms[instance.Slot].Orientation : default);
-            // Rounded as the geometry rounds a pose, so one geometry bakes over one box whatever frame turned it back.
-            var center = (instance.IsDynamic
-                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation))))
-                : instance.Center);
-            Group group;
-
-            if (instance.IsDynamic) {
-                if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
-                    group = new Group(selector: instance.Slot, dynamic: true) {
-                        Low = (center - new Vector3(value: radius)),
-                        High = (center + new Vector3(value: radius)),
-                    };
-                    bySlot.Add(key: instance.Slot, value: group);
-                    m_groups.Add(item: group);
-                } else {
-                    group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
-                    group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
-                }
-            } else if (instance.BakesWithPrevious && (staticRun is { } run) && ((-(run.Selector + 1) + run.Instances) == index)) {
-                group = run;
-                group.Instances++;
-                group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
-                group.High = Vector3.Max(value1: group.High, value2: (instance.Center + new Vector3(value: radius)));
-            } else {
-                group = new Group(selector: -(index + 1), dynamic: false) {
-                    Low = (instance.Center - new Vector3(value: radius)),
-                    High = (instance.Center + new Vector3(value: radius)),
-                };
-                m_groups.Add(item: group);
-            }
-            if (!instance.IsDynamic) {
-                group.Members.Add(item: (instance.Center, radius));
-            }
-            staticRun = (instance.IsDynamic ? null : group);
-            // A bound past the reach bakes over the reach instead, which the geometry then holds.
-            group.Clamped |= (radius != instance.Radius);
-
-            group.Geometry.AppendInstance(instance: index, program: frame.Program, transforms: frame.DynamicTransforms);
-        }
-
-        foreach (var group in m_groups) {
-            if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
-            group.Seal();
-        }
-
-        // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
-        // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.
-        var unions = m_groups.Where(predicate: static group => (group.Members.Count > 1)).ToArray();
-
-        if (unions.Length > 0) {
-            _ = m_groups.RemoveAll(match: static group => (group.Members.Count > 1));
-            m_groups.InsertRange(index: 0, collection: unions);
-        }
-
-        // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
-        // cube the frame's far distance wide about the origin.
-        if (WorldInstructions(frame: frame, reach: reach) is { } world) {
-            m_groups.Add(item: world);
-            world.High = new Vector3(value: reach);
-            world.Low = new Vector3(value: -reach);
-        }
+        m_groups.AddRange(collection: SdfMeshBakeGroup.Plan(
+            create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
+            farDistance: frame.FarDistance,
+            program: frame.Program,
+            transforms: frame.DynamicTransforms
+        ));
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again.
@@ -649,48 +575,13 @@ public sealed class SdfMeshPathBake {
             m_loaded = 0;
             m_reported = false;
             m_clock.Restart();
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={bySlot.Count} instances={instances.Count}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
         }
         // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
         // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
         if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
-    }
-    // A position rounded to the steps a metre the geometry rounds a slot's position to.
-    private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));
-    private static float Rounded(float value) =>
-        (float)(Math.Round(value: ((double)value * SdfMeshGeometryBuilder.PositionSteps), mode: MidpointRounding.ToEven) / SdfMeshGeometryBuilder.PositionSteps);
-    // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
-    // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
-    // drawn shape. Its box is the reach about the origin, which its geometry holds.
-    private static Group? WorldInstructions(SdfFrame frame, float reach) {
-        var program = frame.Program;
-        var instructions = program.Instructions;
-        var owned = new bool[instructions.Count];
-
-        foreach (var instance in program.Instances) {
-            for (var index = instance.First; (index < instance.End); index++) { owned[index] = true; }
-        }
-
-        var drawn = false;
-
-        for (var index = 0; (!drawn && (index < instructions.Count)); index++) {
-            drawn = (!owned[index] && (instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail);
-        }
-
-        if (!drawn) { return null; }
-
-        var world = new Group(selector: WorldSelector, dynamic: false);
-
-        for (var index = 0; (index < instructions.Count); index++) {
-            if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, transforms: frame.DynamicTransforms); }
-        }
-
-        world.Geometry.AppendReach(reach: reach);
-        world.Seal();
-
-        return world;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
     // never fewer than `minimum` samples along any. A final lattice's spacing is never finer than MinimumCell, so a small
@@ -1270,58 +1161,10 @@ public sealed class SdfMeshPathBake {
     // vertex lies on: the material cut's lift.
     private const float SkinLift = 0.0005f;
 
-    // One bake group: the instances it selects, the frame its mesh is stored in, its box, and where its bake stands.
-    private sealed class Group(int selector, bool dynamic) {
-        public int Selector { get; } = selector;
-        public bool Dynamic { get; } = dynamic;
-        // A static group's run of instances from -(Selector + 1) on, and each one's bounding sphere.
-        public int Instances { get; set; } = 1;
-        public List<(Vector3 Center, float Radius)> Members { get; } = [];
-        public int Slot => Selector;
-        // The geometry the group bakes while its instances are appended, then sealed: a world group's names its segments'
-        // materials as they are, an instance group's by their place in MaterialOrder.
-        public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
-        public SdfMeshGeometry Sealed { get; private set; }
-        // The materials the group's shapes carry, in the order its geometry numbers them.
-        public int[] MaterialOrder { get; private set; } = [];
-
-        // The poses the group bakes through: the turn from world axes into its frame, then from its first slot three rows a
-        // slot as the dynamic-transform table lays one out, what its geometry hashed, so its samples never read the frame's
-        // transforms and its mesh is a function of its geometry, whatever frame each lattice dispatches in. A slot between
-        // two the group reads holds the identity.
-        public int PoseFirst { get; private set; }
-        public Vector4[] PoseRows { get; private set; } = [];
+    // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
+    private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
         // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
         public SdfMesh? Skin { get; set; }
-
-        public void Seal() {
-            Sealed = Geometry.Geometry;
-            MaterialOrder = [.. Geometry.Materials];
-
-            var poses = Geometry.Poses;
-
-            if (poses.Count == 0) { return; }
-
-            var first = poses.Keys.First();
-            var rows = new Vector4[1 + (3 * ((poses.Keys.Last() - first) + 1))];
-            var turn = Geometry.BoundTurn;
-
-            rows[0] = new Vector4(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W);
-            for (var row = 2; (row < rows.Length); row += 3) {
-                rows[row] = new Vector4(x: 0f, y: 0f, z: 0f, w: 1f);
-            }
-            foreach (var (slot, pose) in poses) {
-                var row = (1 + (3 * (slot - first)));
-
-                rows[row] = new Vector4(value: pose.Position, w: 0f);
-                rows[row + 1] = new Vector4(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z, w: pose.Orientation.W);
-                rows[row + 2] = pose.Lanes;
-            }
-            PoseFirst = first;
-            PoseRows = rows;
-        }
-        public Vector3 Low { get; set; }
-        public Vector3 High { get; set; }
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         public bool InFlight { get; set; }
@@ -1344,8 +1187,6 @@ public sealed class SdfMeshPathBake {
         public FinalLattice? Final { get; set; }
         // Why a finished group has no mesh, or null.
         public string? Outcome { get; set; }
-        // Whether a member's bound passed the reach, so the group's box, and its geometry, hold the reach.
-        public bool Clamped { get; set; }
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }

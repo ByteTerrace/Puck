@@ -304,6 +304,23 @@ Then run the game and look — a claim about how something reads is not verified
 until you have looked at a capture. The offscreen and windowed recipes, with the
 stream and fencing rules that keep them honest, are in `references/loop.md`.
 
+The boot that renders the capture also bakes the meshes it draws; before calling a
+visual change done, audit what it baked:
+
+```bash
+dotnet <your-cli-copy>/Puck.Cli.dll mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>
+```
+
+The audit reads the boot's stored meshes, measures each group against its own
+field, and names the shapes at its worst clusters, with each cluster's position
+in the creation's author frame. Frayed or sawtoothed edges read as face normals
+off the gradient and folds along an edge; a dropped wall as uncovered crossings;
+a cutter whose field is only a lower bound (a stretched ellipsoid, a non-uniform
+scale) as a loose field the audit attributes to that cutter: give the cutter an
+exact primitive (a prism profile, an unscaled sphere) instead. Compare the
+report before and after the edit; the [rendering skill](../rendering/SKILL.md#auditing-a-bake)
+owns how the audit reads a store.
+
 ## References
 
 | File | Read it for |

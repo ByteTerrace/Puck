@@ -76,18 +76,70 @@ public sealed class SdfMeshStore {
     /// <param name="kernels">The kernel set the bake dispatches.</param>
     /// <returns>The identity.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
-    public static UInt128 IdentityOf(SdfKernelSet kernels) {
+    public static UInt128 IdentityOf(SdfKernelSet kernels) => BuildIdentityOf(code: CodeIdentity, kernels: kernels);
+    /// <summary>Returns the identity of a bake that another build runs on a kernel set: the build's
+    /// <see cref="CodeIdentityOf"/> and the bytecode of its bake kernels, as <see cref="IdentityOf"/> combines
+    /// this build's.</summary>
+    /// <param name="code">The build's code identity.</param>
+    /// <param name="kernels">The kernel set the build's bake dispatches.</param>
+    /// <returns>The identity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
+    public static UInt128 BuildIdentityOf(UInt128 code, SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(argument: kernels);
 
         var hash = new XxHash128();
-        Span<byte> code = stackalloc byte[16];
+        Span<byte> bytes = stackalloc byte[16];
 
-        BinaryPrimitives.WriteUInt128LittleEndian(destination: code, value: CodeIdentity);
-        hash.Append(source: code);
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes, value: code);
+        hash.Append(source: bytes);
         hash.Append(source: kernels[SdfKernel.MeshBakeMask].Span);
         hash.Append(source: kernels[SdfKernel.MeshBake].Span);
 
         return hash.GetCurrentHashAsUInt128();
+    }
+    /// <summary>Returns the <see cref="CodeIdentity"/> of the build deployed in a directory, read from its assemblies'
+    /// metadata without loading them: the module version of its <c>Puck.SignedDistance.dll</c> and the
+    /// <c>PuckMeshBakeSources</c> metadata of its <c>Puck.SdfVm.dll</c>. A tool reads another build's stored meshes under
+    /// that build's identity this way.</summary>
+    /// <param name="directory">The directory the build's assemblies are deployed in.</param>
+    /// <returns>The build's code identity.</returns>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    /// <exception cref="FileNotFoundException">The directory holds no <c>Puck.SignedDistance.dll</c> or
+    /// <c>Puck.SdfVm.dll</c>.</exception>
+    /// <exception cref="BadImageFormatException">An assembly carries no readable metadata.</exception>
+    public static UInt128 CodeIdentityOf(string directory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+
+        using var signedDistance = new System.Reflection.PortableExecutable.PEReader(peStream: File.OpenRead(path: Path.Combine(path1: directory, path2: "Puck.SignedDistance.dll")));
+        using var sdfVm = new System.Reflection.PortableExecutable.PEReader(peStream: File.OpenRead(path: Path.Combine(path1: directory, path2: "Puck.SdfVm.dll")));
+        var module = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(peReader: signedDistance);
+        var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(peReader: sdfVm);
+        var sources = string.Empty;
+
+        foreach (var handle in metadata.GetAssemblyDefinition().GetCustomAttributes()) {
+            var value = metadata.GetBlobReader(handle: metadata.GetCustomAttribute(handle: handle).Value);
+
+            // An AssemblyMetadataAttribute's blob: the prolog, then its key and its value as serialized strings.
+            if ((value.Length < 2) || (value.ReadUInt16() != 1)) { continue; }
+
+            var key = SafeString(reader: ref value);
+
+            if (key == "PuckMeshBakeSources") {
+                sources = (SafeString(reader: ref value) ?? string.Empty);
+                break;
+            }
+        }
+
+        return Identity(mvid: module.GetGuid(handle: module.GetModuleDefinition().Mvid), sources: sources);
+    }
+    // A serialized string a custom attribute's blob holds next, or null when the blob holds no string there.
+    private static string? SafeString(ref System.Reflection.Metadata.BlobReader reader) {
+        try {
+            return reader.ReadSerializedString();
+        } catch (BadImageFormatException) {
+            return null;
+        }
     }
     /// <summary>Returns whether the store holds an entry for a geometry under a bake's identity, without reading it.</summary>
     /// <param name="identity">The bake's identity.</param>
@@ -104,6 +156,68 @@ public sealed class SdfMeshStore {
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal) {
+        var path = PathOf(key: KeyOf(geometry: geometry, identity: identity));
+
+        if (!TryReadEntry(damaged: out var damaged, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal)) {
+            if (damaged) { Delete(path: path); }
+
+            return false;
+        }
+
+        Puck.Abstractions.CacheRetention.Stamp(path: path);
+
+        return true;
+    }
+    /// <summary>Reads a geometry's mesh under a bake's identity as <see cref="TryRead"/> does, leaving the store as it
+    /// is: an entry it refuses stays, and a read stamps nothing, so a tool may read a store a running World owns.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <param name="geometry">The group's geometry.</param>
+    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
+    /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
+    /// <returns><see langword="true"/> when the store held a sound entry.</returns>
+    public bool TryPeek(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal) =>
+        TryReadEntry(damaged: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal);
+
+    /// <summary>Returns the files of the entries the store holds, whatever bake identity wrote them, in ordinal order of
+    /// their names.</summary>
+    /// <returns>The entries' paths; none when the directory does not exist.</returns>
+    public IReadOnlyList<string> EntryPaths() {
+        if (!System.IO.Directory.Exists(path: Directory)) { return []; }
+
+        var paths = System.IO.Directory.GetFiles(path: Directory, searchPattern: ("*" + Extension));
+
+        Array.Sort(array: paths, comparer: StringComparer.Ordinal);
+
+        return paths;
+    }
+    /// <summary>Reads an entry's file under whatever key it names, leaving the store as it is: a tool that compares the
+    /// meshes several builds stored for one geometry reads them this way, since no key reaches another build's
+    /// entries.</summary>
+    /// <param name="path">The entry's file (<see cref="EntryPaths"/>).</param>
+    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the file holds a sound entry.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public static bool TryReadFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+
+        mesh = null;
+        materials = [];
+
+        byte[] bytes;
+
+        try {
+            bytes = File.ReadAllBytes(path: path);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            return false;
+        }
+
+        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes.AsSpan(start: 8)), materials: out materials, mesh: out mesh, refusal: out _));
+    }
+    // Reads an entry, answering whether a held entry's bytes were refused (damaged) rather than unreadable.
+    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged) {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(key: key);
         byte[] bytes;
@@ -111,6 +225,7 @@ public sealed class SdfMeshStore {
         mesh = null;
         materials = [];
         refusal = null;
+        damaged = false;
 
         try {
             bytes = File.ReadAllBytes(path: path);
@@ -124,12 +239,10 @@ public sealed class SdfMeshStore {
 
         if (!TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why)) {
             refusal = $"{Path.GetFileName(path: path)} {why}";
-            Delete(path: path);
+            damaged = true;
 
             return false;
         }
-
-        Puck.Abstractions.CacheRetention.Stamp(path: path);
 
         return true;
     }

@@ -123,6 +123,47 @@ public sealed class SdfMeshStoreLawTests {
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfMeshStore(capacityBytes: 0, directory: "meshes"));
     }
 
+    [Fact]
+    public void APeekLeavesTheStoreAsItIsAndAnEntryReadsUnderAnyKey() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+
+        Assert.Empty(collection: store.EntryPaths());
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [4, 9], mesh: Mesh()));
+
+        var path = Assert.Single(collection: store.EntryPaths());
+        var stamped = DateTime.UtcNow.AddHours(value: -1);
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: stamped, path: path);
+        Assert.True(condition: store.TryPeek(geometry: Geometry, identity: Identity, materials: out var materials, mesh: out var mesh, refusal: out _));
+        Assert.Equal(expected: [4, 9], actual: materials);
+        Assert.Equal(expected: Mesh().Positions.ToArray(), actual: mesh.Positions.ToArray());
+        Assert.Equal(expected: stamped, actual: File.GetLastWriteTimeUtc(path: path));
+        Assert.True(condition: SdfMeshStore.TryReadFile(materials: out var any, mesh: out _, path: path));
+        Assert.Equal(expected: [4, 9], actual: any);
+
+        // A damaged entry is refused and stays where it was, and a file that is no entry reads as none.
+        File.WriteAllBytes(bytes: File.ReadAllBytes(path: path)[..20], path: path);
+        Assert.False(condition: store.TryPeek(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var why));
+        Assert.Contains(expectedSubstring: "is truncated", actualString: why);
+        Assert.True(condition: File.Exists(path: path));
+        Assert.False(condition: SdfMeshStore.TryReadFile(materials: out _, mesh: out _, path: path));
+        Assert.False(condition: SdfMeshStore.TryReadFile(materials: out _, mesh: out _, path: scratch.PathOf(name: "absent.mesh")));
+    }
+    [Fact]
+    public void ABuildsCodeIdentityReadsFromItsAssembliesAsItsOwnProcessComputesIt() {
+        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
+        var kernels = new SdfKernelSet(bytecode: bytes);
+
+        Assert.Equal(expected: SdfMeshStore.CodeIdentity, actual: SdfMeshStore.CodeIdentityOf(directory: AppContext.BaseDirectory));
+        Assert.Equal(expected: SdfMeshStore.IdentityOf(kernels: kernels), actual: SdfMeshStore.BuildIdentityOf(code: SdfMeshStore.CodeIdentity, kernels: kernels));
+        Assert.NotEqual(expected: SdfMeshStore.IdentityOf(kernels: kernels), actual: SdfMeshStore.BuildIdentityOf(code: (SdfMeshStore.CodeIdentity + 1), kernels: kernels));
+
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+
+        _ = Assert.Throws<FileNotFoundException>(testCode: () => SdfMeshStore.CodeIdentityOf(directory: scratch.RootPath));
+    }
+
     // A two-triangle mesh with normals and triangle materials, as a bake meshes one.
     internal static SdfMesh Mesh() => new(
         indices: new uint[] { 0, 1, 2, 0, 2, 1 },

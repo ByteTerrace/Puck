@@ -111,6 +111,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
@@ -2835,6 +2836,57 @@ model at all does.
 The shipped `CreationSculptRegistry` carries no sculpts—`puck creation
 sculpts` reports "none registered" until a composition root or a test
 registers one.
+
+## `puck mesh audit`—baked-mesh audit
+
+`puck mesh audit --world <path>` measures every mesh the baked-mesh path stored
+for a world against the field each was baked from (`SdfMeshAudit`), and reports
+the defects a bake leaves by group, worst first. The bake runs on the GPU alone,
+so the audit reads the meshes a World boot stored in its device cache
+(`SdfMeshStore`): it composes the world's rest scene offline
+(`Puck.Cli.Mesh.RestScene`: one body per creation look, standing at rest),
+plans its bake groups as the bake does (`SdfMeshBakeGroup.Plan`), and finds
+each group's mesh by its geometry under a bake identity. It never bakes and
+never writes the store, so it reads a store a running World owns.
+
+- `--build <dir>` names the World build whose boot stored the meshes (the
+  directory of its `Puck.World.dll`); the identity is that build's assemblies'
+  and bake kernels'. Absent, it is this CLI's own build, which matches a World
+  run from the same checkout. `--identity <hex>` names an identity a report
+  printed instead, which keeps reading a build's meshes after it is rebuilt.
+  `--backend directx|vulkan` names the backend whose kernels baked them.
+- `--cache-dir <dir>` is the World's own `--cache-dir`; absent, the per-user
+  store.
+- `--prototype <id>` keeps the groups of bodies wearing that creation;
+  `--group <text>` keeps the groups whose label holds the text, such as a
+  shape's name.
+- `--top <n>` clusters a group reports, `--worst <n>` clusters the closing list
+  reports across every group, and `--images <dir>` writes a PNG of each of
+  those: the mesh around the cluster's worst sample from three sides, shading
+  normals beside face normals, drawn on the CPU.
+- `--history` (with `--group`) also audits every stored mesh of the group's
+  geometry whatever identity stored it, oldest first: how each build's bake of
+  the same field compares.
+
+Per group it prints the distance off the surface at vertices, triangle
+centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
+the angle between each triangle's face normal, and its corners' shading normals,
+and the field's gradient; how far the field's gradient falls short of a
+distance's (a loose bound such as a stretched ellipsoid's, with the shapes
+that make it loose); folds, flipped triangles, slivers, open and non-manifold
+edges; and the field's zero-set crossings on a sparse lattice no triangle covers
+within a cell. Its worst clusters of flagged samples follow, each at its world
+position at rest and in the creation's author frame, with its extent and the
+shapes whose own surfaces lie nearest. The output is a pure function of the
+world, the stored meshes and the options, so a later run proves a fix.
+
+The field is read through `SdfFieldEvaluator`'s render reading
+(`SdfFieldReading.Render`), which admits a non-uniform scale and the flare and
+twist warps; a group holding a shape it cannot interpret (an `Ellipse` prism)
+reports `field refused`. The group of segments no instance owns matches a
+stored mesh only when nothing but the scene emits into the program. Exit codes:
+0 every selected group reported; 1 the world failed to load, or no selected
+group had a stored mesh (with how to store them); 2 a usage error.
 
 ## `puck schema`—world.def JSON Schema
 

@@ -1,0 +1,251 @@
+using System.Numerics;
+using Puck.SignedDistance;
+
+namespace Puck.SdfVm;
+
+/// <summary>
+/// One group of a program's baked-mesh path, as <see cref="Plan{T}"/> forms it: the instances it selects, the frame its mesh
+/// is stored in, the geometry it is keyed by (<see cref="SdfMeshGeometryBuilder"/>) and the box its first lattice covers.
+/// <see cref="SdfMeshPathBake"/> bakes the groups this plans, and the mesh audit (<see cref="SdfMeshAudit"/>) plans the same
+/// groups to find their stored meshes and the field each was sampled from.
+/// <para>A dynamic group is every instance riding one slot, in that slot's frame; a static group is one instance, or the
+/// run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>), in world space; the
+/// world group (<see cref="IsWorld"/>) is every segment no instance owns.</para>
+/// </summary>
+/// <param name="selector">The dynamic slot the group rides when non-negative; <c>-(index + 1)</c> of its first static
+/// instance otherwise; <see cref="WorldSelector"/> for the world group.</param>
+/// <param name="dynamic">Whether the group bakes in its slot's frame.</param>
+public class SdfMeshBakeGroup(int selector, bool dynamic) {
+    /// <summary>The selector of the group of segments no instance owns, which the bake kernel samples with every instance
+    /// masked out and the world segments kept. KEEP IN SYNC with sdf-mesh-bake.comp.hlsl.</summary>
+    public const int WorldSelector = int.MinValue;
+
+    private readonly List<int> m_instances = [];
+
+    /// <summary>Gets the group's selector: its slot, <c>-(index + 1)</c> of its first static instance, or
+    /// <see cref="WorldSelector"/>.</summary>
+    public int Selector { get; } = selector;
+    /// <summary>Gets whether the group bakes in its slot's frame rather than in world space.</summary>
+    public bool Dynamic { get; } = dynamic;
+    /// <summary>Gets whether the group is the program's segments no instance owns.</summary>
+    public bool IsWorld => (Selector == WorldSelector);
+    /// <summary>Gets the slot a dynamic group rides.</summary>
+    public int Slot => Selector;
+    /// <summary>Gets the instances a static group's run holds, from <c>-(Selector + 1)</c> on.</summary>
+    public int Instances { get; internal set; } = 1;
+    /// <summary>Gets the indices of the program's instances the group selects, in program order; empty for the world
+    /// group.</summary>
+    public IReadOnlyList<int> InstanceIndices => m_instances;
+    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by.</summary>
+    public List<(Vector3 Center, float Radius)> Members { get; } = [];
+    /// <summary>Gets the geometry the group bakes while its instances are appended: a world group's names its segments'
+    /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
+    public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
+    /// <summary>Gets the geometry the group was sealed with, which keys its mesh.</summary>
+    public SdfMeshGeometry Sealed { get; private set; }
+    /// <summary>Gets the materials the group's shapes carry, in the order its geometry numbers them.</summary>
+    public int[] MaterialOrder { get; private set; } = [];
+    /// <summary>Gets the first slot of <see cref="PoseRows"/>.</summary>
+    public int PoseFirst { get; private set; }
+    /// <summary>Gets the poses the group bakes through: the turn from world axes into its frame, then from its first slot
+    /// three rows a slot as the dynamic-transform table lays one out, what its geometry hashed, so its samples never read
+    /// the frame's transforms and its mesh is a function of its geometry, whatever frame each lattice dispatches in. A slot
+    /// between two the group reads holds the identity.</summary>
+    public Vector4[] PoseRows { get; private set; } = [];
+    /// <summary>Gets or sets the low corner of the group's box: its members' bounds when planned, then what the bake's
+    /// lattices narrow it to.</summary>
+    public Vector3 Low { get; set; }
+    /// <summary>Gets or sets the high corner of the group's box.</summary>
+    public Vector3 High { get; set; }
+    /// <summary>Gets whether a member's bound passed the reach, so the group's box, and its geometry, hold the reach.</summary>
+    public bool Clamped { get; internal set; }
+
+    /// <summary>Plans the groups of a program: one per dynamic slot and per run of static instances baked together (one
+    /// rigid copy), unions of several static shapes first, so their long lattices and contours lead each frame's round,
+    /// and the group of the segments no instance owns last. Each is sealed: its geometry, materials and poses fixed.</summary>
+    /// <typeparam name="T">The group type the caller keeps.</typeparam>
+    /// <param name="program">The program.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <param name="farDistance">The frame's far distance, which clamps a bound past it.</param>
+    /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
+    /// <returns>The groups, in the order the bake takes them.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
+    /// <paramref name="create"/> is <see langword="null"/>.</exception>
+    public static List<T> Plan<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: create);
+
+        var groups = new List<T>();
+        var bySlot = new Dictionary<int, T>();
+        var instances = program.Instances;
+        var reach = MathF.Max(1f, farDistance);
+        // The static group the last instance joined, which a following instance that bakes with its previous one extends
+        // while the run stays unbroken.
+        T? staticRun = null;
+
+        for (var index = 0; (index < instances.Count); index++) {
+            var instance = instances[index];
+
+            if (!instance.Active) { continue; }
+
+            var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
+            // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
+            // own frame, its center is that offset turned back by the slot's orientation in this frame.
+            var orientation = ((instance.IsDynamic && (instance.Slot < transforms.Count)) ? transforms[instance.Slot].Orientation : default);
+            // Rounded as the geometry rounds a pose, so one geometry bakes over one box whatever frame turned it back.
+            var center = (instance.IsDynamic
+                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation))))
+                : instance.Center);
+            T group;
+
+            if (instance.IsDynamic) {
+                if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
+                    group = create(arg1: instance.Slot, arg2: true);
+                    group.Low = (center - new Vector3(value: radius));
+                    group.High = (center + new Vector3(value: radius));
+                    bySlot.Add(key: instance.Slot, value: group);
+                    groups.Add(item: group);
+                } else {
+                    group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
+                    group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
+                }
+            } else if (instance.BakesWithPrevious && (staticRun is { } run) && ((-(run.Selector + 1) + run.Instances) == index)) {
+                group = run;
+                group.Instances++;
+                group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
+                group.High = Vector3.Max(value1: group.High, value2: (instance.Center + new Vector3(value: radius)));
+            } else {
+                group = create(arg1: -(index + 1), arg2: false);
+                group.Low = (instance.Center - new Vector3(value: radius));
+                group.High = (instance.Center + new Vector3(value: radius));
+                groups.Add(item: group);
+            }
+            if (!instance.IsDynamic) {
+                group.Members.Add(item: (instance.Center, radius));
+            }
+            staticRun = (instance.IsDynamic ? null : group);
+            // A bound past the reach bakes over the reach instead, which the geometry then holds.
+            group.Clamped |= (radius != instance.Radius);
+            group.m_instances.Add(item: index);
+            group.Geometry.AppendInstance(instance: index, program: program, transforms: transforms);
+        }
+
+        foreach (var group in groups) {
+            if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
+            group.Seal();
+        }
+
+        // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
+        // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.
+        var unions = groups.Where(predicate: static group => (group.Members.Count > 1)).ToArray();
+
+        if (unions.Length > 0) {
+            _ = groups.RemoveAll(match: static group => (group.Members.Count > 1));
+            groups.InsertRange(index: 0, collection: unions);
+        }
+
+        // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
+        // cube the frame's far distance wide about the origin.
+        if (WorldGroup(create: create, program: program, reach: reach, transforms: transforms) is { } world) {
+            world.High = new Vector3(value: reach);
+            world.Low = new Vector3(value: -reach);
+            groups.Add(item: world);
+        }
+
+        return groups;
+    }
+    /// <summary>Returns which of a program's instructions a group's field holds, in program order: its instances' slices,
+    /// or for the world group every instruction no instance owns.</summary>
+    /// <param name="program">The program the group was planned from.</param>
+    /// <returns>The instruction indices.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
+    public IReadOnlyList<int> InstructionIndices(SdfProgram program) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        var indices = new List<int>();
+
+        if (IsWorld) {
+            var owned = Owned(program: program);
+
+            for (var index = 0; (index < owned.Length); index++) {
+                if (!owned[index]) { indices.Add(item: index); }
+            }
+        } else {
+            foreach (var instance in m_instances) {
+                var range = program.Instances[instance];
+
+                for (var index = range.First; (index < range.End); index++) { indices.Add(item: index); }
+            }
+        }
+
+        return indices;
+    }
+
+    // Seals the group: its geometry, its materials, and the pose rows its lattices read.
+    private void Seal() {
+        Sealed = Geometry.Geometry;
+        MaterialOrder = [.. Geometry.Materials];
+
+        var poses = Geometry.Poses;
+
+        if (poses.Count == 0) { return; }
+
+        var first = poses.Keys.First();
+        var rows = new Vector4[1 + (3 * ((poses.Keys.Last() - first) + 1))];
+        var turn = Geometry.BoundTurn;
+
+        rows[0] = new Vector4(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W);
+        for (var row = 2; (row < rows.Length); row += 3) {
+            rows[row] = new Vector4(x: 0f, y: 0f, z: 0f, w: 1f);
+        }
+        foreach (var (slot, pose) in poses) {
+            var row = (1 + (3 * (slot - first)));
+
+            rows[row] = new Vector4(value: pose.Position, w: 0f);
+            rows[row + 1] = new Vector4(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z, w: pose.Orientation.W);
+            rows[row + 2] = pose.Lanes;
+        }
+        PoseFirst = first;
+        PoseRows = rows;
+    }
+    // A position rounded to the steps a metre the geometry rounds a slot's position to.
+    private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));
+    private static float Rounded(float value) =>
+        (float)(Math.Round(value: ((double)value * SdfMeshGeometryBuilder.PositionSteps), mode: MidpointRounding.ToEven) / SdfMeshGeometryBuilder.PositionSteps);
+    // Which instructions an instance owns.
+    private static bool[] Owned(SdfProgram program) {
+        var owned = new bool[program.Instructions.Count];
+
+        foreach (var instance in program.Instances) {
+            for (var index = instance.First; (index < instance.End); index++) { owned[index] = true; }
+        }
+
+        return owned;
+    }
+    // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
+    // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
+    // drawn shape. Its box is the reach about the origin, which its geometry holds.
+    private static T? WorldGroup<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+        var instructions = program.Instructions;
+        var owned = Owned(program: program);
+        var drawn = false;
+
+        for (var index = 0; (!drawn && (index < instructions.Count)); index++) {
+            drawn = (!owned[index] && (instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail);
+        }
+
+        if (!drawn) { return null; }
+
+        var world = create(arg1: WorldSelector, arg2: false);
+
+        for (var index = 0; (index < instructions.Count); index++) {
+            if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, transforms: transforms); }
+        }
+
+        world.Geometry.AppendReach(reach: reach);
+        world.Seal();
+
+        return world;
+    }
+}
