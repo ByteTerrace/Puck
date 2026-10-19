@@ -340,6 +340,10 @@ bindingOverlays [
             label: "Wheel"
             entries [
               {
+                command: "player.wheel.select"
+                sources ["mouse.motion"]
+              }
+              {
                 command: "player.wheel.commit"
                 activateOn: Completed
                 sources ["keyboard.tab"]

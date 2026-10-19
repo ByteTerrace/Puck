@@ -18,11 +18,10 @@ dotnet run --project src/Puck.World -c Release -- --control --world src/Puck.Wor
 
 The debug world is the World's default, so `--world` only matters when you
 want `world.reload` to recompile your edits to the source. It opens on the
-Moth basis's fixed three-quarter camera, which faces the avatar from the -Z
-side and so has the frame behind it. Press 5, or run `view.override layout
-play`, for the chase camera: it follows the avatar from behind, shows the frame
-ahead and to the right with the far frame inside it, and follows the avatar
-through every crossing. `--control` opens the
+Moth basis's chase camera (the `play` layout, which 5 returns to): it follows
+the avatar from behind, shows the frame ahead and to the right with the far
+frame inside it, and follows the avatar through every crossing. Keys 1 to 4
+switch to the fixed inspection cameras. `--control` opens the
 Operator attachment an MCP client drives
 ([setup](../../../Puck.Mcp/README.md)). Where several Worlds run, start the
 adapter with `--attach <file>`, naming the file the World prints on stderr
@@ -76,9 +75,8 @@ turning round and walking back into the counterpart's front fires the way back.
 ## What to try
 
 The crossings below work in every boot shape, headless included; a presenting
-boot draws each of them on the RTX 2060, Direct3D 12 and Vulkan alike, with the
-chase camera on (`view.override layout play`), and a
-body that crosses takes the meshes its first world baked, in the world it
+boot draws each of them on the RTX 2060, Direct3D 12 and Vulkan alike, in the
+chase camera, and a body that crosses takes the meshes its first world baked, in the world it
 arrives in and the world it returns to. On the RTX 2060 under Direct3D 12, a
 warm crossing's frames run 13 to 23 ms, the programs it rebuilds building off
 the frame thread, and a window growing across an octave on the approach at
@@ -134,7 +132,7 @@ sensitivity is (the debug world authors none, so `player.look` turns nothing).
 head height, aims it at the floor 24 m out with a 50 degree lens, and answers
 with the pose it set; add `pose`, `orbit`, `turn`, `swing`, `move` or `fov` to
 place or nudge it, and read it back with `world.view.state`. `view.override
-camera auto` restores the three-quarter camera. Yaw 0 faces -Z, 180 faces +Z
+camera auto` restores the seat's chase camera. Yaw 0 faces -Z, 180 faces +Z
 (toward the frame's far side), and the verbs are listed in
 [the World README](../../README.md#the-console).
 

@@ -25,8 +25,8 @@ With an existing Release build:
 dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
-The initial view is the native model's three-quarter inspection. In the running
-Puck console, open the live comparison:
+The initial view is the seat's chase camera; 1 switches to the native model's
+three-quarter inspection. In the running Puck console, open the live comparison:
 
 ```text
 view.override layout pipeline
