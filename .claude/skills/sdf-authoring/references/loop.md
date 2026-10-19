@@ -28,10 +28,17 @@ underlying state row.
 
 A shape's `parent` carries its animated rigid delta, not its static rest pose
 or scale. Changing a parent's base scale does not reposition children; edit
-their authored base poses too.
+their authored base poses too. A `parent`, `swings` or `slides` edit applies on
+the next frame like any other row edit; `body.rig <body> <shape>` reads back
+the parent the shape's motion chains under and the delta it composed
+([rig](rig.md#attaching-a-shape)).
 
-`world.row creations <id> document.shapes` lists the elements;
-`world.row creations <id> hash` gives the row digest.
+`world.row.add` creates an omitted list field (a shape with no `swings` yet) when
+the member is a list, and refuses a member that is not one.
+
+`world.row creations <id> document.shapes` lists the elements. A creation row
+carries no `hash` unless one was authored: the digest is derived from the
+document and dropped on every edit.
 
 Mutation verbs return no synchronous echo — the verdict lands at the tick
 boundary on stderr. A second edit to the same row inside one tick is refused:

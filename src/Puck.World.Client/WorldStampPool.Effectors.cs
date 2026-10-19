@@ -721,10 +721,12 @@ public sealed partial class WorldStampPool {
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="state">The rig's declared drivers and effectors with their current values, or
     /// <see langword="null"/> when no live creation look is stamped on the body.</param>
+    /// <param name="shapeName">The authored name of a shape whose resolved parent and chained delta to report in
+    /// <see cref="WorldRigState.Shape"/>, or <see langword="null"/> for none.</param>
     /// <returns><see langword="true"/> when a live creation look answered.</returns>
     /// <remarks>Reports the values the last <see cref="PackTransforms"/> left, never a fresh advance: a read-back
     /// that stepped the drivers would answer at a phase nothing was drawn at.</remarks>
-    public bool TryBodyRig(int bodyIndex, out WorldRigState? state) {
+    public bool TryBodyRig(int bodyIndex, out WorldRigState? state, string? shapeName = null) {
         state = null;
 
         if (!TryFindBody(
@@ -780,11 +782,46 @@ public sealed partial class WorldStampPool {
             Drivers: drivers,
             Effectors: effectors,
             Speed: live.DriverSpeed
-        );
+        ) {
+            Shape = ((shapeName is null) ? null : RigShape(live: live, shapes: (document.Shapes ?? []), shapeName: shapeName)),
+        };
 
         return true;
     }
+    // The named shape's resolved parent and chained delta as the last pack left them; an absent shape answers with
+    // no index, and a registration not yet packed with no parent resolved.
+    private static WorldRigShape RigShape(Registration live, IReadOnlyList<ShapeDocument> shapes, string shapeName) {
+        var count = Math.Min(val1: shapes.Count, val2: WorldPlacementPolicy.MaxAnimatedStampShapes);
+
+        for (var index = 0; (index < count); index++) {
+            if (!string.Equals(a: shapes[index].Name?.Value, b: shapeName, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            var parent = (live.PartParentsResolved ? live.PartParent[index] : -1);
+            var turn = live.PartDeltaRotation[index];
+
+            return new WorldRigShape(
+                Name: shapeName,
+                Index: index,
+                Parent: ((parent >= 0) ? shapes[parent].Name?.Value : null),
+                Delta: live.PartDeltaTranslation[index],
+                TurnRadians: (2f * MathF.Acos(x: Math.Clamp(value: MathF.Abs(x: turn.W), min: 0f, max: 1f)))
+            );
+        }
+
+        return new WorldRigShape(Name: shapeName, Index: -1, Parent: null, Delta: Vector3.Zero, TurnRadians: 0f);
+    }
 }
+/// <summary>One shape's live rig placement in a <see cref="WorldRigState"/>: the parent its delta chains under and the
+/// delta the last pack composed for it.</summary>
+/// <param name="Name">The shape's authored name.</param>
+/// <param name="Index">Its index in the creation's shapes, or -1 when the creation has no shape by that name.</param>
+/// <param name="Parent">The authored name of the shape its delta chains under, or <see langword="null"/> for the
+/// creation root.</param>
+/// <param name="Delta">The translation of its chained rigid delta, in creation units of the engine frame.</param>
+/// <param name="TurnRadians">The angle of its chained rigid delta's rotation, radians in [0, 2π].</param>
+public readonly record struct WorldRigShape(string Name, int Index, string? Parent, Vector3 Delta, float TurnRadians);
 /// <summary>One declared driver's live value in a <see cref="WorldRigState"/>.</summary>
 /// <param name="Name">The driver's authored name.</param>
 /// <param name="Phase">Its running phase, radians.</param>
@@ -820,4 +857,7 @@ public readonly record struct WorldRigEffector(string Name, float Weight, bool P
 /// gate tokens test.</param>
 /// <param name="Drivers">Each declared driver's live phase and weight.</param>
 /// <param name="Effectors">Each declared effector's live weight, latch, and target.</param>
-public sealed record WorldRigState(string Creation, float Speed, IReadOnlyList<WorldRigDriver> Drivers, IReadOnlyList<WorldRigEffector> Effectors);
+public sealed record WorldRigState(string Creation, float Speed, IReadOnlyList<WorldRigDriver> Drivers, IReadOnlyList<WorldRigEffector> Effectors) {
+    /// <summary>Gets the shape the read asked about, or <see langword="null"/> when it named none.</summary>
+    public WorldRigShape? Shape { get; init; }
+}
