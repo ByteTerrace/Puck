@@ -76,7 +76,7 @@ budget" and "Composition" below — the stamp-budget count and the
 panel/trim/cells scope refusal both fire here, over every `prototypes[]`
 document, whether or not a placement uses it. What `--validate` does **not**
 run is emission or contact construction (`Morph`/`StairsUnion`/
-`StairsSubtraction`, the Polygon/Ellipse contact refusal, and a residual
+`StairsSubtraction`, the Path contact refusal, and a residual
 nonuniform `Scale`) — that tier is `creation stats`, described next.
 
 Never `puck decompile` over a `.puck` file you want to keep editing: a
@@ -278,7 +278,7 @@ rides its parent's frame.
 ## Render-only versus deterministic
 
 A solid placement requiring deterministic field contact refuses non-detail
-`Polygon` prism profiles of more than eight sides. `Revolve` and domain folds that cannot
+`Path` prism profiles. `Revolve` and domain folds that cannot
 expand are also refused where contact is owed. In contrast, `flare`, `shear`,
 `bumps`, `erode`, panels, trims, cells, sweeps, and creation noise may validate
 but are omitted from creation contact geometry (cells keep the base primitive).

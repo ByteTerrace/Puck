@@ -191,7 +191,7 @@ public sealed partial class SdfProgram {
         var tableVector = (paintVector + 8);
         var data0 = shape.Type switch {
             SdfShapeType.ConvexPolygon => shape.Data0 with {
-                X = BitConverter.UInt32BitsToSingle(value: ((((uint)tableVector) << 4) | (BitConverter.SingleToUInt32Bits(value: shape.Data0.X) & 0xFu))),
+                X = BitConverter.UInt32BitsToSingle(value: SdfPrismProfile.PackConvexReference(count: ((int)(BitConverter.SingleToUInt32Bits(value: shape.Data0.X) & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1), tableVector: tableVector)),
             },
             SdfShapeType.Sweep => shape.Data0 with { X = BitConverter.UInt32BitsToSingle(value: (uint)tableVector) },
             _ => shape.Data0,

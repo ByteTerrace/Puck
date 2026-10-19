@@ -901,9 +901,13 @@ public sealed class AuthoredShapeAdmissionLawTests {
             requiresField: true
         );
     }
-    // A polygon of at most eight sides lowers to its exact convex polygon, which the deterministic evaluator answers.
-    [Fact]
-    public void AFewSidedPolygonPrismAdmitsFieldContact() {
+    // A polygon of any side count lowers to the exact convex polygon of its scaled vertices, which the deterministic
+    // evaluator answers.
+    [InlineData(6)]
+    [InlineData(12)]
+    [InlineData(32)]
+    [Theory]
+    public void APolygonPrismAdmitsFieldContact(int sides) {
         var shape = Shape(
             SdfSolidPrimitive.Prism,
             new Vector3(
@@ -911,36 +915,12 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 y: .2f,
                 z: .1f
             )
-        ) with { Profile = new(SdfPrismProfileKind.Polygon, Sides: 6) };
+        ) with { Profile = new(SdfPrismProfileKind.Polygon, Sides: sides) };
 
         AssertWorldValidates(
             shape,
             requiresField: true
         );
-    }
-    // A polygon of more sides than a convex polygon holds stays render-only.
-    [InlineData(SdfPrismProfileKind.Polygon)]
-    [Theory]
-    public void RenderOnlyProfilesRefuseUnsupportedFieldContact(SdfPrismProfileKind kind) {
-        var shape = Shape(
-            SdfSolidPrimitive.Prism,
-            new Vector3(
-                x: .4f,
-                y: .2f,
-                z: .1f
-            )
-        ) with { Profile = new(kind, Sides: 12) };
-
-        AssertWorldValidates(shape);
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: World(
-                shape,
-                canonicalize: true,
-                requiresField: true
-            ),
-            reason: out var reason
-        ));
-        Assert.False(condition: string.IsNullOrWhiteSpace(value: reason));
     }
     [Fact]
     public void RoundingInsetsTheShapeInsteadOfGrowingIt() {

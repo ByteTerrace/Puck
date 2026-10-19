@@ -344,7 +344,7 @@ public sealed partial class SdfProgram {
         // the typed stream and the packed words must describe the same program.
         for (var profileIndex = 0; (profileIndex < m_convexPolygonProfiles.Length); profileIndex++) {
             var (instructionIndex, vertices) = m_convexPolygonProfiles[profileIndex];
-            var packed = (((uint)convexPolygonProfileOffsets[profileIndex]) << 4) | ((uint)vertices.Length);
+            var packed = SdfPrismProfile.PackConvexReference(count: vertices.Length, tableVector: convexPolygonProfileOffsets[profileIndex]);
             var instruction = m_instructions[instructionIndex];
 
             m_instructions[instructionIndex] = (instruction with {

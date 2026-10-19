@@ -272,8 +272,8 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // ellipsoid — the ISA's one ellipsoid spelling — and runs a pow-free fast path (sdfEllipsoidGauge); any other exponent
 // takes the general power path.
 // A validated convex polygon (SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
-// but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 4) |
-// vertexCount), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
+// but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 5) |
+// (vertexCount - 1)), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
 // vertices live in sdfWords itself, right after every other table this program packs (see sdfPolygonVertex).
 // A quadratic Bezier curve (SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
 // as helical strands. data0 = (asfloat(uint table offset), strands, twist, strandOffset); data1 = (smooth

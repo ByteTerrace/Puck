@@ -233,14 +233,14 @@ public sealed class ConvexProfileLawTests {
         _ = Assert.Single(collection: builder.Build().Instructions);
     }
     [InlineData(2)]
-    [InlineData(9)]
+    [InlineData(33)]
     [Theory]
     public void AVertexCountOutsideTheSupportedRangeIsRefusedByName(int count) {
         var vertices = new Vector2[count];
         var angleStep = ((2f * MathF.PI) / count);
 
         // A regular (clockwise, since angle DECREASES with index — negative step) n-gon: always convex, so a
-        // refusal at 2 or 9 vertices is purely a COUNT refusal, not a winding/convexity one.
+        // refusal at 2 or 33 vertices is purely a COUNT refusal, not a winding/convexity one.
         for (var i = 0; (i < count); i++) {
             var angle = (-angleStep * i);
 

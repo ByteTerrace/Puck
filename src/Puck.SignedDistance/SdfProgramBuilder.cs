@@ -75,7 +75,7 @@ public sealed partial class SdfProgramBuilder {
     /// program's own word stream: <c>ceil(SdfPrismProfile.MaxConvexVertices / 2)</c>, two packed (x, y) vertices per
     /// word. KEEP IN SYNC with <see cref="SdfPrismProfile.MaxConvexVertices"/> and the table layout in
     /// <see cref="SdfShapeType.ConvexPolygon"/>'s remarks.</summary>
-    public const int MaxConvexPolygonWordsPerShape = 4;
+    public const int MaxConvexPolygonWordsPerShape = ((SdfPrismProfile.MaxConvexVertices + 1) / 2);
     /// <summary>The largest exponent a <see cref="Superellipsoid"/> admits — see its own remarks for the 1-Lipschitz
     /// proof this interval is sized to.</summary>
     public const float MaxSuperellipsoidExponent = 8f;

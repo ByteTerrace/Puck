@@ -69,21 +69,6 @@ public static class SdfSolidGeometry {
 
         var revolve = (lift == SdfLift.Revolve);
         var revolveOffset = MathF.Abs(x: scale.Z);
-        var polygonScale = (revolve
-            ? new Vector3(
-                x: scale.X,
-                y: scale.Y,
-                z: scale.X
-            )
-            : scale
-        );
-        var scaledRounding = (rounding / MathF.Max(
-            x: polygonScale.X,
-            y: MathF.Max(
-                x: polygonScale.Y,
-                y: polygonScale.Z
-            )
-        ));
 
         return profile.Kind switch {
             SdfPrismProfileKind.Path when ((lift == SdfLift.Extrude) && (rounding == 0f)) => chain.Path(
@@ -105,11 +90,10 @@ public static class SdfSolidGeometry {
             rounding,
             detail: detail
         ),
-            // A regular polygon of at most MaxConvexVertices sides, at any scale, is the convex polygon of its vertices scaled
-            // into place (vertex k at k·2π/n from +Y toward +X, the shader's convention, which runs clockwise): its exact
-            // distance, rounded as the regular polygon rounds. With more sides it is exact only while X and Y scale alike,
-            // as a native regular polygon; scaled apart it keeps the unit polygon under its scale.
-            SdfPrismProfileKind.Polygon when (profile.Sides <= SdfPrismProfile.MaxConvexVertices) => ConvexProfile(
+            // A regular polygon, at any scale, is the convex polygon of its vertices scaled into place (vertex k at k·2π/n
+            // from +Y toward +X, the shader's convention, which runs clockwise): its exact distance, rounded as the
+            // regular polygon rounds, which the fixed-point evaluator answers too.
+            SdfPrismProfileKind.Polygon => ConvexProfile(
             chain: chain,
             vertices: RegularVertices(sides: profile.Sides, scale: new Vector2(x: scale.X, y: scale.Y)),
             cornerFraction: 0f,
@@ -121,32 +105,6 @@ public static class SdfSolidGeometry {
             material: material,
             blend: blend,
             smooth: smooth,
-            detail: detail
-        ),
-            SdfPrismProfileKind.Polygon when (scale.X == scale.Y) => chain.RegularPolygon(
-            profile.Sides,
-            scale.X,
-            lift,
-            (revolve
-            ? revolveOffset
-            : scale.Z),
-            material,
-            blend,
-            smooth,
-            rounding,
-            detail: detail
-        ),
-            SdfPrismProfileKind.Polygon => chain.Scale(scale: polygonScale).RegularPolygon(
-            profile.Sides,
-            1f,
-            lift,
-            (revolve
-            ? (revolveOffset / polygonScale.X)
-            : 1f),
-            material,
-            blend,
-            smooth,
-            scaledRounding,
             detail: detail
         ),
             // The ellipse's own semi-axes are the scale, so either lift answers its exact distance.
