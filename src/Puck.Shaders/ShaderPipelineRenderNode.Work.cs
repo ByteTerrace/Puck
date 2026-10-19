@@ -117,6 +117,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 }
                 m_work.EnterPass(pass: index);
                 PrepareHistoryWrites(pass: pass);
+                m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: command, label: pass.Label);
                 BeginTiming(command: command, pass: index, slot: slot);
                 Record(
                     command: command,
@@ -125,6 +126,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     slot: slot
                 );
                 EndTiming(command: command, pass: index, slot: slot);
+                m_gpu.Recorder.EndDebugGroup(commandBufferHandle: command);
                 m_work.LeavePass();
                 RecordedCadence(pass: pass, signature: signature);
                 pass.Recorded = true;
