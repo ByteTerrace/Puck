@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-puck(\.cli(\.dll)?)?["']?\s+search\b
+(puck|Puck\.Cli\.dll|\s--|\$\w+|\$\{\w+\}|")["']?\s+search\b

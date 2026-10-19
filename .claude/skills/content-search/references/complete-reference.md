@@ -57,7 +57,7 @@ search <pattern> [path ...]     search contents recursively (default path: cwd)
   -n / -N          line numbers on (default) / off
   -A n             n context lines after
   -B n             n context lines before
-  -C n             n context lines before and after
+  -C n             n context lines before and after (an explicit -A or -B overrides that side)
   -g <glob>        include glob, FILES only (repeatable). No '/' -> matches basename;
                    with '/' -> matches the path relative to cwd. ** = any, * = any-but-'/'
   --not <glob>     exclude glob (repeatable). No '/' -> matches a file OR DIRECTORY
@@ -71,6 +71,11 @@ search <pattern> [path ...]     search contents recursively (default path: cwd)
   --               end of options: everything after it is pattern/paths
   -h / --help      usage
 ```
+
+Each short flag has a long spelling (`--ignore-case`, `--fixed-strings`,
+`--files-with-matches`, `--count`, `--glob`, `--span`, `--max-results`,
+`--quiet`); `puck search --help` lists them. A negative `-A`/`-B`/`-C`/`-M` is a
+usage error (exit 2).
 
 **A pattern starting with `-`** is parsed as an option, with two outcomes
 (verified): an unrecognized one (`->`, `--exit-after-seconds`) fails loudly —
@@ -150,8 +155,8 @@ hardest when you are building a word-boundary lookaround, which is exactly when
 a wrong pattern over-matches silently instead of erroring. `a_b` matches `aXb`
 as well as `a_b`, so `(?!_)` does not mean "not followed by an underscore" — it
 means "not followed by anything", i.e. end of input. And `[[:alnum:]]` is read
-as the literal set `[:alnum]`, so a lookaround built on it silently fails to
-exclude what you meant. **The working boundary spelling is an explicit class:**
+as the set `[[:alnum:]` followed by a literal `]`, so a lookaround built on it
+silently fails to exclude what you meant. **The working boundary spelling is an explicit class:**
 
 ```sh
 # Exactly the token, never a prefix or suffix of a longer one:
