@@ -35,7 +35,22 @@ public abstract record SdfDomainOp {
     /// creation origin, the pre-existing pivot). A nonzero origin sandwiches the fold between a translate to and
     /// from the origin, so sectors fan out around it instead of the creation root. Zero is byte-identical to the
     /// origin-free fold.</param>
-    public sealed record Polar(int Count, SdfAxis Axis = SdfAxis.Y, bool Mirror = false, int MaterialStride = 0, Vector3 Origin = default) : SdfDomainOp;
+    /// <param name="Subject">The point the folded content is centred on, in the same frame as
+    /// <paramref name="Origin"/>: the fold turns so its first sector's bisector passes through it, so content authored
+    /// at any angle about the axis lies inside the sector the fold evaluates and draws one copy per sector, as
+    /// <see cref="SdfDomainExpansion"/> expands it; a mirrored fold reflects across the plane through the axis and
+    /// it. A subject on the axis (zero, the default) keeps the bisector on the fold plane's first axis.</param>
+    public sealed record Polar(int Count, SdfAxis Axis = SdfAxis.Y, bool Mirror = false, int MaterialStride = 0, Vector3 Origin = default, Vector3 Subject = default) : SdfDomainOp {
+        /// <summary>Returns the fold plane's two world-axis indices: the first axis the unturned bisector lies along,
+        /// then the second, which <c>SDF_OP_REPEAT_POLAR</c> measures angles toward.</summary>
+        /// <param name="axis">The fold's rotation axis.</param>
+        /// <returns>The plane's (u, v) axis indices.</returns>
+        public static (int U, int V) PlaneOf(SdfAxis axis) => axis switch {
+            SdfAxis.X => (U: 1, V: 2),
+            SdfAxis.Z => (U: 0, V: 1),
+            _ => (U: 0, V: 2),
+        };
+    }
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfProgramBuilder.WallpaperFold"/>.</summary>
     /// <param name="Group">The wallpaper group.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane.</param>
@@ -65,6 +80,47 @@ public static class SdfDomainOps {
     /// <returns><see langword="true"/> when the repeat's influence is unbounded.</returns>
     public static bool IsUnboundedRepeat(System.Numerics.Vector3 limit) => ((limit.X >= UnboundedRepeatLimit) || (limit.Y >= UnboundedRepeatLimit) || (limit.Z >= UnboundedRepeatLimit));
 
+    // SDF_OP_REPEAT_POLAR keeps the sector whose bisector lies along the fold plane's first axis. A subject off the
+    // axis turns that bisector onto the subject: the point turns back by the subject's angle before the fold and forward
+    // after it. The angle is measured from the plane's first axis toward its second, as the shader's atan2 measures it;
+    // about Y that direction is a negative right-handed turn (the (x, z) pair is left-handed about +Y).
+    private static SdfProgramBuilder ApplyPolar(SdfProgramBuilder chain, SdfDomainOp.Polar polar) {
+        var (u, v) = SdfDomainOp.Polar.PlaneOf(axis: polar.Axis);
+        var relative = (polar.Subject - polar.Origin);
+        var planeU = Component(vector: relative, index: u);
+        var planeV = Component(vector: relative, index: v);
+        var angle = (((planeU != 0f) || (planeV != 0f))
+            ? (MathF.Atan2(y: planeV, x: planeU) * ((polar.Axis is SdfAxis.X or SdfAxis.Z) ? 1f : -1f))
+            : 0f);
+        var turned = (angle != 0f);
+        var axis = polar.Axis switch {
+            SdfAxis.X => Vector3.UnitX,
+            SdfAxis.Z => Vector3.UnitZ,
+            _ => Vector3.UnitY,
+        };
+
+        chain = chain.Translate(offset: polar.Origin);
+        if (turned) {
+            chain = chain.Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: axis, angle: angle));
+        }
+        chain = chain.RepeatPolar(
+            axis: polar.Axis,
+            count: polar.Count,
+            materialStride: polar.MaterialStride,
+            mirror: polar.Mirror
+        );
+        if (turned) {
+            chain = chain.Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: axis, angle: -angle));
+        }
+
+        return chain.Translate(offset: -polar.Origin);
+
+        static float Component(Vector3 vector, int index) => index switch {
+            0 => vector.X,
+            1 => vector.Y,
+            _ => vector.Z,
+        };
+    }
     private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
         return op switch {
             SdfDomainOp.Symmetry symmetry => chain.SymmetryPlane(
@@ -77,14 +133,7 @@ public static class SdfDomainOps {
             spacing: repeat.Spacing
         )
                 .Translate(offset: -repeat.Origin),
-            SdfDomainOp.Polar polar => chain.Translate(offset: polar.Origin)
-                .RepeatPolar(
-            axis: polar.Axis,
-            count: polar.Count,
-            materialStride: polar.MaterialStride,
-            mirror: polar.Mirror
-        )
-                .Translate(offset: -polar.Origin),
+            SdfDomainOp.Polar polar => ApplyPolar(chain: chain, polar: polar),
             SdfDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
             cell: wallpaper.Cell,
             group: wallpaper.Group,

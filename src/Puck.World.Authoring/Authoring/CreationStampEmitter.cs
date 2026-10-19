@@ -129,7 +129,8 @@ public static class CreationStampEmitter {
                     builder: builder,
                     transform: transform
                 ),
-                domain: shape.Domain
+                domain: shape.Domain,
+                subject: shape.Position
             )
                 .Translate(offset: shape.Position)
                 .Rotate(rotation: shape.Rotation);
@@ -749,6 +750,7 @@ public static class CreationStampEmitter {
 
             if (!ShapeDomainOps.TryExpand(
                 domain: shape.Domain,
+                subject: shape.Position,
                 frames: out var frames,
                 refusal: out var refusal
             )) {
@@ -1426,6 +1428,7 @@ public static class CreationStampEmitter {
 
             if (!ShapeDomainOps.TryExpand(
                 domain: shape.Domain,
+                subject: shape.Position,
                 frames: out var frames,
                 refusal: out var refusal
             )) {
