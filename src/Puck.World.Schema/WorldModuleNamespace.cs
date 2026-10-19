@@ -1150,6 +1150,8 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.LineOfSightPrefix), static read => read.BodyReferences(start: 0)),
         (ChannelName(spelling: WorldRuleFacts.PairKeyPrefix), static read => read.BodyReferences(start: 0)),
         (ChannelName(spelling: WorldRuleFacts.FactPrefix), static read => read.BodyReferenceThen(rows: null)),
+        // A body-state slot is the body-state lane's own name, which no module renames.
+        (ChannelName(spelling: WorldRuleFacts.BodyStatePrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.IdentityPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.NavigationPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.ParkedPrefix), static read => read.BodyReferenceThen(rows: null)),

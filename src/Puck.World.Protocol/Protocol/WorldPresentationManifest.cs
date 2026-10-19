@@ -733,11 +733,7 @@ public sealed class WorldPresentationManifest {
 
                             foreach (var instruction in lane.Instructions) {
                                 if (instruction.Payload is InstructionPayload.State operand) {
-                                    AddBody(binding: new StateBinding(
-                                        Key: operand.Key?.Spelling,
-                                        Row: operand.Name.Spelling,
-                                        Target: false
-                                    ));
+                                    AddBody(binding: WorldLookLaneReads.Binding(operand: operand));
                                 }
                             }
                         }

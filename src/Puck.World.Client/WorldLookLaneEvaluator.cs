@@ -4,7 +4,9 @@ namespace Puck.World.Client;
 /// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ExpressionProgram"/> grammar. Reads each state
 /// operand's EASED, presented value through the state mirror slot the body's <see cref="WorldStateLease"/> holds for
 /// it (the same smoothing every other look/driver binding takes), not the raw authoritative tick a server rule reads —
-/// a lane expression drives presentation without modifying simulation values.
+/// a lane expression drives presentation without modifying simulation values. A <c>bodyState($body, slot)</c> operand
+/// reads one of the wearing body's action-state slots as its latest snapshot carried it
+/// (<see cref="WorldLookLaneReads"/>).
 /// Supports a restricted arithmetic subset of <see cref="Instruction"/> (constants, state reads, and the basic
 /// arithmetic/comparison/min/max/clamp/sign operators); every other token, a malformed stack, or a failed read
 /// (division by zero, an absent cell) evaluates to 0 — matching an unauthored lane, never a thrown exception on a
@@ -69,15 +71,17 @@ public static class WorldLookLaneEvaluator {
                             return 0f;
                         }
 
-                        // The spellings are only built the first time the operand is read.
+                        // The binding is only built the first time the operand is read.
                         if (!reads.TryFind(
                             slot: out var slot,
                             source: state,
                             target: false
                         )) {
+                            var binding = WorldLookLaneReads.Binding(operand: state);
+
                             slot = reads.Slot(
-                                key: state.Key?.Spelling,
-                                row: state.Name.Spelling,
+                                key: binding.Key,
+                                row: binding.Row,
                                 source: state,
                                 target: false
                             );

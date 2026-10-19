@@ -203,6 +203,18 @@ public static partial class WorldFederationCodec {
         }
 
         var facts = ((BodyFacts)((ushort)(factBits & ((uint)BodyFacts.All))));
+        var stateCount = reader.ReadCount(
+            field: $"snapshot entity {ordinal} body-state slot count",
+            maximum: StateCapacity.MaxBodySlots,
+            minimum: 0
+        );
+        var state = new long[(reader.Failed
+            ? 0
+            : stateCount)];
+
+        for (var slot = 0; (slot < state.Length); slot++) {
+            state[slot] = reader.ReadInt64();
+        }
 
         if (
             !reader.Failed &&
@@ -230,7 +242,8 @@ public static partial class WorldFederationCodec {
             generation,
             placementId,
             heading,
-            facts
+            facts,
+            state
         );
     }
     private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
@@ -776,6 +789,11 @@ public static partial class WorldFederationCodec {
             writer.WriteInt32(value: entry.Generation);
             writer.WriteNullableString(value: entry.PlacementId);
             writer.WriteUInt32(value: ((uint)entry.Facts));
+            writer.WriteInt32(value: entry.State.Length);
+
+            foreach (var value in entry.State.Span) {
+                writer.WriteInt64(value: value);
+            }
         }
 
         writer.WriteBoolean(value: snapshot.FieldsFull);

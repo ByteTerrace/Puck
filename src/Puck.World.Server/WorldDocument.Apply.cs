@@ -8,6 +8,9 @@ public sealed partial class WorldDocument {
     // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
+    // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
+    // State slices; overwritten by the next snapshot, like the entry array itself.
+    private long[] m_snapshotState = [];
 
     internal bool ApplyDesignationCore(WorldDesignation designation, Principal principal, bool knownSubject, int connectionId, long correlationId) {
         var sourceIndex = designation.EntityIndex;
@@ -879,6 +882,13 @@ public sealed partial class WorldDocument {
 
     private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
         var count = 0;
+        var stateLane = Host.Population.ActionStateLane;
+        var stateSlots = stateLane.Definitions;
+        var stateWidth = (Host.Population.Capacity * stateSlots.Count);
+
+        if (m_snapshotState.Length < stateWidth) {
+            m_snapshotState = new long[stateWidth];
+        }
 
         for (var index = 0; (index < Host.Population.Capacity); index++) {
             if (
@@ -886,6 +896,18 @@ public sealed partial class WorldDocument {
                 (Host.Population.EntryBody(index: index) is not { } body)
             ) {
                 continue;
+            }
+
+            var stateStart = (index * stateSlots.Count);
+
+            for (var slot = 0; (slot < stateSlots.Count); slot++) {
+                m_snapshotState[(stateStart + slot)] = WorldBodyStateReads.Presented(
+                    kind: stateSlots[slot].Kind,
+                    raw: stateLane.Read(
+                    ordinal: index,
+                    slot: slot
+                )
+                );
             }
 
             Host.SnapshotEntries[count++] = new EntitySnapshot(
@@ -903,7 +925,11 @@ public sealed partial class WorldDocument {
                 Generation: Host.Population.Generation(index: index),
                 PlacementId: Host.Population.InhabitantPlacementId(index: index),
                 Heading: body.Yaw,
-                Facts: body.Facts
+                Facts: body.Facts,
+                State: m_snapshotState.AsMemory(
+                    length: stateSlots.Count,
+                    start: stateStart
+                )
             );
         }
 

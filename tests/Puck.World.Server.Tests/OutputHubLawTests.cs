@@ -224,6 +224,22 @@ internal sealed class RecordingSink : IClientSink {
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         SnapshotDeliveries++;
         m_lastEntries = snapshot.Entries.ToArray();
+
+        // An entry's action state is borrowed scratch the next snapshot overwrites.
+        for (var index = 0; (index < m_lastEntries.Length); index++) {
+            m_lastEntries[index] = (m_lastEntries[index] with { State = m_lastEntries[index].State.ToArray() });
+        }
+    }
+    /// <summary>The most recently delivered snapshot's action-state values for the named entity index, or
+    /// <see langword="null"/> when no delivery has reported that index active.</summary>
+    public long[]? LastState(int index) {
+        foreach (var entry in m_lastEntries) {
+            if (entry.Index == index) {
+                return entry.State.ToArray();
+            }
+        }
+
+        return null;
     }
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
     /// <summary>The most recently delivered snapshot's continuity hint for the named entity index, or

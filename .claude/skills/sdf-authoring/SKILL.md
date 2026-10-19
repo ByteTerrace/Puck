@@ -226,7 +226,8 @@ Nothing in the renderer knows what health, charge, or speed are. A look row
 carries up to four anonymous **render lanes**, each an expression over world
 state. Only body registration supplies those lanes: an inhabited placement
 needs a look, kit, and body capacity. Static, animated, and attached placement
-registrations supply zero lanes. Use bare `hp` or `airPose[$body]` in a lane;
+registrations supply zero lanes. Use bare `hp` or `airPose[$body]` in a lane,
+and `bodyState($body, flightFuel)` for one of the body's own action-state slots;
 `state.hp` is driver/binding spelling and reads the wrong row here.
 Shapes and materials read a lane by index:
 

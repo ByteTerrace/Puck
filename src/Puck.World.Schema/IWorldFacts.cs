@@ -54,6 +54,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     RuleFact Read(BodyFactOperand operand);
+    /// <summary>Returns one of a body's action-state slots.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    RuleFact Read(BodyStateOperand operand);
     /// <summary>Returns an adjacency link's staleness, in ticks.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

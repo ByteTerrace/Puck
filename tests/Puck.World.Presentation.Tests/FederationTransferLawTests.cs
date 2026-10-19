@@ -2130,7 +2130,8 @@ public sealed partial class FederationTransferLawTests {
             Continuity: EntityContinuity.Continuous,
             Generation: 11,
             PlacementId: null,
-            Heading: 1.25f
+            Heading: 1.25f,
+            State: new long[] { 5L, -7L }
         );
         var snapshot = new WorldSnapshot(
             Authority: "destination/world",
@@ -2161,6 +2162,10 @@ public sealed partial class FederationTransferLawTests {
         Assert.Equal(
             expected: 1.25f,
             actual: actual.Heading
+        );
+        Assert.Equal(
+            expected: [5L, -7L],
+            actual: actual.State.ToArray()
         );
         Assert.NotEqual(
             expected: ((byte)actual.Index),

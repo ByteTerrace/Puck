@@ -65,6 +65,11 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// <param name="Facts">The body's authoritative per-tick fact mask — the same predicates the simulation's action
 /// gates read, published so a client can key animation (a walk, a climb reach, a swim stroke) on the authority's own
 /// answer. Derived, never authored.</param>
+/// <param name="State">The body's action-state register file as it presents (raw <see cref="Puck.Maths.FixedQ4816"/>
+/// bits per <see cref="WorldBodyStateReads.Presented"/>), one value per slot in register-file order (<c>state.body</c>,
+/// then <c>state.identity</c>), so a render lane reads a slot the way a rule does. Like <paramref name="Facts"/> it
+/// rides the entry, so an observer is delivered it only for a body it is disclosed. The memory is borrowed scratch
+/// the next snapshot overwrites: a consumer copies what it keeps.</param>
 public readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -78,7 +83,8 @@ public readonly record struct EntitySnapshot(
     int Generation = 0,
     string? PlacementId = null,
     float Heading = 0f,
-    BodyFacts Facts = BodyFacts.None
+    BodyFacts Facts = BodyFacts.None,
+    ReadOnlyMemory<long> State = default
 );
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the
 /// client watches to rebuild its avatar program (as the population/roster revisions drive it today). The client
