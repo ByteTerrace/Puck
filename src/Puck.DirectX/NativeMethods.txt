@@ -119,7 +119,7 @@ D3D12_FEATURE_DATA_ROOT_SIGNATURE
 D3D12_FEATURE_DATA_D3D12_OPTIONS19
 
 // Direct3D 12: whether the device samples a format from a two-dimensional texture, which an image upload refuses by
-// name when it does not (the block-compressed formats a bake stores).
+// name when it does not.
 D3D12_FEATURE_DATA_FORMAT_SUPPORT
 
 // Direct3D 12: debug layer + info queue (validation message surfacing), and the live-object report at teardown.

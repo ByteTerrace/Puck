@@ -83,14 +83,14 @@ public sealed class VulkanImportedWritableImageLawTests {
                 expected: (CommandBuffer, Image)
             );
             Barriers.Add(item: new Barrier(
-                DestinationAccessMask: ((uint)args[9]!),
-                DestinationQueueFamily: ((uint)args[13]!),
-                DestinationStageMask: ((uint)args[11]!),
-                NewLayout: ((uint)args[7]!),
-                OldLayout: ((uint)args[6]!),
-                SourceAccessMask: ((uint)args[8]!),
-                SourceQueueFamily: ((uint)args[12]!),
-                SourceStageMask: ((uint)args[10]!)
+                DestinationAccessMask: ((uint)args[7]!),
+                DestinationQueueFamily: ((uint)args[11]!),
+                DestinationStageMask: ((uint)args[9]!),
+                NewLayout: ((uint)args[5]!),
+                OldLayout: ((uint)args[4]!),
+                SourceAccessMask: ((uint)args[6]!),
+                SourceQueueFamily: ((uint)args[10]!),
+                SourceStageMask: ((uint)args[8]!)
             ));
 
             return null;

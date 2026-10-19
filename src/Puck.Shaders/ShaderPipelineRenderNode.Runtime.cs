@@ -99,8 +99,10 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // A package pass has no declaration and no compiled shader; its step's ports, its recorder and their resolved
     // versions stand in for them.
-    private sealed class RuntimePass(ShaderPipelinePlannedPass planned, CompiledShader? compiled, int count, (uint Width, uint Height) extent) {
+    private sealed class RuntimePass(ShaderPipelinePlannedPass planned, string label, CompiledShader? compiled, int count, (uint Width, uint Height) extent) {
         public readonly string Name = planned.Name;
+        // The scope a capture tool shows around its recording, its instance's name and its own.
+        public readonly string Label = label;
         // Its position in execution order: its row of the ledger's passes and of the kernel counters.
         public readonly int Index = planned.Index;
         public readonly bool CountsKernelWork = (planned.Package?.CountsKernelWork == true);

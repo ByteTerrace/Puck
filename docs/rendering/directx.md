@@ -499,8 +499,10 @@ PIX sees the device from its creation (`PixGpuCaptureTool`). `--capture-tool
 renderdoc` loads RenderDoc's `renderdoc.dll` and its in-application API
 instead (`RenderDocCaptureTool`), with its overlay off. Either tool names the
 device's objects, so a capture shows `sdf.world/program[1]` rather than a bare
-resource, and every pass already carries its PIX event label
-(`DirectXDebugLabel`).
+resource. Each render-graph pass records inside a labeled scope named for its
+instance and itself (`world/sdf.world$views`), as do the uploads, region copies
+and display encode: `IGpuRecorder.BeginDebugGroup`, which Direct3D 12 writes as
+a pix3 event blob (`DirectXDebugLabel`) and Vulkan as a debug-utils label.
 
 `gpu.capture <path> [<frames>]` arms a capture of the next frames
 (`GpuFrameCapture`): the host starts it after `BeginFrame` has waited for the

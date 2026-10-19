@@ -149,14 +149,12 @@ public interface IVulkanCommandBufferRecordingApi {
     // caller sequences layouts and access/stage masks. All operate on 2D, single-layer,
     // color images.
 
-    /// <summary>Records a pipeline barrier that transitions a range of mip levels of a 2D, single-layer image between layouts. No surrounding barriers are implied; the caller supplies the access and stage scopes.</summary>
+    /// <summary>Records a pipeline barrier that transitions a 2D, single-level, single-layer image between layouts. No surrounding barriers are implied; the caller supplies the access and stage scopes.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to transition.</param>
     /// <param name="aspectMask">The image's aspect, as <c>VkImageAspectFlags</c>: <see cref="VulkanGpuFormats.ColorAspect"/>
     /// or <see cref="VulkanGpuFormats.DepthAspect"/>.</param>
-    /// <param name="baseMipLevel">The first mip level affected.</param>
-    /// <param name="mipLevelCount">The number of mip levels affected, starting from <paramref name="baseMipLevel"/>.</param>
     /// <param name="oldLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
     /// <param name="newLayout">The layout to transition to, as a <c>VkImageLayout</c> value.</param>
     /// <param name="sourceAccessMask">A bitmask of <c>VkAccessFlagBits</c> giving the source access scope.</param>
@@ -172,8 +170,6 @@ public interface IVulkanCommandBufferRecordingApi {
         nint commandBufferHandle,
         nint imageHandle,
         uint aspectMask,
-        uint baseMipLevel,
-        uint mipLevelCount,
         uint oldLayout,
         uint newLayout,
         uint sourceAccessMask,
@@ -282,17 +278,15 @@ public interface IVulkanCommandBufferRecordingApi {
         uint width,
         uint height
     );
-    /// <summary>Records a copy from tightly packed buffer bytes into a width × height region of one mip level of a 2D,
-    /// single-layer color image at the given offset. A block-compressed image's buffer bytes are rows of blocks, and its
-    /// region may end at the level's edge short of a whole block.</summary>
+    /// <summary>Records a copy from tightly packed buffer bytes into a width × height region of a 2D, single-level,
+    /// single-layer color image at the given offset.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to copy from.</param>
-    /// <param name="bufferOffset">The offset, in bytes, of the region's first texel or block in the buffer; a multiple
-    /// of the format's texel or block size.</param>
+    /// <param name="bufferOffset">The offset, in bytes, of the region's first texel in the buffer; a multiple of the
+    /// format's texel size.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to copy to.</param>
     /// <param name="imageLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
-    /// <param name="mipLevel">The mip level of the image the region is in.</param>
     /// <param name="imageOffsetX">The x texel offset of the destination region.</param>
     /// <param name="imageOffsetY">The y texel offset of the destination region.</param>
     /// <param name="width">The width, in texels, of the region to copy.</param>
@@ -304,7 +298,6 @@ public interface IVulkanCommandBufferRecordingApi {
         ulong bufferOffset,
         nint imageHandle,
         uint imageLayout,
-        uint mipLevel,
         int imageOffsetX,
         int imageOffsetY,
         uint width,

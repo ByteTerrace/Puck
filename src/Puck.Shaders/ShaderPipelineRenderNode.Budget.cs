@@ -184,7 +184,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 ? FullscreenVertexBytes
                 : 0UL));
     // The bytes of one image of a declared format, as the image factories allocate it.
-    private static ulong ImageBytes(string? format, uint width, uint height) => GpuPixelFormats.LevelByteLength(
+    private static ulong ImageBytes(string? format, uint width, uint height) => GpuPixelFormats.ImageByteLength(
         format: ParseFormat(format: format),
         height: height,
         width: width

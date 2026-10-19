@@ -141,8 +141,8 @@ public readonly record struct Surface {
         );
     }
     /// <summary>Returns the byte length a tightly packed extent of a format occupies: one texel of
-    /// <see cref="GpuPixelFormats.UnitBytes"/> per pixel.</summary>
-    public static int RequiredByteLength(uint width, uint height, GpuPixelFormat format) => checked((int)(checked((((ulong)width) * height)) * GpuPixelFormats.UnitBytes(format: format)));
+    /// <see cref="GpuPixelFormats.TexelBytes"/> per pixel.</summary>
+    public static int RequiredByteLength(uint width, uint height, GpuPixelFormat format) => checked((int)(checked((((ulong)width) * height)) * GpuPixelFormats.TexelBytes(format: format)));
     /// <summary>Creates a surface whose image view belongs to the consumer's device chain, in any image format
     /// (<see cref="IsImageFormat"/>).</summary>
     public static Surface SameDeviceImage(nint imageHandle, nint imageViewHandle, uint width, uint height, GpuPixelFormat format) {

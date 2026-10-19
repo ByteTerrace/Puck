@@ -83,6 +83,6 @@ public sealed partial class SdfPassPlanLawTests {
         }
         var (width, height) = declaration.Dimensions!.Resolve(frameHeight: counts.Height, frameWidth: counts.Width, renderHeight: counts.RenderHeight, renderWidth: counts.RenderWidth);
 
-        return (sum + (GpuPixelFormats.LevelByteLength(format: ShaderPipelineRenderNode.ParseFormat(format: declaration.Format), height: height, width: width) * instances));
+        return (sum + (GpuPixelFormats.ImageByteLength(format: ShaderPipelineRenderNode.ParseFormat(format: declaration.Format), height: height, width: width) * instances));
     });
 }

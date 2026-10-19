@@ -450,8 +450,6 @@ callers still re-probe before relying on a path, and fall back otherwise:
   (compiled register counts, etc.); nothing reads them back yet.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
-- **Block-compressed textures**—`textureCompressionBC`, which a BC4, BC5, BC6H or BC7 surface
-  upload needs; a device without it refuses the upload by name.
 - **Shader capability floor**—half-precision arithmetic, 16-bit storage and
   subgroup-size control, enabled on a device that reports them for kernels that adopt them.
 - **External semaphores and timeline semaphores**—`VK_KHR_external_semaphore_win32` and the

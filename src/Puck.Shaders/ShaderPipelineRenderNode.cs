@@ -246,6 +246,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var declaration = planned.Declaration;
         var runtime = new RuntimePass(
             planned,
+            $"{m_name}/{planned.Name}",
             m_pipeline!.Shaders.GetValueOrDefault(key: planned.Name),
             ((int)m_inFlight),
             built.Passes[planned.Index]!.Extent

@@ -415,7 +415,6 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         ulong bufferOffset,
         nint imageHandle,
         uint imageLayout,
-        uint mipLevel,
         int imageOffsetX,
         int imageOffsetY,
         uint width,
@@ -440,7 +439,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 AspectMask = ImageAspectColorBit,
                 BaseArrayLayer = 0,
                 LayerCount = 1,
-                MipLevel = mipLevel,
+                MipLevel = 0,
             },
         };
         var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
@@ -959,8 +958,6 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         nint commandBufferHandle,
         nint imageHandle,
         uint aspectMask,
-        uint baseMipLevel,
-        uint mipLevelCount,
         uint oldLayout,
         uint newLayout,
         uint sourceAccessMask,
@@ -983,9 +980,9 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             SubresourceRange = new VkImageSubresourceRange {
                 AspectMask = aspectMask,
                 BaseArrayLayer = 0,
-                BaseMipLevel = baseMipLevel,
+                BaseMipLevel = 0,
                 LayerCount = 1,
-                LevelCount = mipLevelCount,
+                LevelCount = 1,
             },
         };
         var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
