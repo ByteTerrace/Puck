@@ -157,6 +157,9 @@ t=saturate((lane-from)/(to-from)); t>=1 skips the shape. Noise is tapered
 by 4*t*(1-t), leaving both endpoints exact. Unequal finite endpoints are
 required; reversed ranges grow the shape as the lane rises. Unbound lanes
 read zero. Erosion is render-only and uses the same scope as the shape's warps.
+It is baked into the mesh at the lanes the bake read, so it does not follow a
+live lane; `palette[].emissiveLane` and `weathering.lane` do
+([render lanes](../../sdf-authoring/references/surface.md#render-lanes)).
 
 A creation's `volumes` list declares `flow` media with `position`,
 `rotation`, positive `halfExtent`, optional `parent`, and a required

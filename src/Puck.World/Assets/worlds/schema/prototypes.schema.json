@@ -731,6 +731,14 @@
                   },
                   "default": null,
                   "description": "Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none."
+                },
+                "emissiveLane": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static."
                 }
               },
               "required": [

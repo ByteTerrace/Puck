@@ -140,7 +140,7 @@ from what you want the surface to *do*:
 | A hollow shell | `onion` | |
 | Repetition — ribs, teeth, plates, spokes | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
 | Cellular or faceted relief — scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
-| Erosion driven by live state | `erode` | see "Binding to state" |
+| Erosion set by state when the program bakes | `erode` | frozen in the bake; never live — see "Binding to state" |
 
 Exact scale conventions per primitive (a torus is not what you would guess), the
 facet-admission matrix, every ceiling, and every refusal message are in
@@ -209,7 +209,8 @@ charged, and the baked frame samples them like any other shape.
 ## Surface and look
 
 The palette carries far more than a color: `specular`, `roughness`, `metal`,
-`coat`, `sheen`, `emissive`, plus `wrap` and `soften` for skin, `fill` for a
+`coat`, `sheen`, `emissive` (switched by a render lane with `emissiveLane`),
+plus `wrap` and `soften` for skin, `fill` for a
 warm interior fill, `weathering` for chips and scratches over a revealed
 substrate, and `inset` for a refracted layer beneath the surface — which is how
 an eye is authored, as color stops at radii rather than a dark sphere, and
@@ -230,19 +231,27 @@ registrations supply zero lanes. Use bare `hp` or `airPose[$body]` in a lane;
 Shapes and materials read a lane by index:
 
 - `shapes[].erode` erodes a shape away over a lane range, with a ragged noise
-  front, and skips it entirely past the range — the plate that crumbles and goes
+  front, and skips it entirely past the range
 - `palette[].weathering` scales its chips and scratches by a lane, with a
   static floor for props
+- `palette[].emissiveLane` scales the slot's `emissive` by `saturate(lane)` —
+  the glow that switches on in flight mode
 - a volume's intensity can ride a lane — the jet that answers throttle
 
-Live erosion uses the body path's lanes. Static placements supply zero-valued
-lanes, so their erosion resolves at zero; the prefix is emitted both inside a
-shared scope and when the shape owns its scope. See
+Erosion is geometry, and every view draws baked meshes: the bake reads the
+lanes while a new program bakes (at boot, usually 0) and the mesh keeps that
+erosion until the program next changes. A lane change alone never rebakes, so
+**erode on a baked creation cannot show or hide a part live**, and a part that
+only appears as its lane rises bakes empty. Weathering, `emissiveLane` and
+volume intensity read the lane at shading time every frame; switch a look on and
+off with those. Static placements supply zero-valued lanes, so their erosion
+and lane-driven emission resolve at zero. See
+[surface](references/surface.md#render-lanes) and
 [composition](references/composition.md#the-three-scope-rules).
 
 Author the meaning in the document's own cell names and the lane expression; the
 engine only ever sees a number. A reversed `from`/`to` range runs the fold
-backwards, which is how something *appears* as a lane rises.
+backwards, which is how something bakes present only when its lane is high.
 
 ## Making it move
 

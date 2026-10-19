@@ -48,10 +48,19 @@ namespace Puck.SignedDistance;
 /// irradiance volume. Null means white; this does not change the directly viewed surface color.</param>
 /// <param name="Receive">The finite, nonnegative gain applied to indirect irradiance received by the surface.</param>
 /// <param name="Paints">The paints drawn over the surface, each over the one before; null or empty paints none.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null) {
+/// <param name="EmissiveLane">The render lane in [0, 3] that scales <see cref="Emissive"/> by <c>saturate(lane)</c>
+/// at shading time, read from the shaded surface's own frame slot (an inhabited body's look lanes). A surface with
+/// no frame slot, and the irradiance volume's trace of static draws, read the lane as zero. Null keeps the static
+/// emissive.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>
     /// (0.018) — the two constants together fix the default highlight width.</summary>
     public const float DefaultRoughness = 0.20204833f;
+
+    /// <summary>Returns whether an emissive lane is absent or names one of the four render lanes.</summary>
+    /// <param name="lane">The lane, or <see langword="null"/> for a static emissive.</param>
+    /// <returns><see langword="true"/> when <paramref name="lane"/> is null or in [0, 3].</returns>
+    public static bool IsEmissiveLane(int? lane) => ((lane is not { } index) || (((uint)index) <= 3u));
 }

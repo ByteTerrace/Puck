@@ -76,6 +76,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, shadeMaterial);
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
+            sdfApplyEmissiveLane(s.lanes, shadeMaterial);
 
             // The surface pass's occlusion, into the ambient fill and unslotted directionals. A wrapped (skin-like)
             // material relaxes it toward 1; wrap = 0 leaves it as it is.

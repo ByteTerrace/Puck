@@ -399,7 +399,9 @@ public sealed class SdfMeshIrradiance {
             }
             result += ((reflected * direct) * lighting.Gains.Lights);
         }
-        if (lighting.Emission && (surface.Emissive > 0f)) {
+        // A lane-driven emissive reads its lane from a frame slot, and a static draw has none: it reads zero, as the views
+        // pass shades it.
+        if (lighting.Emission && (surface.Emissive > 0f) && (surface.EmissiveLane is null)) {
             result += (((surface.Albedo * surface.Emissive) * (surface.Bleed ?? Vector3.One)) * lighting.Gains.Emission);
         }
         if (lighting.Feedback && (sweep > 0) && (reflected != Vector3.Zero)) {

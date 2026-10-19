@@ -190,7 +190,8 @@ public static class SdfEncodingProbe {
                     Paints: [
                         new SdfPaint(Color: new Vector3(x: v[67], y: v[68], z: v[69]), Origin: new Vector3(x: v[60], y: v[61], z: v[62]), Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(scale: new Vector3(x: v[63], y: v[64], z: v[65]), type: SdfSolidPrimitive.Ellipsoid), Stroke: v[66]),
                         new SdfPaint(Color: new Vector3(x: v[77], y: v[78], z: v[79]), Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: new Vector3(x: v[70], y: v[71], z: v[72]), B: new Vector3(x: v[73], y: v[74], z: v[75]), Bulge: 0f, C: new Vector3(x: 0.9f, y: 0.1f, z: 0.2f), RadiusEnd: v[76], RadiusStart: v[76], StrandOffset: 0f, Strands: 1, Twist: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 3),
-                    ]
+                    ],
+                    EmissiveLane: ((int)v[80])
                 )),
                 radius: 0.5f
             ),
@@ -203,6 +204,7 @@ public static class SdfEncodingProbe {
                 0.6f, 0.61f, 0.3f, 0.63f, 0.64f, 0.65f, 0.66f, 0.67f, 0.7f, 0.69f,
                 0.71f, 0.72f, 0.73f, 0.3f, 0.4f, 0.5f, 0.02f, 0.77f, 0.78f, 0.79f,
                 0.81f, 0.82f, 0.83f, 0.5f, 0.6f, 0.7f, 0.03f, 0.87f, 0.88f, 0.89f,
+                2f,
             ],
             name: "material"
         );

@@ -55,6 +55,22 @@ public sealed class PaletteAdmissionLawTests {
         ));
     }
     [Fact]
+    public void AnEmissiveLaneOutsideTheRenderLanesIsRefusedByName() {
+        AssertRefusesNaming(
+            entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: 7),
+            needle: "emissiveLane"
+        );
+        AssertRefusesNaming(
+            entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: -1),
+            needle: "emissiveLane"
+        );
+        AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 2f, Specular: null, Roughness: null, EmissiveLane: 3));
+
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfProgramBuilder().AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One, EmissiveLane: 4)));
+
+        Assert.Contains(expectedSubstring: "emissive lane", actualString: refused.Message, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
     public void IndirectPaletteInputsAreAdmittedBeforeStamping() {
         var entry = new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null);
 
