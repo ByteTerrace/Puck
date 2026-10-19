@@ -3348,25 +3348,6 @@ prototypes {
         }
       }
 
-      shape Prism "pelvicPlate" {
-        id: 12
-        position [0, 1.0165, 0.1325]
-        scale [0.135, 0.11, 0.036]
-        material: violet
-        parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.8703704, 0.7045455]
-            [0.8703704, 0.7045455]
-            [1, -0.0681818]
-            [0, -1]
-            [-1, -0.0681818]
-          ]
-          cornerRadius: 0.12
-        }
-      }
-
       shape Superellipsoid "neckYoke" {
         id: 13
         position [0, 1.495, 0.0025]
@@ -4467,23 +4448,13 @@ prototypes {
 
       shape Box "thighSide-left" {
         id: 176
-        position [0.2425, 0.9215, 0.0075]
+        position [0.285, 0.9215, 0.0075]
         scale [0.095, 0.23, 0.1]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.009
         group: 17
         parent: "thigh-left"
-      }
-
-      shape Superellipsoid "hipGuard-left" {
-        id: 177
-        position [0.2225, 1.059, 0.06]
-        rotation [0, 0, 0.1986693, 0.9800666]
-        scale [0.07, 0.11, 0.074]
-        material: skin
-        parent: "thigh-left"
-        exponent: softness
       }
 
       shape Superellipsoid "knee-left" {
@@ -6123,23 +6094,13 @@ prototypes {
 
       shape Box "thighSide-right" {
         id: 244
-        position [-0.2425, 0.9215, 0.0075]
+        position [-0.285, 0.9215, 0.0075]
         scale [0.095, 0.23, 0.1]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.009
         group: 31
         parent: "thigh-right"
-      }
-
-      shape Superellipsoid "hipGuard-right" {
-        id: 245
-        position [-0.2225, 1.059, 0.06]
-        rotation [0, 0, -0.1986693, 0.9800666]
-        scale [0.07, 0.11, 0.074]
-        material: skin
-        parent: "thigh-right"
-        exponent: softness
       }
 
       shape Superellipsoid "knee-right" {
