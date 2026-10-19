@@ -108,6 +108,22 @@ public sealed class BodyFactOperand : WorldOperandFact {
     public CompiledBodyRef Body { get; }
     public BodyFacts Fact { get; }
 }
+/// <summary>One world axis of a body's live position, in metres (<see cref="WorldRuleFacts.BodyPositionPrefix"/>); a
+/// reference resolving to no live body reads <c>0</c>.</summary>
+public sealed class BodyPositionOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="BodyPositionOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="axis">The world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</param>
+    public BodyPositionOperand(CompiledBodyRef body, int axis) : base(CellKind.Fixed) {
+        Axis = axis;
+        Body = body;
+    }
+
+    /// <summary>Gets the world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</summary>
+    public int Axis { get; }
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+}
 /// <summary>One of a body's action-state slots (<see cref="WorldRuleFacts.BodyStatePrefix"/>), answered as
 /// <see cref="WorldBodyStateReads.Presented"/> defines; a reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyStateOperand : WorldOperandFact {
