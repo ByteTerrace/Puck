@@ -1,6 +1,6 @@
 ---
 name: boy-scout
-description: Scopes cleanup when finishing a Puck change: stale citations, links, comments and docs after a rename or move, typos, unrelated bugs found, formatter sweeps. Owed, in-passing or recorded.
+description: "Scopes cleanup when finishing a Puck change: stale citations, links, comments and docs after a rename or move, typos, unrelated bugs found, formatter sweeps. Owed, in-passing or recorded."
 ---
 
 # Boy scout

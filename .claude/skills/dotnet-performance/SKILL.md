@@ -1,6 +1,6 @@
 ---
 name: dotnet-performance
-description: Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage.
+description: "Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage."
 ---
 
 # .NET 11 performance

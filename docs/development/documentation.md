@@ -343,7 +343,8 @@ questioned: `AGENTS.md` rule 2 makes skills evidence, outranked by the current
 request. A skill is a map: where the code lives, the few contracts that bite
 and how to run or see the thing, without restating what the code already
 says. Its frontmatter carries `name` (lowercase kebab case, matching the
-directory) and `description`: third person, at most 200 characters, naming the
+directory) and `description`: a double-quoted string (a bare `: ` breaks strict
+YAML parsers such as Codex's), third person, at most 200 characters, naming the
 capability and the words a request that should load it uses (files, types,
 verbs, symptoms), with at most a short pointer to the sibling that owns a
 look-alike area. `claude plugin eval` lists a longer description by the skill's

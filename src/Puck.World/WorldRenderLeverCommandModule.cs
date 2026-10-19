@@ -262,7 +262,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.ao",
-            description: "Toggles ambient occlusion engine-wide, live (no rebuild): world.ao [on|off] — no argument echoes the current state. AO darkens creases and contact seams; turning it off skips the per-lit-pixel occlusion march (a small GPU saving, see world.counters gpu).",
+            description: "Toggles ambient occlusion engine-wide, live (no rebuild): world.ao [on|off] — no argument echoes the current state. AO darkens creases and contact seams; turning it off skips the surface pass's screen-space occlusion taps (a small GPU saving, see world.counters gpu).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion

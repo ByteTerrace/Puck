@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-device
+device[- ]laws?|Category\W{0,3}Gpu

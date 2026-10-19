@@ -86,8 +86,9 @@ model.
 furthest-behind endpoint so a linked set has one deterministic cable timeline.
 Tier C verifies replay-identical synthetic multiplayer exchange and a
 commercial link-game flow. `AgbSerialController` exposes cable presence,
-multiplayer identity, ready lines, and transferred words through the hardware
-register model.
+multiplayer identity and error state, and transferred words through the hardware
+register model. The Multiplayer SD/SI ready lines are not modeled, so a game
+that polls them to detect a partner never sees one.
 
 The link session and snapshot primitives are sufficient substrate for a future
 rollback protocol, but they do not define network prediction, input delay,

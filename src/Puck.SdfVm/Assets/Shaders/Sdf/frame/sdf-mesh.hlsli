@@ -28,7 +28,7 @@ static const uint SdfMeshNormalsFlag = 1u;
 static const uint SdfMeshMaterialsFlag = 2u;
 static const uint SdfMeshSkinFlag = 4u;
 // The bit the view starts at in the index a mesh draw call pushes; the bits below it name the draw. KEEP IN SYNC with
-// SdfWorldInterfaces.MeshViewShift.
+// SdfKernelInterfaces.MeshViewShift.
 static const uint SdfMeshViewShift = 24u;
 static const uint SdfMeshDrawMask = ((1u << SdfMeshViewShift) - 1u);
 

@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns the landing bar, optional checks and GPU execution; review-passes owns launching and closing optional review-and-fix passes.
+description: "Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, merging to main, GPU and build scheduling, idle partners, routing findings; review-passes runs passes."
 ---
 
 # Orchestration
@@ -9,7 +9,9 @@ This skill is the lead's procedure for coordinating assignments, machines,
 merges and reviews. [AGENTS.md](../../../AGENTS.md) owns branch authority and
 repository rules; this skill routes verification and review execution to their
 owners. The user's current instruction outranks this skill; a rule that argues
-against a requested change is stale and is corrected in the same change.
+against a requested change is stale and is corrected in the same change. What
+the owner says in a session overrides this skill and is written into it in that
+session.
 
 ## Plan from the milestone
 
@@ -25,7 +27,10 @@ constraints, never the method, the design or the order of the edits. A partner
 picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order. Every brief ends with the partner's own next one or two items, and the
-partner works its queue without waiting for the lead between items. A queue the
+partner works its queue without waiting for the lead between items. A wait (a
+GPU leg, a review slot, a landing) blocks the lane, never the partner: the
+partner takes its next item from its track or the ready queue and announces
+it. A queue the
 partners cannot read is no queue: keep the lead's queue where partners can reach
 it, or delegate it to them. Every queue item has exactly one recorded owner, and
 a handoff records the new one; an item with two owners is a defect to resolve
@@ -81,7 +86,10 @@ A lane lands as soon as it meets the
 [landing bar](../verification/SKILL.md#the-landing-bar): the lead merges the
 integration head into it, builds what the merge touched, and fast-forwards the
 integration branch. Never hold a finished lane for others to make a batch; a
-lane that cannot land alone is a dependency to name in the brief. Gates,
+lane that cannot land alone is a dependency to name in the brief. A wait for a
+review or a review slot never holds a lane that meets the landing bar, since a
+review is optional
+([`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review)). Gates,
 parity, canaries and counters checks run when the owner asks for a
 qualification, on the head the owner names. A red check on the integration
 branch is the next piece of work, not a reason to stop landing.
@@ -100,11 +108,14 @@ contract questions from the local code; a stale remote makes false "failing"
 claims.
 
 The lead runs any merge an agent is denied. Agents resolve conflicts in
-generated files, including shader interfaces, fingerprints and generated
-schemas, by running their generators; never hand-merge those files.
+generated files by running their generators, never by hand-merging: the world
+schemas and the portal's TypeScript (`puck schema`), the name registry
+(`puck registry`), the vocabulary page (`puck vocabulary`) and
+`packages.lock.json` (`puck locks`).
 
 The integration branch is where the lead lands work. Work reaches `main` in
-complete milestones, only when the owner asks, under
+complete milestones, only when the owner asks and never on a lane's request,
+because a push to `main` deploys to Azure, under
 [AGENTS.md's branch authority](../../../AGENTS.md#branches-commits-and-pushes).
 
 ## Schedule machines
