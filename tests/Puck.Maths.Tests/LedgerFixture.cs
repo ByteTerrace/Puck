@@ -85,8 +85,8 @@ public sealed class LedgerFixture : IDisposable {
     private const int StampDateLength = 10;
     private const string StampPrefix = "- last run: ";
 
-    private static readonly Tier[] ReportedTiers = [Tier.Smoke, Tier.Default, Tier.Deep, Tier.Exhaustive];
-    private static readonly string[] SectionOrder = ["Invocations", "Smoke", "Default", "Deep", "Exhaustive", "Coverage", "Legs", "Frontier"];
+    private static readonly Tier[] ReportedTiers = [Tier.Default, Tier.Deep, Tier.Exhaustive];
+    private static readonly string[] SectionOrder = ["Invocations", "Default", "Deep", "Exhaustive", "Coverage", "Legs", "Frontier"];
 
     // A block this run does NOT own, brought forward from the previous file — with its last-run line normalized to the
     // date alone. A carried block keeps whatever text its own last run wrote, which is the whole point of the merge,
@@ -141,8 +141,7 @@ public sealed class LedgerFixture : IDisposable {
 
         _ = builder.Append(value: "| tier | command |\n");
         _ = builder.Append(value: "| --- | --- |\n");
-        _ = builder.Append(value: "| Default (Smoke+Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` |\n");
-        _ = builder.Append(value: "| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` |\n");
+        _ = builder.Append(value: "| Default | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` |\n");
         _ = builder.Append(value: "| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` |\n");
         _ = builder.Append(value: "| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` |\n");
 

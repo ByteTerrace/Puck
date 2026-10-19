@@ -12,7 +12,7 @@ by a person, which four-hundred-character string literals buried among generic c
 | --- | --- | --- | --- |
 | 1 | Domains | `Domains.cs`, `Frontier.cs` | Operand sources: one committed edge set, an edge-biased `Pcg32XshRr` sampler, and a rolling frontier mapped through the stratified `DigitalNetSampler`. |
 | 2 | Oracles | `Oracles.cs` and its `Oracles.<area>.cs` partials | Shared-nothing `BigInteger` reference arithmetic (dyadic round/wrap, quadratic product/norm, Möbius step). Never calls a subject kernel. |
-| 3 | Laws | `laws/*.json`, `LawDeclarations.cs`, `LawRegistry.cs` and its `LawRegistry.<families>.cs` partials, `Laws.cs`, `LawCase.cs`, `Subjects.cs` and its `Subjects.<family>.cs` partials, `*Claims.cs` | Declarations are **data**: id, tier, covered members and leg prose live in `laws/<family>.json`, one file per family (several files may feed one family—the loader reads every `*.json` and keys by id). `LawRegistry.cs` and its partials hold only one binding per law—`ClaimCase(id, claim)` for a single `Laws.Claim`, `SweptCase(id, domain, width, claim)` for a single `Laws.SweptClaim`, `Case(id, run)` otherwise—grouped into per-family builder methods that `LawRegistry.Build()` concatenates; `Laws.cs` holds the combinators; the claim bodies sit in `Subjects.cs`, its partials, and the `*Claims.cs` files, sharing `Refusals.cs` and `DoublingTower.cs`. A declaration without a binding, or a binding without a declaration, fails `LawDeclarationTests` by name. |
+| 3 | Laws | `laws/*.json`, `LawDeclarations.cs`, `LawRegistry.cs` and its `LawRegistry.<families>.cs` partials, `Laws.cs`, `LawCase.cs`, `Legs.cs` (the `Leg` record the JSON leg rows materialize into, and the combinator-shape observer), `Subjects.cs` and its `Subjects.<family>.cs` partials, `*Claims.cs` | Declarations are **data**: id, tier, covered members and leg prose live in `laws/<family>.json`, one file per family (several files may feed one family—the loader reads every `*.json` and keys by id). `LawRegistry.cs` and its partials hold only one binding per law—`ClaimCase(id, claim)` for a single `Laws.Claim`, `SweptCase(id, domain, width, claim)` for a single `Laws.SweptClaim`, `Case(id, run)` otherwise—grouped into per-family builder methods that `LawRegistry.Build()` concatenates; `Laws.cs` holds the combinators; the claim bodies sit in `Subjects.cs`, its partials, and the `*Claims.cs` files, sharing `Refusals.cs` and `DoublingTower.cs`. A declaration without a binding, or a binding without a declaration, fails `LawDeclarationTests` by name. |
 | 4 | Coverage | `Coverage.cs`, `CoverageManifestTests.cs` | Reflection-driven coverage ratchet against `coverage-manifest.json`. |
 | 5 | Ledger | `LawTests.cs`, `LedgerFixture.cs` | Tier runner and the RESULTS ledger. |
 
@@ -56,18 +56,30 @@ they never fall back to rewriting the live report in place.
 ## Tiers and how to run them
 
 Tier selection is fully declarative; no environment variable selects a tier. Every case carries its tier as the
-`tier` trait, and Deep and Exhaustive cases are explicit, so a plain `dotnet test` runs **Smoke + Default** only. A run
+`tier` trait, and Deep and Exhaustive cases are explicit, so a plain `dotnet test` runs the **Default** tier only. A run
 opts into the explicit cases with `--explicit on` and selects one tier with `--filter-trait tier=<tier>`; without
 `--explicit on`, a Deep or Exhaustive filter selects no test. To run one law, filter on its id, which is the case's
 display name: `--explicit on --filter-display-name '<law-id>*'`. The trailing
 wildcard includes the runner's appended argument display; an exact bare id selects no row.
 
-| Tier | Command | Budget |
+Build with `-nodeReuse:false`, then run with `--no-build`. `dotnet test` forwards a switch it does not know to the
+xUnit v3 test host, which exits 5, so `-nodeReuse:false` belongs to the build and restore alone:
+
+```sh
+dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false
+```
+
+| Tier | Command | Measured |
 | --- | --- | --- |
-| Default (Smoke + Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` | < 30 s |
-| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` | < 2 s |
-| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | minutes |
-| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long; full-carrier sweeps and expensive finite combinatorial-prime checks; on demand or nightly |
+| Default | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build` | 743 cases, 26 s |
+| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Deep` | 103 cases, 49 s |
+| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive` | full-carrier sweeps and expensive finite combinatorial-prime checks; not timed |
+
+The Default tier reaches the line coverage CI counts for `Puck.Maths`, and its time is the one the table measures
+on the reference machine with nothing else running. Deep holds what Default does not reach: the exhaustive
+four-operand edge cross product (`Domains.Quads`), finite carriers swept whole (the 16-bit unit fraction, GF(2^8)), and
+modulus, degree and band ladders longer than Default's. A Deep row that only draws more random operands from the
+same domain as its Default sibling adds no evidence and does not belong. For the same reason there is no Smoke tier.
 
 The high-bound combinatorial-prime checks use Exhaustive to keep expensive
 counts and rank searches out of the ordinary Deep run. Their declarations

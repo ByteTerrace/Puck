@@ -16,20 +16,16 @@ internal static partial class Subjects {
 
     /// <summary>Compares the strong Lucas test with the U and V recurrence oracle at the Default tier's operands.</summary>
     /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? LucasTraceLadderMatchesRecurrence() => LucasTraceLadderMatchesRecurrence(full: false);
-    /// <summary>Compares the strong Lucas test with the U and V recurrence oracle at the Deep tier's stronger operands.</summary>
-    /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? LucasTraceLadderMatchesRecurrenceDeep() => LucasTraceLadderMatchesRecurrence(full: true);
-
-    private static string? LucasTraceLadderMatchesRecurrence(bool full) =>
-        (LucasTraceSelfridgeSurface(full: full)
-        ?? (LucasTraceSelfridgeSearchSurface(full: full)
-        ?? (LucasTraceParameterSurface(full: full)
+    public static string? LucasTraceLadderMatchesRecurrence() =>
+        (LucasTraceSelfridgeSurface()
+        ?? (LucasTraceSelfridgeSearchSurface()
+        ?? (LucasTraceParameterSurface()
         ?? LucasTraceRefusals())));
+
     // Selfridge's search alone, the discriminant it chooses or the rejection it returns, against the oracle's own
     // search: the constant-divisor residues and the skipped square discriminant cannot be seen through the test's
     // verdict on a prime, which accepts at every discriminant of symbol -1.
-    private static string? LucasTraceSelfridgeSearchSurface(bool full) {
+    private static string? LucasTraceSelfridgeSearchSurface() {
         var generator = Pcg32XshRr.Create(state: 2073, stream: 23);
         var pastTable = 0;
         var rejected = 0;
@@ -50,7 +46,7 @@ internal static partial class Subjects {
 
         // Every odd value of a contiguous band, which holds the values that share a factor with each tabulated
         // candidate, the squares, and the values whose search leaves the table.
-        var band = (full ? (1UL << 23) : (1UL << 21));
+        var band = (1UL << 21);
 
         for (var value = 3UL; (value < band); value += 2UL) {
             if (Check(value: value) is { } failure) { return failure; }
@@ -59,8 +55,8 @@ internal static partial class Subjects {
 
         // Values whose search passes every tabulated discriminant: one modulo every odd prime through 31, so that every
         // symbol through 31 is one, with the symbols at 37 through 61 left to the draw, which one value in 128 passes.
-        const ulong Residues = (3UL * 5UL * 7UL * 11UL * 13UL * 17UL * 19UL * 23UL * 29UL * 31UL);
-        var draws = (full ? 2_000 : 200);
+        const ulong Residues = (((((((((3UL * 5UL) * 7UL) * 11UL) * 13UL) * 17UL) * 19UL) * 23UL) * 29UL) * 31UL);
+        var draws = 200;
 
         for (var count = 0; (count < (draws * 10)); ++count) {
             if (Check(value: (1UL + (Residues * ((NextWord() % (ulong.MaxValue / (Residues << 1))) << 1)))) is { } failure) { return failure; }
@@ -71,19 +67,19 @@ internal static partial class Subjects {
 
         for (var width = 5; (width <= 64); ++width) {
             for (var count = 0; (count < draws); ++count) {
-                var word = ((NextWord() >> (64 - width)) | 1UL);
+                var word = (NextWord() >> (64 - width)) | 1UL;
 
                 if (Check(value: word) is { } failure) { return failure; }
-                foreach (var factor in (ulong[])[3UL, 5UL, 7UL, 9UL, 11UL, 13UL, 15UL]) {
+                foreach (var factor in ((ulong[])[3UL, 5UL, 7UL, 9UL, 11UL, 13UL, 15UL])) {
                     if (Check(value: (((word / factor) | 1UL) * factor)) is { } multiple) { return multiple; }
                 }
             }
         }
-        for (var root = 3UL; (root < (full ? (1UL << 17) : (1UL << 15))); root += 2UL) {
+        for (var root = 3UL; (root < (1UL << 15)); root += 2UL) {
             if (Check(value: (root * root)) is { } failure) { return failure; }
         }
         for (var count = 0; (count < draws); ++count) {
-            var root = ((NextWord() >> 32) | 1UL);
+            var root = (NextWord() >> 32) | 1UL;
 
             if (Check(value: (root * root)) is { } failure) { return failure; }
         }
@@ -102,7 +98,7 @@ internal static partial class Subjects {
             ?? Refuses(action: () => _ = PrimeKernels.SelfridgeDiscriminant(value: 1UL), type: typeof(ArgumentOutOfRangeException), parameterName: "value", what: "a Selfridge search below three"));
     }
     // The whole test, Selfridge's search included, against the recurrence oracle with its own search.
-    private static string? LucasTraceSelfridgeSurface(bool full) {
+    private static string? LucasTraceSelfridgeSurface() {
         var generator = Pcg32XshRr.Create(state: 2071, stream: 17);
         var acceptedComposites = 0;
 
@@ -119,7 +115,7 @@ internal static partial class Subjects {
         }
 
         // Every odd value of a contiguous band, where the composites a single trace would accept live.
-        var band = (full ? (1UL << 23) : (1UL << 21));
+        var band = (1UL << 21);
 
         for (var value = 3UL; (value < band); value += 2UL) {
             if (Check(value: value) is { } failure) { return failure; }
@@ -138,7 +134,7 @@ internal static partial class Subjects {
         if (acceptedComposites < 2) { return $"the band held {acceptedComposites} accepted composites, so the accepting path at a composite went unexercised"; }
 
         // Drawn odd words in each band: below 2^58, up to 2^61, up to 2^62, and above.
-        var draws = (full ? 40_000 : 4_000);
+        var draws = 4_000;
         var traceCeiling = LucasTraceBoundaries[2];
 
         for (var count = 0; (count < draws); ++count) {
@@ -155,11 +151,11 @@ internal static partial class Subjects {
         }
         // A long run of draws in [2^61, 3·2^60), which holds enough primes for an accepting path that loses a fold to
         // show.
-        for (var count = 0; (count < (full ? 120_000 : 24_000)); ++count) {
+        for (var count = 0; (count < 24_000); ++count) {
             if (Check(value: (traceCeiling + (NextWord() % (traceCeiling >> 1))) | 1UL) is { } failure) { return failure; }
         }
         // Just above the signed ceiling, where a ladder left signed too far carries traces past the signed word.
-        for (var count = 0; (count < (full ? 120_000 : 24_000)); ++count) {
+        for (var count = 0; (count < 24_000); ++count) {
             if (Check(value: (ScaledResidueRing64.SignedModulusCeiling + (NextWord() % (ScaledResidueRing64.SignedModulusCeiling >> 1))) | 1UL) is { } failure) { return failure; }
         }
         // The strong base-two pseudoprimes of every region, which only this test rejects, and composites shaped against
@@ -168,13 +164,13 @@ internal static partial class Subjects {
         var bandPseudoprimes = new List<ulong>();
         var high = new List<ulong>();
 
-        if (BaseTwoPseudoprimes(band: bandPseudoprimes, full: false, high: high, low: low) is { } construction) { return construction; }
-        foreach (var value in low.Concat(second: bandPseudoprimes).Concat(second: high).Concat(second: BandShapedComposites(full: full))) {
+        if (BaseTwoPseudoprimes(band: bandPseudoprimes, high: high, low: low) is { } construction) { return construction; }
+        foreach (var value in low.Concat(second: bandPseudoprimes).Concat(second: high).Concat(second: BandShapedComposites())) {
             if (Check(value: value) is { } failure) { return failure; }
         }
 
         // The odd neighbours of every boundary on both sides, and the top of the carrier.
-        var reach = (full ? 8_192UL : 512UL);
+        var reach = 512UL;
 
         foreach (var boundary in LucasTraceBoundaries) {
             for (var offset = 1UL; (offset < reach); offset += 2UL) {
@@ -210,7 +206,7 @@ internal static partial class Subjects {
 
         var nearRoot = new List<ulong>();
 
-        for (var candidate = ((ulong)uint.MaxValue); (nearRoot.Count < (full ? 64 : 16)); candidate -= 2UL) {
+        for (var candidate = ((ulong)uint.MaxValue); (nearRoot.Count < 16); candidate -= 2UL) {
             if (Oracles.ExactPrimality(value: candidate)) { nearRoot.Add(item: candidate); }
         }
         for (var i = 0; (i < nearRoot.Count); ++i) {
@@ -222,7 +218,7 @@ internal static partial class Subjects {
         return null;
     }
     // The ladder at a given parameter, every small Q including the non-units Selfridge's search never selects.
-    private static string? LucasTraceParameterSurface(bool full) {
+    private static string? LucasTraceParameterSurface() {
         var generator = Pcg32XshRr.Create(state: 2072, stream: 19);
         var nonUnits = 0;
         var accepted = 0;
@@ -249,8 +245,8 @@ internal static partial class Subjects {
             return null;
         }
 
-        var contiguous = (full ? 6_000UL : 2_000UL);
-        var drawsPerRegion = (full ? 48 : 8);
+        var contiguous = 2_000UL;
+        var drawsPerRegion = 8;
         var traceCeiling = LucasTraceBoundaries[2];
 
         for (var q = -40L; (q <= 40L); ++q) {
@@ -289,7 +285,7 @@ internal static partial class Subjects {
         // Wide parameters, whose odd parts are past every tabulated digit, and wide powers of two.
         const long Limit = (1L << 61);
         long[] wide = [(Limit - 1L), -(Limit - 1L), (Limit - 3L), -(Limit - 3L), (1L << 60), -(1L << 60), (3L << 58), -(3L << 58), 65_537L, -65_537L];
-        var wideDraws = (full ? 512 : 64);
+        var wideDraws = 64;
 
         for (var count = 0; (count < (wide.Length + wideDraws)); ++count) {
             var q = ((count < wide.Length)

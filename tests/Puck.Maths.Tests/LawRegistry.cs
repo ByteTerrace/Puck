@@ -169,12 +169,6 @@ internal static partial class LawRegistry {
         NeighborhoodFraction: 0.3,
         SublatticeShift: 16
     );
-    private static readonly Domain SmokeDomain = new(
-        Key: "smoke",
-        Block: 64,
-        EdgeFraction: 0.5,
-        NeighborhoodFraction: 0.3
-    );
     private static readonly Domain Presented = new(
         Key: "presented",
         Block: 512,
@@ -786,7 +780,6 @@ internal static partial class LawRegistry {
 
     private static IReadOnlyList<LawCase> Build() =>
     [
-        .. SmokeCases(),
         .. RootCoreCases(),
         .. CostModelCases(),
         .. FixedQ4816Cases(),

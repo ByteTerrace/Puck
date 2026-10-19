@@ -376,8 +376,7 @@
         "binary-field.regions-vs-oracle",
         "deep.binary-field-degree8-exhaustive",
         "presented.binary-field-wide-degrees-twin",
-        "presented.gf2-twins-binaryfield",
-        "smoke.binary-field-product-vs-oracle"
+        "presented.gf2-twins-binaryfield"
       ],
       "Id": "Puck.Maths.BinaryField<T>.Multiply(T,T)",
       "State": "covered"
@@ -588,8 +587,7 @@
         "binary-field.regions-vs-oracle",
         "deep.binary-field-irreducible-census",
         "deep.binary-field-multiplicative-group",
-        "presented.gf2-twins-binaryfield",
-        "smoke.binary-field-product-vs-oracle"
+        "presented.gf2-twins-binaryfield"
       ],
       "Id": "Puck.Maths.BinaryFields.Degree16",
       "State": "covered"
@@ -632,8 +630,7 @@
         "deep.binary-field-degree8-exhaustive",
         "deep.binary-field-irreducible-census",
         "deep.binary-field-multiplicative-group",
-        "presented.gf2-twins-binaryfield",
-        "smoke.binary-field-product-vs-oracle"
+        "presented.gf2-twins-binaryfield"
       ],
       "Id": "Puck.Maths.BinaryFields.Degree8",
       "State": "covered"
@@ -998,9 +995,7 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
         "deep.polynomial-factor-odd-cycle-vs-cyclotomic-cosets",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "deep.polynomial-irreducible-census-and-trial-division",
         "deep.polynomial-primitive-order-and-census",
         "polynomial.additive-group-and-accessors",
@@ -1016,9 +1011,7 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "polynomial.divrem-vs-monomial-oracle",
-        "smoke.polynomial-divrem-vs-monomial-oracle"
+        "polynomial.divrem-vs-monomial-oracle"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.DivRem(Puck.Maths.BinaryPolynomial)",
       "State": "covered"
@@ -1033,7 +1026,6 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "polynomial.gcd-vs-binary-descent-oracle"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.GreatestCommonDivisor(Puck.Maths.BinaryPolynomial)",
@@ -1042,7 +1034,6 @@
     {
       "CoveredBy": [
         "deep.polynomial-irreducible-census-and-trial-division",
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "deep.polynomial-primitive-order-and-census",
         "polynomial.additive-group-and-accessors",
         "polynomial.irreducible-census-and-trial-division",
@@ -1081,8 +1072,6 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "polynomial.additive-group-and-accessors",
         "polynomial.divrem-vs-monomial-oracle",
         "polynomial.gcd-vs-binary-descent-oracle",
@@ -1108,10 +1097,7 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "deep.polynomial-irreducible-census-and-trial-division",
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "polynomial.additive-group-and-accessors",
         "polynomial.divrem-vs-monomial-oracle",
         "polynomial.gcd-vs-binary-descent-oracle",
@@ -1123,10 +1109,7 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "deep.polynomial-irreducible-census-and-trial-division",
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "polynomial.additive-group-and-accessors",
         "polynomial.divrem-vs-monomial-oracle",
         "polynomial.gcd-vs-binary-descent-oracle",
@@ -1145,7 +1128,6 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "polynomial.multiply-vs-carryless-oracle"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.op_CheckedMultiply(Puck.Maths.BinaryPolynomial,Puck.Maths.BinaryPolynomial)",
@@ -1153,17 +1135,14 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
         "polynomial.divrem-vs-monomial-oracle",
-        "polynomial.shifts-are-monomial-arithmetic",
-        "smoke.polynomial-divrem-vs-monomial-oracle"
+        "polynomial.shifts-are-monomial-arithmetic"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.op_Division(Puck.Maths.BinaryPolynomial,Puck.Maths.BinaryPolynomial)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "polynomial.multiply-vs-carryless-oracle",
         "polynomial.shifts-are-monomial-arithmetic"
       ],
@@ -1172,20 +1151,14 @@
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
         "polynomial.divrem-vs-monomial-oracle",
-        "polynomial.gcd-vs-binary-descent-oracle",
-        "smoke.polynomial-divrem-vs-monomial-oracle"
+        "polynomial.gcd-vs-binary-descent-oracle"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.op_Modulus(Puck.Maths.BinaryPolynomial,Puck.Maths.BinaryPolynomial)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "deep.polynomial-divrem-vs-monomial-oracle",
-        "deep.polynomial-gcd-vs-binary-descent-oracle",
-        "deep.polynomial-multiply-vs-carryless-oracle",
         "polynomial.divrem-vs-monomial-oracle",
         "polynomial.gcd-vs-binary-descent-oracle",
         "polynomial.multiply-vs-carryless-oracle",
@@ -1242,8 +1215,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.Add(System.Boolean,System.Boolean)",
       "State": "covered"
@@ -1252,8 +1224,7 @@
       "CoveredBy": [
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
-        "presented.material-fused-identities",
-        "smoke.presented-boolean-star"
+        "presented.material-fused-identities"
       ],
       "Id": "Puck.Maths.BooleanMaterial.Complement(System.Boolean)",
       "State": "covered"
@@ -1264,8 +1235,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.FusedChargedLinear(System.ReadOnlySpan<System.Boolean>,System.ReadOnlySpan<System.Boolean>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -1276,8 +1246,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.FusedChargedSum(System.ReadOnlySpan<System.Boolean>,System.ReadOnlySpan<System.Boolean>,System.ReadOnlySpan<System.Boolean>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -1288,8 +1257,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.IsZero(System.Boolean)",
       "State": "covered"
@@ -1300,8 +1268,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.Multiply(System.Boolean,System.Boolean)",
       "State": "covered"
@@ -1312,8 +1279,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.One",
       "State": "covered"
@@ -1324,8 +1290,7 @@
         "presented.matcher-vs-backtracking-oracle",
         "presented.material-contract-boundaries",
         "presented.material-fused-identities",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-boolean-star"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.BooleanMaterial.Zero",
       "State": "covered"
@@ -1668,6 +1633,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -1731,15 +1697,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.Create(System.ReadOnlySpan<Puck.Maths.Generator>,System.ReadOnlySpan<Puck.Maths.RewriteRule<TValue>>,TOps,System.Int32,System.ReadOnlySpan<TValue>)",
       "State": "covered"
@@ -1772,6 +1730,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -1834,15 +1793,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.GeneratorCount",
       "State": "covered"
@@ -1882,6 +1833,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -1944,15 +1896,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.HasFiniteNormalForms",
       "State": "covered"
@@ -1985,6 +1929,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2046,15 +1991,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.HasLiveReassociation",
       "State": "covered"
@@ -2087,6 +2024,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2148,15 +2086,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.Lane",
       "State": "covered"
@@ -2189,6 +2119,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2250,15 +2181,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.Material",
       "State": "covered"
@@ -2291,6 +2214,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2352,15 +2276,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.MaximumCellTerms",
       "State": "covered"
@@ -2394,6 +2310,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2456,15 +2373,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.NormalFormCount",
       "State": "covered"
@@ -2498,6 +2407,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2560,15 +2470,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.NormalFormWord(System.Int64)",
       "State": "covered"
@@ -2601,6 +2503,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -2662,15 +2565,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.ChargedPresentation<TValue,TOps>.WindowDegree",
       "State": "covered"
@@ -2690,8 +2585,7 @@
         "presented.tropical-star-vs-oracle",
         "presented.unit-interval-boolean-sublattice",
         "presented.unit-interval-power-of-two-twin",
-        "presented.unit-interval-star-licensing",
-        "smoke.presented-boolean-star"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.ClosureCertificate.Idempotent",
       "State": "covered"
@@ -2712,8 +2606,7 @@
         "presented.quasishuffle-vs-prefix-sums",
         "presented.resolvent-remultiplies",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-reciprocal-round-trip",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-reciprocal-round-trip"
       ],
       "Id": "Puck.Maths.ClosureCertificate.Nilpotent",
       "State": "covered"
@@ -3188,9 +3081,7 @@
         "presented.shuffle-multiterm-canary",
         "presented.shuffle-vs-binomial",
         "presented.shuffle-vs-enumeration",
-        "presented.tangle-loop-charge-canary",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-loop-charge-canary"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.Charge(System.Int64,System.Int64)",
       "State": "covered"
@@ -3210,9 +3101,7 @@
         "presented.shuffle-multiterm-canary",
         "presented.shuffle-vs-binomial",
         "presented.shuffle-vs-enumeration",
-        "presented.tangle-loop-charge-canary",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-loop-charge-canary"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.Charge(System.Int64,System.Int64,System.Int32)",
       "State": "covered"
@@ -3230,9 +3119,7 @@
         "presented.quasishuffle-degenerates-to-shuffle",
         "presented.reassociation-route-coherent",
         "presented.shuffle-multiterm-canary",
-        "presented.shuffle-vs-enumeration",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.shuffle-vs-enumeration"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.KeyCount",
       "State": "covered"
@@ -3251,9 +3138,7 @@
         "presented.quasishuffle-degenerates-to-shuffle",
         "presented.reassociation-route-coherent",
         "presented.shuffle-vs-binomial",
-        "presented.shuffle-vs-enumeration",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.shuffle-vs-enumeration"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.Target(System.Int64,System.Int64)",
       "State": "covered"
@@ -3272,9 +3157,7 @@
         "presented.quasishuffle-degenerates-to-shuffle",
         "presented.reassociation-route-coherent",
         "presented.shuffle-vs-binomial",
-        "presented.shuffle-vs-enumeration",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.shuffle-vs-enumeration"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.Target(System.Int64,System.Int64,System.Int32)",
       "State": "covered"
@@ -3294,9 +3177,7 @@
         "presented.shuffle-multiterm-canary",
         "presented.shuffle-vs-binomial",
         "presented.shuffle-vs-enumeration",
-        "presented.tangle-loop-charge-canary",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-loop-charge-canary"
       ],
       "Id": "Puck.Maths.CompiledProduct<TValue>.TargetCount(System.Int64,System.Int64)",
       "State": "covered"
@@ -3381,10 +3262,10 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Algebra",
       "State": "covered"
@@ -3392,11 +3273,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
         "presented.transfer-functor-vs-legacy-copies",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Create(TOps)",
       "State": "covered"
@@ -3404,10 +3285,10 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Digit(TValue)",
       "State": "covered"
@@ -3415,11 +3296,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
         "presented.transfer-functor-vs-legacy-copies",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Entry(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,System.Int32,System.Int32)",
       "State": "covered"
@@ -3427,11 +3308,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
         "presented.transfer-functor-vs-legacy-copies",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Evaluate(System.ReadOnlySpan<TValue>)",
       "State": "covered"
@@ -3439,10 +3320,10 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.substitution-matrix-vs-inflation",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.ConvergentTransfer<TValue,TOps>.Run(System.ReadOnlySpan<TValue>,System.Int32,System.Int32)",
       "State": "covered"
@@ -3707,8 +3588,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.Add(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered"
@@ -3732,8 +3612,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.FusedChargedLinear(System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -3750,8 +3629,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.FusedChargedSum(System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -3768,8 +3646,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.IsZero(System.Numerics.BigInteger)",
       "State": "covered"
@@ -3786,8 +3663,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.Multiply(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered"
@@ -3805,8 +3681,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.One",
       "State": "covered"
@@ -3824,8 +3699,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.substitution-matrix-vs-inflation",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.CountingMaterial.Zero",
       "State": "covered"
@@ -4875,11 +4749,11 @@
       "CoveredBy": [
         "presented.duality-weighted-equivalence-vs-enumeration",
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.EquivalenceWitness<TValue>.LeftValue",
       "State": "covered"
@@ -4888,11 +4762,11 @@
       "CoveredBy": [
         "presented.duality-weighted-equivalence-vs-enumeration",
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.EquivalenceWitness<TValue>.RightValue",
       "State": "covered"
@@ -4901,11 +4775,11 @@
       "CoveredBy": [
         "presented.duality-weighted-equivalence-vs-enumeration",
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.EquivalenceWitness<TValue>.Word",
       "State": "covered"
@@ -5536,9 +5410,7 @@
         "complex.multiply-routes-allocate-nothing",
         "complex.twin-quad",
         "deep.complex-mul-vs-oracle",
-        "presented.clifford-planar-complex-twin",
-        "smoke.complex-twin-quad",
-        "smoke.presented-complex-twin"
+        "presented.clifford-planar-complex-twin"
       ],
       "Id": "Puck.Maths.FixedComplex.op_Multiply(Puck.Maths.FixedComplex,Puck.Maths.FixedComplex)",
       "State": "covered"
@@ -5815,7 +5687,6 @@
     },
     {
       "CoveredBy": [
-        "deep.dual-quaternion-mul-vs-oracle",
         "dual.additive-group-exact",
         "dual.generic-carrier-two-roundings",
         "dual.mul-purity",
@@ -5824,8 +5695,7 @@
         "dual.seeds-and-identities",
         "dual.twin-quad",
         "presented.clifford-planar-dual-twin",
-        "presented.jet-residual-twins-dual",
-        "smoke.presented-jet-residual-twin"
+        "presented.jet-residual-twins-dual"
       ],
       "Id": "Puck.Maths.FixedDual<TValue>.op_Multiply(Puck.Maths.FixedDual<TValue>,Puck.Maths.FixedDual<TValue>)",
       "State": "covered"
@@ -6486,7 +6356,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6498,7 +6367,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6510,7 +6378,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6522,7 +6389,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "position.delta-vs-oracle",
         "position.group-structure-exact",
         "position.render-relative-ladder"
@@ -6540,7 +6406,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6567,7 +6432,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6578,7 +6442,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "position.delta-vs-oracle",
         "position.group-structure-exact"
       ],
@@ -6603,7 +6466,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "deep.position-translate-vs-oracle",
         "position.canonical-vs-oracle",
         "position.delta-vs-oracle",
@@ -6625,7 +6487,6 @@
     },
     {
       "CoveredBy": [
-        "deep.position-delta-vs-oracle",
         "position.delta-vs-oracle",
         "position.group-structure-exact"
       ],
@@ -7906,7 +7767,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.atan2-vs-series"
       ],
       "Id": "Puck.Maths.FixedQ4816.Atan2(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
@@ -7956,7 +7816,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.sincos-vs-series",
         "scalar.trigonometry-constants",
         "scalar.trigonometry-seams"
@@ -7987,7 +7846,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.exp2-vs-series"
       ],
       "Id": "Puck.Maths.FixedQ4816.Exp2(Puck.Maths.FixedQ4816)",
@@ -8175,7 +8033,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.log2-vs-series"
       ],
       "Id": "Puck.Maths.FixedQ4816.Log2(Puck.Maths.FixedQ4816)",
@@ -8268,7 +8125,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8279,7 +8135,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8290,7 +8145,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8301,7 +8155,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8356,7 +8209,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.sincos-vs-series",
         "scalar.trigonometry-constants",
         "scalar.trigonometry-seams"
@@ -8366,7 +8218,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "quaternion.sincos-raw-full-unsigned-width",
         "scalar.sincos-vs-series",
         "scalar.trigonometry-constants",
@@ -8460,7 +8311,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-transcendental-envelope",
         "scalar.sqrt-exact"
       ],
       "Id": "Puck.Maths.FixedQ4816.Sqrt(Puck.Maths.FixedQ4816)",
@@ -8482,7 +8332,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.text-ladder-and-refusals",
         "scalar.text-round-trip"
       ],
@@ -8491,7 +8340,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8502,7 +8350,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8513,7 +8360,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8524,7 +8370,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.culture-token-ambiguity-refused",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
@@ -8535,7 +8380,6 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-text-round-trip",
         "scalar.additive-ops-vs-oracle",
         "scalar.culture-token-ambiguity-refused",
         "scalar.double-projection-vs-oracle",
@@ -8620,9 +8464,7 @@
     },
     {
       "CoveredBy": [
-        "deep.fixed-divide-vs-oracle",
-        "scalar.divide-vs-oracle",
-        "smoke.fixed-divide-ties-to-even"
+        "scalar.divide-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedQ4816.op_Division(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered"
@@ -8680,7 +8522,6 @@
       "CoveredBy": [
         "scalar.mul-purity",
         "scalar.mul-vs-oracle",
-        "smoke.fixed-mul-ties-to-even",
         "split.norm-multiplicative"
       ],
       "Id": "Puck.Maths.FixedQ4816.op_Multiply(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
@@ -8999,30 +8840,26 @@
     },
     {
       "CoveredBy": [
-        "deep.quaternion-mul-vs-oracle",
         "presented.clifford-quaternion-even-twin",
         "quaternion.additive-group-exact",
         "quaternion.algebraic-sanity-and-fromto-poles",
         "quaternion.conjugate-antiautomorphism",
         "quaternion.hamilton-product-dot-inverse-full-width",
         "quaternion.mul-vs-oracle",
-        "quaternion.scale-vs-oracle",
-        "smoke.quaternion-mul-vs-oracle"
+        "quaternion.scale-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedQuaternion.op_Multiply(Puck.Maths.FixedQuaternion,Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "deep.quaternion-mul-vs-oracle",
         "presented.clifford-quaternion-even-twin",
         "quaternion.additive-group-exact",
         "quaternion.algebraic-sanity-and-fromto-poles",
         "quaternion.conjugate-antiautomorphism",
         "quaternion.hamilton-product-dot-inverse-full-width",
         "quaternion.mul-vs-oracle",
-        "quaternion.scale-vs-oracle",
-        "smoke.quaternion-mul-vs-oracle"
+        "quaternion.scale-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedQuaternion.op_Multiply(Puck.Maths.FixedQuaternion,Puck.Maths.FixedQuaternion)",
       "State": "covered"
@@ -9048,7 +8885,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rate-schedule-vs-ledger",
         "rate.construction-and-refusals",
         "rate.schedule-vs-ledger",
         "rate.unit-advance-exact",
@@ -9059,7 +8895,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rate-schedule-vs-ledger",
         "rate.construction-and-refusals",
         "rate.schedule-vs-ledger"
       ],
@@ -9068,7 +8903,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rate-schedule-vs-ledger",
         "rate.construction-and-refusals",
         "rate.schedule-vs-ledger",
         "rate.unit-advance-exact",
@@ -9079,7 +8913,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rate-schedule-vs-ledger",
         "rate.construction-and-refusals",
         "rate.schedule-vs-ledger",
         "rate.unit-advance-exact",
@@ -9098,7 +8931,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rate-schedule-vs-ledger",
         "rate.construction-and-refusals",
         "rate.schedule-vs-ledger",
         "rate.unit-advance-exact"
@@ -9108,7 +8940,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rigid-compose-vs-oracle",
         "deep.rigid-transform-point-vs-oracle",
         "rigid.compose-normalized-twin",
         "rigid.compose-vs-oracle",
@@ -9118,8 +8949,7 @@
         "rigid.normalize-unit-constraints",
         "rigid.sclerp-endpoints-and-screw",
         "rigid.transform-point-vs-oracle",
-        "rigid.translation-vs-oracle",
-        "smoke.rigid-compose-vs-oracle"
+        "rigid.translation-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedRigidTransform..ctor(Puck.Maths.FixedDual<Puck.Maths.FixedQuaternion>)",
       "State": "covered"
@@ -9269,7 +9099,6 @@
     },
     {
       "CoveredBy": [
-        "deep.rigid-compose-vs-oracle",
         "deep.rigid-transform-point-vs-oracle",
         "rigid.compose-normalized-twin",
         "rigid.compose-vs-oracle",
@@ -9280,15 +9109,13 @@
         "rigid.normalize-unit-constraints",
         "rigid.sclerp-endpoints-and-screw",
         "rigid.transform-point-vs-oracle",
-        "rigid.translation-vs-oracle",
-        "smoke.rigid-compose-vs-oracle"
+        "rigid.translation-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedRigidTransform.Value",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "deep.rigid-compose-vs-oracle",
         "deep.rigid-transform-point-vs-oracle",
         "presented.clifford-motor-rigid-transform-twin",
         "rigid.compose-normalized-twin",
@@ -9296,8 +9123,7 @@
         "rigid.identity-and-inverse-exact",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw",
-        "rigid.transform-point-vs-oracle",
-        "smoke.rigid-compose-vs-oracle"
+        "rigid.transform-point-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedRigidTransform.op_Multiply(Puck.Maths.FixedRigidTransform,Puck.Maths.FixedRigidTransform)",
       "State": "covered"
@@ -9613,7 +9439,6 @@
       "CoveredBy": [
         "deep.vector-narrow-lane-vs-oracle",
         "deep.vector-plane-products-vs-oracle",
-        "smoke.vector-fused-products-one-rounding",
         "vector.exact-algebra-on-the-sublattice",
         "vector.fused-products-diverge-from-per-product",
         "vector.identity-and-negation",
@@ -9678,7 +9503,6 @@
       "CoveredBy": [
         "deep.vector-narrow-lane-vs-oracle",
         "deep.vector-plane-products-vs-oracle",
-        "smoke.vector-fused-products-one-rounding",
         "vector.construction-and-refusals",
         "vector.exact-algebra-on-the-sublattice",
         "vector.fused-products-diverge-from-per-product",
@@ -9803,7 +9627,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-cross-vs-oracle",
         "vector.construction-and-refusals",
         "vector.exact-algebra-on-the-sublattice",
         "vector.identity-and-negation",
@@ -9824,7 +9647,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-cross-vs-oracle",
         "vector.exact-algebra-on-the-sublattice",
         "vector.fused-products-diverge-from-per-product",
         "vector.identity-and-negation",
@@ -9910,7 +9732,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-normalize-vs-ideal-and-staged",
         "quaternion.normalize-full-width-oracle-and-four-square-carry",
         "vector.identity-and-negation",
         "vector.normalize-ideal-bound-full-width-sweep",
@@ -9991,7 +9812,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-normalize-vs-ideal-and-staged",
         "vector.componentwise-vs-oracle",
         "vector.construction-and-refusals",
         "vector.identity-and-negation",
@@ -10003,7 +9823,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-normalize-vs-ideal-and-staged",
         "vector.componentwise-vs-oracle",
         "vector.construction-and-refusals",
         "vector.identity-and-negation",
@@ -10015,7 +9834,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-normalize-vs-ideal-and-staged",
         "vector.componentwise-vs-oracle",
         "vector.construction-and-refusals",
         "vector.identity-and-negation",
@@ -10027,7 +9845,6 @@
     },
     {
       "CoveredBy": [
-        "deep.vector-normalize-vs-ideal-and-staged",
         "vector.construction-and-refusals",
         "vector.identity-and-negation",
         "vector.normalize-vs-ideal-and-staged"
@@ -10312,6 +10129,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -10319,8 +10137,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>..ctor(System.Int32,Puck.Maths.RewriteRule<TValue>,System.Int64,System.Int64)",
       "State": "covered"
@@ -10331,6 +10148,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -10338,8 +10156,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>.LeftKey",
       "State": "covered"
@@ -10350,6 +10167,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -10357,8 +10175,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>.RightKey",
       "State": "covered"
@@ -10369,6 +10186,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -10376,8 +10194,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>.Rule",
       "State": "covered"
@@ -10388,6 +10205,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -10395,8 +10213,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>.RuleIndex",
       "State": "covered"
@@ -10614,6 +10431,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -10675,15 +10493,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Generator..ctor(System.Int32,System.ReadOnlyMemory<System.Int32>,System.ReadOnlyMemory<System.Int32>,System.Int32)",
       "State": "covered"
@@ -10730,6 +10540,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -10791,15 +10602,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Generator.Degree",
       "State": "covered"
@@ -10832,6 +10635,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -10894,15 +10698,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Generator.Inputs",
       "State": "covered"
@@ -10935,6 +10731,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -10997,15 +10794,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Generator.Outputs",
       "State": "covered"
@@ -11038,6 +10827,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -11099,15 +10889,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Generator.Symbol",
       "State": "covered"
@@ -12342,6 +12124,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12362,10 +12145,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.Add(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered"
@@ -12387,6 +12167,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12407,10 +12188,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.FusedChargedLinear(System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -12432,6 +12210,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12452,10 +12231,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.FusedChargedSum(System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,System.ReadOnlySpan<System.Numerics.BigInteger>,Puck.Maths.ChargeLane)",
       "State": "covered"
@@ -12477,6 +12253,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12497,10 +12274,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.IsZero(System.Numerics.BigInteger)",
       "State": "covered"
@@ -12522,6 +12296,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12542,10 +12317,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.Multiply(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered"
@@ -12566,6 +12338,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12584,10 +12357,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.Negate(System.Numerics.BigInteger)",
       "State": "covered"
@@ -12609,6 +12379,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12629,10 +12400,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.One",
       "State": "covered"
@@ -12653,6 +12421,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12671,10 +12440,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.Subtract(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered"
@@ -12696,6 +12462,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.homology-torsion-and-betti",
         "presented.incidence-euler-mass",
@@ -12716,10 +12483,7 @@
         "presented.tangle-relations-hold",
         "presented.tensor-behavior-vs-product",
         "presented.transfer-twins-convergents",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.IntegerMaterial.Zero",
       "State": "covered"
@@ -16180,8 +15944,7 @@
         "presented.motor-sandwich-vs-geometric-algebra",
         "presented.multiply-into-twins-multiply",
         "presented.orientation-twins-determinant",
-        "presented.reassociation-brackets-inert",
-        "smoke.presented-multiply-into-twin"
+        "presented.reassociation-brackets-inert"
       ],
       "Id": "Puck.Maths.Presentations.Clifford(System.Int32,System.Int32,System.Int32,TOps)",
       "State": "covered"
@@ -16211,6 +15974,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fuzzy-complement-lens",
         "presented.jet-residual-twins-dual",
@@ -16226,8 +15990,7 @@
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
         "presented.substitution-twins-quasicrystal",
-        "presented.zeta-limits-refuse",
-        "smoke.presented-functor-twin"
+        "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.Presentations.FreeMonoid(System.Int32,TOps,System.Int32)",
       "State": "covered"
@@ -16260,9 +16023,7 @@
         "presented.quasishuffle-vs-prefix-sums",
         "presented.reassociation-brackets-inert",
         "presented.tensor-behavior-vs-product",
-        "presented.zeta-reciprocal-round-trip",
-        "smoke.presented-complex-twin",
-        "smoke.presented-jet-residual-twin"
+        "presented.zeta-reciprocal-round-trip"
       ],
       "Id": "Puck.Maths.Presentations.Monogenic(System.ReadOnlySpan<TValue>,TOps)",
       "State": "covered"
@@ -16292,8 +16053,7 @@
         "presented.tangle-basis-counts",
         "presented.tangle-limits-refuse",
         "presented.tangle-loop-charge-canary",
-        "presented.tangle-relations-hold",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-relations-hold"
       ],
       "Id": "Puck.Maths.Presentations.PlanarTangle(System.Int32,TValue,TOps)",
       "State": "covered"
@@ -16307,6 +16067,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fuzzy-closure-vs-max-min",
         "presented.group-limits-refuse",
@@ -16326,10 +16087,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-functor-twin",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.Presentations.Quiver(System.Int32,System.ReadOnlySpan<System.ValueTuple<System.Int32,System.Int32,TValue>>,TOps)",
       "State": "covered"
@@ -16352,8 +16110,7 @@
         "presented.shuffle-multiterm-canary",
         "presented.shuffle-near-cap-basis",
         "presented.shuffle-vs-binomial",
-        "presented.shuffle-vs-enumeration",
-        "smoke.presented-shuffle-twin"
+        "presented.shuffle-vs-enumeration"
       ],
       "Id": "Puck.Maths.Presentations.Shuffle(System.Int32,System.Int32,TOps,System.ReadOnlySpan<System.Int32>)",
       "State": "covered"
@@ -16396,9 +16153,7 @@
         "presented.tropical-star-vs-oracle",
         "presented.unit-interval-boolean-sublattice",
         "presented.unit-interval-power-of-two-twin",
-        "presented.unit-interval-star-licensing",
-        "smoke.presented-boolean-star",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Add(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&)",
       "State": "covered"
@@ -16415,6 +16170,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fuzzy-complement-lens",
         "presented.group-orders-exact",
@@ -16429,10 +16185,7 @@
         "presented.shuffle-vs-enumeration",
         "presented.tangle-relations-hold",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-reciprocal-round-trip",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-reciprocal-round-trip"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.AreEqual(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&)",
       "State": "covered"
@@ -16490,9 +16243,7 @@
         "presented.shuffle-multiterm-canary",
         "presented.shuffle-vs-binomial",
         "presented.shuffle-vs-enumeration",
-        "presented.tangle-loop-charge-canary",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-loop-charge-canary"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Compile()",
       "State": "covered"
@@ -16528,6 +16279,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -16596,15 +16348,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Create(Puck.Maths.ChargedPresentation<TValue,TOps>)",
       "State": "covered"
@@ -16636,6 +16380,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -16695,15 +16440,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Element.Coefficients",
       "State": "covered"
@@ -16738,9 +16475,7 @@
         "presented.transfer-twins-convergents",
         "presented.unit-interval-power-of-two-envelope-boundary",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-reciprocal-round-trip",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-reciprocal-round-trip"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Element.Item(System.Int64)",
       "State": "covered"
@@ -16773,6 +16508,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -16832,15 +16568,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Element.Keys",
       "State": "covered"
@@ -16873,6 +16601,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -16934,15 +16663,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Element.SupportCount",
       "State": "covered"
@@ -17027,12 +16748,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.FromSupport(System.ReadOnlySpan<System.Int64>,System.ReadOnlySpan<TValue>)",
       "State": "covered"
@@ -17045,6 +16761,7 @@
         "presented.certification-scopes-associativity-not-confluence",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fuzzy-complement-lens",
         "presented.group-limits-refuse",
@@ -17063,10 +16780,7 @@
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
         "presented.substitution-twins-quasicrystal",
-        "presented.tangle-relations-hold",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-tangle-composes"
+        "presented.tangle-relations-hold"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Generator(System.Int32)",
       "State": "covered"
@@ -17082,6 +16796,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fuzzy-closure-vs-max-min",
         "presented.fuzzy-complement-lens",
@@ -17116,12 +16831,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-functor-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Identity",
       "State": "covered"
@@ -17140,8 +16850,7 @@
         "presented.mobius-star-round-trip",
         "presented.multiply-into-twins-multiply",
         "presented.stokes-adjunction",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-multiply-into-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.MaximumSupportCount",
       "State": "covered"
@@ -17171,6 +16880,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -17223,23 +16933,14 @@
         "presented.unit-interval-star-licensing",
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Multiply(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "presented.multiply-into-twins-multiply",
-        "smoke.presented-multiply-into-twin"
+        "presented.multiply-into-twins-multiply"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.MultiplyInto(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,System.Span<System.Int64>,System.Span<TValue>)",
       "State": "covered"
@@ -17329,8 +17030,7 @@
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
         "presented.jet-residual-twins-dual",
-        "presented.matcher-vs-backtracking-oracle",
-        "smoke.presented-jet-residual-twin"
+        "presented.matcher-vs-backtracking-oracle"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Residual(System.Int32,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.ResidualTwist,System.Int32)",
       "State": "covered"
@@ -17368,8 +17068,7 @@
         "presented.most-likely-path-vs-oracle",
         "presented.resolvent-remultiplies",
         "presented.unit-interval-power-of-two-envelope-boundary",
-        "presented.unit-interval-star-licensing",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.TruncatedSum(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,System.Int32)",
       "State": "covered"
@@ -17430,9 +17129,7 @@
         "presented.unit-interval-power-of-two-envelope-boundary",
         "presented.unit-interval-power-of-two-twin",
         "presented.unit-interval-star-licensing",
-        "presented.zeta-reciprocal-round-trip",
-        "smoke.presented-boolean-star",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.zeta-reciprocal-round-trip"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.TrySumOverAllLengths(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,Puck.Maths.SumClosureObstruction&)",
       "State": "covered"
@@ -17447,8 +17144,7 @@
         "presented.jet-residual-twins-dual",
         "presented.matcher-vs-backtracking-oracle",
         "presented.pattern-scale-weights",
-        "presented.resolvent-remultiplies",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.resolvent-remultiplies"
       ],
       "Id": "Puck.Maths.PresentedAlgebra<TValue,TOps>.Zero",
       "State": "covered"
@@ -17459,6 +17155,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17466,8 +17163,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.Image(System.Int32)",
       "State": "covered"
@@ -17478,6 +17174,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17485,8 +17182,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.ImageCount",
       "State": "covered"
@@ -17497,6 +17193,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17504,8 +17201,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.IsWordMorphism",
       "State": "covered"
@@ -17516,6 +17212,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17523,8 +17220,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.Map(Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&)",
       "State": "covered"
@@ -17535,6 +17231,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17542,8 +17239,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.MapWord(System.ReadOnlySpan<System.Int32>,System.Span<System.Int32>)",
       "State": "covered"
@@ -17554,6 +17250,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17561,8 +17258,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.Source",
       "State": "covered"
@@ -17573,6 +17269,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17580,8 +17277,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.Target",
       "State": "covered"
@@ -17592,6 +17288,7 @@
         "presented.element-ownership-is-uniform",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.knot-limits-refuse",
         "presented.state-sum-move-invariant",
@@ -17599,8 +17296,7 @@
         "presented.state-sum-vs-smoothing-enumeration",
         "presented.state-sum-vs-tabulated",
         "presented.substitution-matrix-vs-inflation",
-        "presented.substitution-twins-quasicrystal",
-        "smoke.presented-functor-twin"
+        "presented.substitution-twins-quasicrystal"
       ],
       "Id": "Puck.Maths.PresentedFunctor<TValue,TOps>.TryCreate(Puck.Maths.PresentedAlgebra<TValue,TOps>,Puck.Maths.PresentedAlgebra<TValue,TOps>,System.ReadOnlySpan<Puck.Maths.PresentedAlgebra<TValue,TOps>.Element>,Puck.Maths.PresentedFunctor<TValue,TOps>&,Puck.Maths.FunctorObstruction<TValue>&)",
       "State": "covered"
@@ -17647,11 +17343,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Algebra",
       "State": "covered"
@@ -17659,11 +17355,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.AreEquivalent(Puck.Maths.PresentedMachine<TValue,TOps>,Puck.Maths.PresentedMachine<TValue,TOps>,Puck.Maths.EquivalenceWitness<TValue>&)",
       "State": "covered"
@@ -17671,11 +17367,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Create(Puck.Maths.PresentedAlgebra<TValue,TOps>,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&,System.ReadOnlySpan<Puck.Maths.PresentedAlgebra<TValue,TOps>.Element>,Puck.Maths.PresentedAlgebra<TValue,TOps>.Element&)",
       "State": "covered"
@@ -17683,11 +17379,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Initial",
       "State": "covered"
@@ -17695,11 +17391,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.MinimizeByPairingRadical()",
       "State": "covered"
@@ -17707,11 +17403,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Readout",
       "State": "covered"
@@ -17719,11 +17415,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Run(System.ReadOnlySpan<System.Int32>)",
       "State": "covered"
@@ -17731,11 +17427,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.Step(System.Int32)",
       "State": "covered"
@@ -17743,11 +17439,11 @@
     {
       "CoveredBy": [
         "presented.element-ownership-is-uniform",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.machine-equivalence-vs-enumeration",
         "presented.matcher-vs-backtracking-oracle",
-        "presented.transfer-twins-convergents",
-        "smoke.presented-functor-twin"
+        "presented.transfer-twins-convergents"
       ],
       "Id": "Puck.Maths.PresentedMachine<TValue,TOps>.StepCount",
       "State": "covered"
@@ -18489,8 +18185,6 @@
     {
       "CoveredBy": [
         "deep.prime-field-baillie-and-populations",
-        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
-        "deep.prime-field-lucas-vs-companion-matrix",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
         "prime-field.lucas-trace-ladder-vs-recurrence",
@@ -18505,7 +18199,6 @@
     {
       "CoveredBy": [
         "deep.prime-field-baillie-and-populations",
-        "deep.prime-field-strong-round-vs-oracle",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
         "prime-field.pseudoprime-populations",
@@ -18584,8 +18277,7 @@
       "CoveredBy": [
         "deep.prime-field-pow-vs-modpow",
         "prime-field.montgomery-chains-exhaustive",
-        "prime-field.pow-vs-modpow",
-        "smoke.prime-field-pow-vs-modpow"
+        "prime-field.pow-vs-modpow"
       ],
       "Id": "Puck.Maths.PrimeField64.Pow(System.UInt64,System.UInt64)",
       "State": "covered"
@@ -18919,7 +18611,6 @@
     },
     {
       "CoveredBy": [
-        "deep.prime-field-base-two-batch-vs-modular-power",
         "prime-field.base-two-batch-vs-modular-power"
       ],
       "Id": "Puck.Maths.PrimeKernels.BaseTwoBatchWidth",
@@ -18998,7 +18689,6 @@
     },
     {
       "CoveredBy": [
-        "deep.prime-field-base-two-batch-vs-modular-power",
         "prime-field.base-two-batch-vs-modular-power"
       ],
       "Id": "Puck.Maths.PrimeKernels.PassesBaseTwoBatch(System.ReadOnlySpan<System.UInt64>)",
@@ -19006,7 +18696,6 @@
     },
     {
       "CoveredBy": [
-        "deep.prime-field-base-two-round-vs-modular-power",
         "prime-field.base-two-round-vs-modular-power"
       ],
       "Id": "Puck.Maths.PrimeKernels.PassesBaseTwoRound(System.UInt64)",
@@ -19014,7 +18703,6 @@
     },
     {
       "CoveredBy": [
-        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
         "prime-field.lucas-trace-ladder-vs-recurrence"
       ],
       "Id": "Puck.Maths.PrimeKernels.PassesStrongLucasRound(System.UInt64,System.Int64)",
@@ -19022,7 +18710,6 @@
     },
     {
       "CoveredBy": [
-        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
         "prime-field.lucas-trace-ladder-vs-recurrence"
       ],
       "Id": "Puck.Maths.PrimeKernels.SelfridgeDiscriminant(System.UInt64)",
@@ -19817,8 +19504,6 @@
         "presented.quadratic-twin-algebra-fractional-lane",
         "presented.quadratic-twin-algebra-integer-lane",
         "quadratic-integer.class-number-one-worlds-factor-prime-canonical",
-        "smoke.complex-twin-quad",
-        "smoke.mobius-integer-exact",
         "split.norm-twin-quad",
         "split.twin-quad"
       ],
@@ -19855,8 +19540,7 @@
         "mobius.integer-0,-1",
         "mobius.integer-1,1",
         "mobius.integer-2,1",
-        "presented.companion-quiver-twins-mobius",
-        "smoke.mobius-integer-exact"
+        "presented.companion-quiver-twins-mobius"
       ],
       "Id": "Puck.Maths.QuadraticAlgebra<TScalar>.MobiusStep(Puck.Maths.QuadraticAlgebra<TScalar>.Projective)",
       "State": "covered"
@@ -19876,7 +19560,6 @@
         "presented.quadratic-twin-algebra-integer-lane",
         "quadratic-integer.class-number-one-worlds-factor-prime-canonical",
         "quadratic-integer.fast-tier-routing-vs-independent-reference",
-        "smoke.complex-twin-quad",
         "split.twin-quad"
       ],
       "Id": "Puck.Maths.QuadraticAlgebra<TScalar>.Multiply(Puck.Maths.QuadraticAlgebra<TScalar>.Element,Puck.Maths.QuadraticAlgebra<TScalar>.Element)",
@@ -20015,8 +19698,7 @@
         "extension-field.norm-trace-frobenius-vs-oracle",
         "extension-field.pow-vs-oracle",
         "extension-field.product-vs-oracle",
-        "extension-field.ring-vs-oracle",
-        "smoke.extension-field-product-vs-oracle"
+        "extension-field.ring-vs-oracle"
       ],
       "Id": "Puck.Maths.QuadraticExtensionField64.Element..ctor(System.UInt64,System.UInt64)",
       "State": "covered"
@@ -20031,8 +19713,7 @@
         "extension-field.norm-trace-frobenius-vs-oracle",
         "extension-field.pow-vs-oracle",
         "extension-field.product-vs-oracle",
-        "extension-field.ring-vs-oracle",
-        "smoke.extension-field-product-vs-oracle"
+        "extension-field.ring-vs-oracle"
       ],
       "Id": "Puck.Maths.QuadraticExtensionField64.Element.A",
       "State": "covered"
@@ -20047,8 +19728,7 @@
         "extension-field.norm-trace-frobenius-vs-oracle",
         "extension-field.pow-vs-oracle",
         "extension-field.product-vs-oracle",
-        "extension-field.ring-vs-oracle",
-        "smoke.extension-field-product-vs-oracle"
+        "extension-field.ring-vs-oracle"
       ],
       "Id": "Puck.Maths.QuadraticExtensionField64.Element.B",
       "State": "covered"
@@ -20090,8 +19770,7 @@
         "extension-field.pow-vs-oracle",
         "extension-field.product-vs-oracle",
         "extension-field.ring-vs-oracle",
-        "presented.monogenic-twins-prime-extension",
-        "smoke.extension-field-product-vs-oracle"
+        "presented.monogenic-twins-prime-extension"
       ],
       "Id": "Puck.Maths.QuadraticExtensionField64.Multiply(Puck.Maths.QuadraticExtensionField64.Element,Puck.Maths.QuadraticExtensionField64.Element)",
       "State": "covered"
@@ -22773,8 +22452,7 @@
     },
     {
       "CoveredBy": [
-        "presented.jet-residual-twins-dual",
-        "smoke.presented-jet-residual-twin"
+        "presented.jet-residual-twins-dual"
       ],
       "Id": "Puck.Maths.ResidualTwist.Identity",
       "State": "covered"
@@ -22819,6 +22497,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -22880,15 +22559,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>..ctor(Puck.Maths.RuleKind,System.ReadOnlyMemory<System.Int32>,System.ReadOnlyMemory<System.Int32>,System.ReadOnlyMemory<TValue>)",
       "State": "covered"
@@ -22921,6 +22592,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -22982,15 +22654,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.Charges",
       "State": "covered"
@@ -23023,6 +22687,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -23084,15 +22749,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.Kind",
       "State": "covered"
@@ -23125,6 +22782,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -23186,15 +22844,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.PackReplacement(System.Int32[][])",
       "State": "covered"
@@ -23227,6 +22877,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -23288,15 +22939,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.Pattern",
       "State": "covered"
@@ -23329,6 +22972,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -23390,15 +23034,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.Replacement",
       "State": "covered"
@@ -23431,6 +23067,7 @@
         "presented.finite-basis-outcome-is-typed",
         "presented.functor-preserves-relations",
         "presented.functor-refuses-witness",
+        "presented.functor-twins-transfer",
         "presented.functor-twins-transfer-varied-length",
         "presented.fused-vs-per-product-diverges",
         "presented.fuzzy-closure-vs-max-min",
@@ -23492,15 +23129,7 @@
         "presented.zeta-charpoly-vs-minors",
         "presented.zeta-limits-refuse",
         "presented.zeta-reciprocal-round-trip",
-        "presented.zeta-traces-vs-walk-counts",
-        "smoke.presented-boolean-star",
-        "smoke.presented-complex-twin",
-        "smoke.presented-functor-twin",
-        "smoke.presented-jet-residual-twin",
-        "smoke.presented-multiply-into-twin",
-        "smoke.presented-shuffle-twin",
-        "smoke.presented-star-unguarded-refuses",
-        "smoke.presented-tangle-composes"
+        "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RewriteRule<TValue>.TermCount",
       "State": "covered"
@@ -24782,8 +24411,7 @@
     },
     {
       "CoveredBy": [
-        "presented.resolvent-remultiplies",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.resolvent-remultiplies"
       ],
       "Id": "Puck.Maths.SumClosureObstruction..ctor(Puck.Maths.ClosureCertificate,System.Int64,System.Int64)",
       "State": "covered"
@@ -24796,8 +24424,7 @@
         "presented.quasishuffle-vs-prefix-sums",
         "presented.quiver-counting-star-vs-walk-oracle",
         "presented.resolvent-remultiplies",
-        "presented.unit-interval-star-licensing",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.SumClosureObstruction.Attempted",
       "State": "covered"
@@ -24810,8 +24437,7 @@
         "presented.quasishuffle-vs-prefix-sums",
         "presented.quiver-counting-star-vs-walk-oracle",
         "presented.resolvent-remultiplies",
-        "presented.unit-interval-star-licensing",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.SumClosureObstruction.StepsTaken",
       "State": "covered"
@@ -24819,8 +24445,7 @@
     {
       "CoveredBy": [
         "presented.incidence-euler-mass",
-        "presented.resolvent-remultiplies",
-        "smoke.presented-star-unguarded-refuses"
+        "presented.resolvent-remultiplies"
       ],
       "Id": "Puck.Maths.SumClosureObstruction.SupportKey",
       "State": "covered"
@@ -25615,10 +25240,8 @@
     },
     {
       "CoveredBy": [
-        "deep.unsigned-scalar-div-vs-oracle",
         "deep.unsigned-scalar-fraction-sweep",
         "scalar.generic-conversion-modes",
-        "smoke.unsigned-scalar-mul-ties-to-even",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.construction-and-refusals",
         "unsigned-scalar.div-vs-oracle",
@@ -25975,11 +25598,9 @@
     },
     {
       "CoveredBy": [
-        "deep.unsigned-scalar-div-vs-oracle",
         "deep.unsigned-scalar-fraction-sweep",
         "scalar.generic-conversion-modes",
         "scalar.styled-exponent-compensation",
-        "smoke.unsigned-scalar-mul-ties-to-even",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.construction-and-refusals",
         "unsigned-scalar.div-vs-oracle",
@@ -26096,7 +25717,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unsigned-scalar-div-vs-oracle",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.construction-and-refusals",
         "unsigned-scalar.div-vs-oracle",
@@ -26172,7 +25792,6 @@
     },
     {
       "CoveredBy": [
-        "smoke.unsigned-scalar-mul-ties-to-even",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.mul-purity",
         "unsigned-scalar.mul-vs-oracle",
@@ -26635,9 +26254,6 @@
     {
       "CoveredBy": [
         "deep.unit-fraction32-div-vs-oracle",
-        "deep.unit-fraction32-mul-vs-oracle",
-        "deep.unit-fraction32-text-vs-oracle",
-        "smoke.unit-fraction32-mul-ties-to-even",
         "unit-fraction32.construction-and-refusals",
         "unit-fraction32.div-vs-oracle",
         "unit-fraction32.double-projection-exact",
@@ -26683,7 +26299,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.parse-ladder",
         "unit-fraction32.text-vs-oracle"
       ],
@@ -26692,7 +26307,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.parse-ladder",
         "unit-fraction32.text-vs-oracle"
       ],
@@ -26708,7 +26322,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.construction-and-refusals",
         "unit-fraction32.shifts-vs-oracle",
         "unit-fraction32.text-vs-oracle"
@@ -26718,7 +26331,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.text-vs-oracle"
       ],
       "Id": "Puck.Maths.UnitFraction32.TryFormat(System.Span<System.Char>,System.Int32&,System.ReadOnlySpan<System.Char>,System.IFormatProvider)",
@@ -26726,7 +26338,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.parse-ladder",
         "unit-fraction32.text-vs-oracle"
       ],
@@ -26735,7 +26346,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-text-vs-oracle",
         "unit-fraction32.parse-ladder",
         "unit-fraction32.text-vs-oracle"
       ],
@@ -26745,9 +26355,6 @@
     {
       "CoveredBy": [
         "deep.unit-fraction32-div-vs-oracle",
-        "deep.unit-fraction32-mul-vs-oracle",
-        "deep.unit-fraction32-text-vs-oracle",
-        "smoke.unit-fraction32-mul-ties-to-even",
         "unit-fraction32.construction-and-refusals",
         "unit-fraction32.div-vs-oracle",
         "unit-fraction32.double-projection-exact",
@@ -26864,8 +26471,6 @@
     },
     {
       "CoveredBy": [
-        "deep.unit-fraction32-mul-vs-oracle",
-        "smoke.unit-fraction32-mul-ties-to-even",
         "unit-fraction32.mul-vs-oracle"
       ],
       "Id": "Puck.Maths.UnitFraction32.op_Multiply(Puck.Maths.UnitFraction32,Puck.Maths.UnitFraction32)",
@@ -26960,8 +26565,7 @@
         "presented.unit-interval-power-of-two-envelope-boundary",
         "presented.unit-interval-power-of-two-twin",
         "presented.unit-interval-semirings-vs-oracle",
-        "presented.unit-interval-star-licensing",
-        "smoke.closed-unit-mul-ties-to-even"
+        "presented.unit-interval-star-licensing"
       ],
       "Id": "Puck.Maths.UnitInterval32.Create(System.UInt64)",
       "State": "covered"
@@ -27023,8 +26627,7 @@
         "presented.most-likely-path-vs-oracle",
         "presented.unit-interval-fused-vs-per-term-diverges",
         "presented.unit-interval-power-of-two-twin",
-        "presented.unit-interval-semirings-vs-oracle",
-        "smoke.closed-unit-mul-ties-to-even"
+        "presented.unit-interval-semirings-vs-oracle"
       ],
       "Id": "Puck.Maths.UnitInterval32.Multiply(Puck.Maths.UnitInterval32,Puck.Maths.UnitInterval32)",
       "State": "covered"
@@ -27037,8 +26640,7 @@
         "presented.most-likely-path-vs-oracle",
         "presented.unit-interval-fused-vs-per-term-diverges",
         "presented.unit-interval-power-of-two-twin",
-        "presented.unit-interval-semirings-vs-oracle",
-        "smoke.closed-unit-mul-ties-to-even"
+        "presented.unit-interval-semirings-vs-oracle"
       ],
       "Id": "Puck.Maths.UnitInterval32.Multiply(Puck.Maths.UnitInterval32,Puck.Maths.UnitInterval32,Puck.Maths.UnitInterval32)",
       "State": "covered"
@@ -27101,7 +26703,6 @@
         "presented.unit-interval-fused-vs-per-term-diverges",
         "presented.unit-interval-power-of-two-twin",
         "presented.unit-interval-semirings-vs-oracle",
-        "smoke.closed-unit-mul-ties-to-even",
         "unit-fraction32.kinship-exact"
       ],
       "Id": "Puck.Maths.UnitInterval32.Value",

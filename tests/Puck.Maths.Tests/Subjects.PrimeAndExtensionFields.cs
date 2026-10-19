@@ -27,8 +27,6 @@ internal static partial class Subjects {
     private static readonly ulong[] PrimeFieldChainModuli = [
         3UL, 17UL, 2_147_483_647UL, 3_221_225_473UL, 4_611_686_018_427_387_847UL,
     ];
-    // The smoke ladder: the degenerate rung, the deep descent and the carrier corner, and nothing else.
-    private static readonly ulong[] PrimeFieldSmokeModuli = [3UL, 3_221_225_473UL, 4_611_686_018_427_387_847UL];
     // The Deep ladder: every rung above plus the shapes Default leaves out — the small primes where the guards
     // outnumber the arithmetic, both Mersenne widths, and the largest prime below 2^32.
     private static readonly ulong[] PrimeFieldDeepModuli = [
@@ -339,17 +337,6 @@ internal static partial class Subjects {
         PrimeFieldPowMatchesModularPower(
             left: left,
             moduli: PrimeFieldChainModuli,
-            right: right
-        );
-    /// <summary>The Smoke sentinel of <see cref="PrimeFieldPowMatchesModularPower(long[], long[])"/> at the three-rung
-    /// smoke ladder.</summary>
-    /// <param name="left">The first operand vector, one raw — the base.</param>
-    /// <param name="right">The second operand vector, one raw — the swept exponent.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? PrimeFieldPowMatchesModularPowerSmoke(long[] left, long[] right) =>
-        PrimeFieldPowMatchesModularPower(
-            left: left,
-            moduli: PrimeFieldSmokeModuli,
             right: right
         );
     /// <summary>The Deep mirror of <see cref="PrimeFieldPowMatchesModularPower(long[], long[])"/> at the fifteen-rung
@@ -856,17 +843,6 @@ internal static partial class Subjects {
     public static string? PrimeFieldLucasMatchesCompanionMatrix(long[] left, long[] right) =>
         PrimeFieldLucasMatchesCompanionMatrix(
             breadth: 1,
-            left: left,
-            right: right
-        );
-    /// <summary>The Deep mirror of <see cref="PrimeFieldLucasMatchesCompanionMatrix(long[], long[])"/>, which runs BOTH
-    /// drawn raws rather than one — this family's most expensive oracle.</summary>
-    /// <param name="left">The first operand vector, one raw.</param>
-    /// <param name="right">The second operand vector, one raw.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? PrimeFieldLucasMatchesCompanionMatrixDeep(long[] left, long[] right) =>
-        PrimeFieldLucasMatchesCompanionMatrix(
-            breadth: 2,
             left: left,
             right: right
         );

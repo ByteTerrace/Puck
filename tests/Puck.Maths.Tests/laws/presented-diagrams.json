@@ -217,7 +217,7 @@
         "Flavor": "IntraPresented",
         "Subject": "PresentedFunctor.Map of 60 deterministically varied quotient words out of Presentations.FreeMonoid",
         "Against": "ConvergentTransfer<BigInteger, IntegerMaterial>.Evaluate of the same partial quotients",
-        "Shared": "the PresentedAlgebra kernel — ConvergentTransfer is a PresentedAlgebra on a Quiver(2) presentation, ConvergentTransfer.cs:52-58; both exact. Extends smoke.presented-functor-twin's leg 1 to variable length (one to eight letters) and a wider quotient range (one to nine), where the smoke sentinel fixes both at five letters and three words",
+        "Shared": "the PresentedAlgebra kernel — ConvergentTransfer is a PresentedAlgebra on a Quiver(2) presentation, ConvergentTransfer.cs:52-58; both exact. Extends presented.functor-twins-transfer's leg 1 to variable length (one to eight letters) and a wider quotient range (one to nine), where that law fixes both at five letters and three words",
         "Citation": "",
         "Absolute": ""
       },
@@ -226,7 +226,7 @@
         "Flavor": "IntraPresented",
         "Subject": "ConvergentTransfer.Entry of the mapped element, all four cells, at the same 60 words",
         "Against": "ConvergentTransfer.Run through PresentedMachine on the same word",
-        "Shared": "one PresentedAlgebra instance and the same Digit elements. Extends smoke.presented-functor-twin's leg 2 the same way",
+        "Shared": "one PresentedAlgebra instance and the same Digit elements. Extends presented.functor-twins-transfer's leg 2 the same way",
         "Citation": "",
         "Absolute": ""
       },

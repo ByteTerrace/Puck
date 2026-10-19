@@ -3,7 +3,7 @@ using System.Text;
 namespace Puck.Maths.Tests;
 
 /// <summary>One gate statement's legs.</summary>
-/// <param name="Surface">The surface: <c>law: Smoke</c>, <c>law: Default</c>, <c>law: Deep</c> or
+/// <param name="Surface">The surface: <c>law: Default</c>, <c>law: Deep</c> or
 /// <c>law: Exhaustive</c>.</param>
 /// <param name="Statement">The statement's stable name: a law id.</param>
 /// <param name="Legs">The declared legs, in declaration order.</param>
@@ -39,7 +39,7 @@ internal static class LegLedger {
     }
     private static void AppendDocGapRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: behaviour pinned as observed against its own XML doc\n\n");
-        _ = builder.Append(value: $"Every leg spelled `Leg.PinnedAsObserved`, whose citation opens `{Leg.DocGapMarker}`. A law that pins what a kernel DOES\n");
+        _ = builder.Append(value: $"Every structural leg whose citation opens `{Leg.DocGapMarker}`. A law that pins what a kernel DOES\n");
         _ = builder.Append(value: "where its own documentation says otherwise is legitimate — the alternative is a law tuned to prose — but only while\n");
         _ = builder.Append(value: "the divergence is carried somewhere a reader can act on it. This register is that somewhere, derived from the\n");
         _ = builder.Append(value: "declarations rather than written beside them, so a leg can neither cite a register that does not exist nor sit in\n");
@@ -327,7 +327,7 @@ internal static class LegLedger {
                     leg.IsDocGap &&
                     (leg.Kind != LegKind.Structural)
                 ) {
-                    violations.Add(item: $"{where}: a doc-gap citation belongs on a structural leg, where Leg.PinnedAsObserved puts it.");
+                    violations.Add(item: $"{where}: a doc-gap citation belongs on a structural leg.");
                 }
 
                 if (

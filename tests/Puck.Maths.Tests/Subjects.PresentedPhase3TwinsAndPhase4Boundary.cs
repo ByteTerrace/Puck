@@ -1199,11 +1199,6 @@ internal static partial class Subjects {
     /// mis-transcribed table as well as a mis-enumerated basis.</remarks>
     public static string? TangleBasisCounts() =>
         TangleBasisCountsThrough(maximumWidth: 5);
-    /// <summary>Proves the whole width-two composition table — the six diagrams — against the arc-tracing oracle, and
-    /// that the sum of the identity diagrams acts as the unit on every one of them.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? TangleComposesAtSmokeWidth() =>
-        (TangleBasisCountsThrough(maximumWidth: 2) ?? TangleTableMatchesOracle(maximumWidth: 2));
     /// <summary>Proves the derived product satisfies the three algebraic relations of a tangle algebra: a cup-cap
     /// generator squares to the loop charge times itself, an adjacent triple collapses, and a distant pair
     /// commutes.</summary>

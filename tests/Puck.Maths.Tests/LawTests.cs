@@ -5,7 +5,7 @@ namespace Puck.Maths.Tests;
 /// <summary>
 /// Runs every declared law case as a theory row, one test per case, named by its id and tagged with its tier trait.
 /// Tier selection is declarative: Deep and Exhaustive rows are explicit, so a plain run leaves them out, and the tier
-/// trait selects one tier (<c>--filter-trait tier=Smoke</c>, or <c>--explicit on --filter-trait tier=Deep</c>).
+/// trait selects one tier (<c>--explicit on --filter-trait tier=Deep</c>).
 /// This is also where a law failure is RAISED for the frontier's green gate (see
 /// <see cref="Frontier.AdvanceAndPersist"/>): every law-side failure mode passes through this one frame, and no
 /// narrower one sees them all.

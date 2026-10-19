@@ -619,24 +619,6 @@ internal static partial class Subjects {
             windowDegree: 3
         )
             ?? ShuffleCertifies())))))));
-    /// <summary>Proves the smallest instance of the second product — the seven words of two letters at a window of
-    /// two — composes exactly as the interleaving enumeration says, and that its unit fixes every one of them.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? ShuffleComposesAtSmokeWindow() =>
-        (ShuffleCellsMatchEnumeration<BigInteger, IntegerMaterial>(
-            convert: static count => count,
-            letterCount: 2,
-            letterProduct: [],
-            material: default,
-            windowDegree: 2
-        )
-            ?? ShuffleCellsMatchEnumeration<BigInteger, IntegerMaterial>(
-            convert: static count => count,
-            letterCount: 1,
-            letterProduct: [0],
-            material: default,
-            windowDegree: 3
-        ));
     /// <summary>Proves the one-letter shuffle's structure constants ARE the binomial coefficients, read two ways: as the
     /// multiplicity one letter's own shuffle carries, and as the number of terms the shuffle of two DIFFERENT letters
     /// splits into.</summary>

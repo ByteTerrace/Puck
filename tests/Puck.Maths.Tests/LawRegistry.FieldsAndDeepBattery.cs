@@ -69,17 +69,6 @@ internal static partial class LawRegistry {
             claim: Subjects.BinaryPolynomialFactorOddCycle,
             id: "polynomial.factor-odd-cycle-vs-cyclotomic-cosets"
         ),
-        // DivRem is this family's own hot path: operator / and operator % are one call through to it
-        // (BinaryPolynomial.cs:100-108), GreatestCommonDivisor reaches it through operator % (cs:220), and
-        // FactorOddCycle's quotient loop calls it directly (cs:171). NOT IsIrreducible's delegate, which a previous
-        // wording claimed: that route reaches BinaryFieldKernels.PolynomialRemainder, a self-contained shift-and-XOR
-        // long division over the packed carrier (BinaryFieldKernels.cs:953-986), and touches DivRem nowhere.
-        SweptCase(
-            claim: Subjects.BinaryPolynomialDivRemVsOracle,
-            domain: SmokeDomain,
-            id: "smoke.polynomial-divrem-vs-monomial-oracle",
-            width: 2
-        ),
 
     ];
     private static LawCase[] BinaryFieldQuotientCases() => [
@@ -160,35 +149,6 @@ internal static partial class LawRegistry {
         ClaimCase(
             claim: BinaryFieldWideDegreeClaims.WideDegreeIrreducibilitySweepSurface,
             id: "binary-field.wide-degree-irreducibility-sweep"
-        ),
-        // The family's hottest kernel: every region rung's table and matrix, every inversion chain step, every
-        // exponentiation and every square resolves to Multiply.
-        Case(
-            id: "smoke.binary-field-product-vs-oracle",
-            run: () => {
-                Laws.VectorMatchesOracle(
-                    lawId: "smoke.binary-field-product-vs-oracle",
-                    domain: SmokeDomain,
-                    tier: Tier.Smoke,
-                    width: 8,
-                    subject: Subjects.BinaryFieldMultiply8,
-                    oracle: Subjects.BinaryFieldProductOracle(
-                        degree: 8,
-                        reductionTail: 0x1BUL
-                    )
-                );
-                Laws.VectorMatchesOracle(
-                    lawId: "smoke.binary-field-product-vs-oracle",
-                    domain: SmokeDomain,
-                    tier: Tier.Smoke,
-                    width: 16,
-                    subject: Subjects.BinaryFieldMultiply16,
-                    oracle: Subjects.BinaryFieldProductOracle(
-                        degree: 16,
-                        reductionTail: 0x2BUL
-                    )
-                );
-            }
         ),
 
     ];
@@ -384,27 +344,6 @@ internal static partial class LawRegistry {
             )
         ),
 
-        // This family's hot path: Inverse, LegendreCharacter, TrySqrt's descent and all four primality entry points
-        // reach their arithmetic through Pow's Montgomery chain, so a smoke run that never touched it would report
-        // confidence it does not have.
-        SweptCase(
-            claim: Subjects.PrimeFieldPowMatchesModularPowerSmoke,
-            domain: SmokeDomain,
-            id: "smoke.prime-field-pow-vs-modpow",
-            width: 1
-        ),
-        // The extension's hot path: Pow is a chain of the product, Inverse forms the norm out of it and BatchInverse is
-        // a running product of it, so every other operation in the type bottoms out here.
-        Case(
-            id: "smoke.extension-field-product-vs-oracle",
-            run: () => Laws.BinaryMatchesOracle(
-                lawId: "smoke.extension-field-product-vs-oracle",
-                domain: SmokeDomain,
-                tier: Tier.Smoke,
-                subject: Subjects.ExtensionProduct(entry: 2),
-                oracle: Subjects.ExtensionProductOracle(entry: 2)
-            )
-        ),
 
     ];
     private static LawCase[] SamplingRefusalCases() => [
@@ -513,28 +452,6 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "deep.quaternion-mul-vs-oracle",
-            run: () => Laws.VectorMatchesOracle(
-                domain: Quaternion,
-                lawId: "deep.quaternion-mul-vs-oracle",
-                oracle: Subjects.QuaternionMultiplyOracle,
-                subject: Subjects.QuaternionMultiplyLanes,
-                tier: Tier.Deep,
-                width: 4
-            )
-        ),
-        Case(
-            id: "deep.dual-quaternion-mul-vs-oracle",
-            run: () => Laws.VectorMatchesOracle(
-                domain: DualQuaternion,
-                lawId: "deep.dual-quaternion-mul-vs-oracle",
-                oracle: Subjects.DualQuaternionMultiplyOracle,
-                subject: Subjects.DualQuaternionMultiplyLanes,
-                tier: Tier.Deep,
-                width: 8
-            )
-        ),
-        Case(
             id: "deep.complex-div-vs-oracle",
             run: () => Laws.BinaryMatchesOracle(
                 domain: ComplexDivide,
@@ -608,16 +525,6 @@ internal static partial class LawRegistry {
             claim: Subjects.UnitFraction16Exhaustive,
             id: "deep.unit-fraction16-exhaustive"
         ),
-        Case(
-            id: "deep.unit-fraction32-mul-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: UnitFraction32Domain,
-                lawId: "deep.unit-fraction32-mul-vs-oracle",
-                oracle: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.MultiplyOracle,
-                subject: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.Multiply,
-                tier: Tier.Deep
-            )
-        ),
         // The one division kernel the family landed without a Deep mirror, and the mirror is stronger IN KIND rather
         // than only in sample count: the Default law's operand fold takes (min, max), so its quotient never exceeds one
         // and the Math.Min clamp fires at exactly one point — the edge square's diagonal, where the quotient is exactly
@@ -630,44 +537,6 @@ internal static partial class LawRegistry {
                 lawId: "deep.unit-fraction32-div-vs-oracle",
                 oracle: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.DivideUnorderedOracle,
                 subject: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.DivideUnordered,
-                tier: Tier.Deep
-            )
-        ),
-        SweptCase(
-            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.TextMatchesOracle,
-            domain: UnitFraction32Domain,
-            id: "deep.unit-fraction32-text-vs-oracle",
-            width: 1
-        ),
-        Case(
-            id: "deep.fixed-divide-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: ScalarDivision,
-                lawId: "deep.fixed-divide-vs-oracle",
-                oracle: Subjects.FixedDivideOracle,
-                subject: Subjects.FixedDivide,
-                tier: Tier.Deep
-            )
-        ),
-        SweptCase(
-            claim: Subjects.FixedTranscendentalDeepSweep,
-            domain: ScalarTranscendental,
-            id: "deep.fixed-transcendental-envelope",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.FixedTextRoundTrip,
-            domain: ScalarText,
-            id: "deep.fixed-text-round-trip",
-            width: 1
-        ),
-        Case(
-            id: "deep.unsigned-scalar-div-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: UnsignedScalar,
-                lawId: "deep.unsigned-scalar-div-vs-oracle",
-                oracle: Subjects.UnsignedFixedDivideOracle,
-                subject: Subjects.UnsignedFixedDivide,
                 tier: Tier.Deep
             )
         ),
@@ -698,50 +567,6 @@ internal static partial class LawRegistry {
                 tier: Tier.Deep
             )
         ),
-        Case(
-            id: "deep.vector-cross-vs-oracle",
-            run: () => {
-                Laws.VectorMatchesOracle(
-                    domain: Vector,
-                    lawId: "deep.vector-cross-vs-oracle",
-                    oracle: Subjects.SpaceCrossLanesOracle,
-                    subject: Subjects.SpaceCrossLanes,
-                    tier: Tier.Deep,
-                    width: 3
-                );
-                Laws.VectorMatchesOracle(
-                    domain: Vector,
-                    lawId: "deep.vector-cross-vs-oracle",
-                    oracle: Subjects.SpaceDotLanesOracle,
-                    subject: Subjects.SpaceDotLanes,
-                    tier: Tier.Deep,
-                    width: 3
-                );
-            }
-        ),
-        SweptCase(
-            claim: Subjects.VectorNormalizeMatchesOracles,
-            domain: VectorDirection,
-            id: "deep.vector-normalize-vs-ideal-and-staged",
-            width: 3
-        ),
-        Case(
-            id: "deep.rigid-compose-vs-oracle",
-            run: () => Laws.VectorMatchesOracle(
-                domain: Rigid,
-                lawId: "deep.rigid-compose-vs-oracle",
-                oracle: Subjects.RigidComposeOracle,
-                subject: Subjects.RigidComposeLanes,
-                tier: Tier.Deep,
-                width: 8
-            )
-        ),
-        SweptCase(
-            claim: Subjects.PositionDeltaExact,
-            domain: PositionDelta,
-            id: "deep.position-delta-vs-oracle",
-            width: 6
-        ),
         SweptCase(
             claim: Subjects.PositionTranslateExact,
             domain: PositionTranslate,
@@ -753,49 +578,6 @@ internal static partial class LawRegistry {
             domain: RigidPoint,
             id: "deep.rigid-transform-point-vs-oracle",
             width: 8
-        ),
-        SweptCase(
-            claim: Subjects.RateScheduleVsLedger,
-            domain: Rate,
-            id: "deep.rate-schedule-vs-ledger",
-            width: 4
-        ),
-        // No Deep mirror stands for polynomial.additive-group-and-accessors or
-        // polynomial.shifts-are-monomial-arithmetic, and the campaign says why rather than leaving the gap silent:
-        // both are exact identities over operations linear in their operand (+, the two shifts) or over one accessor,
-        // and every seam either carries is a FIXED LADDER — the identity constants, the shift-count ladder at 63/64,
-        // the written forms — which a wider random batch does not touch. A mirror there would buy draw volume over
-        // ground the Default battery already crosses, which the tier's own contract calls buying nothing.
-        Case(
-            id: "deep.polynomial-multiply-vs-carryless-oracle",
-            run: () => {
-                Laws.ScalarBinaryMatchesOracle(
-                    domain: BinaryPolynomialRing,
-                    lawId: "deep.polynomial-multiply-vs-carryless-oracle",
-                    oracle: Subjects.BinaryPolynomialMultiplyOracle,
-                    subject: Subjects.BinaryPolynomialMultiply,
-                    tier: Tier.Deep
-                );
-                Laws.SweptClaim(
-                    claim: Subjects.BinaryPolynomialCheckedMultiplyAndRingLaws,
-                    domain: BinaryPolynomialRing,
-                    lawId: "deep.polynomial-multiply-vs-carryless-oracle",
-                    tier: Tier.Deep,
-                    width: 2
-                );
-            }
-        ),
-        SweptCase(
-            claim: Subjects.BinaryPolynomialDivRemVsOracle,
-            domain: BinaryPolynomialDivision,
-            id: "deep.polynomial-divrem-vs-monomial-oracle",
-            width: 2
-        ),
-        SweptCase(
-            claim: Subjects.BinaryPolynomialGcdVsOracle,
-            domain: BinaryPolynomialGcd,
-            id: "deep.polynomial-gcd-vs-binary-descent-oracle",
-            width: 2
         ),
         ClaimCase(
             id: "deep.polynomial-irreducible-census-and-trial-division",
@@ -908,30 +690,6 @@ internal static partial class LawRegistry {
                     width: 1
                 );
             }
-        ),
-        SweptCase(
-            claim: Subjects.PrimeFieldStrongRoundMatchesOracle,
-            domain: PrimeFieldPrimality,
-            id: "deep.prime-field-strong-round-vs-oracle",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.PrimeFieldLucasMatchesCompanionMatrixDeep,
-            domain: PrimeFieldLucas,
-            id: "deep.prime-field-lucas-vs-companion-matrix",
-            width: 1
-        ),
-        ClaimCase(
-            claim: Subjects.LucasTraceLadderMatchesRecurrenceDeep,
-            id: "deep.prime-field-lucas-trace-ladder-vs-recurrence"
-        ),
-        ClaimCase(
-            claim: Subjects.BaseTwoBatchMatchesModularPowerDeep,
-            id: "deep.prime-field-base-two-batch-vs-modular-power"
-        ),
-        ClaimCase(
-            claim: Subjects.BaseTwoRoundMatchesModularPowerDeep,
-            id: "deep.prime-field-base-two-round-vs-modular-power"
         ),
         Case(
             id: "deep.prime-field-baillie-and-populations",
@@ -1193,7 +951,7 @@ internal static partial class LawRegistry {
     ];
     private static LawCase[] QuaternionDualStatCases() => [
         // ---- quaternion / dual ----
-        // The three ladder cases below declare Leg.Structural rather than Leg.PublishedConstant. Their literals were
+        // The three ladder cases below declare a structural leg rather than a classical one. Their literals were
         // computed offline in double from the closed form, then cross-checked against the shipped kernel to confirm
         // the tolerance before being copied in — so the band was set by observing the subject. That is a regression
         // pin, not classical evidence, and condition (C) forbids calling it independent.

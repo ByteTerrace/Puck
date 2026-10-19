@@ -256,21 +256,6 @@ internal static partial class Subjects {
     }
     // ---- FixedSplit (the (0, +1) relation) ----
 
-    /// <summary>The subject <see cref="FixedComplex"/> multiply as a two-lane vector operation.</summary>
-    /// <param name="left">The multiplicand's lanes.</param>
-    /// <param name="right">The multiplier's lanes.</param>
-    /// <param name="result">The destination lanes.</param>
-    public static void ComplexMultiplyLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        var (u, v) = ComplexMultiply(
-            u1: left[0],
-            v1: left[1],
-            u2: right[0],
-            v2: right[1]
-        );
-
-        result[0] = u;
-        result[1] = v;
-    }
     /// <summary>The subject <see cref="FixedSplit"/> multiply.</summary>
     public static (long U, long V) SplitMultiply(long u1, long v1, long u2, long v2) {
         var product = (new FixedSplit(
@@ -793,63 +778,6 @@ internal static partial class Subjects {
     /// <summary>The number of vertices every graph law runs on; the lane count is its square.</summary>
     public const int GraphOrder = 4;
 
-    /// <summary>The subject reflexive-transitive closure: the guarded sum over all lengths of a Boolean quiver
-    /// element.</summary>
-    /// <returns>The bound operation. The presentation is built on first use and owned by this closure alone, because
-    /// the kernel's working buffers are per-instance mutable state.</returns>
-    public static VectorBinaryOp PresentedBooleanStar() {
-        PresentedAlgebra<bool, BooleanMaterial>? algebra = null;
-
-        return (left, right, result) => {
-            algebra ??= PresentedAlgebra<bool, BooleanMaterial>.Create(presentation: CodiscreteQuiver<bool, BooleanMaterial>(
-                material: default,
-                order: GraphOrder
-            ));
-
-            var count = right.Length;
-            var coefficients = new bool[count];
-            var keys = new long[count];
-            var support = 0;
-
-            for (var lane = 0; (lane < count); ++lane) {
-                if (0L == (right[lane] & 1L)) { continue; }
-
-                coefficients[support] = true;
-                keys[support] = lane;
-                ++support;
-            }
-
-            var element = algebra.FromSupport(
-                keys: keys.AsSpan(
-                    length: support,
-                    start: 0
-                ),
-                coefficients: coefficients.AsSpan(
-                    length: support,
-                    start: 0
-                )
-            );
-
-            result.Clear();
-
-            if (!algebra.TrySumOverAllLengths(
-                obstruction: out _,
-                total: out var total,
-                value: element
-            )) {
-                for (var lane = 0; (lane < result.Length); ++lane) { result[lane] = -1L; }
-
-                return;
-            }
-
-            for (var index = 0; (index < total.SupportCount); ++index) {
-                result[((int)total.Keys[index])] = (total.Coefficients[index]
-                    ? 1L
-                    : 0L
-                );
-            }
-        };
-    }
     /// <summary>The shared-nothing reflexive-transitive closure oracle.</summary>
     /// <param name="left">The weight lanes, unread.</param>
     /// <param name="right">The arc-presence lanes.</param>

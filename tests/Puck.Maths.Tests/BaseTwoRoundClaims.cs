@@ -14,12 +14,7 @@ internal static partial class Subjects {
 
     /// <summary>Compares the single base-two round with plain modular exponentiation at the Default tier's operands.</summary>
     /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? BaseTwoRoundMatchesModularPower() => BaseTwoRoundMatchesModularPower(full: false);
-    /// <summary>Compares the single base-two round with plain modular exponentiation at the Deep tier's stronger operands.</summary>
-    /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? BaseTwoRoundMatchesModularPowerDeep() => BaseTwoRoundMatchesModularPower(full: true);
-
-    private static string? BaseTwoRoundMatchesModularPower(bool full) {
+    public static string? BaseTwoRoundMatchesModularPower() {
         var generator = Pcg32XshRr.Create(state: 2087, stream: 31);
         var passes = 0;
 
@@ -45,12 +40,12 @@ internal static partial class Subjects {
 
         // Every odd value of a contiguous band, which holds every odd part through the seed's window at every short
         // exponent of two, and the strong base-two pseudoprimes 2047, 3277, 4033, 4681 and 8321.
-        for (var value = 3UL; (value < (full ? (1UL << 21) : (1UL << 17))); value += 2UL) {
+        for (var value = 3UL; (value < (1UL << 17)); value += 2UL) {
             if (Check(value: value) is { } failure) { return failure; }
         }
 
         // Drawn values inside each region.
-        var draws = (full ? 48_000 : 4_800);
+        var draws = 4_800;
 
         foreach (var region in BaseTwoRoundRegions) {
             var before = passes;
@@ -62,7 +57,7 @@ internal static partial class Subjects {
         }
         // Just above the signed ceiling, where a seeded walk left signed too far carries its accumulator past the signed
         // word.
-        for (var count = 0; (count < (full ? 240_000 : 24_000)); ++count) {
+        for (var count = 0; (count < 24_000); ++count) {
             if (Check(value: Draw(region: (ScaledResidueRing64.SignedModulusCeiling, (ScaledResidueRing64.SignedModulusCeiling + (ScaledResidueRing64.SignedModulusCeiling >>> 1))))) is { } failure) { return failure; }
         }
 
@@ -96,18 +91,18 @@ internal static partial class Subjects {
         var band = new List<ulong>();
         var low = new List<ulong>();
 
-        if (BaseTwoPseudoprimes(band: band, full: full, high: high, low: low) is { } construction) { return construction; }
+        if (BaseTwoPseudoprimes(band: band, high: high, low: low) is { } construction) { return construction; }
         foreach (var pseudoprime in low.Concat(second: band).Concat(second: high)) {
             if (Check(value: pseudoprime) is { } failure) { return failure; }
         }
         // Prime powers inside [2^60, 2^62), the powers of the Wieferich primes 1093 and 3511 the carrier holds, whose
         // squares are base-two pseudoprimes, and products of primes just above 2^30 with primes just below 2^31.
-        foreach (var value in BandShapedComposites(full: full)) {
+        foreach (var value in BandShapedComposites()) {
             if (Check(value: value) is { } failure) { return failure; }
         }
 
         // The odd neighbours of every dispatch boundary on both sides, and the top of the carrier.
-        var reach = (full ? 4_096UL : 256UL);
+        var reach = 256UL;
 
         foreach (var boundary in ((ulong[])[(1UL << 32), (1UL << 58), ScaledResidueRing64.LazyModulusCeiling, (1UL << 61), (1UL << 62), ScaledResidueRing64.SignedModulusCeiling])) {
             for (var offset = 1UL; (offset < reach); offset += 2UL) {
@@ -120,14 +115,14 @@ internal static partial class Subjects {
 
         return BaseTwoRoundRefusals();
     }
+
     /// <summary>Constructs the strong base-two pseudoprimes <c>(6k + 1)(12k + 1)(18k + 1)</c> with all three factors prime below <c>2^60</c>, in <c>[2^60, 2^62)</c> and above <c>2^63</c>, each decided by the oracle alone.</summary>
-    /// <param name="full">Whether to reach the Deep tier's longer run below <c>2^60</c>.</param>
     /// <param name="low">Receives those below <see cref="ScaledResidueRing64.LazyModulusCeiling"/>.</param>
     /// <param name="band">Receives those in <c>[2^60, 2^62)</c>.</param>
     /// <param name="high">Receives those above <c>2^63</c>.</param>
     /// <returns>A failure when the construction does not find the pseudoprimes the laws rely on, or <see langword="null"/>.</returns>
-    private static string? BaseTwoPseudoprimes(bool full, List<ulong> low, List<ulong> band, List<ulong> high) {
-        foreach (var (first, last, into) in (((ulong First, ulong Last, List<ulong> Into)[])[(1UL, (full ? 96_000UL : 24_000UL), low), (95_000UL, 153_000UL, band), (192_000UL, 243_000UL, high)])) {
+    private static string? BaseTwoPseudoprimes(List<ulong> low, List<ulong> band, List<ulong> high) {
+        foreach (var (first, last, into) in (((ulong First, ulong Last, List<ulong> Into)[])[(1UL, 24_000UL, low), (95_000UL, 153_000UL, band), (192_000UL, 243_000UL, high)])) {
             for (var k = first; (k < last); ++k) {
                 var product = (((((UInt128)((6UL * k) + 1UL)) * ((12UL * k) + 1UL))) * ((18UL * k) + 1UL));
                 var inside = ((into == low)
@@ -150,13 +145,12 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>Lists composites shaped against the band <c>[2^60, 2^62)</c>: prime powers inside it, the powers of the Wieferich primes the carrier holds, and products of primes either side of <c>2^30</c> and <c>2^31</c>.</summary>
-    /// <param name="full">Whether to reach the Deep tier's wider prime set.</param>
     /// <returns>The composites.</returns>
-    private static List<ulong> BandShapedComposites(bool full) {
+    private static List<ulong> BandShapedComposites() {
         var values = new List<ulong>();
         var smallPrimes = Oracles.SmallPrimes;
 
-        for (var index = 1; (smallPrimes[index] < (full ? 2_000U : 200U)); ++index) {
+        for (var index = 1; (smallPrimes[index] < 200U); ++index) {
             var prime = ((ulong)smallPrimes[index]);
 
             for (var power = (prime * prime); (power <= (ulong.MaxValue / prime)); power *= prime) {
@@ -175,10 +169,10 @@ internal static partial class Subjects {
         var above = new List<ulong>();
         var below = new List<ulong>();
 
-        for (var candidate = ((1UL << 30) + 1UL); (above.Count < (full ? 64 : 16)); candidate += 2UL) {
+        for (var candidate = ((1UL << 30) + 1UL); (above.Count < 16); candidate += 2UL) {
             if (Oracles.ExactPrimality(value: candidate)) { above.Add(item: candidate); }
         }
-        for (var candidate = ((1UL << 31) - 1UL); (below.Count < (full ? 64 : 16)); candidate -= 2UL) {
+        for (var candidate = ((1UL << 31) - 1UL); (below.Count < 16); candidate -= 2UL) {
             if (Oracles.ExactPrimality(value: candidate)) { below.Add(item: candidate); }
         }
         foreach (var first in above) {

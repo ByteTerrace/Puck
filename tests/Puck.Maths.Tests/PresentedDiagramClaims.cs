@@ -16,8 +16,8 @@ namespace Puck.Maths.Tests;
 /// all three configurations exhaustively, and one configuration — order 3, modulus 13, swap 3 — is not built anywhere
 /// else in the suite.</item>
 /// <item><see cref="FunctorTwinsTransferAtVariedLength"/> — draws 60 quotient words of varying length through the
-/// same three-evaluator agreement <c>smoke.presented-functor-twin</c> already pins at exactly three FIXED five-letter
-/// words; this widens the length and quotient range that smoke sentinel never reaches.</item>
+/// same three-evaluator agreement <c>presented.functor-twins-transfer</c> already pins at exactly three FIXED five-letter
+/// words; this widens the length and quotient range that law never reaches.</item>
 /// </list>
 /// </remarks>
 internal static class PresentedDiagramClaims {
@@ -184,9 +184,9 @@ internal static class PresentedDiagramClaims {
 
     /// <summary>Proves three shipped evaluators of one word — <see cref="PresentedFunctor{TValue, TOps}.Map"/>,
     /// <see cref="ConvergentTransfer{TValue, TOps}.Evaluate"/> and <see cref="ConvergentTransfer{TValue, TOps}.Run"/>
-    /// — agree at 60 words of varying length, extending <c>smoke.presented-functor-twin</c>'s three FIXED
+    /// — agree at 60 words of varying length, extending <c>presented.functor-twins-transfer</c>'s three FIXED
     /// five-letter words to a deterministically varied length (one through eight letters) and partial-quotient range
-    /// the smoke sentinel never reaches.</summary>
+    /// that law never reaches.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     /// <remarks>
     /// The length and each partial quotient are derived from the draw index by fixed-point multiplicative mixing —

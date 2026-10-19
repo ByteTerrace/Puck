@@ -16,16 +16,13 @@ internal sealed record MemberRef(string Type, string Name);
 /// <remarks>
 /// <para>
 /// The shape mirrors <see cref="Leg"/> exactly — kind, flavor and the five prose slots — so the round trip through
-/// JSON is lossless and both leg gates read precisely what they read before.
+/// JSON is lossless.
 /// </para>
 /// <para>
-/// <b>A row is materialized directly rather than through the factories in <c>Legs.cs</c>.</b> Those factories exist to
-/// make illegal combinations unspellable in C#, which a JSON row can obviously ignore, so the guarantee moves rather
-/// than disappearing: <c>LegLedgerTests.LawLegsAreDeclared</c> already checks every invariant the factories encode —
-/// an agreement names what it stands against, a shared-substrate leg names what is shared, a delegation or
+/// A row is materialized directly, so <c>LegLedgerTests.LawLegsAreDeclared</c> checks every invariant on a Default-tier
+/// run: an agreement names what it stands against, a shared-substrate leg names what is shared, a delegation or
 /// shared-exact leg carries a citation, a transcription names its witness, a canary names an absolute sibling, a
-/// doc-gap citation sits on a structural leg. What was a compile error becomes a Default-tier failure, on a tier every
-/// change already runs.
+/// doc-gap citation sits on a structural leg.
 /// </para>
 /// </remarks>
 internal sealed record LegText(string Kind, string Flavor, string Subject, string Against, string Shared, string Citation, string Absolute) {

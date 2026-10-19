@@ -4,15 +4,13 @@ using Xunit;
 
 namespace Puck.Maths.Tests;
 
-/// <summary>The four execution tiers. Plain <c>dotnet test</c> runs <see cref="Smoke"/> and <see cref="Default"/>;
-/// <see cref="Deep"/> and <see cref="Exhaustive"/> rows are explicit, and a run opts into one with
+/// <summary>The three execution tiers. Plain <c>dotnet test</c> runs <see cref="Default"/>; <see cref="Deep"/> and
+/// <see cref="Exhaustive"/> rows are explicit, and a run opts into one with
 /// <c>--explicit on --filter-trait tier=&lt;tier&gt;</c> (see the project README). No tier measures time: cost is <c>puck bench</c>'s.</summary>
 internal enum Tier {
-    /// <summary>A handful of tiny facts, under two seconds — the fastest confidence check.</summary>
-    Smoke,
-    /// <summary>Everything but <see cref="Deep"/> and <see cref="Exhaustive"/>; the plain-run set, under thirty seconds.</summary>
+    /// <summary>Everything but <see cref="Deep"/> and <see cref="Exhaustive"/>; the plain-run set, which reaches the suite's line coverage of <c>Puck.Maths</c>.</summary>
     Default,
-    /// <summary>Exhaustive edge batteries and larger sweeps, in minutes; the pre-commit guardian. Opt in with <c>--explicit on --filter-trait tier=Deep</c>.</summary>
+    /// <summary>Domains Default does not reach: the exhaustive four-operand edge cross product, finite carriers swept whole, and longer modulus and degree ladders. Opt in with <c>--explicit on --filter-trait tier=Deep</c>.</summary>
     Deep,
     /// <summary>
     /// Full-carrier sweeps and expensive finite combinatorial-prime checks. Opt in with

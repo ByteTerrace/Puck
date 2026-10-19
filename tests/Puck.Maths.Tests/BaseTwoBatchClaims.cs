@@ -18,12 +18,7 @@ internal static partial class Subjects {
 
     /// <summary>Compares the batched base-two round with plain modular exponentiation at the Default tier's operands.</summary>
     /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? BaseTwoBatchMatchesModularPower() => BaseTwoBatchMatchesModularPower(full: false);
-    /// <summary>Compares the batched base-two round with plain modular exponentiation at the Deep tier's stronger operands.</summary>
-    /// <returns>The first counterexample, or <see langword="null"/>.</returns>
-    public static string? BaseTwoBatchMatchesModularPowerDeep() => BaseTwoBatchMatchesModularPower(full: true);
-
-    private static string? BaseTwoBatchMatchesModularPower(bool full) {
+    public static string? BaseTwoBatchMatchesModularPower() {
         var generator = Pcg32XshRr.Create(state: 2083, stream: 29);
         var lanes = new ulong[PrimeKernels.BaseTwoBatchWidth];
         var passes = 0;
@@ -68,7 +63,7 @@ internal static partial class Subjects {
 
         // Every odd value of a contiguous band, four consecutive values to a batch, and the band's start beside three
         // values above 2^63, so short odd parts walk beside the longest ones.
-        var band = (full ? (1UL << 21) : (1UL << 17));
+        var band = (1UL << 17);
 
         for (var value = 3UL; (value < band); value += 8UL) {
             if (Check(first: value, fourth: (value + 6UL), second: (value + 2UL), third: (value + 4UL)) is { } failure) { return failure; }
@@ -80,7 +75,7 @@ internal static partial class Subjects {
         }
 
         // Drawn batches inside each region, then batches whose lanes come from any region.
-        var draws = (full ? 12_000 : 1_200);
+        var draws = 1_200;
 
         foreach (var region in BaseTwoBatchRegions) {
             var before = passes;
@@ -102,13 +97,13 @@ internal static partial class Subjects {
         }
         // Above the lazy ceiling up to 2^61, where a batch left lazy too far carries its accumulators past their
         // operand bound; a lazy accumulator there leaves 4n only now and then, so the sweep is long.
-        for (var count = 0; (count < (full ? 240_000 : 24_000)); ++count) {
+        for (var count = 0; (count < 24_000); ++count) {
             var region = (ScaledResidueRing64.LazyModulusCeiling, (ScaledResidueRing64.LazyModulusCeiling << 1));
 
             if (Check(first: Draw(region: region), fourth: Draw(region: region), second: Draw(region: region), third: Draw(region: region)) is { } failure) { return failure; }
         }
         // Just above the signed ceiling, where a batch left signed too far carries its accumulators past the signed word.
-        for (var count = 0; (count < (full ? 60_000 : 6_000)); ++count) {
+        for (var count = 0; (count < 6_000); ++count) {
             var region = (ScaledResidueRing64.SignedModulusCeiling, (ScaledResidueRing64.SignedModulusCeiling + (ScaledResidueRing64.SignedModulusCeiling >>> 1)));
 
             if (Check(first: Draw(region: region), fourth: Draw(region: region), second: Draw(region: region), third: Draw(region: region)) is { } failure) { return failure; }
@@ -118,8 +113,8 @@ internal static partial class Subjects {
         // reach 1, 2, 33, 64, 65 and 128 (65 through 128 needing m = a - 64, 64 and 128 the reduction by 2^64), and the
         // common lengths reach 1, 6, 7 and 8, where k is zero or one, and 63, the longest an odd part of a word has.
         // Each value d 2^s + 1 is placed at bit lengths in every region, so the same prefixes run in every arithmetic.
-        int[] lengths = (full ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 16, 31, 32, 33, 47, 57, 58, 59, 60, 61, 62, 63] : [1, 2, 5, 6, 7, 8, 9, 32, 57, 62, 63]);
-        int[] widths = (full ? [33, 34, 40, 50, 58, 59, 60, 61, 62, 63, 64] : [33, 58, 60, 61, 62, 63, 64]);
+        int[] lengths = [1, 2, 5, 6, 7, 8, 9, 32, 57, 62, 63];
+        int[] widths = [33, 58, 60, 61, 62, 63, 64];
 
         static ulong Place(ulong oddPart, int width) {
             var shift = (width - (64 - BitOperations.LeadingZeroCount(value: oddPart)));
@@ -161,7 +156,7 @@ internal static partial class Subjects {
         var pseudoprimes = new List<ulong>();
         var bandPseudoprimes = new List<ulong>();
 
-        if (BaseTwoPseudoprimes(band: bandPseudoprimes, full: false, high: pseudoprimes, low: new List<ulong>()) is { } construction) { return construction; }
+        if (BaseTwoPseudoprimes(band: bandPseudoprimes, high: pseudoprimes, low: new List<ulong>()) is { } construction) { return construction; }
         for (var i = 0; (i < bandPseudoprimes.Count); ++i) {
             var pseudoprime = bandPseudoprimes[i];
 
@@ -169,7 +164,7 @@ internal static partial class Subjects {
             if (CheckRotations(first: pseudoprime, fourth: Draw(region: BaseTwoBatchRegions[3]), second: Draw(region: BaseTwoBatchRegions[2]), third: Draw(region: BaseTwoBatchRegions[0])) is { } lower) { return lower; }
             if (CheckRotations(first: pseudoprime, fourth: Draw(region: BaseTwoBatchRegions[4]), second: Draw(region: BaseTwoBatchRegions[5]), third: Draw(region: BaseTwoBatchRegions[6])) is { } upper) { return upper; }
         }
-        foreach (var value in BandShapedComposites(full: full)) {
+        foreach (var value in BandShapedComposites()) {
             if (Check(first: value, fourth: Draw(region: BaseTwoBatchRegions[4]), second: Draw(region: BaseTwoBatchRegions[3]), third: Draw(region: BaseTwoBatchRegions[1])) is { } failure) { return failure; }
         }
         for (var i = 0; (i < pseudoprimes.Count); ++i) {
@@ -182,7 +177,7 @@ internal static partial class Subjects {
 
         // The odd neighbours of every dispatch boundary on both sides, alone and beside drawn values of every region,
         // and the top of the carrier.
-        var reach = (full ? 4_096UL : 256UL);
+        var reach = 256UL;
 
         foreach (var boundary in BaseTwoBatchBoundaries) {
             for (var offset = 1UL; (offset < reach); offset += 2UL) {
@@ -201,6 +196,7 @@ internal static partial class Subjects {
 
         return BaseTwoBatchRefusals();
     }
+
     private static string? BaseTwoBatchRefusals() {
         var outOfRange = typeof(ArgumentOutOfRangeException);
         var wrongLength = typeof(ArgumentException);

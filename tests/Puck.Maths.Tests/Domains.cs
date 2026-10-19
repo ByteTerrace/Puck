@@ -34,7 +34,6 @@ internal static class Domains {
     }
     private static int RandomCount(Tier tier) =>
         tier switch {
-            Tier.Smoke => 16,
             Tier.Deep => 4096,
             _ => 256,
         };

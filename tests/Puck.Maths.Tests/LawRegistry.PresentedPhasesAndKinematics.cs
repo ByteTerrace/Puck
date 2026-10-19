@@ -269,6 +269,13 @@ internal static partial class LawRegistry {
     ];
     private static LawCase[] Phase4BoundaryCases() => [
         // ---- phase 4: boundary composability, and co-arity greater than one ----
+        // Ledger row 19's transfer, named: the morphism out of the free monoid on one letter per partial quotient,
+        // carrying each to that quotient's digit element, reaches the element the transfer's own fold reaches and the
+        // entries its module run reads out; it is also the one law that reaches MapWord's refusal.
+        ClaimCase(
+            claim: Subjects.FunctorTwinsTransfer,
+            id: "presented.functor-twins-transfer"
+        ),
         //
         // Composability stopped being written out per entry and became one comparison over the generators' own
         // boundaries. The quiver and the interval poset exercise its colour half at arity one; the planar tangle

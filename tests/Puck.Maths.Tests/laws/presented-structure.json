@@ -727,5 +727,328 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "presented.functor-twins-transfer",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AreEqual"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Generator"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "FreeMonoid"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Quiver"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Image"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "ImageCount"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "IsWordMorphism"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Map"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MapWord"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Source"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Target"
+      },
+      {
+        "Type": "Puck.Maths.PresentedFunctor\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FunctorObstruction\u00601[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FunctorObstruction\u00601[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+        "Name": "LeftKey"
+      },
+      {
+        "Type": "Puck.Maths.FunctorObstruction\u00601[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+        "Name": "RightKey"
+      },
+      {
+        "Type": "Puck.Maths.FunctorObstruction\u00601[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+        "Name": "Rule"
+      },
+      {
+        "Type": "Puck.Maths.FunctorObstruction\u00601[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+        "Name": "RuleIndex"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Algebra"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Digit"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Entry"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Evaluate"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Run"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Algebra"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AreEquivalent"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Initial"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MinimizeByPairingRadical"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Readout"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Run"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Step"
+      },
+      {
+        "Type": "Puck.Maths.PresentedMachine\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "StepCount"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "LeftValue"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "RightValue"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Subtract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "PresentedFunctor.Map of the five-letter word out of Presentations.FreeMonoid(5)",
+        "Against": "ConvergentTransfer\u003CBigInteger, IntegerMaterial\u003E.Evaluate of the same partial quotients, Subjects.cs:8129-8134",
+        "Shared": "the PresentedAlgebra kernel \u2014 ConvergentTransfer is a PresentedAlgebra on a Quiver(2) presentation, ConvergentTransfer.cs:52-58; both exact",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "ConvergentTransfer.Entry of the mapped element, all four cells",
+        "Against": "ConvergentTransfer.Run through PresentedMachine on the same word, Subjects.cs:8136-8142",
+        "Shared": "one PresentedAlgebra instance and the same Digit elements",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the morphism reports its image count and the two algebras it was built over, hands back each digit image it was given, reports IsWordMorphism false because a three-term digit element names no word, and MapWord refuses with InvalidOperationException where Map answers",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]
