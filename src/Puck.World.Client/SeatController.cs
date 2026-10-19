@@ -90,9 +90,10 @@ public sealed class SeatController {
     /// and follows live look yaw. <see langword="null"/> while no latched producer moves. Presentation-side
     /// composition state, like the camera itself.</summary>
     public float? CameraFrameYaw { get; set; }
-    /// <summary>The world's declared channel table — resolves each composition ordinal's shape for
-    /// <see cref="HeldChannels"/>'s end clamp. Set once by the roster from the same table the server compiled
-    /// (<c>WorldServer.Population.Channels</c>); <see langword="null"/> is normalized to
+    /// <summary>Gets or sets the seat's routed channel table — the one its bindings lower channel names through, which
+    /// resolves each ordinal's role and each composition ordinal's shape for <see cref="HeldChannels"/>'s end clamp.
+    /// The roster seeds it from <see cref="WorldSeatBindings.Channels"/> and the host's post-step seat sync keeps it
+    /// equal to that table across a route change or a document reload; <see langword="null"/> is normalized to
     /// <see cref="WorldChannelTable.Empty"/>.</summary>
     public WorldChannelTable Channels {
         get => m_channels;

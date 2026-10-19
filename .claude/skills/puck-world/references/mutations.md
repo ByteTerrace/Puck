@@ -153,7 +153,13 @@ table — a row added there grants nothing until relaunch.
   Mutate over EVERY section (`WorldGrants.AllowsAllSections`) → (Load-only,
   unless `force`) refuse while the journal is dirty → whole-document validate
   → envelope `TryFit` → wholesale solid rebuild → `Install` with a full
-  population rebuild → journal CLEARS → `WorldGrants.Reset` wipes and
+  population rebuild, which recompiles the channel table every channel-name
+  door reads live (`WorldPopulation.Channels`: `body.press`, `world.affordances`,
+  the engagement fold, each seat's held-channel fold through its routed
+  `WorldSeatBindings.Channels`) → every live body's action state re-births
+  (`WorldPopulation.RebirthActionState`: `state.body` slots at their initials;
+  a `state.identity` slot keeps its value on a body with an identity when the
+  previous document declared it under the same name and kind) → journal CLEARS → `WorldGrants.Reset` wipes and
   re-seeds the RUNTIME grant table, the candidate's own `Grants` section
   replays under Console (the identical `WithoutAuthoredConsent`-filtered path
   the constructor and `world.grant` use) → every currently-admitted peer

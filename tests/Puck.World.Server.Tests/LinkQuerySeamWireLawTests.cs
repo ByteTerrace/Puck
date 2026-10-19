@@ -147,13 +147,9 @@ public sealed class LinkQuerySeamWireLawTests {
         );
     }
     // Observe-all queries answer only the console and local seats; over the wire they refuse by name.
-    [InlineData("population-channels")]
-    [InlineData("profile-catalog")]
-    [Theory]
-    public async Task AnObserveAllQuery_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly(string query) {
-        var answer = await RunQueryAsync(query: _ => ((query == "population-channels")
-            ? new WorldQuery.PopulationChannels()
-            : new WorldQuery.ProfileCatalog()));
+    [Fact]
+    public async Task ProfileCatalog_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly() {
+        var answer = await RunQueryAsync(query: _ => new WorldQuery.ProfileCatalog());
 
         Assert.True(
             condition: answer.Refused,

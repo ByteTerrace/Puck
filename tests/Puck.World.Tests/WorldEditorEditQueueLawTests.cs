@@ -34,7 +34,7 @@ public sealed class WorldEditorEditQueueLawTests {
 
             m_row = EditorPlacementFixtures.Build();
             Away = WorldEditorPlacementLawTests.AwayDocument(row: m_row);
-            Link = new RecordingLink(definition: Away);
+            Link = new RecordingLink();
             Endpoint = EditorEndpoints.Of(definition: Away, identity: "away", link: Link, pose: WorldEditorPlacementLawTests.AwayCrate);
             Registry = WorldEditorPlacementLawTests.BuildRegistry(echoes: echoes, routes: Routes, row: m_row, seats: Seats);
             echoes.Completed += result => Lines.Add(item: result.Output);
@@ -259,7 +259,7 @@ public sealed class WorldEditorEditQueueLawTests {
     [Fact]
     public void TwoSeatsInOneWorldShareItsOrderAndEachSendsThroughItsOwnEndpoint() {
         using var rig = new Rig();
-        var second = new RecordingLink(definition: rig.Away) { Activation = rig.Link.Activation };
+        var second = new RecordingLink { Activation = rig.Link.Activation };
         using var other = EditorEndpoints.Of(definition: rig.Away, identity: "away-2", link: second, pose: WorldEditorPlacementLawTests.AwayCrate);
         using var seat = new TextCommandSource(registry: rig.Registry).CreateSession(principal: Principal.Seat(slot: 1), slot: 1);
 
@@ -349,7 +349,7 @@ public sealed class WorldEditorEditQueueLawTests {
         var version = row.Server.DocumentVersion;
         var definition = row.Server.Definition;
         var local = new GatedLink(target: row.Instance.Link);
-        var federated = new RecordingLink(definition: definition) { Activation = version.Activation, Sequence = version.Sequence };
+        var federated = new RecordingLink { Activation = version.Activation, Sequence = version.Sequence };
         var near = EditorEndpoints.Of(definition: definition, identity: "near", link: local, pose: Vector3.Zero, version: version);
         var far = EditorEndpoints.Of(definition: definition, identity: "far", link: federated, pose: Vector3.Zero, version: version);
         var routes = new WorldSeatAuthorityRouter();

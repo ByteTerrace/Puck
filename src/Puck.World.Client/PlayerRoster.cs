@@ -198,9 +198,6 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     // pre-quantization threshold now lands on the SAME fixed raw as this constant and crosses it, a deliberate
     // mapping correction under determinism-pins-the-mapping, never a preserved-old-boundary regression.
     private readonly FixedQ4816 m_pickerThreshold;
-    // The document's own compiled channel shapes (WorldPopulation.CompileFixedTables), fetched once via
-    // WorldQuery.PopulationChannels — the same table Fill/OccupySeat always seated a fresh participant with.
-    private readonly WorldChannelTable m_populationChannels;
     // The per-seat input resolver, pushed a seat's selected-profile binding layer whenever its identity settles so the
     // seat's composed mapping (default ⊕ overlays ⊕ profile ⊕ session) recompiles once, off the frame path.
     private readonly WorldSeatBindings m_seatBindings;
@@ -517,10 +514,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                     Origin = origin,
                     Seat = new SeatController {
                         Profile = profile,
-                        // The same table the server compiled from the identical world document (WorldPopulation.CompileFixedTables
-                        // runs in WorldServer's own constructor dependency, always ahead of this DI-resolved roster) — the
-                        // shape data HeldChannels' end clamp needs (bipolar/unipolar/binary), never re-derived here.
-                        Channels = m_populationChannels,
+                        // The seat's routed channel table, the one its bindings lower channel names through.
+                        Channels = m_seatBindings.Channels(slot: slot),
                     },
                     State = state,
                 };
@@ -1695,9 +1690,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             Origin = ParticipantOrigin.Script,
             Seat = new SeatController {
                 Profile = profile,
-                // The same table Fill seats a fresh participant with — the world document's own compiled channel
-                // shapes, never re-derived here.
-                Channels = m_populationChannels,
+                // The same routed table Fill seats a fresh participant with.
+                Channels = m_seatBindings.Channels(slot: slot),
             },
             State = ParticipantState.Active,
         };
@@ -2185,14 +2179,6 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 ),
             ];
         }
-
-        WorldChannelTable? channels = null;
-
-        m_link.Query(
-            query: new WorldQuery.PopulationChannels(),
-            completion: answer => channels = (answer.Payload as WorldChannelTable)
-        );
-        m_populationChannels = (channels ?? throw new InvalidOperationException(message: "the server answered no population channel table"));
 
         // The boot census self-provisions: EXPLICIT at each call site (SelfProvisioned(slot)), never an omitted
         // default — see SelfProvisioned's own remarks for why this is a deliberate choice, not a laundered actor.

@@ -9,8 +9,7 @@ namespace Puck.World.Tests;
 /// would receive them, so a law answers each verdict itself, in the order it chooses. It stands for the destination's
 /// installs too: <see cref="Version"/> is the document the destination last installed, which an applied verdict moves
 /// forward and a law delivers to the destination's mirror.</summary>
-/// <param name="definition">The destination's document, which answers its population queries.</param>
-internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
+internal sealed class RecordingLink : IServerLink {
     /// <summary>Gets a verdict the destination's grant check refused.</summary>
     public static WorldSubmissionResult Refused { get; } = new WorldSubmissionResult.Refusal(Code: "world.grant.denied", Detail: "the seat may not mutate placements here");
 
@@ -56,7 +55,8 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
     /// <param name="index">The envelope's submission index.</param>
     /// <returns>The placement row.</returns>
     public WorldPlacement Placement(int index) => ((WorldMutation.UpsertPlacement)((WorldSubmissionPayload.Mutation)Submitted[index]).Value).Placement;
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) => new SilentLink(definition: definition).Query(completion: completion, query: query);
+    public void Query(WorldQuery query, Action<QueryAnswer> completion) {
+    }
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         completion: null,
         operationId: Guid.Empty,

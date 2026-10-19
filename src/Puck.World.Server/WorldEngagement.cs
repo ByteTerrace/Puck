@@ -60,22 +60,21 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// launcher's window-pump thread, so no lock guards this state.</para>
 /// </remarks>
 public sealed partial class WorldEngagement {
-    private readonly WorldChannelTable m_channels;
     private readonly WorldPadElement?[] m_defaultPad;
     private readonly Func<WorldDefinition> m_definition;
     private readonly IWorldGrantsView m_grants;
     private readonly WorldPopulation m_population;
 
     // The policy cache, the one place a screen's or a kit's engagement policy is compiled: each entry is compiled from
-    // the live definition's row and kept only while that definition still holds the very same row object, so a live
-    // edit (world.row.set, a reload) replaces the row and the next read compiles the new one, once. A screen's entry is
+    // the live definition's row against the population's live channel table, and kept only while the definition still
+    // holds the very same row object and the population the very same table, so a live edit (world.row.set, a reload)
+    // that replaces either compiles the entry again on its next read, once. A screen's entry is
     // its authored reach mask and pad-kit name (what Compose stamps and FoldTick reads) and its light gun's mapping
     // (what FoldTick aims through); a kit's is its compiled pad map (channel ordinal -> pad element, or null when
     // unmapped). A kit that declares no pad, like a screen naming no kit, reads the engine's baked default table; a null
-    // Kit on a body target never reaches a pad at all (pure passthrough). Channels are boot-fixed, so the channel table
-    // is compiled once.
-    private readonly Dictionary<int, (WorldScreen Row, ScreenPolicy Policy)> m_screenPolicies = new();
-    private readonly Dictionary<string, (WorldKit Row, WorldPadElement?[] Pad)> m_kitPads = new(comparer: StringComparer.Ordinal);
+    // Kit on a body target never reaches a pad at all (pure passthrough).
+    private readonly Dictionary<int, (WorldScreen Row, WorldChannelTable Channels, ScreenPolicy Policy)> m_screenPolicies = new();
+    private readonly Dictionary<string, (WorldKit Row, WorldChannelTable Channels, WorldPadElement?[] Pad)> m_kitPads = new(comparer: StringComparer.Ordinal);
     // The live definition's screen and kit rows by index and name (IndexRows), for the section objects they were read from.
     private readonly Dictionary<int, WorldScreen> m_screenRows = new();
     private readonly Dictionary<string, WorldKit> m_kitRows = new(comparer: StringComparer.Ordinal);
@@ -729,11 +728,11 @@ public sealed partial class WorldEngagement {
 
     /// <summary>Initializes the application fold over the population (up to bodies 0..4095) and the one grant table the
     /// sets live in.</summary>
-    /// <param name="population">The entity table.</param>
+    /// <param name="population">The entity table, whose live channel table each policy compiles against.</param>
     /// <param name="grants">The capability table's view (application set reads/writes plus the Control-over-target check).</param>
-    /// <param name="definition">Reads the live world definition: its boot-fixed channel table once, here, and each
-    /// screen's application policy (channel reach, pad kit) and each kit's pad map whenever a fold or a compose needs
-    /// them, compiled again only after a live edit replaces the row.</param>
+    /// <param name="definition">Reads the live world definition: each screen's application policy (channel reach, pad
+    /// kit) and each kit's pad map whenever a fold or a compose needs them, compiled again only after a live edit
+    /// replaces the row or the channel table.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public WorldEngagement(WorldPopulation population, IWorldGrantsView grants, Func<WorldDefinition> definition) {
         ArgumentNullException.ThrowIfNull(argument: population);
@@ -743,7 +742,6 @@ public sealed partial class WorldEngagement {
         m_population = population;
         m_grants = grants;
         m_definition = definition;
-        m_channels = WorldChannelTable.Compile(channels: definition().Channels);
         m_defaultPad = CompileDefaultPad();
     }
 
@@ -822,6 +820,9 @@ public sealed partial class WorldEngagement {
         )) {
             return null;
         }
+
+        var channels = m_population.Channels;
+
         if (
             m_screenPolicies.TryGetValue(
                 key: screenIndex,
@@ -830,6 +831,10 @@ public sealed partial class WorldEngagement {
             ReferenceEquals(
                 objA: cached.Row,
                 objB: screen
+            ) &&
+            ReferenceEquals(
+                objA: cached.Channels,
+                objB: channels
             )
         ) {
             return cached.Policy;
@@ -846,12 +851,12 @@ public sealed partial class WorldEngagement {
             ),
             Kit: screen.Route.Kit,
             Reach: CompileReach(
-                channels: m_channels,
+                channels: channels,
                 names: screen.Route.Channels
             )
         );
 
-        m_screenPolicies[screenIndex] = (screen, policy);
+        m_screenPolicies[screenIndex] = (screen, channels, policy);
 
         return policy;
     }
@@ -873,6 +878,9 @@ public sealed partial class WorldEngagement {
         ) {
             return m_defaultPad;
         }
+
+        var channels = m_population.Channels;
+
         if (
             m_kitPads.TryGetValue(
                 key: name,
@@ -881,17 +889,21 @@ public sealed partial class WorldEngagement {
             ReferenceEquals(
                 objA: cached.Row,
                 objB: row
+            ) &&
+            ReferenceEquals(
+                objA: cached.Channels,
+                objB: channels
             )
         ) {
             return cached.Pad;
         }
 
         var pad = CompilePad(
-            channels: m_channels,
+            channels: channels,
             pad: row.Pad
         );
 
-        m_kitPads[name] = (row, pad);
+        m_kitPads[name] = (row, channels, pad);
 
         return pad;
     }

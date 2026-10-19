@@ -702,6 +702,7 @@ public sealed partial class WorldDocument {
             // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
             // a draw fill repaints only where the loaded document names a different pass than the one on the field.
             var rebuiltFrom = m_definition;
+            var previousActionState = Host.Population.ActionStateLane.Definitions;
 
             Install(
                 arena: rebuildArena,
@@ -709,6 +710,9 @@ public sealed partial class WorldDocument {
                 definition: installed,
                 rebuildPopulation: true
             );
+            // A rebuild starts a fresh simulation, so every live body's action state starts over as the installed
+            // document declares it, like the world rows it reseeds; identity slots stay with their identity.
+            Host.Population.RebirthActionState(previous: previousActionState);
             Host.RepaintChangedLatticeDraws(
                 current: candidate,
                 previous: rebuiltFrom

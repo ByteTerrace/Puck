@@ -258,7 +258,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
         var client = new WorldClient(
             new PlayerRoster(
                 definition: definition,
-                link: new SilentLink(definition: definition),
+                link: new SilentLink(),
                 seatBindings: new WorldSeatBindings(definition: definition)
             ),
             definition,

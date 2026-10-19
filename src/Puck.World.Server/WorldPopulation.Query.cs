@@ -889,6 +889,25 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+    /// <summary>Re-births every active body's named action state for a fresh simulation, as a whole-document rebuild
+    /// starts one: a <c>state.body</c> slot returns to its authored initial value, and a <c>state.identity</c> slot
+    /// keeps the value the body's identity holds when <paramref name="previous"/> declared it under the same name and
+    /// kind, and is born at its initial value otherwise or on a body with no identity.</summary>
+    /// <param name="previous">The register file installed before the rebuild.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="previous"/> is <see langword="null"/>.</exception>
+    public void RebirthActionState(IReadOnlyList<CompiledActionStateSlot> previous) {
+        ArgumentNullException.ThrowIfNull(argument: previous);
+
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index].Active) {
+                m_actionStateLane.Rebirth(
+                    keepsIdentity: (m_entries[index].Body?.Profile is not null),
+                    ordinal: index,
+                    previous: previous
+                );
+            }
+        }
+    }
     /// <summary>Sets the exact rendered material color retained by an authority-transferred body.</summary>
     public void SetBodyColor(int slot, Vector3 color) {
         if (((uint)slot) < ((uint)Capacity)) {

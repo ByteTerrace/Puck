@@ -512,10 +512,6 @@ public sealed partial class WorldRuleHost {
             WorldQuery.GrantAllows allows => AnswerGrantAllows(query: allows),
             WorldQuery.GrantHandleMint mint => AnswerGrantHandleMint(query: mint),
             WorldQuery.GrantHandleResolve resolve => AnswerGrantHandleResolve(query: resolve),
-            WorldQuery.PopulationChannels => new QueryAnswer(
-            Text: $"[world.channels: {Host.Population.Channels.ChannelCount} declared]",
-            Payload: Host.Population.Channels
-        ),
             WorldQuery.ProfileCatalog => AnswerProfileCatalog(),
             WorldQuery.FindProfile find => AnswerFindProfile(query: find),
             WorldQuery.PreferredControllerProfile preferred => AnswerPreferredControllerProfile(query: preferred),

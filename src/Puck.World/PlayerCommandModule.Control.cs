@@ -425,7 +425,7 @@ internal sealed partial class PlayerCommandModule {
         routed = false;
 
         WorldAuthorityRoute? routedLocation = null;
-        var targetChannels = m_channels;
+        var targetChannels = Channels;
 
         if (IsSeat(index: index)) {
             var rosterSlot = index;

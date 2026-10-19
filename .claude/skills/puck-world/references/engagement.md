@@ -299,11 +299,12 @@ and addon read pump and before machine stepping, visits EVERY live body once:
 
 A screen's policy (reach, pad kit, light-gun mapping) and a kit's pad map are
 read from the rows the live document holds (`WorldEngagement.PolicyOf`/`PadOf`),
-compiled once per row object and kept while the document still holds that row,
-so a `world.row.set` of the screen or kit, or a reload, reaches the next fold
-with no re-compose (`EngagementPolicyLiveEditLawTests`). The `Kit`/`Reach` a
-screen application records are the policy at compose, for the echoes; the fold
-does not read them. Channels are boot-fixed and compile once.
+compiled once per row object against the population's live channel table and
+kept while the document still holds that row and the population that table, so
+a `world.row.set` of the screen or kit, or a reload that moves the channels,
+reaches the next fold with no re-compose (`EngagementPolicyLiveEditLawTests`).
+The `Kit`/`Reach` a screen application records are the policy at compose, for
+the echoes; the fold does not read them.
 
 `body.EngagedIntent` is captured on EVERY `WorldBody.Advance` call, so it is
 available whether or not the avatar is idle. The server passes

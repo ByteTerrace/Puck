@@ -105,6 +105,49 @@ public sealed class WorldActionStateLane {
             );
         }
     }
+    /// <summary>Writes the authored initial value of every register slot one entity index answers, except an identity
+    /// slot whose identity carries its value across: one <paramref name="previous"/> declared under the same name and
+    /// kind, on a body that has an identity.</summary>
+    /// <param name="ordinal">The entity index.</param>
+    /// <param name="previous">The register file installed before the document that installed this one.</param>
+    /// <param name="keepsIdentity"><see langword="true"/> when the body at <paramref name="ordinal"/> has an identity
+    /// that owns its identity slots.</param>
+    public void Rebirth(int ordinal, IReadOnlyList<CompiledActionStateSlot> previous, bool keepsIdentity) {
+        for (var slot = 0; (slot < m_definitions.Length); slot++) {
+            if (
+                !keepsIdentity ||
+                (m_definitions[slot].Lifetime != ActionStateLifetime.Durable) ||
+                !Declares(
+                    definition: in m_definitions[slot],
+                    file: previous
+                )
+            ) {
+                Write(
+                    ordinal: ordinal,
+                    raw: InitialRaw(definition: in m_definitions[slot]),
+                    slot: slot
+                );
+            }
+        }
+    }
+    // Whether a register file declares a durable slot of the same name and kind.
+    private static bool Declares(in CompiledActionStateSlot definition, IReadOnlyList<CompiledActionStateSlot> file) {
+        for (var index = 0; (index < file.Count); index++) {
+            if (
+                (file[index].Lifetime == ActionStateLifetime.Durable) &&
+                (file[index].Kind == definition.Kind) &&
+                string.Equals(
+                    a: file[index].Name,
+                    b: definition.Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Reads one register slot's stored raw value.</summary>
     /// <param name="slot">The register-file slot.</param>
     /// <param name="ordinal">The entity index.</param>

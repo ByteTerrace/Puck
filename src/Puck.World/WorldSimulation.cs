@@ -71,6 +71,8 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
                 routes: m_seatRouter,
                 slot: slot
             );
+            // The held-channel fold reads ordinals the bindings lowered through the seat's routed table.
+            m_client.Roster.Seat(slot: slot)?.Channels = m_seatBindings.Channels(slot: slot);
         }
 
         WorldSeatContextSync.Publish(

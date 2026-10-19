@@ -89,7 +89,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
             return new Lease();
         },
-        submissions: new SilentLink(definition: definition)
+        submissions: new SilentLink()
     );
     // The destination runs a document of its own, and stands a door the home world has not.
     private static WorldDefinition AwayDocument() => (Fixtures.BuildDocument() with {

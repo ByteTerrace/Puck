@@ -149,10 +149,6 @@ public abstract record WorldQuery {
     /// <see cref="GrantSubject"/>, or <see langword="null"/> when the handle no longer resolves.</summary>
     /// <param name="Handle">The handle to resolve.</param>
     public sealed record GrantHandleResolve(WorldHandle Handle) : WorldQuery;
-    /// <summary>The world's compiled channel shape table (bipolar/unipolar/binary per declared channel), the same
-    /// table every entity's held channels are read against. The answer's <see cref="QueryAnswer.Payload"/> carries the
-    /// <see cref="WorldChannelTable"/>.</summary>
-    public sealed record PopulationChannels : WorldQuery;
     /// <summary>The owned-world identity catalog, projected — name, appearance, and claimed motion rates, never the
     /// owned document itself (the same projection a federation seam carries). The answer's
     /// <see cref="QueryAnswer.Payload"/> carries an <see cref="IReadOnlyList{T}"/> of <see cref="WorldIdentityProjection"/>.
