@@ -189,6 +189,12 @@ slot.
 
 Lane expressions read **bare row names**, such as `hp`; keyed reads can use
 `airPose[$body]` or `airPose.$body`. The evaluator adds `state.` itself.
+`bodyState($body, flightFuel)` reads one of the wearing body's action-state
+slots (`state.body` or `state.identity`, the slots kit predicates and hold
+`spend` use), and `bodyState(body, 0, flightFuel)` body 0's; the value is the
+one the latest snapshot carried, a counter's value or a timer's remaining
+seconds, never eased. A lane naming an undeclared slot is refused at
+validation.
 The `state.<row>[.<key>]` spelling belongs to driver signals and document
 value bindings, not lane expressions.
 

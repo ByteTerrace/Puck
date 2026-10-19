@@ -31,16 +31,55 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
     private int[] m_ordinalOfField = [];
 
+    // The delivered action-state register file of every entity index (raw Q48.16 presented values, the slots of one
+    // body contiguous), the catalog ordinal each slot's lane row holds, and which slots a delivery moved since the
+    // owner last took them, all shaped for the definition last shaped for.
+    private long[] m_bodyState = [];
+    private bool[] m_bodyStateMoved = [];
+    private int[] m_bodyStateOrdinals = [];
+
     private WorldDefinition? m_shaped;
 
     /// <inheritdoc/>
     public WorldPresentationManifest Manifest => WorldPresentationManifest.Of(definition: m_definition());
 
+    /// <summary>Gets the most body-state rows one <see cref="TakeMovedBodyState"/> names.</summary>
+    public static int MaxMovedBodyState => StateCapacity.MaxBodySlots;
+
+    // The register-file slot a catalog ordinal's body-state row is, or -1 for any other ordinal.
+    private int BodyStateSlotOf(int ordinal) => ((ordinal < 0)
+        ? -1
+        : Array.IndexOf(
+            array: m_bodyStateOrdinals,
+            value: ordinal
+        )
+    );
+
     /// <inheritdoc/>
+    /// <remarks>A name spelling <see cref="WorldBodyStateReads.RowPrefix"/> and a declared action-state slot resolves
+    /// to that slot's lane row, read by body index from the values the snapshots carry
+    /// (<see cref="ApplyBodyState"/>).</remarks>
     public bool TryResolveRow(string rowName, out int ordinal) {
         ArgumentNullException.ThrowIfNull(argument: rowName);
 
-        var document = m_definition();
+        var document = Shape();
+
+        if (rowName.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldBodyStateReads.RowPrefix
+        )) {
+            ordinal = (WorldBodyStateReads.TryResolveSlot(
+                definition: document,
+                kind: out _,
+                name: rowName[WorldBodyStateReads.RowPrefix.Length..],
+                slot: out var slot
+            )
+                ? m_bodyStateOrdinals[slot]
+                : -1
+            );
+
+            return (ordinal >= 0);
+        }
 
         if (
             document.StateCatalog.TryResolve(
@@ -81,6 +120,29 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         var document = Shape();
         var rows = document.State;
 
+        if (BodyStateSlotOf(ordinal: ordinal) is var stateSlot and >= 0) {
+            var slots = m_bodyStateOrdinals.Length;
+            var stateCell = ((int.TryParse(
+                provider: CultureInfo.InvariantCulture,
+                result: out var stateBody,
+                s: key,
+                style: NumberStyles.None
+            ) && (((uint)stateBody) < ((uint)(m_bodyState.Length / slots))))
+                ? ((stateBody * slots) + stateSlot)
+                : -1
+            );
+
+            sample = new WorldStateSample(
+                Max: null,
+                Min: null,
+                Motion: WorldStateMotion.Still,
+                Value: ((stateCell >= 0)
+                    ? CellValue.Fixed(rawBits: m_bodyState[stateCell])
+                    : default)
+            );
+
+            return true;
+        }
         if (((uint)ordinal) >= ((uint)rows.Count)) {
             sample = default;
 
@@ -309,7 +371,93 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         return count;
     }
+    /// <summary>Applies one snapshot entry's action-state register file (<see cref="EntitySnapshot.State"/>) to the
+    /// values its body's <see cref="WorldBodyStateReads.RowPrefix"/> rows read, noting each slot a value moved until
+    /// <see cref="TakeMovedBodyState"/>. A body outside the delivered population, or a register file whose width is not
+    /// the delivered definition's, is ignored. It allocates nothing unless the delivered definition changed the
+    /// population or the register file, which starts every value at zero until the next snapshot writes it.</summary>
+    /// <param name="body">The 0-based entity index.</param>
+    /// <param name="values">The entry's presented slot values.</param>
+    public void ApplyBodyState(int body, ReadOnlySpan<long> values) {
+        _ = Shape();
 
+        var slots = m_bodyStateOrdinals.Length;
+
+        if (
+            (values.Length != slots) ||
+            (slots == 0) ||
+            (((uint)body) >= ((uint)(m_bodyState.Length / slots)))
+        ) {
+            return;
+        }
+
+        var stored = m_bodyState.AsSpan(
+            length: slots,
+            start: (body * slots)
+        );
+
+        for (var slot = 0; (slot < slots); slot++) {
+            if (stored[slot] != values[slot]) {
+                stored[slot] = values[slot];
+                m_bodyStateMoved[slot] = true;
+            }
+        }
+    }
+    /// <summary>Names each body-state row a value moved since the last call, so the owner refreshes the mirror slots
+    /// bound to it (<see cref="WorldStateMirror.RefreshRows"/>), and forgets them.</summary>
+    /// <param name="moved">Receives the catalog ordinal of each moved row; at least <see cref="MaxMovedBodyState"/>
+    /// long.</param>
+    /// <returns>How many ordinals <paramref name="moved"/> received.</returns>
+    public int TakeMovedBodyState(Span<int> moved) {
+        var count = 0;
+
+        for (var slot = 0; (slot < m_bodyStateMoved.Length); slot++) {
+            if (m_bodyStateMoved[slot]) {
+                m_bodyStateMoved[slot] = false;
+                moved[count++] = m_bodyStateOrdinals[slot];
+            }
+        }
+
+        return count;
+    }
+
+    // Resolves the action-state rows of the definition currently delivered, keeping the delivered values while the
+    // population and the register file keep their widths.
+    private void ShapeBodyState(WorldDefinition document) {
+        var bodyState = document.BodyState;
+        var identityState = document.IdentityState;
+        var slots = (bodyState.Count + identityState.Count);
+        var width = (Math.Max(
+            val1: 1,
+            val2: document.Population.Capacity
+        ) * slots);
+
+        if (
+            (m_bodyStateOrdinals.Length != slots) ||
+            (m_bodyState.Length != width)
+        ) {
+            m_bodyState = new long[width];
+            m_bodyStateMoved = new bool[slots];
+            m_bodyStateOrdinals = new int[slots];
+        }
+
+        for (var slot = 0; (slot < slots); slot++) {
+            var body = (slot < bodyState.Count);
+
+            m_bodyStateOrdinals[slot] = (document.StateCatalog.TryResolve(
+                handle: out var handle,
+                lane: (body
+                    ? StateLane.Participant
+                    : StateLane.Identity),
+                name: (body
+                    ? bodyState[slot].Name
+                    : identityState[(slot - bodyState.Count)].Name)
+            )
+                ? handle.Ordinal
+                : -1
+            );
+        }
+    }
     // Resolves the field rows of the definition currently delivered, keeping the delivered cells while the lattice
     // keeps its shape; a definition already shaped for costs one comparison.
     private WorldDefinition Shape() {
@@ -323,6 +471,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
 
         m_shaped = document;
+        ShapeBodyState(document: document);
 
         var fields = document.Fields;
         var fieldCount = (fields?.Fields.Count ?? 0);

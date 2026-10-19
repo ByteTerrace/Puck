@@ -66,6 +66,8 @@ public sealed class WorldSessionMirror : IClientSink {
 
     // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+    // The body-state rows one snapshot's entries moved (TakeMovedBodyState's output), used only under m_followGate.
+    private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 
     private WorldStateMirror? m_state;
 
@@ -626,6 +628,28 @@ public sealed class WorldSessionMirror : IClientSink {
                     lock (m_stampGate) {
                         for (var index = 0; (index < moved); index++) {
                             NoteRow(ordinal: m_movedFields[index]);
+                        }
+                    }
+                }
+                // A body's action state rides its entry, applied for every entry this delivery admitted.
+                foreach (ref readonly var entry in snapshot.Entries.Span) {
+                    if (
+                        (((uint)entry.Index) < ((uint)EntityCapacity)) &&
+                        m_seen[entry.Index]
+                    ) {
+                        m_stateView.ApplyBodyState(
+                            body: entry.Index,
+                            values: entry.State.Span
+                        );
+                    }
+                }
+
+                var movedBodyState = m_stateView.TakeMovedBodyState(moved: m_movedBodyState);
+
+                if (movedBodyState > 0) {
+                    lock (m_stampGate) {
+                        for (var index = 0; (index < movedBodyState); index++) {
+                            NoteRow(ordinal: m_movedBodyState[index]);
                         }
                     }
                 }

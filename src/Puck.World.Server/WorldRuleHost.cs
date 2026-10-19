@@ -306,6 +306,21 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    public RuleFact Read(BodyStateOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return RuleFact.Finite(
+            kind: CellKind.Fixed,
+            value: WorldBodyStateReads.Presented(
+                kind: operand.Kind,
+                raw: Host.Population.ActionStateLane.Read(
+                ordinal: ResolveBodyRef(bodyRef: operand.Body),
+                slot: operand.Slot
+            )
+            )
+        );
+    }
+    /// <inheritdoc/>
     public RuleFact Read(LinkStalenessOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 

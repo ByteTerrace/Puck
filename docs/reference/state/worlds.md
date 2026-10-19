@@ -146,8 +146,15 @@ Puck.World extends the rule compiler the way any host does (see
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
-  `$clock:`, and `$board:cellOf:`. Its key family answers `$pair:`. Its effect arms cover body motion and
+  `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$clock:`, and `$board:cellOf:`. `bodyState(each, fuel)` reads one of a
+  body's action-state slots (declared in `state.body` or `state.identity`, the
+  slots a kit's `compareState` and a hold's `spend` use) as the body's step
+  left it this tick: a counter's value, or a timer's remaining seconds. A slot
+  the world does not declare is refused with
+  `WorldRuleRefusal.BodyStateMalformed`. A look's render lane reads the same
+  slot of the body wearing it as `bodyState($body, fuel)`, from the value each
+  snapshot entry carries. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and

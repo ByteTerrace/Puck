@@ -47,6 +47,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+    private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
@@ -855,6 +856,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
             m_facts[index] = entry.Facts;
+            m_stateView.ApplyBodyState(
+                body: index,
+                values: entry.State.Span
+            );
             m_catalogRig[index] = entry.CatalogRig;
             m_generation[index] = entry.Generation;
             m_placementId[index] = entry.PlacementId;
@@ -915,6 +920,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_renderPosition[index] = entry.Position;
             m_renderOrientation[index] = entry.Orientation;
             m_active[index] = true;
+        }
+
+        // A body's action state is likewise carried beside the document, on its entry.
+        var movedBodyState = m_stateView.TakeMovedBodyState(moved: m_movedBodyState);
+
+        if ((movedBodyState > 0) && !m_pendingStateInstall) {
+            m_stateMirror.RefreshRows(ordinals: m_movedBodyState.AsSpan(
+                length: movedBodyState,
+                start: 0
+            ));
         }
 
         var peers = 0;

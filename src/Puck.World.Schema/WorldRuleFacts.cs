@@ -22,6 +22,14 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
     /// smallest cell; it accepts the same optional <c>:where:&lt;filterRow&gt;</c> suffix.</summary>
     public const string ArgMinPrefix = "$argmin:";
+    /// <summary>The prefix; <c>$bodyState:&lt;bodyRef&gt;:&lt;slot&gt;</c> (<c>bodyState(each, fuel)</c> in
+    /// <c>.puck</c>) reads one of the named body's action-state slots, declared in <c>state.body</c> or
+    /// <c>state.identity</c>: a counter's value, or a timer's remaining seconds
+    /// (<see cref="WorldBodyStateReads.Presented"/>). A rule reads the value the body's own step left this tick, since
+    /// rules evaluate after every body has advanced; a reference resolving to no live body reads <c>0</c>. The slot is
+    /// resolved by name at compile time and refused by name when the world declares none
+    /// (<see cref="WorldRuleRefusal.BodyStateMalformed"/>).</summary>
+    public const string BodyStatePrefix = $"${WorldBodyStateReads.ChannelName}:";
     /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <c>CommandSnapshot</c> read folded with co-driving contributions and the admitted held

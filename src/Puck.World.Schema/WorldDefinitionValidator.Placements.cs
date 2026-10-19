@@ -1273,6 +1273,30 @@ public static partial class WorldDefinitionValidator {
             if (look.Motion.Lanes is { Count: > 4 }) {
                 errors.Add(item: $"looks row '{look.Name}' carries more than four render lanes.");
             }
+            // A body-state read in a lane names the body and a declared slot; the lane would otherwise read zero
+            // forever.
+            for (var lane = 0; (lane < (look.Motion.Lanes?.Count ?? 0)); lane++) {
+                foreach (var instruction in (look.Motion.Lanes![lane]?.Instructions ?? [])) {
+                    if (
+                        (instruction.Payload is InstructionPayload.State { Name.Call.Channel: WorldBodyStateReads.ChannelName } operand) &&
+                        !(
+                            WorldBodyStateReads.TryBinding(
+                            binding: out var binding,
+                            key: operand.Key,
+                            name: operand.Name
+                        ) &&
+                            WorldBodyStateReads.TryResolveSlot(
+                            definition: definition,
+                            kind: out _,
+                            name: binding.Row[WorldBodyStateReads.RowPrefix.Length..],
+                            slot: out _
+                        )
+                        )
+                    ) {
+                        errors.Add(item: $"{path}.motion.lanes[{lane}] reads '{operand.Name.Spelling}', which does not spell bodyState($body, <slot>) or bodyState(body, <n>, <slot>) with a slot state.body or state.identity declares.");
+                    }
+                }
+            }
             if (look.Motion.Poses is { } poses) {
                 var poseFrames = ((!isCatalog && (look.Source is WorldLookSource.Creation poseCreation))
                     ? WorldDefinitionRows.FindCreation(creations: creations, id: poseCreation.PrototypeId)?.Document.Frames
