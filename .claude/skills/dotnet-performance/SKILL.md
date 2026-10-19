@@ -1,14 +1,14 @@
 ---
 name: dotnet-performance
-description: Applies .NET 11 performance behavior when writing, reviewing, refactoring, or optimizing this repository's C# code. Use for hot paths, regressions, benchmarks, micro-optimization, collection, string, JSON, SIMD, interop, allocation, code-generation, Native AOT, or trimming questions and claims that a C# pattern is slow. Prefers measurement and idiomatic net11.0 code while preserving semantics. Determinism outranks throughput on simulation value paths, where maths-usage owns primitive choice; subsystem skills own their verification gates.
+description: Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage.
 ---
 
 # .NET 11 performance
 
-This skill is factual, not an architecture or style mandate. Judge a change by
-code, disassembly and load-independent counts (allocations, operation counts);
-a wall-clock benchmark (`puck bench`) is evidence beside those counts, never
-alone, and runs on a quiet machine. Distinguish runtime improvements from workload-specific evidence.
+Judge a change by code, disassembly and load-independent counts (allocations,
+operation counts). A wall-clock benchmark (`puck bench`) is evidence beside
+those counts, never alone, and runs on a quiet machine. Keep runtime
+improvements apart from workload-specific evidence.
 
 ## Route to the relevant evidence
 
@@ -22,112 +22,146 @@ alone, and runs on a quiet machine. Distinguish runtime improvements from worklo
 | I/O, compression, networking, JSON, crypto | [references/io-network-json-crypto.md](references/io-network-json-crypto.md) |
 | AOT, reflection, GC handles, diagnostics, DI, runtime | [references/runtime-aot-reflection-diagnostics.md](references/runtime-aot-reflection-diagnostics.md) |
 
-Read only the files relevant to the code under review.
-
-## Apply repository constraints
-
-The references describe .NET 11 in general; their measurements and magnitudes
-were taken on 10.0, which .NET 11 keeps unless a section says otherwise.
-Resolve their advice through the current
+Read only the files relevant to the code under review. The references describe
+.NET 11 in general, with magnitudes measured on 10.0 that 11 keeps unless a
+section says otherwise; resolve their advice through
 [`Directory.Build.props`](../../../Directory.Build.props) and the affected
 project file before changing code.
 
-- **`net11.0` is the repository default.** `Puck.Analyzers` deliberately targets
-  `netstandard2.0`; inspect the affected project rather than assuming every
-  project inherits the default. A reference that compares net9.0 with 10.0
-  describes an upgrade decision this tree has already made.
-- **`InvariantGlobalization` is on.** Culture-sensitive comparison and formatting
-  guidance collapses to the invariant case, and there is no ICU behavior to tune.
+## Apply repository constraints
+
+- **`net11.0` is the repository default.** `Puck.Analyzers` deliberately
+  targets `netstandard2.0`; inspect the affected project rather than assuming
+  every project inherits the default.
+- **`InvariantGlobalization` is on.** Culture-sensitive comparison and
+  formatting guidance collapses to the invariant case.
 - **`PlatformTarget` is x64 and `OptimizationPreference` is Speed.** Arm-specific
   and size-tuning material is background rather than a work item.
+- **`Puck.World` sets `TieredPGO=false`.** Advice that rests on dynamic PGO
+  (guarded devirtualization, stack-allocated `foreach` enumerators over
+  `IEnumerable<T>`, hot and cold splitting) describes other hosts; for World
+  code, read the disassembly of the actual build before relying on it.
+- **Test hosts shape allocation evidence.** Test projects run blocking server GC
+  (no background GC) so `GC.GetAllocatedBytesForCurrentThread` stays exact, and
+  several suites set `System.Runtime.TieredCompilation` to `false` so allocation
+  laws measure optimized code. Read the test project's own
+  `RuntimeHostConfigurationOption` entries before comparing numbers across
+  hosts.
+- **`System.Numerics.Tensors` is a NuGet package outside the shared framework,**
+  and no Puck project references it directly (it arrives transitively through
+  `Microsoft.Extensions.AI`, which `Puck.World.Embeddings` uses). Adding a direct
+  reference is a dependency decision.
 - **AOT and trim compatibility analysis is the default; Native AOT publication
-  is not.** `Directory.Build.props` sets `IsAotCompatible=true`, enabling the
-  AOT and trimming analyzers under warnings-as-errors. Executables opt into
-  `PublishAot` deliberately when they ship that artifact. Projects unable to
-  satisfy the analyzers set `IsAotCompatible=false` locally with a blocker
-  comment. Discover the current exceptions with a search for that property;
-  do not preserve a hard-coded count or backlog in this skill.
-- **Prefer source-generated serialization over an AOT opt-out.** Follow an
-  existing `[JsonSerializable]` context and use `JsonTypeInfo` overloads so the
-  analyzer can see the supported graph. Add or retain a project opt-out only
-  when the project file documents a genuine structural blocker.
-- **World publication uses ReadyToRun.** `Puck.World` restores the `win-x64`
-  and `linux-x64` graphs and precompiles published assemblies; ordinary builds
-  still produce IL. Compare the exact published artifact with `puck bench startup
+  is not.** `Directory.Build.props` sets `IsAotCompatible=true`, enabling the AOT
+  and trimming analyzers under warnings-as-errors, and executables opt into
+  `PublishAot` deliberately when they ship that artifact. A project that cannot
+  satisfy the analyzers sets `IsAotCompatible=false` locally with a comment
+  naming the blocker (`src/Puck.Launcher/Puck.Launcher.csproj` is one). Discover
+  the current set with a search for that property and read each blocker comment
+  before adding one; do not copy a count into a skill or document.
+- **Fix a reflection-JSON analysis failure with source generation, not an
+  opt-out.** Declare a `[JsonSerializable]` partial class deriving from
+  `JsonSerializerContext` (`BindingProfileJsonContext` in `src/Puck.Commands` is
+  the in-tree example) and call the `JsonTypeInfo` overloads
+  (`JsonSerializer.Serialize(value, Context.Default.Type)`) so the analyzer sees
+  the supported graph. Set `IsAotCompatible=false` only when the project file can
+  document a structural blocker, such as reflection-based document
+  serialization that a source-generated context cannot yet replace.
+- **World publication uses ReadyToRun.** `Puck.World` restores the `win-x64` and
+  `linux-x64` graphs and precompiles published assemblies; ordinary builds still
+  produce IL. Compare the exact published artifact with `puck bench startup
   --world-artifact <path>` and account for its larger assemblies. The World
-  README owns the publish recipe; CI retains its compile-once contract. World
-  regenerates publish dependency metadata through a pinned SDK hook when
-  reusing portable IL; verify a real no-build published launch after SDK updates.
+  README owns the publish recipe; CI retains its compile-once contract.
 
 ## Determinism outranks throughput
 
 `AGENTS.md` rule 4 binds every value a simulation advances, compares, hashes,
-snapshots, or replays: the same document and input produce bit-identical state
-on every run, machine, and backend. Some of the references' strongest
-recommendations are unsafe on that path, and the references do not say so
-because they are not written about this repository.
+snapshots or replays: the same document and input produce bit-identical state
+on every run, machine and backend. Some of the references' strongest
+recommendations are unsafe on that path, and they do not say so because they
+are not written about this repository.
 
 - **`Vector<T>` is machine-width.** Any result that depends on `Vector<T>.Count`
-  — a float reduction, a lane-order hash, chunking that reaches the output —
-  differs between hosts. Fixed-width `Vector128/256/512` with an explicit scalar
-  tail is the deterministic form.
+  (a float reduction, a lane-order hash, chunking that reaches the output)
+  differs between hosts. Fixed-width `Vector128/256/512` with an explicit lane
+  count, an explicit lane-combine order and a scalar tail is the deterministic
+  form.
 - **`TensorPrimitives` promises no evaluation order for its reductions.** Over
   integer element types the result is exact and order cannot move it; over
-  `float` or `double` it can differ by ISA. A float fast path is not a free win
-  at any speed where the value it produces is compared, hashed, or replayed.
+  `float` or `double` it can differ by ISA. Throughput alone never justifies a
+  float fast path whose value is compared, hashed or replayed.
+- **Reordering a float reduction changes its bits.** Moving to a fixed-width
+  formulation is a deliberate correction: the value moves once, then stays
+  stable. Prove bit-identity across runs first (`puck test --reproduce`), then
+  measure.
 - **Randomness and parallel completion order are not optimization knobs.**
-  `Random.Shared`, `RandomNumberGenerator`, and `Parallel.*` never touch a value
-  path; `maths-usage` names the reproducible primitives that replace them.
+  `Random.Shared`, `RandomNumberGenerator` and `Parallel.*` never touch a value
+  path; [`maths-usage`](../maths-usage/SKILL.md) names the reproducible
+  primitives that replace them.
 
-Presentation-only float — shaders, renderer and UI math, capture output — sits
+Presentation-only float (shaders, renderer and UI math, capture output) sits
 outside this contract and takes the references as written.
 
 ## Review discipline
 
-- Start with a profile, benchmark, allocation trace, or demonstrated hot path.
+- Start with a profile, benchmark, allocation trace or demonstrated hot path. A
+  suspected hot path is not one; ask for the evidence, and keep the clearer
+  form (LINQ, `foreach`, an interface call) when it does not show a win.
 - Route measurements through the existing harnesses: `puck bench kernels` for
   BenchmarkDotNet timing, allocation and disassembly; `puck bench world` for
-  server construction and tick workloads; and `puck bench startup` for fresh-process
+  server construction and tick workloads; `puck bench startup` for fresh-process
   readiness. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
   owns options, report fields and measurement hygiene.
-- Preserve comparable semantics, traversal and sinks; confirm specialization
-  and call boundaries in optimized assembly. Record first-use work separately from warm
-  tables, and distinguish allocated bytes from retained pools or peak workspace.
-  Use idle, serial runs under the repository's timing authorization rules;
-  sampled timings alone never establish an algorithmic or full-domain claim.
-- No law gates a timing: cost laws state deterministic counts.
-  The one managed-allocation meter is `Puck.Abstractions.Counting.AllocationWindow`:
-  `Least` takes the least of up to 16 windows of
-  `GC.GetAllocatedBytesForCurrentThread` and, when every window allocated,
-  throws naming the window, the GC mode, and the types the runtime's
-  `AllocationSampled` event sampled on that thread; `Measure` reads the same
-  least as a count for a ceiling, and `Total` counts one run of a body that
-  cannot repeat. Write allocation laws, stages and diagnostics with it rather
-  than reading the counter by hand.
-  Outside the existing harnesses, say which harness you built and why it measures the claim.
-- Judge a hot kernel under default tiering as well as in FullOpts disassembly.
-  A method runs its tier-0 code until call counting promotes it, and promotion
-  waits for a spell with no new tier-0 compiles, about a second when the process
-  sees one processor; generic-math helpers stay calls at tier 0. A compute kernel
-  a request or count enters directly takes
-  `[MethodImpl(MethodImplOptions.AggressiveOptimization)]`, while the cheap
-  dispatcher above several kernels stays tiered so first use compiles only the
-  path taken. Check the tiers with `DOTNET_JitDisasmSummary` in a scratch process
-  pinned to one CPU, and record first-call cost beside the steady state.
-- Prefer idiomatic code the .NET 11 JIT and libraries recognize.
-- Check the folklore section before preserving an old hand-optimization.
-- Keep semantic behavior, exception behavior, and readability explicit;
-  performance evidence does not silently authorize changing them.
+- Check the folklore section of the core guidance before preserving an old
+  hand-optimization, and confirm specialization and call boundaries in optimized
+  assembly. Prefer idiomatic code the .NET 11 JIT and libraries recognize.
+- Preserve semantics, exception behavior, traversal order and sinks; performance
+  evidence does not silently authorize changing them. A hand-written loop
+  replaces a LINQ pipeline only with the same deferred-versus-immediate
+  execution, the same empty-input and null exceptions and the same ordering.
+- Record first-use work separately from warm tables, and distinguish allocated
+  bytes from retained pools or peak workspace. Use idle, serial runs; sampled
+  timings alone never establish an algorithmic or full-domain claim.
+- No law gates a timing: cost laws state deterministic counts. The managed
+  allocation meter is `Puck.Abstractions.Counting.AllocationWindow`: `Least`
+  takes the least of up to 16 windows of `GC.GetAllocatedBytesForCurrentThread`
+  and, when every window allocated, throws naming the window, the GC mode and
+  the types the runtime's `AllocationSampled` event sampled on that thread;
+  `Measure` returns the same least as a count for a ceiling, and `Total` counts
+  one run of a body that cannot repeat. Write allocation laws, stages and
+  diagnostics with it rather than reading the counter by hand. Warm the body
+  first: it runs more than once and must leave its subject able to run again.
+  Outside the existing harnesses, say which harness you built and why it
+  measures the claim.
 - Record the runtime, build configuration, workload, and the counts or
-  disassembly behind any performance claim, plus the `puck bench` result when
-  the owner asked for a timing.
+  disassembly behind a performance claim, plus the `puck bench` result when the
+  owner asked for a timing.
+
+## First-call latency and tiering
+
+Judge a hot kernel under default tiering as well as in FullOpts disassembly. A
+method runs its tier-0 code until call counting promotes it, and promotion waits
+for a spell with no new tier-0 compiles, about a second when the process sees
+one processor; generic-math helpers stay calls at tier 0. So a kernel's first
+calls in a fresh process can run several times slower than its steady state.
+
+- A compute kernel a request or count enters directly takes
+  `[MethodImpl(MethodImplOptions.AggressiveOptimization)]`; the cheap dispatcher
+  above several kernels stays tiered, so first use compiles only the path taken.
+- A published World is ReadyToRun-compiled, which moves first-use JIT work out
+  of startup; an ordinary build still produces IL that tiers.
+- Check each hot method's tier with `DOTNET_JitDisasmSummary` in a scratch
+  process pinned to one CPU, and record first-call cost beside the steady state.
+  Pinning a harness to one CPU before it warms up starves the background tiering
+  thread, so warm up first.
 
 ## Route adjacent work
 
 | Skill | Route to it when |
 |---|---|
 | [`maths-usage`](../maths-usage/SKILL.md) | The code sits on a simulation value path. It owns the determinism contract this file defers to, the primitive that is correct, and which tier the change owes. |
-| [`maths-laws`](../maths-laws/SKILL.md) | The optimization changes a public `Puck.Maths` member, or moves a value the law suite pins — both are law-or-waiver events. |
-| [`gaming-bricks`](../gaming-bricks/SKILL.md) | The optimization changes emulator timing, snapshots, replay, allocation, or Post-stage behavior. |
-| [`content-search`](../content-search/SKILL.md) | You need to locate a performance pattern, project property, analyzer opt-out, or repeated workaround textually. |
+| [`maths-laws`](../maths-laws/SKILL.md) | The optimization changes a public `Puck.Maths` member, or moves a value the law suite pins. |
+| [`rendering`](../rendering/SKILL.md) | Shader, HLSL and GPU cost questions, which this skill's host-side C# guidance does not cover. |
+| [`gaming-bricks`](../gaming-bricks/SKILL.md) | The optimization changes emulator timing, snapshots, replay, allocation or Post-stage behavior. |
+| [`content-search`](../content-search/SKILL.md) | You need to locate a performance pattern, project property, analyzer opt-out or repeated workaround textually. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | You are about to delete a hand-optimization the folklore sections retire and need to know what still references it. |
