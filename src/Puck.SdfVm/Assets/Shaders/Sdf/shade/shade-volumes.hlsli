@@ -116,9 +116,13 @@ float2 sdfVolumeSlabInterval(float3 localOrigin, float3 localDirection, float3 h
 // Density selects color at each local sample, before emission/absorption integration.
 float3 sdfVolumeRamp(SdfVolumeData v, float density) {
     float3 color = v.ramp[0].rgb;
-    [loop] for (uint i = 1u; i < v.rampCount; i++) {
-        float blend = saturate((density - v.ramp[i - 1u].w) / (v.ramp[i].w - v.ramp[i - 1u].w));
-        color = lerp(color, v.ramp[i].rgb, blend);
+    // Unrolled to the ramp's length and guarded, so every index is a constant: NVIDIA's Vulkan compiler keeps a
+    // dynamically indexed local array in per-thread memory, and DXC's SPIR-V unroller keeps a loop with a break rolled.
+    [unroll] for (uint i = 1u; i < 4u; i++) {
+        if (i < v.rampCount) {
+            float blend = saturate((density - v.ramp[i - 1u].w) / (v.ramp[i].w - v.ramp[i - 1u].w));
+            color = lerp(color, v.ramp[i].rgb, blend);
+        }
     }
     return color;
 }

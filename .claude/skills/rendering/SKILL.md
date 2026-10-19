@@ -97,6 +97,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   one backend's bake disagrees, compare `[sdf.mesh-bake] done` on both: a group
   that empties on one backend alone (an axis line under the floor) is the walk
   ignoring its mask.
+- **Index local arrays by constants only.** NVIDIA's Vulkan compiler keeps a
+  dynamically indexed local array, a `static const` table included, in
+  per-thread local memory. Unroll the loop to the array's length and guard the
+  body (`if (i < count)`), or pick the element by comparison; DXC's SPIR-V
+  unroller leaves a loop with a `break` rolled. RenderDoc's pipeline-executable
+  statistics show the spill as "Local Memory Size" (the low 32 bits).
 - **Bindings are generated.** No kernel declares a binding or register by hand;
   a new resource is a member of `SdfKernelInterfaces`.
 

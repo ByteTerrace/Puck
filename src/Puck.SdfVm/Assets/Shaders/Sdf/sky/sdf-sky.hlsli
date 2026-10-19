@@ -116,10 +116,16 @@ void sdfSkyFieldRuns(float3 world, out float3 base, out float3 scales[SDF_SKY_MA
         sdfSkyAffine(layer.Blend, value.rgb, value.a, scale, offset);
         if (run < 0) {
             base = ((scale * base) + offset);
-        } else if (run < (int)SDF_SKY_MAX_UPPER_FIELD_RUNS) {
-            // Applying (M1, B1) and then (M2, B2) is d -> M2·(M1·d + B1) + B2.
-            scales[run] = (scale * scales[run]);
-            offsets[run] = ((scale * offsets[run]) + offset);
+        } else {
+            // Applying (M1, B1) and then (M2, B2) is d -> M2·(M1·d + B1) + B2. The slot is chosen by comparison so
+            // every index is a constant: NVIDIA's Vulkan compiler keeps a dynamically indexed local array in per-thread
+            // memory.
+            [unroll] for (uint slot = 0u; (slot < SDF_SKY_MAX_UPPER_FIELD_RUNS); slot++) {
+                if ((int)slot == run) {
+                    scales[slot] = (scale * scales[slot]);
+                    offsets[slot] = ((scale * offsets[slot]) + offset);
+                }
+            }
         }
     }
 }
@@ -155,8 +161,13 @@ float3 sdfSkyCompose(float3 world, bool summarized, float3 base, float3 scales[S
         }
         if (!inField) {
             // The base is already the colour; each later field run applies its summary once, where it opens.
-            if (started && (upper < SDF_SKY_MAX_UPPER_FIELD_RUNS)) {
-                color = ((scales[upper] * color) + offsets[upper]);
+            if (started) {
+                // Chosen by comparison so every index is a constant, as sdfSkyFieldRuns does.
+                [unroll] for (uint slot = 0u; (slot < SDF_SKY_MAX_UPPER_FIELD_RUNS); slot++) {
+                    if (slot == upper) {
+                        color = ((scales[slot] * color) + offsets[slot]);
+                    }
+                }
                 upper++;
             }
             inField = true;

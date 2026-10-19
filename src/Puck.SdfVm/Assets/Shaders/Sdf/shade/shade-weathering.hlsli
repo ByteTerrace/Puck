@@ -36,11 +36,15 @@ void applyWeathering(float3 position, float3 normal, float upFacing, float curva
         sdfLineCoverage(p.xy, seed + 2u, footprint * controls.y)));
     float coverage = saturate(amount * max(w.x * edge, w.y * lineMask));
     uint count = (uint)material.underResponse[0].z;
-    [loop] for (uint i = 0u; i < count; i++) {
-        float4 stage = material.underColorThreshold[i];
-        float aa = max(footprint * controls.y, 0.001);
-        float reveal = smoothstep(max(stage.w - aa, 0.0), stage.w, coverage);
-        sdfRevealSurface(stage.rgb, material.underResponse[i].xy, reveal, material);
+    // Unrolled to the stages' length and guarded, so every index is a constant: NVIDIA's Vulkan compiler keeps a
+    // dynamically indexed local array in per-thread memory, and DXC's SPIR-V unroller keeps a loop with a break rolled.
+    [unroll] for (uint i = 0u; i < 2u; i++) {
+        if (i < count) {
+            float4 stage = material.underColorThreshold[i];
+            float aa = max(footprint * controls.y, 0.001);
+            float reveal = smoothstep(max(stage.w - aa, 0.0), stage.w, coverage);
+            sdfRevealSurface(stage.rgb, material.underResponse[i].xy, reveal, material);
+        }
     }
     float settle = saturate(upFacing) * w.z * amount * noise * material.deposit.w;
     sdfRevealSurface(material.deposit.rgb, material.depositResponse.xy, settle, material);
