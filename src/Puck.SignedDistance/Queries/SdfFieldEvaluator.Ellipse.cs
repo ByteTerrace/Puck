@@ -9,6 +9,9 @@ public sealed partial class SdfFieldEvaluator {
     // The rounding a fixed-point ellipse distance may carry, which its interval bound widens by: the bisection's last
     // step and the normalizing divisions, far under this.
     private static readonly FixedQ4816 EllipseBoundSlack = (FixedQ4816.One / FixedQ4816.FromInteger(value: 4096));
+    // The farthest box centre, in metres from the ellipse's own origin along either axis, whose bound the projection
+    // answers.
+    private static readonly FixedQ4816 EllipseBoundCentre = FixedQ4816.FromInteger(value: 65536);
 
     // An ellipse lifted from 2D (KEEP IN SYNC with sdfEllipseSolid in field/sdf-shapes.hlsli): extruded along Z to
     // ±liftAmount with its cap bevel, or revolved about Y at liftAmount, exactly as the other lifted profiles.
@@ -113,7 +116,9 @@ public sealed partial class SdfFieldEvaluator {
         return s;
     }
     // The ellipse's distance over a box of points: the distance is 1-Lipschitz, so it lies within the box's half diagonal
-    // of its value at the centre, widened by the fixed-point rounding.
+    // of its value at the centre, widened by the fixed-point rounding. A centre past EllipseBoundCentre (the frame search's
+    // cubes reach 2^46 m, and a revolve's radial interval centres half way out) would overflow the projection's
+    // normalized squares, so such a box is unbounded.
     private static FixedInterval Ellipse2DBounds(IntervalVector2 p, FixedQ4816 semiX, FixedQ4816 semiY) {
         if (p.X.IsUnbounded || p.Y.IsUnbounded) {
             return FixedInterval.Entire;
@@ -121,6 +126,10 @@ public sealed partial class SdfFieldEvaluator {
 
         var two = FixedQ4816.FromInteger(value: 2);
         var centre = new FixedVector2(X: ((p.X.Lower + p.X.Upper) / two), Y: ((p.Y.Lower + p.Y.Upper) / two));
+
+        if ((FixedQ4816.Abs(value: centre.X) > EllipseBoundCentre) || (FixedQ4816.Abs(value: centre.Y) > EllipseBoundCentre)) {
+            return FixedInterval.Entire;
+        }
         var reach = (new FixedVector2(X: ((p.X.Upper - p.X.Lower) / two), Y: ((p.Y.Upper - p.Y.Lower) / two)).Length + EllipseBoundSlack);
         var distance = SdfEllipse2D(p: centre, semiX: semiX, semiY: semiY);
 

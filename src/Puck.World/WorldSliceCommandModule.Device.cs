@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Puck.Commands;
 using Puck.SdfVm;
 
@@ -18,7 +20,8 @@ public sealed partial class WorldSliceCommandModule {
         );
 
         return (residency.MeshPathBake.Probe(slice: slice)
-            ? new CommandResult(Output: Armed(request: request))
+            ? new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture,
+                handler: $"[{Verb}: sampling {request.Axis.ToString().ToLowerInvariant()}={request.Offset:0.###} centre=({request.Centre.X:0.###},{request.Centre.Y:0.###}) half={request.Half:0.###} {request.Resolution}x{request.Resolution} bands={request.Bands:0.####} -> {request.Path}]"))
             : CommandResult.Error(output: $"[{Verb}: a slice is still sampling — wait for its [{Verb}] line (world.wait bakes <seconds>)]"));
     }
 }

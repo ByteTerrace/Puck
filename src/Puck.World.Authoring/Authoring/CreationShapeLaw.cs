@@ -17,12 +17,12 @@ public enum CreationShapeDistance {
     /// non-uniform scale, whose gradient magnitude lies between the gain and one.</summary>
     Bound,
     /// <summary>The field certifies no distance gain: a warp, a field op, a fold, a path or a sweep.</summary>
-    Approximate,
+    Uncertified,
 }
 
 /// <summary>
 /// What one authored shape of a creation is once lowered: the instructions the renderer emits for it alone, whether that
-/// field is the distance, a bound or an approximation (<see cref="SdfProgram.InstanceDistanceGain"/>, the program's step
+/// field is the distance, a bound, or uncertified (<see cref="SdfProgram.InstanceDistanceGain"/>, the program's step
 /// scale and its scope clamps), whether the fixed-point evaluator interprets it, and what deterministic contact makes of
 /// it on a solid placement. The read-back behind <c>creation.shape</c> and <c>puck creation shape</c>.
 /// </summary>
@@ -76,7 +76,7 @@ public sealed record CreationShapeLaw(
         _ = line.Append(value: Distance switch {
             CreationShapeDistance.Exact => " distance=exact",
             CreationShapeDistance.Bound => $" distance=bound gain={Number(value: Gain)} (|grad d| in [{Number(value: Gain)}, 1])",
-            _ => " distance=approximate (no certified gain)",
+            _ => " distance=uncertified (no certified gain)",
         });
         if (StepScale < 1f) { _ = line.Append(value: $" step={Number(value: StepScale)} (L={Number(value: (1f / StepScale))})"); }
         _ = line.Append(value: ((CpuRefusal is null) ? " cpu=interprets" : $" cpu=refuses ({CpuRefusal})"));
@@ -140,6 +140,7 @@ public static partial class CreationShapeLaws {
     /// <param name="shape">The authored shape.</param>
     /// <param name="requiresField">Whether the world requires deterministic field contact.</param>
     /// <returns>The refusal clauses, in the order the validator reports them.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
     public static IEnumerable<string> SolidRefusals(ShapeDocument shape, bool requiresField) {
         ArgumentNullException.ThrowIfNull(shape);
 
@@ -160,6 +161,7 @@ public static partial class CreationShapeLaws {
     /// <param name="laws">The laws to describe, in the creation's order.</param>
     /// <param name="shapeCount">The creation's whole shape count.</param>
     /// <returns>The lines, joined by line feeds.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="laws"/> is <see langword="null"/>.</exception>
     public static string Describe(string verb, string prototype, IReadOnlyList<CreationShapeLaw> laws, int shapeCount) {
         ArgumentNullException.ThrowIfNull(laws);
 
@@ -169,7 +171,7 @@ public static partial class CreationShapeLaws {
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[{verb}: {prototype} shapes={laws.Count}/{shapeCount}");
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" exact={described.Count(predicate: static law => (law.Distance == CreationShapeDistance.Exact))}");
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" bound={described.Count(predicate: static law => (law.Distance == CreationShapeDistance.Bound))}");
-        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" approximate={described.Count(predicate: static law => (law.Distance == CreationShapeDistance.Approximate))}");
+        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" uncertified={described.Count(predicate: static law => (law.Distance == CreationShapeDistance.Uncertified))}");
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" cpu-refused={laws.Count(predicate: static law => (law.CpuRefusal is not null))}");
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" contact-refused={laws.Count(predicate: static law => law.Contact.StartsWith(value: "refused", comparisonType: StringComparison.Ordinal))}");
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" unlowered={(laws.Count - described.Count)}]");
@@ -181,6 +183,7 @@ public static partial class CreationShapeLaws {
     /// <summary>Reads every shape of a creation.</summary>
     /// <param name="document">The creation, in the engine frame (<see cref="CreationFrame.ToEngine"/>).</param>
     /// <returns>One law a shape, in the creation's order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<CreationShapeLaw> Of(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -195,7 +198,9 @@ public static partial class CreationShapeLaws {
     /// <summary>Reads one shape of a creation.</summary>
     /// <param name="document">The creation, in the engine frame.</param>
     /// <param name="index">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
-    /// <returns>The shape's law.</returns>
+    /// <returns>The shape's law; a shape the renderer cannot lower reads its refusal as <see cref="CreationShapeLaw.Failure"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no shape.</exception>
     public static CreationShapeLaw Of(CreationDocument document, int index) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -225,7 +230,7 @@ public static partial class CreationShapeLaws {
                 Contact: "unknown",
                 ContactOmits: [],
                 CpuRefusal: null,
-                Distance: CreationShapeDistance.Approximate,
+                Distance: CreationShapeDistance.Uncertified,
                 Failure: Sentence(exception: exception),
                 Gain: 0f,
                 Index: index,
@@ -238,11 +243,13 @@ public static partial class CreationShapeLaws {
 
     // The law of a shape from its posed program and its program at its own origin (own).
     private static CreationShapeLaw Read(ShapeDocument authored, ShapeDocument own, int index, SdfProgram posed, SdfProgram unposed) {
-        var gain = posed.InstanceDistanceGain(index: 0);
+        // A plane's instance is unbounded, so the gain analysis certifies nothing about it; its field is the distance.
+        var lowered = Lowering(program: unposed);
+        var gain = (string.Equals(a: lowered, b: nameof(SdfShapeType.Plane), comparisonType: StringComparison.Ordinal) ? 1f : posed.InstanceDistanceGain(index: 0));
         var stepScale = posed.FieldScopeClamps.Aggregate(seed: posed.StepScale, func: static (smallest, clamp) => MathF.Min(x: smallest, y: clamp.StepScale));
         var distance = (((gain >= ExactGain) && (stepScale >= 1f))
             ? CreationShapeDistance.Exact
-            : ((gain > 0f) ? CreationShapeDistance.Bound : CreationShapeDistance.Approximate));
+            : ((gain > 0f) ? CreationShapeDistance.Bound : CreationShapeDistance.Uncertified));
         var (contact, omits) = Contact(authored: authored, own: own, render: unposed);
 
         return new CreationShapeLaw(
@@ -253,7 +260,7 @@ public static partial class CreationShapeLaws {
             Failure: null,
             Gain: ((distance == CreationShapeDistance.Exact) ? 1f : gain),
             Index: index,
-            Lowered: Lowering(program: unposed),
+            Lowered: lowered,
             Shape: authored,
             StepScale: stepScale
         );
@@ -281,7 +288,7 @@ public static partial class CreationShapeLaws {
 
         var refusals = SolidRefusals(requiresField: true, shape: authored).ToList();
 
-        if (!ShapeDomainOps.TryExpand(domain: authored.Domain, frames: out _, refusal: out var fold)) {
+        if (!ShapeDomainOps.TryExpand(domain: authored.Domain, frames: out _, refusal: out var fold, subject: authored.Position)) {
             refusals.Add(item: $"carries {fold}");
         }
         if (refusals.Count > 0) {

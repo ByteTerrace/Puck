@@ -300,7 +300,7 @@ dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --
 
 A hand-authored JSON document starts at `creation stats` directly.
 
-Whether one shape's distance is exact, a bound or an approximation, whether
+Whether one shape's distance is exact, a bound, or uncertified, whether
 the fixed-point evaluator takes it and what contact makes of it: `creation
 shape --world <file> --prototype <id> [--shape <name>]`, or `creation.shape
 <prototype> [<shape-name>]` live. `world.slice <placement> <x|y|z> <path.png>`

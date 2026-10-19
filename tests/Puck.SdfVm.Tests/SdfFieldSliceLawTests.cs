@@ -200,6 +200,28 @@ public sealed class SdfFieldSliceLawTests {
         Assert.Equal(expected: 1, actual: completions);
         Assert.Contains(expectedSubstring: "off=0%", actualString: slice.Describe(), comparisonType: StringComparison.Ordinal);
     }
+    // A field twice the distance overestimates it: its gradient reads two and draws red. A field that holds no surface
+    // within a band of the slice has nothing near it to describe.
+    [Fact]
+    public void AnOverestimateDrawsRedAndAFieldWithNoSurfaceNearHasNoNearSurfaceReading() {
+        var completions = 0;
+        var doubled = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.1f, centre: new Vector2(x: SphereCentre.X, y: SphereCentre.Y), completed: _ => completions++, half: 1f, offset: (SphereCentre.Z + 0.4f), resolution: 32);
+        var bake = new SdfMeshPathBake { Residency = "slice-doubled" };
+
+        Assert.True(condition: bake.Probe(slice: doubled));
+        _ = Drive(bake: bake, done: () => (completions > 0), instances: Far, world: static point => (2f * Sphere(point: point)));
+        Assert.Matches(expectedRegexPattern: @"\|grad d\| min=(1\.99\d|2) mean=2 max=(2\.00\d|2) off=100%", actualString: doubled.Describe());
+
+        var red = Pixel(column: (32 + 0), rgba: doubled.Render(), row: 0, width: 64);
+
+        Assert.True(condition: ((red.X > 200f) && (red.Z < 100f)), userMessage: $"gradient panel {red}");
+
+        var distant = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.1f, centre: Vector2.Zero, completed: _ => completions++, half: 1f, offset: 0f, resolution: 16);
+
+        Assert.True(condition: bake.Probe(slice: distant));
+        _ = Drive(bake: bake, done: () => (completions > 1), instances: Far, world: static _ => 5f);
+        Assert.EndsWith(expectedEndString: "near-surface none", actualString: distant.Describe(), comparisonType: StringComparison.Ordinal);
+    }
     [Fact]
     public void ASliceNoShapeAnswersSaysSoAndDrawsGrey() {
         var bake = new SdfMeshPathBake { Residency = "slice-empty" };

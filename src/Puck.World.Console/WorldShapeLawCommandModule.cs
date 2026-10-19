@@ -7,7 +7,7 @@ namespace Puck.World;
 /// <summary>
 /// <c>creation.shape &lt;prototype&gt; [&lt;shape-name&gt;...]</c>: the per-shape law read-back of a creation the live
 /// document authors (<see cref="CreationShapeLaws"/>). Each shape's line names what it lowers to, whether that field is
-/// the distance, a bound (with its gain and step scale) or an approximation, whether the fixed-point evaluator
+/// the distance, a bound (with its gain and step scale) or uncertified, whether the fixed-point evaluator
 /// interprets it, and what deterministic contact makes of it on a solid placement. Reads the document through the
 /// acting principal's view and changes nothing; it needs no renderer, so it answers on a headless host too. The
 /// offline twin is <c>puck creation shape</c>.
@@ -21,7 +21,7 @@ public sealed class WorldShapeLawCommandModule(IWorldConsoleAuthority authority)
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: "Reads back each shape's law in a creation the live document authors: creation.shape <prototype> [<shape-name>...]. A summary line counts the shapes whose lowered field is exact, a bound or an approximation, and those the fixed-point evaluator or deterministic contact refuse; then one line a shape (all of them, or the named ones): index, name, authored type/profile/lift, scale, facets, lowered= the instructions the renderer emits for the shape alone (its domain folds aside), distance=exact | bound gain=<g> (the field is at least g times the distance, so |grad d| lies in [g, 1]: a gauge or a non-uniform Scale) | approximate (a warp, field op, path or sweep certifies no gain), step=<1/L> when a warp or blend clamps the march, cpu=interprets | refuses (the fixed-point evaluator's reason), contact=admitted | omitted (detail, sweep) | refused (why) for a solid placement, and contact-omits= the render instructions contact drops. Refuses by name a prototype the document does not author and a shape name it does not hold, changing nothing. Needs no renderer. The offline twin is puck creation shape.",
+            description: "Reads back each shape's law in a creation the live document authors: creation.shape <prototype> [<shape-name>...]. A summary line counts the shapes whose lowered field is exact, a bound, or uncertified, and those the fixed-point evaluator or deterministic contact refuse; then one line a shape (all of them, or the named ones): index, name, authored type/profile/lift, scale, facets, lowered= the instructions the renderer emits for the shape alone (its domain folds aside), distance=exact | bound gain=<g> (the field is at least g times the distance, so |grad d| lies in [g, 1]: a gauge or a non-uniform Scale) | uncertified (a warp, field op, path or sweep certifies no gain), step=<1/L> when a warp or blend clamps the march, cpu=interprets | refuses (the fixed-point evaluator's reason), contact=admitted | omitted (detail, sweep) | refused (why) for a solid placement, and contact-omits= the render instructions contact drops. Refuses by name a prototype the document does not author and a shape name it does not hold, changing nothing. Needs no renderer. The offline twin is puck creation shape.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return CommandResult.Usage(form: "<prototype> [<shape-name>...]", verb: Verb);

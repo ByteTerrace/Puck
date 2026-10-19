@@ -985,7 +985,7 @@ Facts a script needs:
   that field is `exact`, a `bound` with its certified gain (the field is at least
   `gain` times the distance, so `|grad d|` lies in `[gain, 1]`: a non-uniform
   `Scale` the primitive has no native spelling for, or the superellipsoid gauge
-  an ellipsoid lowers to) or `approximate` (a warp, field op, path or sweep),
+  an ellipsoid lowers to) or `uncertified` (a warp, field op, path or sweep),
   the `step` a warp or blend clamps the march to, whether the fixed-point
   evaluator interprets it (`cpu=`), and what deterministic contact makes of it
   on a solid placement (`contact=admitted`, with the instructions it drops, or

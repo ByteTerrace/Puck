@@ -193,8 +193,6 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         SdfAxis.Y => new Vector2(x: value.X, y: value.Z),
         _ => new Vector2(x: value.X, y: value.Y),
     };
-    private static string Armed(WorldSliceRequest request) => string.Create(provider: CultureInfo.InvariantCulture,
-        handler: $"[{Verb}: sampling {request.Axis.ToString().ToLowerInvariant()}={request.Offset:0.###} centre=({request.Centre.X:0.###},{request.Centre.Y:0.###}) half={request.Half:0.###} {request.Resolution}x{request.Resolution} bands={request.Bands:0.####} -> {request.Path}]");
     private CommandResult Arm(WorldSliceRequest request) => ((renderProbe.Residency is { } residency)
         ? ArmOn(request: request, residency: residency)
         : CommandResult.Error(output: $"[{Verb}: no renderer — a slice samples the World's residency, which a headless host does not build]"));

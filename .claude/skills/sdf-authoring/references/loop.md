@@ -154,7 +154,7 @@ live motion, nor rendered appearance.
 `creation shape --world <path> --prototype <id> [--shape <name>...]` and its
 live twin `creation.shape <prototype> [<shape-name>...]` (headless too) read
 each shape off its own lowering: `lowered=` (what the renderer emits for it
-alone), `distance=exact | bound gain=<g> | approximate`, `step=` when a warp
+alone), `distance=exact | bound gain=<g> | uncertified`, `step=` when a warp
 clamps the march, `cpu=` (the fixed-point evaluator's verdict) and `contact=`
 (admitted with `contact-omits=`, omitted, or refused and why). A `bound` is a
 field that underestimates: `|grad d|` lies in `[g, 1]`, from a non-uniform

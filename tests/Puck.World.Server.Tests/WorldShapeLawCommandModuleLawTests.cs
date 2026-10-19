@@ -13,7 +13,7 @@ namespace Puck.World.Server.Tests;
 /// no native spelling (a capsule, cone or torus scaled apart in X and Z) rides the generic <see cref="SdfOp.Scale"/> and
 /// reads as a bound whose gain is its smallest scale over its largest, which the fixed-point evaluator and contact
 /// refuse; an ellipsoid is the exponent-2 gauge, a bound contact admits; the native lowerings (an elliptic cylinder, a
-/// torus scaled alike in X and Z) read exact; a warp reads approximate with its step clamp and the instructions contact
+/// torus scaled alike in X and Z) read exact; a warp reads uncertified with its step clamp and the instructions contact
 /// drops; a path, a revolve and an unbounded fold are refused for contact by name, and a sweep and a detail shape are
 /// omitted. Unknown prototypes and shapes are refused by name.
 /// </summary>
@@ -62,6 +62,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Shape(id: 12, name: "lattice", scale: new Vector3(value: 0.1f), type: SdfSolidPrimitive.Sphere) with {
             Domain = [new ShapeDomainOp.Repeat(Spacing: new Vector3(value: 0.5f))],
         },
+        Shape(id: 13, name: "plane", scale: Vector3.One, type: SdfSolidPrimitive.Plane) with { Blend = SdfBlendOp.Intersection },
     ];
     private static WorldDefinition BuildDocument() {
         var canonical = CreationCanonicalizer.Canonicalize(
@@ -105,7 +106,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.StartsWith(
             actualString: result.Output,
             comparisonType: StringComparison.Ordinal,
-            expectedStartString: $"[creation.shape: {PrototypeId} shapes=13/13 exact=6 bound=4 approximate=3 cpu-refused=5 contact-refused=6 unlowered=0]"
+            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=5 contact-refused=6 unlowered=0]"
         );
 
         var output = result.Output;
@@ -121,16 +122,34 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.Contains(expectedSubstring: "lowered=Rotate·Ellipse distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "cylinder-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Superellipsoid(e=2) distance=bound gain=0.333 ", actualString: Line(output: output, shape: "ellipsoid"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=admitted", actualString: Line(output: output, shape: "ellipsoid"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "lowered=Path distance=approximate (no certified gain) cpu=refuses", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "lowered=Path distance=uncertified (no certified gain) cpu=refuses", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=refused (uses profile Path)", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=refused (lifts by revolve)", actualString: Line(output: output, shape: "revolve"), comparisonType: StringComparison.Ordinal);
-        Assert.Matches(expectedRegexPattern: @"lowered=AxialProfile·PushField·Scale\(0\.4\)·Sphere·PopField distance=approximate \(no certified gain\) step=0\.\d+ \(L=\d", actualString: Line(output: output, shape: "flared"));
+        Assert.Matches(expectedRegexPattern: @"lowered=AxialProfile·PushField·Scale\(0\.4\)·Sphere·PopField distance=uncertified \(no certified gain\) step=0\.\d+ \(L=\d", actualString: Line(output: output, shape: "flared"));
         Assert.Contains(expectedSubstring: "contact=admitted contact-omits=AxialProfile+PushField+PopField", actualString: Line(output: output, shape: "flared"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "lowered=Sweep distance=approximate (no certified gain) cpu=interprets contact=omitted (a sweep is not a closed solid)", actualString: Line(output: output, shape: "sweep"), comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "lowered=Sweep distance=uncertified (no certified gain) cpu=interprets contact=omitted (a sweep is not a closed solid)", actualString: Line(output: output, shape: "sweep"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "facets=detail lowered=Scale(0.1)·Box(detail)", actualString: Line(output: output, shape: "detail"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=omitted (detail)", actualString: Line(output: output, shape: "detail"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "facets=domain:Repeat lowered=Scale(0.1)·Sphere distance=exact", actualString: Line(output: output, shape: "lattice"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=refused (carries ", actualString: Line(output: output, shape: "lattice"), comparisonType: StringComparison.Ordinal);
+        // A plane's instance is unbounded, which certifies no gain, but its field is the distance.
+        Assert.Contains(expectedSubstring: "facets=blend:Intersection lowered=Plane distance=exact cpu=interprets", actualString: Line(output: output, shape: "plane"), comparisonType: StringComparison.Ordinal);
+    }
+    /// <summary>A revolved ellipse away from its creation's origin (a torus scaled alike in X and Z lowers to one) reads
+    /// its law, which builds the fixed-point evaluator over it: exact, interpreted, and refused for contact by its
+    /// lift.</summary>
+    [Fact]
+    public void ARevolvedEllipseReadsItsLaw() {
+        var shape = Shape(id: 0, name: "rev", scale: new Vector3(x: 0.15f, y: 0.3f, z: 0.3f), type: SdfSolidPrimitive.Prism) with {
+            Lift = SdfLift.Revolve,
+            Position = new Vector3(x: 0f, y: 1.2f, z: 0f),
+            Profile = new SdfPrismProfile(SdfPrismProfileKind.Ellipse, CornerRadius: 0f),
+        };
+        var canonical = CreationCanonicalizer.Canonicalize(document: new CreationDocument(Schema: CreationDocument.CurrentSchema, Name: "rev", Palette: null, Shapes: [shape], Frames: null), source: "rev");
+        var law = CreationShapeLaws.Of(document: CreationFrame.ToEngine(document: canonical.Document), index: 0);
+
+        Assert.Null(law.Failure);
+        Assert.EndsWith(expectedEndString: "lowered=Ellipse distance=exact cpu=interprets contact=refused (lifts by revolve)", actualString: law.Describe(), comparisonType: StringComparison.Ordinal);
     }
     /// <summary>Named shapes read alone, in the order named.</summary>
     [Fact]
@@ -139,7 +158,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         var lines = result.Output.Split(separator: '\n');
 
         Assert.False(condition: result.IsError, userMessage: result.Output);
-        Assert.StartsWith(expectedStartString: $"[creation.shape: {PrototypeId} shapes=2/13 ", actualString: lines[0], comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: $"[creation.shape: {PrototypeId} shapes=2/14 ", actualString: lines[0], comparisonType: StringComparison.Ordinal);
         Assert.Equal(expected: 3, actual: lines.Length);
         Assert.StartsWith(expectedStartString: "  6 ellipsoid ", actualString: lines[1], comparisonType: StringComparison.Ordinal);
         Assert.StartsWith(expectedStartString: "  0 box ", actualString: lines[2], comparisonType: StringComparison.Ordinal);

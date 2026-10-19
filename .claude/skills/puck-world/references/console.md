@@ -506,7 +506,7 @@ Laws: `WorldSculptCommandModuleLawTests`.
 **`creation.shape` reads, `world.slice` looks.** `creation.shape <prototype>
 [<shape-name>...]` (`WorldShapeLawCommandModule`, through the acting
 principal's read view, headless too) answers each shape's law from
-`CreationShapeLaws`: its lowering, `distance=exact|bound|approximate`, the
+`CreationShapeLaws`: its lowering, `distance=exact|bound|uncertified`, the
 fixed-point evaluator's and contact's verdicts; `puck creation shape` is the
 offline twin. `world.slice` (`WorldSliceCommandModule`, presentation only)
 samples a plane of the live residency's field through the bake and writes the

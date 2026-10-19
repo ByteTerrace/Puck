@@ -22,7 +22,7 @@ mutating verb), `creation.sculpts`/`creation.sculpt`
 patch against the live document by resubmitting each touched row through
 `world.row.set`/`.remove`, never a parallel apply path), `creation.shape`
 (`WorldShapeLawCommandModule`—each shape's law read off its own lowering through
-`Puck.World.Authoring`'s `CreationShapeLaws`: exact, bound or approximate distance, the
+`Puck.World.Authoring`'s `CreationShapeLaws`: exact, bound or uncertified distance, the
 fixed-point evaluator's and deterministic contact's verdicts), `world.dynamics` (`WorldDynamicsCommandModule`—the
 `dynamics` section's read-back: every row's authored triple, the derived
 fixed-point constants, and its live reference count), `world.curves`
