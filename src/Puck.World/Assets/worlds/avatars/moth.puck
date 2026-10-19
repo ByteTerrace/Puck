@@ -5060,8 +5060,8 @@ prototypes {
           kind: "Convex"
           cornerRadius: 0.03
           vertices [
-            [-1, -0.1792]
-            [-1, 0.2547]
+            [-0.736, -0.1792]
+            [-0.736, 0.2396]
             [0.3208, 0.1792]
             [0.8491, 0.0849]
             [1, -0.0472]
@@ -5100,22 +5100,8 @@ prototypes {
 
       shape Box "soleGap-left" {
         id: 956
-        position [0.2, 0.055, -0.045]
+        position [0.2, 0.055, 0]
         scale [0.2, 0.065, 0.04]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.006
-        group: 23
-        parent: "boot-left"
-      }
-
-      // The heel is bevelled away behind a plane parallel to the heel thruster's plume and 6 cm ahead of it, so the sole
-      // ends clear of the jet and the thruster overhangs the cut.
-      shape Box "heelBevel-left" {
-        id: 970
-        position [0.2, 0.135, -0.2046]
-        rotation [-0.5, 0, 0, 0.866025]
-        scale [0.12, 0.05, 0.2]
         material: violet
         blend: "SmoothSubtraction"
         smooth: 0.006
@@ -5125,7 +5111,7 @@ prototypes {
 
       shape Box "sole-left" {
         id: 201
-        position [0.2, 0.055, -0.045]
+        position [0.2, 0.055, 0]
         scale [0.12, 0.055, 0.05]
         material: charcoal
         blend: "SmoothUnion"
@@ -5136,7 +5122,7 @@ prototypes {
 
       shape Cylinder "heelHousing-left" {
         id: 202
-        position [0.2, 0.15, -0.15]
+        position [0.2, 0.15, -0.185]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
@@ -5149,7 +5135,7 @@ prototypes {
 
       shape Cylinder "heelRing-left" {
         id: 203
-        position [0.2, 0.130947, -0.161]
+        position [0.2, 0.130947, -0.196]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.085, 0.016, 0.085]
         material: steel
@@ -5161,7 +5147,7 @@ prototypes {
 
       shape Cylinder "heelInset-left" {
         id: 204
-        position [0.2, 0.123153, -0.1655]
+        position [0.2, 0.123153, -0.2005]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.066, 0.016, 0.066]
         material: jet
@@ -5171,7 +5157,7 @@ prototypes {
 
       shape Superellipsoid "heelLight-left" {
         id: 205
-        position [0.2, 0.115359, -0.17]
+        position [0.2, 0.115359, -0.205]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.05, 0.05, 0.012]
         material: thrusterCyan
@@ -5181,7 +5167,7 @@ prototypes {
 
       shape Superellipsoid "heelCore-left" {
         id: 980
-        position [0.2, 0.110163, -0.173]
+        position [0.2, 0.110163, -0.208]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.022, 0.022, 0.01]
         material: thrusterGlow
@@ -6785,8 +6771,8 @@ prototypes {
           kind: "Convex"
           cornerRadius: 0.03
           vertices [
-            [-1, -0.1792]
-            [-1, 0.2547]
+            [-0.736, -0.1792]
+            [-0.736, 0.2396]
             [0.3208, 0.1792]
             [0.8491, 0.0849]
             [1, -0.0472]
@@ -6825,22 +6811,8 @@ prototypes {
 
       shape Box "soleGap-right" {
         id: 963
-        position [-0.2, 0.055, -0.045]
+        position [-0.2, 0.055, 0]
         scale [0.2, 0.065, 0.04]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.006
-        group: 37
-        parent: "boot-right"
-      }
-
-      // The heel is bevelled away behind a plane parallel to the heel thruster's plume and 6 cm ahead of it, so the sole
-      // ends clear of the jet and the thruster overhangs the cut.
-      shape Box "heelBevel-right" {
-        id: 978
-        position [-0.2, 0.135, -0.2046]
-        rotation [-0.5, 0, 0, 0.866025]
-        scale [0.12, 0.05, 0.2]
         material: violet
         blend: "SmoothSubtraction"
         smooth: 0.006
@@ -6850,7 +6822,7 @@ prototypes {
 
       shape Box "sole-right" {
         id: 269
-        position [-0.2, 0.055, -0.045]
+        position [-0.2, 0.055, 0]
         scale [0.12, 0.055, 0.05]
         material: charcoal
         blend: "SmoothUnion"
@@ -6861,7 +6833,7 @@ prototypes {
 
       shape Cylinder "heelHousing-right" {
         id: 270
-        position [-0.2, 0.15, -0.15]
+        position [-0.2, 0.15, -0.185]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
@@ -6874,7 +6846,7 @@ prototypes {
 
       shape Cylinder "heelRing-right" {
         id: 271
-        position [-0.2, 0.130947, -0.161]
+        position [-0.2, 0.130947, -0.196]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.085, 0.016, 0.085]
         material: steel
@@ -6886,7 +6858,7 @@ prototypes {
 
       shape Cylinder "heelInset-right" {
         id: 272
-        position [-0.2, 0.123153, -0.1655]
+        position [-0.2, 0.123153, -0.2005]
         rotation [0.258819, 0, 0, 0.965926]
         scale [0.066, 0.016, 0.066]
         material: jet
@@ -6896,7 +6868,7 @@ prototypes {
 
       shape Superellipsoid "heelLight-right" {
         id: 273
-        position [-0.2, 0.115359, -0.17]
+        position [-0.2, 0.115359, -0.205]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.05, 0.05, 0.012]
         material: thrusterCyan
@@ -6906,7 +6878,7 @@ prototypes {
 
       shape Superellipsoid "heelCore-right" {
         id: 981
-        position [-0.2, 0.110163, -0.173]
+        position [-0.2, 0.110163, -0.208]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.022, 0.022, 0.01]
         material: thrusterGlow
