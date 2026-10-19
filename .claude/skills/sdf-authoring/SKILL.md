@@ -278,7 +278,7 @@ rides its parent's frame.
 ## Render-only versus deterministic
 
 A solid placement requiring deterministic field contact refuses non-detail
-`Polygon` and `Ellipse` prism profiles. `Revolve` and domain folds that cannot
+`Polygon` prism profiles. `Revolve` and domain folds that cannot
 expand are also refused where contact is owed. In contrast, `flare`, `shear`,
 `bumps`, `erode`, panels, trims, cells, sweeps, and creation noise may validate
 but are omitted from creation contact geometry (cells keep the base primitive).

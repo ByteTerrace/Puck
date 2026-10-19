@@ -884,8 +884,24 @@ public sealed class AuthoredShapeAdmissionLawTests {
             requiresField: true
         );
     }
+    // An ellipse prism lowers to its exact native ellipse, which the deterministic evaluator answers.
+    [Fact]
+    public void AnEllipsePrismAdmitsFieldContact() {
+        var shape = Shape(
+            SdfSolidPrimitive.Prism,
+            new Vector3(
+                x: .4f,
+                y: .2f,
+                z: .1f
+            )
+        ) with { Profile = new(SdfPrismProfileKind.Ellipse) };
+
+        AssertWorldValidates(
+            shape,
+            requiresField: true
+        );
+    }
     [InlineData(SdfPrismProfileKind.Polygon)]
-    [InlineData(SdfPrismProfileKind.Ellipse)]
     [Theory]
     public void RenderOnlyProfilesRefuseUnsupportedFieldContact(SdfPrismProfileKind kind) {
         var shape = Shape(

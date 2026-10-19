@@ -118,29 +118,20 @@ public static class SdfSolidGeometry {
             scaledRounding,
             detail: detail
         ),
-            SdfPrismProfileKind.Ellipse => (revolve
-            ? chain.Ellipse(
-                scale.X,
-                scale.Y,
-                SdfLift.Revolve,
-                revolveOffset,
-                material,
-                blend,
-                smooth,
-                rounding,
-                detail: detail
-            )
-            : chain.Scale(scale: scale).Ellipse(
-                1f,
-                1f,
-                SdfLift.Extrude,
-                1f,
-                material,
-                blend,
-                smooth,
-                scaledRounding,
-                detail: detail
-            )),
+            // The ellipse's own semi-axes are the scale, so either lift answers its exact distance.
+            SdfPrismProfileKind.Ellipse => chain.Ellipse(
+            scale.X,
+            scale.Y,
+            lift,
+            (revolve
+            ? revolveOffset
+            : scale.Z),
+            material,
+            blend,
+            smooth,
+            rounding,
+            detail: detail
+        ),
             SdfPrismProfileKind.ChamferedRectangle => chain.ChamferedRectangle(
             scale.X,
             scale.Y,
@@ -469,6 +460,11 @@ public static class SdfSolidGeometry {
         SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
         SdfSweepParameters? curve = null) {
         ArgumentNullException.ThrowIfNull(chain);
+        // A native lowering spells the scale into its shape's dimensions, so a non-finite scale is refused here by name
+        // rather than as whichever dimension it reaches first.
+        if (!Puck.Maths.VectorFunctions.IsFinite(vector: scale)) {
+            throw new ArgumentOutOfRangeException(message: "A scale must be finite on every component.", paramName: nameof(scale));
+        }
         if (
             (profile is not null) &&
             ((type != SdfSolidPrimitive.Prism) || !profile.IsValid())

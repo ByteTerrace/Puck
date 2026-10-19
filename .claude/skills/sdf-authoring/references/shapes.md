@@ -64,7 +64,7 @@ only.
 | `Trapezoid` | uses the shape's `taper` | yes |
 | `RoundedRectangle` | `cornerRadius` as a fraction of the smaller half-extent, [0,1] | yes |
 | `Polygon` | `sides` in [3, 32] | **no — renderable only** |
-| `Ellipse` | none | **no — renderable only** |
+| `Ellipse` | none | yes |
 | `ChamferedRectangle` | `cornerRadius` as a chamfer fraction, [0,1] | yes |
 | `Convex` | `vertices`, 3 to 8 points; `cornerRadius` rounds them uniformly | yes |
 | `Path` | `path` contours; `cornerRadius: 0`; bounded line/Bezier/arc flattening, optional stroke or filled-outline shear | no — renderable only |
@@ -230,7 +230,7 @@ folds may not carry either.
 
 ## Contact admission
 
-- **Refused by name:** non-detail Polygon/Ellipse prisms when the solid row
+- **Refused by name:** non-detail Polygon prisms when the solid row
   requires deterministic field contact; Revolve where contact is owed;
   folds that cannot expand within the contact copy budget.
 - **Accepted but omitted:** creation contact emission skips sweeps entirely
@@ -251,9 +251,10 @@ A uniform scale is always admitted, so this only bites an anisotropic shape.
 
 | Bakes its dimensions | Rides a generic `Scale` |
 |---|---|
-| Sphere, Ellipsoid, Superellipsoid, Box, Plane | Torus, RoundCone |
-| Prism with a Trapezoid, RoundedRectangle, or ChamferedRectangle profile | Prism with a Convex profile (Polygon and Ellipse are already refused) |
-| Capsule, Cylinder, Cone when `scale.x == scale.z` | those three when `scale.x != scale.z` |
+| Sphere, Ellipsoid, Superellipsoid, Box, Plane | RoundCone |
+| Torus when `scale.x == scale.z` (an elliptic section revolved) | Torus when `scale.x != scale.z` |
+| Prism with a Trapezoid, RoundedRectangle, ChamferedRectangle or Ellipse profile | Prism with a Convex profile (Polygon is already refused) |
+| Capsule and Cone when `scale.x == scale.z`; Cylinder at any scale (elliptic when `scale.x != scale.z`) | Capsule and Cone when `scale.x != scale.z` |
 
 None of the right column is refused by name — each validates, renders, and fails
 only when the contact field is constructed. For an anisotropic solid, prefer a

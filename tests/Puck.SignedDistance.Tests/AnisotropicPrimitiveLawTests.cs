@@ -65,11 +65,38 @@ public sealed class AnisotropicPrimitiveLawTests {
         Assert.Empty(collection: failures);
     }
 
-    private static SdfFieldEvaluator Evaluator(SdfSolidPrimitive type, Vector3 scale) {
+    // An ellipse prism: its section the ellipse its scale's X and Y span, extruded through its Z.
+    [InlineData(0.3f, 0.12f, 0.05f)]
+    [InlineData(0.1f, 0.45f, 0.6f)]
+    [InlineData(0.25f, 0.25f, 0.1f)]
+    [Theory]
+    public void AnEllipsePrismAnswersItsTrueDistance(float x, float y, float z) {
+        var scale = new Vector3(x: x, y: y, z: z);
+        var evaluator = Evaluator(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Ellipse), scale: scale, type: SdfSolidPrimitive.Prism);
+        var failures = new List<string>();
+
+        foreach (var point in Points(reach: (1.4f * MathF.Max(MathF.Max(x, y), z)))) {
+            // The builder parts a circle's semi-axes by 1e-4, which the reference follows.
+            var semiY = ((Math.Abs(value: (x - y)) < 1e-4f) ? (x + 1e-4) : y);
+            var expected = Extruded(section: EllipseDistanceLawTests.Reference(px: point.X, py: point.Y, semiX: x, semiY: semiY), depth: (Math.Abs(value: point.Z) - z));
+            var actual = Distance(evaluator: evaluator, point: point);
+
+            if (!(Math.Abs(value: (actual - expected)) <= Tolerance)) {
+                failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
+            }
+        }
+
+        Assert.Empty(collection: failures);
+    }
+
+    // A section's distance extruded through a slab: exact inside and out.
+    private static double Extruded(double section, double depth) =>
+        (Math.Min(val1: Math.Max(val1: section, val2: depth), val2: 0.0) + Math.Sqrt(d: (Math.Pow(x: Math.Max(val1: section, val2: 0.0), y: 2.0) + Math.Pow(x: Math.Max(val1: depth, val2: 0.0), y: 2.0))));
+    private static SdfFieldEvaluator Evaluator(SdfSolidPrimitive type, Vector3 scale, SdfPrismProfile? profile = null) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = SdfSolidGeometry.AppendScaledPrimitive(chain: builder.ResetPoint(), material: material, scale: scale, type: type);
+        _ = SdfSolidGeometry.AppendScaledPrimitive(chain: builder.ResetPoint(), material: material, profile: profile, scale: scale, type: type);
 
         var program = builder.Build();
 
