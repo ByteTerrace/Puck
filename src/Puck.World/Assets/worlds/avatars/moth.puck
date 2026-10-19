@@ -31,6 +31,8 @@ let gunmetal = 19 // #43464E heel lens housing and heel block
 let steel = 20 // #8B9099 the lens housing's bright ring
 let thrusterGlow = 21 // #D8FDFF the heel and back-pod thruster lenses' white-hot cores, lit by flight mode (lane 2)
 let thrusterCyan = 22 // #1F9BAE the heel and back-pod thruster lenses, lit by flight mode (lane 2)
+let gauntletLeft = 23 // #EED3A6 of the left gauntlet pod, under its lilac and seams
+let gauntletRight = 24 // #EED3A6 of the right gauntlet pod, under its lilac and seams
 
 let archBackOutline = [
   [-1, -1]
@@ -2319,54 +2321,6 @@ prototypes {
               scale [0.0025, 0.2, 0.17]
               color: "#CDB794"
             }
-            // Each gauntlet pod: lilac over its inner side and elbow cap, and two pale seams across its cream face, in the
-            // pod's own frame.
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, -0.03, -0.115]
-              scale [0.17, 0.245, 0.07]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, 0.2, 0]
-              rotation [0, 0, 0, 1]
-              scale [0.17, 0.07, 0.17]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0.03, -0.01, 0]
-              rotation [0, 0, 0.087156, 0.996195]
-              scale [0.14, 0.0025, 0.17]
-              color: "#CDB794"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, -0.03, -0.115]
-              scale [0.17, 0.245, 0.07]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, 0.2, 0]
-              rotation [0, 0, 0, 1]
-              scale [0.17, 0.07, 0.17]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0.03, -0.01, 0]
-              rotation [0, 0, -0.087156, 0.996195]
-              scale [0.14, 0.0025, 0.17]
-              color: "#CDB794"
-            }
           ]
         }
         {
@@ -3013,6 +2967,146 @@ prototypes {
           emissive: 2.4
           emissiveLane: 2
           coat: 0
+        }
+        {
+          color: "#EED3A6"
+          roughness: 0.36
+          specular: 0.08
+          emissive: 0
+          coat: 0.28
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 31
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#D7C9B7"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          // The gauntlet pod's lilac elbow cap and back face, and the darker seams that split its cream into plates, in
+          // the pod's own frame.
+          paints [
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0, 0.195, 0]
+              scale [0.2, 0.04, 0.2]
+              color: "#9D66C6"
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0, 0, -0.17]
+              scale [0.2, 0.25, 0.075]
+              color: "#9D66C6"
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0, 0.06, 0]
+              scale [0.2, 0.0025, 0.2]
+              color: "#B39C78"
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0, -0.12, 0]
+              scale [0.2, 0.0025, 0.2]
+              color: "#B39C78"
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0.03, 0.11, 0.13]
+              scale [0.0025, 0.05, 0.06]
+              color: "#B39C78"
+            }
+          ]
+        }
+        {
+          color: "#EED3A6"
+          roughness: 0.36
+          specular: 0.08
+          emissive: 0
+          coat: 0.28
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 31
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#D7C9B7"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          // The gauntlet pod's lilac elbow cap and back face, and the darker seams that split its cream into plates, in
+          // the pod's own frame.
+          paints [
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [0, 0.195, 0]
+              scale [0.2, 0.04, 0.2]
+              color: "#9D66C6"
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [0, 0, -0.17]
+              scale [0.2, 0.25, 0.075]
+              color: "#9D66C6"
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [0, 0.06, 0]
+              scale [0.2, 0.0025, 0.2]
+              color: "#B39C78"
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [0, -0.12, 0]
+              scale [0.2, 0.0025, 0.2]
+              color: "#B39C78"
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [-0.03, 0.11, 0.13]
+              scale [0.0025, 0.05, 0.06]
+              color: "#B39C78"
+            }
+          ]
         }
       ]
       shape Superellipsoid "pelvis" {
@@ -4146,31 +4240,18 @@ prototypes {
 
       shape Superellipsoid "bracer-left" {
         id: 160
-        position [0.409667, 1.037567, -0.026102]
+        position [0.379353, 1.053594, -0.006895]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.128, 0.215, 0.13]
-        material: skin
+        scale [0.112, 0.2, 0.115]
+        material: gauntletLeft
         group: 16
         parent: "forearm-left"
-        exponent: 2.4
-      }
-
-      shape Superellipsoid "bracerLobe-left" {
-        id: 161
-        position [0.421441, 0.943117, -0.014898]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.148, 0.13, 0.148]
-        material: skin
-        blend: "SmoothUnion"
-        smooth: 0.05
-        group: 16
-        parent: "forearm-left"
-        exponent: 2.4
+        exponent: 3.2
       }
 
       shape Box "bracerMouth-left" {
-        id: 162
-        position [0.414183, 0.442637, 0.083724]
+        id: 161
+        position [0.379697, 0.474186, 0.104559]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
         scale [0.4, 0.4, 0.4]
         material: skin
@@ -4181,29 +4262,29 @@ prototypes {
 
       shape Cylinder "cuff-left" {
         id: 164
-        position [0.419533, 0.838412, 0.007426]
+        position [0.380726, 0.872656, 0.026507]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.088, 0.008, 0.088]
+        scale [0.09, 0.006, 0.09]
         material: charcoal
         parent: "forearm-left"
-        rounding: 0.004
+        rounding: 0.003
       }
 
       shape Cylinder "bracerSocket-left" {
         id: 172
-        position [0.565346, 0.929351, -0.012761]
+        position [0.503985, 0.955221, 0.005956]
         rotation [-0.079561, -0.049422, -0.702727, 0.705267]
-        scale [0.048, 0.014, 0.048]
+        scale [0.04, 0.012, 0.04]
         material: charcoal
         parent: "forearm-left"
-        rounding: 0.006
+        rounding: 0.005
       }
 
       shape Superellipsoid "bracerLight-left" {
         id: 173
-        position [0.577335, 0.929346, -0.013275]
+        position [0.513977, 0.955218, 0.005528]
         rotation [-0.079561, -0.049422, -0.702727, 0.705267]
-        scale [0.032, 0.008, 0.032]
+        scale [0.027, 0.007, 0.027]
         material: cyan
         parent: "forearm-left"
         exponent: softness
@@ -5818,31 +5899,18 @@ prototypes {
 
       shape Superellipsoid "bracer-right" {
         id: 228
-        position [-0.409667, 1.037567, -0.026102]
+        position [-0.379353, 1.053594, -0.006895]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.128, 0.215, 0.13]
-        material: skin
+        scale [0.112, 0.2, 0.115]
+        material: gauntletRight
         group: 30
         parent: "forearm-right"
-        exponent: 2.4
-      }
-
-      shape Superellipsoid "bracerLobe-right" {
-        id: 229
-        position [-0.421441, 0.943117, -0.014898]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.148, 0.13, 0.148]
-        material: skin
-        blend: "SmoothUnion"
-        smooth: 0.05
-        group: 30
-        parent: "forearm-right"
-        exponent: 2.4
+        exponent: 3.2
       }
 
       shape Box "bracerMouth-right" {
-        id: 230
-        position [-0.414183, 0.442637, 0.083724]
+        id: 229
+        position [-0.379697, 0.474186, 0.104559]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
         scale [0.4, 0.4, 0.4]
         material: skin
@@ -5853,29 +5921,29 @@ prototypes {
 
       shape Cylinder "cuff-right" {
         id: 232
-        position [-0.419533, 0.838412, 0.007426]
+        position [-0.380726, 0.872656, 0.026507]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.088, 0.008, 0.088]
+        scale [0.09, 0.006, 0.09]
         material: charcoal
         parent: "forearm-right"
-        rounding: 0.004
+        rounding: 0.003
       }
 
       shape Cylinder "bracerSocket-right" {
         id: 240
-        position [-0.565346, 0.929351, -0.012761]
+        position [-0.503985, 0.955221, 0.005956]
         rotation [-0.079561, 0.049422, 0.702727, 0.705267]
-        scale [0.048, 0.014, 0.048]
+        scale [0.04, 0.012, 0.04]
         material: charcoal
         parent: "forearm-right"
-        rounding: 0.006
+        rounding: 0.005
       }
 
       shape Superellipsoid "bracerLight-right" {
         id: 241
-        position [-0.577335, 0.929346, -0.013275]
+        position [-0.513977, 0.955218, 0.005528]
         rotation [-0.079561, 0.049422, 0.702727, 0.705267]
-        scale [0.032, 0.008, 0.032]
+        scale [0.027, 0.007, 0.027]
         material: cyan
         parent: "forearm-right"
         exponent: softness
