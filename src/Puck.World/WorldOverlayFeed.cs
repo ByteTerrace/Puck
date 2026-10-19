@@ -401,7 +401,7 @@ internal sealed class WorldOverlayFeed {
                         view: view
                     )
                 : ReadOnlyMemory<string>.Empty),
-                Label: (barText
+                Label: ((barText && authoring.PageLabel)
                 ? ((string.Equals(a: view.PageId, b: WorldEditorBindings.BuildPage, comparisonType: StringComparison.Ordinal) && m_editor.IsReadOnly(slot: slot))
                     ? WorldEditorBindings.ReadOnlyLabel
                     : (view.Label ?? view.PageId))

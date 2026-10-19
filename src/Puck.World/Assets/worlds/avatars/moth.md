@@ -73,14 +73,14 @@ studio origin; use **5** when moving away from it. Return to the comparison
 with `view.override layout pipeline`.
 
 The debug world and the garden draw these controls on screen from
-[`controls.puck`](../controls.puck): a binding bar along the bottom edge (the
-keyboard while `state.bar.layout` reads `keys`, the pad while it reads `pad`),
-a key-hint strip at the top left, and the play wheel. Hold Tab and point with
-the mouse, or hold LB and aim the right stick, then release over a sector:
-Console, Build, Where (`body.where`), Channels (`body.channels`), Annotate,
-Keys / pad (flips the bar's layout), Respawn (back to the stage) and
-Disengage. Releasing at the hub cancels. The bar and the hint strip fade
-after six seconds without input.
+[`controls.puck`](../controls.puck): the standard controller bar along the bottom
+edge (the d-pad diamond with LB and the left stick's press, the face diamond
+with RB and the right stick's press, each plate showing its action) and the
+play wheel. Hold Tab and point with the mouse, or hold LB and aim the right
+stick, then release over a sector: Console, Build, Where (`body.where`),
+Channels (`body.channels`), Annotate, Respawn (back to the stage) and
+Disengage. Releasing at the hub cancels. The bar fades after six seconds
+without input.
 
 ## Edit the native character live
 

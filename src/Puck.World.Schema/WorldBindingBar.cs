@@ -307,6 +307,8 @@ public sealed record WorldBindingBarBank(
 /// modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit
 /// while held. <see langword="false"/> drops the row and leaves the slot clusters alone; the chord hints and page
 /// label are <paramref name="Text"/>'s, not this one's.</param>
+/// <param name="PageLabel">Whether the bar names the active page under its anchor while <paramref name="Text"/> is on;
+/// <see langword="false"/> keeps every badge label and chord hint and drops only the page's name.</param>
 /// <param name="SlotSet">The physical controls this bar shows, by input source id (<c>gamepad.buttonSouth</c>,
 /// <c>mouse.button1</c>, …) — the same vocabulary a binding entry's <c>sources</c> speak, every id validated against
 /// the engine's input-source catalog, unique, at most <see cref="WorldBindingBarCapacity.MaxSlots"/>. A layout's bank
@@ -342,6 +344,7 @@ public sealed record WorldBindingBarAuthoring(
     bool Enabled = true,
     bool Text = true,
     bool Modifiers = true,
+    bool PageLabel = true,
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IconRow = null,

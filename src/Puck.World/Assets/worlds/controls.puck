@@ -1,16 +1,14 @@
-// The on-screen controls of the worlds the Moth walks: the drawn cursor, a key-hint strip, the icons every badge and
-// action draws, the binding bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), and the play
-// wheel. The debug world and the garden import it beside the theme, so a seat keeps its bar and wheel through the
-// portal:
+// The on-screen controls of the worlds the Moth walks: the drawn cursor, the icons every badge and action draws, the
+// standard controller bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), and the play wheel.
+// The debug world and the garden import it beside the theme, so a seat keeps its bar and wheel through the portal:
 //
 //   import "theme"
 //   import "controls"
 //
 // Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
-// under the pointer; releasing at the hub cancels. The bar shows the keyboard while `state.bar.layout` reads `keys` and
-// the pad while it reads `pad`; the wheel's Keys / pad sector flips it, as does `world.state.cell.set bar layout pad`.
-// Every action icon is ordinary state: a plate's icon is `state.barIcons.<entry id>`, a sector's label and icon
-// `state.wheelLabels.<sector id>` and `state.wheelIcons.<sector id>`, each naming a row of `icons`.
+// under the pointer; releasing at the hub cancels. Every action icon is ordinary state: a plate's icon is
+// `state.barIcons.<entry id>`, a sector's label and icon `state.wheelLabels.<sector id>` and
+// `state.wheelIcons.<sector id>`, each naming a row of `icons`.
 
 let mono = "jetbrains-mono-regular"
 
@@ -39,24 +37,7 @@ hud {
       }
     }
   }
-  panels [
-    {
-      id: "hints"
-      rect { x: 0.012, y: 0.016, width: 0.3, height: 0.034 }
-      layer: Under
-      style: Strip
-      visible: shownWhilePlaying
-      elements [
-        {
-          id: "keys"
-          kind: Text
-          rect { x: 0.03, y: 0, width: 0.94, height: 1 }
-          style: Dim
-          text: "` console   Tab/LB wheel   F2/Back build"
-        }
-      ]
-    }
-  ]
+  panels []
 }
 
 icons {
@@ -98,6 +79,7 @@ icons {
     { name: "pad.r", label: "R" }
     { name: "pad.ls", label: "LS" }
     { name: "pad.rs", label: "RS" }
+    { name: "pad.l3", label: "L3" }
     { name: "pad.r3", label: "R3" }
     { name: "pad.back", label: "BK" }
     { name: "pad.minus", label: "-" }
@@ -131,7 +113,6 @@ icons {
     { name: "act.console", label: ">_" }
     { name: "act.where", glyph { font: mono, glyph: "U+25C8" } }
     { name: "act.channels", glyph { font: mono, glyph: "U+2261" } }
-    { name: "act.layout", glyph { font: mono, glyph: "U+2328" } }
     { name: "act.respawn", glyph { font: mono, glyph: "U+23CE" } }
     { name: "act.disengage", glyph { font: mono, glyph: "U+238B" } }
   ]
@@ -186,8 +167,7 @@ icons {
       icon: "pad.rb"
       overrides [{ family: "PlayStation5", icon: "pad.r1" }, { family: "SwitchPro", icon: "pad.r" }]
     }
-    { source: "gamepad.leftStick", icon: "pad.ls" }
-    { source: "gamepad.rightStick", icon: "pad.rs" }
+    { source: "gamepad.leftStickPress", icon: "pad.l3" }
     { source: "gamepad.rightStickPress", icon: "pad.r3" }
     {
       source: "gamepad.back"
@@ -203,11 +183,6 @@ icons {
 
 state {
   world {
-    // The bar's live layout: `keys` or `pad`.
-    table bar {
-      layout = "keys"
-    }
-
     // The icon each Moth control's plate shows, by its binding entry id.
     table barIcons {
       forward = "arrow.up"
@@ -242,7 +217,6 @@ state {
       where = "Where"
       channels = "Channels"
       annotate = "Annotate"
-      layout = "Keys / pad"
       respawn = "Respawn"
       disengage = "Disengage"
       cancel = "Cancel"
@@ -254,7 +228,6 @@ state {
       where = "act.where"
       channels = "act.channels"
       annotate = "act.annotate"
-      layout = "act.layout"
       respawn = "act.respawn"
       disengage = "act.disengage"
     }
@@ -267,31 +240,18 @@ bindingOverlays [
     id: "bare"
     bindingBar {
       slotSet [
-        "keyboard.w"
-        "keyboard.a"
-        "keyboard.s"
-        "keyboard.d"
-        "keyboard.space"
-        "keyboard.controlLeft"
-        "keyboard.f"
-        "keyboard.1"
-        "keyboard.2"
-        "keyboard.3"
-        "keyboard.4"
-        "keyboard.5"
-        "keyboard.f2"
-        "keyboard.f3"
-        "keyboard.f4"
-        "mouse.button1"
-        "mouse.button2"
-        "gamepad.leftStick"
-        "gamepad.rightStick"
-        "gamepad.rightStickPress"
-        "gamepad.back"
+        "gamepad.dpadUp"
+        "gamepad.dpadRight"
+        "gamepad.dpadDown"
+        "gamepad.dpadLeft"
+        "gamepad.leftShoulder"
+        "gamepad.leftStickPress"
         "gamepad.buttonNorth"
         "gamepad.buttonWest"
-        "gamepad.buttonEast"
         "gamepad.buttonSouth"
+        "gamepad.buttonEast"
+        "gamepad.rightShoulder"
+        "gamepad.rightStickPress"
       ]
       banks [
         {
@@ -301,86 +261,52 @@ bindingOverlays [
         }
       ]
       iconRow: "state.barIcons"
-      layout: "keys"
-      layoutCell: "state.bar.layout"
+      // The standard bar shows the controller alone: no row of page-holding modifiers on its anchor line and no page
+      // name under it.
+      modifiers: false
+      pageLabel: false
+      layout: "standard"
       visible: shownWhilePlaying
       layouts {
-        // Pitches from the bottom-centre anchor, x right and y up: the WASD cross on the left, then the vertical and
-        // flight keys and the mouse buttons, with the camera and function keys on the row above.
-        keys {
-          tables {
-            move [
-              { source: "keyboard.w", x: 0, y: 1, badge [0, 1] }
-              { source: "keyboard.a", x: -1, y: 0, badge [-1, 0] }
-              { source: "keyboard.s", x: 0, y: 0, badge [0, -1] }
-              { source: "keyboard.d", x: 1, y: 0, badge [1, 0] }
-            ]
-            act [
-              { source: "keyboard.space", x: 0, y: 0 }
-              { source: "keyboard.controlLeft", x: 1, y: 0 }
-              { source: "keyboard.f", x: 2, y: 0 }
-            ]
-            mouse [
-              { source: "mouse.button1", x: 0, y: 0 }
-              { source: "mouse.button2", x: 1, y: 0 }
-            ]
-            cameras [
-              { source: "keyboard.1", x: 0, y: 0 }
-              { source: "keyboard.2", x: 1, y: 0 }
-              { source: "keyboard.3", x: 2, y: 0 }
-              { source: "keyboard.4", x: 3, y: 0 }
-              { source: "keyboard.5", x: 4, y: 0 }
-            ]
-            functions [
-              { source: "keyboard.f2", x: 0, y: 0 }
-              { source: "keyboard.f3", x: 1, y: 0 }
-              { source: "keyboard.f4", x: 2, y: 0 }
-            ]
+        // The standard controller cluster, in pitches from the bottom-centre anchor (x right, y up): the d-pad diamond
+        // left of centre with the left stick's press at its heart and LB above its outer point, and the face diamond
+        // mirrored on the right with the right stick's press and RB; the two diamonds stand 1.33 pitches off centre.
+        standard {
+          // The old engine bar's size: a 0.075 plate at 0.72 scale, its anchor 0.14 of the height above the bottom edge.
+          buttonSize: 0.054
+          anchor {
+            edge: Bottom
+            inset: 2.6
           }
-          banks {
-            play {
-              pieces [
-                { table: "move", at [-6, 0] }
-                { table: "act", at [-3, 0] }
-                { table: "mouse", at [4, 0] }
-                { table: "cameras", at [-3, 1] }
-                { table: "functions", at [3, 1] }
-              ]
-            }
-          }
-        }
-
-        // The left stick and Back on the left, the right stick and its press in the middle, the face diamond right.
-        pad {
           tables {
             left [
-              { source: "gamepad.leftStick", x: 0, y: 0 }
-              { source: "gamepad.back", x: 2, y: 0 }
+              { source: "gamepad.dpadUp", x: -4.333, y: 1, badge [0, 1] }
+              { source: "gamepad.dpadRight", x: -3.333, y: 0, badge [1, 0] }
+              { source: "gamepad.dpadDown", x: -4.333, y: -1, badge [0, -1] }
+              { source: "gamepad.dpadLeft", x: -5.333, y: 0, badge [-1, 0] }
+              { source: "gamepad.leftShoulder", x: -5.333, y: 1, badge [-1, 1] }
+              { source: "gamepad.leftStickPress", x: -4.333, y: 0, badge [-1, -1] }
             ]
             right [
-              { source: "gamepad.rightStick", x: 0, y: 0 }
-              { source: "gamepad.rightStickPress", x: 1, y: 0 }
-            ]
-            face [
-              { source: "gamepad.buttonNorth", x: 0, y: 1, badge [0, 1] }
-              { source: "gamepad.buttonWest", x: -1, y: 0, badge [-1, 0] }
-              { source: "gamepad.buttonEast", x: 1, y: 0, badge [1, 0] }
-              { source: "gamepad.buttonSouth", x: 0, y: -1, badge [0, -1] }
+              { source: "gamepad.buttonNorth", x: 4.333, y: 1, badge [0, 1] }
+              { source: "gamepad.buttonWest", x: 3.333, y: 0, badge [-1, 0] }
+              { source: "gamepad.buttonSouth", x: 4.333, y: -1, badge [0, -1] }
+              { source: "gamepad.buttonEast", x: 5.333, y: 0, badge [1, 0] }
+              { source: "gamepad.rightShoulder", x: 5.333, y: 1, badge [1, 1] }
+              { source: "gamepad.rightStickPress", x: 4.333, y: 0, badge [1, -1] }
             ]
           }
           banks {
             play {
               pieces [
-                { table: "left", at [-5, 0] }
-                { table: "right", at [-1, 0] }
-                { table: "face", at [4, 0] }
+                { table: "left", at [0, 0] }
+                { table: "right", at [0, 0] }
               ]
             }
           }
         }
       }
-    }
-  }
+    }  }
 
   // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
   // the build toggle again under an id, so its plate carries an icon.
@@ -462,7 +388,6 @@ bindingOverlays [
                 { id: "where", command: "body.where", sources: null }
                 { id: "channels", command: "body.channels", sources: null }
                 { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
-                { id: "layout", command: "player.state.cell.toggle", text: "bar layout keys pad", sources: null }
                 { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
                 { id: "disengage", command: "body.disengage", sources: null }
               ]
