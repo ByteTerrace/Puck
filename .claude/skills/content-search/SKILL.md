@@ -1,6 +1,6 @@
 ---
 name: content-search
-description: Searches Puck repo text with puck search, not grep or rg: files or lines mentioning a verb, flag or key, regex, contains-A-not-B, counts, uncapped file lists. C# usages go to symbol-analysis.
+description: "Searches Puck repo text with puck search, not grep or rg: files or lines mentioning a verb, flag or key, regex, contains-A-not-B, counts, uncapped file lists. C# usages go to symbol-analysis."
 ---
 
 # Content search

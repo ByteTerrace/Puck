@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Verifies a Puck change. Use for the landing bar, a failed or timed-out canary or test (flake or failure), GPU legs and what runs beside them, the puck CLI copy, coverage, branch bases.
+description: "Verifies a Puck change. Use for the landing bar, a failed or timed-out canary or test (flake or failure), GPU legs and what runs beside them, the puck CLI copy, coverage, branch bases."
 ---
 
 # Verification

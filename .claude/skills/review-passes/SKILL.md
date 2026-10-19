@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Runs an optional review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, landing fixes.
+description: "Runs an optional review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, landing fixes."
 ---
 
 # Review passes

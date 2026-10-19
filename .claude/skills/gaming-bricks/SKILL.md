@@ -1,6 +1,6 @@
 ---
 name: gaming-bricks
-description: Fixes and diagnoses Puck's GB/GBC/GBA emulators (SM83 STOP/HALT/EI, PPU/STAT timing, APU, serial and SIOCNT links, snapshots) and their Post batteries (--cosim, --filter). Cartridges are rom-forge.
+description: "Fixes and diagnoses Puck's GB/GBC/GBA emulators (SM83 STOP/HALT/EI, PPU/STAT timing, APU, serial and SIOCNT links, snapshots) and their Post batteries (--cosim, --filter). Cartridges are rom-forge."
 ---
 
 # Gaming Bricks

@@ -1,6 +1,6 @@
 ---
 name: maths-laws
-description: Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindings, oracles, legs, waivers, the coverage ratchet, puck baselines maths-ledger. Primitive choice: maths-usage.
+description: "Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindings, oracles, legs, waivers, the coverage ratchet, puck baselines maths-ledger. Primitive choice: maths-usage."
 ---
 
 # Writing a Puck.Maths law that bites

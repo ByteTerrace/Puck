@@ -1,6 +1,6 @@
 ---
 name: symbol-analysis
-description: Answers C# structure questions with puck references and declarations: which types derive from, implement or override a symbol, who references it, safe to delete or rename. Text: content-search.
+description: "Answers C# structure questions with puck references and declarations: which types derive from, implement or override a symbol, who references it, safe to delete or rename. Text: content-search."
 ---
 
 # Symbol analysis

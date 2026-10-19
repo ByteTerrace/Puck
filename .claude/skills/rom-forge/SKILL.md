@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/AGB native compilers, cost. Emulator core is gaming-bricks.
+description: "Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/AGB native compilers, cost. Emulator core is gaming-bricks."
 ---
 
 # ROM documents and native compilers

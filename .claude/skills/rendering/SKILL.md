@@ -60,6 +60,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   the occlusion live.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **Camera history uses the camera's sample grid.** The first recorder can be
+  a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
+  `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's
+  `world.debug-view motion` stays stationary with shadows both on and off.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.

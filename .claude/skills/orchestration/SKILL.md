@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, merging to main, GPU and build scheduling, idle partners, routing findings; review-passes runs passes.
+description: "Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, merging to main, GPU and build scheduling, idle partners, routing findings; review-passes runs passes."
 ---
 
 # Orchestration

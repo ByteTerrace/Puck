@@ -1,6 +1,6 @@
 ---
 name: puck-world
-description: Maps Puck.World: .puck worlds, rules, grants, console verbs, extensions, the live MCP World. Use to run or verify a World change (stdin script, stale binary, headless run) or debug a refusal.
+description: "Maps Puck.World: .puck worlds, rules, grants, console verbs, extensions, the live MCP World. Use to run or verify a World change (stdin script, stale binary, headless run) or debug a refusal."
 ---
 
 # Puck.World

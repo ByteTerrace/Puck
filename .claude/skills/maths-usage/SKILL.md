@@ -1,6 +1,6 @@
 ---
 name: maths-usage
-description: Picks Puck.Maths primitives and determinism rules: FixedQ4816, FixedVector3, rate accumulators, Pcg32XshRr, AliasTable, Fnv1aHash, rounding, saturation, primes. Law cases: maths-laws.
+description: "Picks Puck.Maths primitives and determinism rules: FixedQ4816, FixedVector3, rate accumulators, Pcg32XshRr, AliasTable, Fnv1aHash, rounding, saturation, primes. Law cases: maths-laws."
 ---
 
 # Puck.Maths: choose, obey, verify
