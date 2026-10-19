@@ -217,10 +217,12 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //   icon:     (accentRole << 4, 0 = the accent token) · 0..1 plate center (normalized) · 2 plate half (px) ·
     //             3 badge half (px) · 5 iconGlyph0 · 6 state bits · 7..8 badge offset (px) · 10 iconGlyph1 ·
     //             11 toggle phase (0..1; the marching border's position while state bit 25, TOGGLED, is set)
-    //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle
-    //             (the marker radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
-    //             OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple from words 5/6/8 (Pack()'d floats) instead of
-    //             indexing the token slab — a marker's authored, possibly state-bound ring color.
+    //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 3 vertical radius (px, 0 = a circle) ·
+    //             7 alpha · 10 stroke half-width (px, 0 = the hairline) — a stroked circle (the marker radius
+    //             indicator, at the hairline weight like every grammar stroke) or ellipse (an annotation outline,
+    //             OverlayFrameBuilder.WriteEllipse). colorRole == OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple
+    //             from words 5/6/8 (Pack()'d floats) instead of indexing the token slab — a marker's authored,
+    //             possibly state-bound ring color.
     //   wedge:    colorRole << 4 · 0..1 center (normalized) · 2 inner radius (px) · 3 outer radius (px) ·
     //             5 start angle (radians, clockwise from twelve) · 6 sweep (radians) · 7 alpha · 8 gap (px, the
     //             half-width trimmed off each angular edge so neighbours read as separate pie pieces) · 10 glow role
@@ -284,11 +286,26 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             color = lerp(color, float3(0.0, 0.01, 0.015), (sample.y * 0.85 * alpha));
             color = lerp(color, OverlayTokenColor(overlayData, role).rgb, (sample.x * alpha));
         } else if (kind == 3u) {
-            // A RING: one hairline stroked circle — origin is the center, ab.x the radius in px.
-            float radius = OverlayFloat(overlayData, (o + 2u));
-            float dist = abs(length(local) - radius);
+            // A RING: a stroked circle — origin is the center, ab.x the radius in px — or, when ab.y is set, a stroked
+            // ellipse with radii ab in px. Word 10 is the stroke half-width in px; 0 is the hairline.
+            float halfWidth = OverlayFloat(overlayData, (o + 10u));
 
-            if (dist > (edgeAa + 1.0)) {
+            halfWidth = ((halfWidth > 0.0) ? halfWidth : 0.5);
+
+            float dist;
+
+            if (ab.y > 0.0) {
+                // The first-order distance to the ellipse: its implicit value over its gradient's length.
+                float2 radii = max(ab, float2(1.0, 1.0));
+                float k0 = length(local / radii);
+                float k1 = length(local / (radii * radii));
+
+                dist = ((k1 > 0.0) ? abs((k0 * (k0 - 1.0)) / k1) : min(radii.x, radii.y));
+            } else {
+                dist = abs(length(local) - ab.x);
+            }
+
+            if (dist > ((edgeAa + halfWidth) + 0.5)) {
                 continue;
             }
 
@@ -297,7 +314,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 ? float4(OverlayFloat(overlayData, (o + 5u)), OverlayFloat(overlayData, (o + 6u)), OverlayFloat(overlayData, (o + 8u)), 1.0)
                 : OverlayTokenColor(overlayData, role));
 
-            color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
+            color = lerp(color, strokeColor.rgb, (strokeMask(dist, halfWidth, edgeAa) * strokeColor.a * alpha));
         } else if (kind == 5u) {
             // A WEDGE: a filled annular sector — origin the center, ab.x/ab.y the inner/outer radii in px, words 5/6
             // the start angle and sweep (radians, clockwise from twelve o'clock, the wheel's own convention), word 8

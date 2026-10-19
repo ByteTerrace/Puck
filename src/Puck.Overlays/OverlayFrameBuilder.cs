@@ -670,6 +670,38 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
+    /// <summary>Packs one stroked ellipse outline of a chosen width in a raw, caller-resolved color: the ring record
+    /// with its vertical radius and stroke set. Word layout (12): 0..1 center (normalized) · 2 horizontal radius (px
+    /// float) · 3 vertical radius (px float) · 4 = 3 | (Custom &lt;&lt; 4) · 5 color R · 6 color G · 7 alpha · 8 color
+    /// B · 9 clip index · 10 stroke half-width (px float).</summary>
+    /// <param name="centerX">The center x, px.</param>
+    /// <param name="centerY">The center y, px.</param>
+    /// <param name="radiusX">The horizontal radius, px; must be positive.</param>
+    /// <param name="radiusY">The vertical radius, px; must be positive.</param>
+    /// <param name="halfWidth">The stroke's half-width, px.</param>
+    /// <param name="color">The stroke's color (alpha channel unused; <paramref name="alpha"/> carries opacity).</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteEllipse(float centerX, float centerY, float radiusX, float radiusY, float halfWidth, RgbaColor color, float alpha) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: radiusX);
+        m_scratch[(offset + 3)] = Pack(value: radiusY);
+        m_scratch[(offset + 4)] = 3u | (((uint)OverlayColorRole.Custom) << 4);
+        m_scratch[(offset + 5)] = Pack(value: color.R);
+        m_scratch[(offset + 6)] = Pack(value: color.G);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: color.B);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = Pack(value: halfWidth);
+        m_elementCount++;
+    }
     /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside
     /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
     /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text

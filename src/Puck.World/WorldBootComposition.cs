@@ -907,6 +907,11 @@ public static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 
+        // The on-screen annotations (view.annotate): presentation-only state, core like view.override because the
+        // debug world binds the verb. A windowed boot draws it on the overlay and feeds it from the pointer.
+        services.AddSingleton<WorldAnnotations>();
+        services.AddSingleton<ICommandModule, WorldAnnotationCommandModule>();
+
         // The shader-pipeline verb surface (pipeline.*). CORE-registered for the same command-vocabulary-parity reason
         // as WorldViewCommandModule above; pipeline.load's row upsert is core so it genuinely works headless, and
         // WorldViewGraphHost is OPTIONAL (default null) so every other verb refuses by name at use when it is absent
@@ -1502,9 +1507,10 @@ public static class WorldBootComposition {
             IsHeld: true
         ));
 
-        // Host passthrough: the panes the local user opened as passthrough sources with source.passthrough, and the
-        // router the window pump offers every raw event to before the observers above, so a focused source's keys and
-        // the pointer over its pane reach its window instead of the game.
+        // The window input filters the pump offers every raw event to before the observers above, in order: annotate
+        // mode's pointer (a drag circles on screen and reaches neither the camera nor a binding), then host passthrough
+        // (the panes the local user opened as passthrough sources with source.passthrough, so a focused source's keys
+        // and the pointer over its pane reach its window instead of the game).
         services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
             windows: sp.GetRequiredService<WorldScreenBinder>(),
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
@@ -1512,7 +1518,13 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
             CapabilityType: typeof(IWindowInputFilter),
-            Instance: sp.GetRequiredService<WorldSourcePassthrough>(),
+            Instance: new WorldWindowInputFilters(
+                new WorldAnnotationInput(
+                    annotations: sp.GetRequiredService<WorldAnnotations>(),
+                    viewports: sp.GetRequiredService<WorldSeatViewports>()
+                ),
+                sp.GetRequiredService<WorldSourcePassthrough>()
+            ),
             IsHeld: true
         ));
         services.AddSingleton<ICommandModule, WorldPassthroughCommandModule>();
@@ -1695,7 +1707,8 @@ public static class WorldBootComposition {
                         Cursor: sp.GetRequiredService<CursorStore>(),
                         Wheel: sp.GetRequiredService<WheelStore>(),
                         Inspector: sp.GetRequiredService<IInspectorSource>(),
-                        HistoryRow: sp.GetRequiredService<IHistoryRowSource>()
+                        HistoryRow: sp.GetRequiredService<IHistoryRowSource>(),
+                        Annotations: sp.GetRequiredService<WorldAnnotations>()
                     ),
                     theme: themeResolve.Resolve(
                         definition: sp.GetRequiredService<WorldDefinition>(),

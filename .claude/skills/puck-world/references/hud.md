@@ -261,10 +261,12 @@ a template with no document row behind it at all.
 
 ## The overlay reservation — what refuses at construction
 
-`OverlayChannel` has EIGHT members, value = draw priority for the first four:
+`OverlayChannel` has nine members, value = draw priority for the first four:
 `Console = 0`, `BindingBar = 1`, `Markers = 2`, `Toast = 3`, `Hud = 4`,
 `Cursor = 5`, `Wheel = 6`, `Editor = 7` (the inspector, drawn after the seat
-panels and just before the wheel and cursor). The FOUR first-party writers are
+panels), `Annotation = 8` (`AnnotationWriter`, the `view.annotate` outlines,
+drawn after the editor and just before the wheel and cursor, unclipped; see
+[views.md](views.md)). The FOUR first-party writers are
 `ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
 (`FirstPartyChannelCount = 4`); `HudWriter`
 is the fifth channel, banded, not one of the four; `WheelWriter` and

@@ -16,7 +16,8 @@ public sealed class OverlayFrameComposer {
     // is not in the table: it is the banded pipeline's under/base/over sequence plus the unbanded player-scope seat-panel
     // pass (see Compose), opened as its own channel scope up to four times a frame. OverlayChannel.Cursor (5) and
     // OverlayChannel.Wheel (6) are excluded too: they are the frame's last two channel scopes, drawn over everything and
-    // outside the replace-band suppression. Editor (7) runs just before them, after the authored HUD.
+    // outside the replace-band suppression. Editor (7) and then Annotation (8) run just before them, after the authored
+    // HUD.
     private const int FirstPartyChannelCount = 4;
 
     /// <summary>The bytes <see cref="WritePassValues"/> writes: three float4 values.</summary>
@@ -44,6 +45,7 @@ public sealed class OverlayFrameComposer {
     private readonly WheelWriter? m_wheelWriter;
     private readonly InspectorWriter? m_inspectorWriter;
     private readonly HistoryRowWriter? m_historyRowWriter;
+    private readonly AnnotationWriter? m_annotationWriter;
 
     // Per-channel reservation-overflow episode latches: set when a channel starts losing records at its own
     // reservation, cleared the frame it renders clean again, so each episode narrates exactly once.
@@ -131,6 +133,7 @@ public sealed class OverlayFrameComposer {
         m_sources = sources;
         m_inspectorWriter = ((sources.Inspector is { } inspector) ? new InspectorWriter(source: inspector, theme: m_theme) : null);
         m_historyRowWriter = ((sources.HistoryRow is { } historyRow) ? new HistoryRowWriter(source: historyRow, theme: m_theme) : null);
+        m_annotationWriter = ((sources.Annotations is { } annotations) ? new AnnotationWriter(source: annotations, theme: m_theme) : null);
         m_toastWriter = ((sources.Toast is { } toast)
             ? new ToastWriter(
                 source: toast,
@@ -295,7 +298,7 @@ public sealed class OverlayFrameComposer {
     /// writer in draw order and narrates any overflow. The banded order, bottom to top, is the HUD's under band, then the
     /// base (the four first-party writers in <see cref="OverlayChannel"/> order, unless a live authored panel declares
     /// the replace band, whose panels take the base instead), the HUD's over band, the player-scope seat panels, the inspector, the
-    /// radial action menu and the drawn cursor, the last two outside the replace-band suppression.</summary>
+    /// annotation outlines, the radial action menu and the drawn cursor, the last two outside the replace-band suppression.</summary>
     /// <param name="renderTicks">The frame's continuous content clock.</param>
     /// <returns><see langword="true"/> when the frame has anything to draw.</returns>
     public bool Compose(ulong renderTicks) {
@@ -345,6 +348,12 @@ public sealed class OverlayFrameComposer {
             m_builder.BeginChannel(channel: OverlayChannel.Editor);
             m_inspectorWriter?.Emit(builder: m_builder);
             m_historyRowWriter?.Emit(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        if (m_annotationWriter is { } annotationWriter) {
+            m_builder.BeginChannel(channel: OverlayChannel.Annotation);
+            annotationWriter.Emit(builder: m_builder);
             m_builder.EndChannel();
         }
 
