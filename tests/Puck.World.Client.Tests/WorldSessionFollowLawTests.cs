@@ -99,6 +99,53 @@ public sealed class WorldSessionFollowLawTests {
 
         Assert.Equal(expected: [0d, 0d, 0.5d, 0d, 0d, 1d, 0d, 0d], actual: state.RowValues(slot: bump).ToArray());
     }
+    // A snapshot entry's action state reaches the followed mirror's bodyState rows, as it reaches the local one.
+    [Fact]
+    public void ASnapshotEntrysActionStateReachesAFollowedSessionsBodyStateRow() {
+        var baseDocument = Fixtures.BuildDocument();
+        var session = Session(definition: baseDocument with {
+            StateRaw = new WorldStateSection(
+                Body: [new ActionStateSlot(Name: "fuel", Kind: Puck.Physics.Motion.ActionStateKind.Counter)],
+                World: baseDocument.State
+            ),
+        });
+        var state = session.FollowState();
+        var fuel = state.Acquire(
+            binding: new StateBinding(Key: "0", Row: $"{WorldBodyStateReads.RowPrefix}fuel", Target: false),
+            conversion: WorldStateConversion.Number
+        );
+
+        Assert.True(condition: (fuel >= 0));
+
+        session.DeliverSnapshot(snapshot: new WorldSnapshot(
+            Tick: 1UL,
+            Revision: 0,
+            StepTicks: 1UL,
+            Entries: new[] { new EntitySnapshot(
+                Active: true,
+                BodyColor: Vector3.One,
+                CatalogRig: 0,
+                Continuity: EntityContinuity.Continuous,
+                Index: 0,
+                Kit: 0,
+                Look: 0,
+                Orientation: Quaternion.Identity,
+                Position: Vector3.Zero,
+                State: new[] { (3L * One) }
+            ) }
+        ));
+        state = session.FollowState();
+        state.Apply(fraction: 1f);
+
+        Assert.True(condition: state.TryNumber(
+            slot: fuel,
+            value: out var value
+        ));
+        Assert.Equal(
+            actual: value,
+            expected: 3f
+        );
+    }
     [Fact]
     public void AStateWriteMovingABakedColorMovesTheSessionEmittersRevision() {
         var session = Session(definition: Document(bump: "#3FAF6F"));

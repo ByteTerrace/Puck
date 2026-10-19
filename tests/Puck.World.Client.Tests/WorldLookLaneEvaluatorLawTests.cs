@@ -190,6 +190,28 @@ public sealed class WorldLookLaneEvaluatorLawTests {
             expected: 0
         );
 
+        // A key naming no body reads no value, and a slot the world does not declare resolves no row.
+        Assert.True(condition: view.TryResolveRow(
+            ordinal: out var fuelRow,
+            rowName: $"{WorldBodyStateReads.RowPrefix}fuel"
+        ));
+        Assert.True(condition: view.TryRead(
+            engineTick: 0UL,
+            key: "nobody",
+            ordinal: fuelRow,
+            sample: out var unkeyed,
+            target: false,
+            tick: 0UL
+        ));
+        Assert.Equal(
+            actual: unkeyed.Value,
+            expected: default
+        );
+        Assert.False(condition: view.TryResolveRow(
+            ordinal: out _,
+            rowName: $"{WorldBodyStateReads.RowPrefix}missing"
+        ));
+
         WorldDefinition Wearing(string text) => definition with {
             LooksRaw = new(Rows: [new(
                 "probe",
@@ -206,15 +228,17 @@ public sealed class WorldLookLaneEvaluatorLawTests {
             ),
             userMessage: controlReason
         );
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: Wearing(text: "bodyState($body, missing)"),
-            reason: out var reason
-        ));
-        Assert.Contains(
-            expectedSubstring: "bodyState($body, <slot>)",
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal
-        );
+        foreach (var malformed in new[] { "bodyState($body, missing)", "bodyState(fuel)" }) {
+            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Wearing(text: malformed),
+                reason: out var reason
+            ));
+            Assert.Contains(
+                expectedSubstring: "bodyState($body, <slot>)",
+                actualString: reason,
+                comparisonType: StringComparison.Ordinal
+            );
+        }
     }
     [Fact]
     public void LanesRoundTripThroughTheWorldSourceGeneratedContext() {
