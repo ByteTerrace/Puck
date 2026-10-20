@@ -16,14 +16,6 @@ public static partial class SdfSkyEnvironment {
         _ => throw new NotSupportedException(message: $"The environment cannot project {layer.Kind}."),
     };
     private static T Payload<T>(ref SdfSkyLayer layer) where T : unmanaged, ISdfSkyKind => SdfSky.PayloadOf<T>(layer: ref layer);
-    private static float Saturate(float value) => Math.Clamp(max: 1f, min: 0f, value: value);
-    private static float Mix(float a, float b, float t) => (a + ((b - a) * t));
-    private static float Smooth(float a, float b, float x) {
-        var t = Saturate(value: ((x - a) / (b - a)));
-
-        return ((t * t) * (3f - (2f * t)));
-    }
-    private static float Fraction(float value) => (value - MathF.Floor(x: value));
     private static float Quintic(float f) => (((f * f) * f) * ((f * ((f * 6f) - 15f)) + 10f));
     private static float Hash(uint x, uint y, uint z) => (Pcg3dLatticeNoise.Pcg3d(x: x, y: y, z: z).X * (1f / 4294967296f));
     private static uint Cell(float value) => unchecked((uint)((int)MathF.Floor(x: value))) & (SdfVolume.NoisePeriodCells - 1u);
@@ -37,18 +29,18 @@ public static partial class SdfSkyEnvironment {
             var nx = (x + 1u) & (SdfVolume.NoisePeriodCells - 1u);
             var ny = (y + 1u) & (SdfVolume.NoisePeriodCells - 1u);
             var nz = (z + 1u) & (SdfVolume.NoisePeriodCells - 1u);
-            var u = Quintic(f: Fraction(value: point.X)); var v = Quintic(f: Fraction(value: point.Y)); var w = Quintic(f: Fraction(value: point.Z));
+            var u = Quintic(f: VectorFunctions.Fract(x: point.X)); var v = Quintic(f: VectorFunctions.Fract(x: point.Y)); var w = Quintic(f: VectorFunctions.Fract(x: point.Z));
             var key = unchecked((seed + octave));
             float sample;
 
             if (volume) {
-                var sy = key ^ 0x9E3779B9u; var sz = key ^ 0x85EBCA77u;
-                var low = Mix(a: Mix(a: Hash(x: x ^ key, y: y ^ sy, z: z ^ sz), b: Hash(x: nx ^ key, y: y ^ sy, z: z ^ sz), t: u), b: Mix(a: Hash(x: x ^ key, y: ny ^ sy, z: z ^ sz), b: Hash(x: nx ^ key, y: ny ^ sy, z: z ^ sz), t: u), t: v);
-                var high = Mix(a: Mix(a: Hash(x: x ^ key, y: y ^ sy, z: nz ^ sz), b: Hash(x: nx ^ key, y: y ^ sy, z: nz ^ sz), t: u), b: Mix(a: Hash(x: x ^ key, y: ny ^ sy, z: nz ^ sz), b: Hash(x: nx ^ key, y: ny ^ sy, z: nz ^ sz), t: u), t: v);
+                var sy = key ^ Pcg3dLatticeNoise.NoiseSeedStreamY; var sz = key ^ Pcg3dLatticeNoise.NoiseSeedStreamZ;
+                var low = float.Lerp(amount: v, value1: float.Lerp(amount: u, value1: Hash(x: x ^ key, y: y ^ sy, z: z ^ sz), value2: Hash(x: nx ^ key, y: y ^ sy, z: z ^ sz)), value2: float.Lerp(amount: u, value1: Hash(x: x ^ key, y: ny ^ sy, z: z ^ sz), value2: Hash(x: nx ^ key, y: ny ^ sy, z: z ^ sz)));
+                var high = float.Lerp(amount: v, value1: float.Lerp(amount: u, value1: Hash(x: x ^ key, y: y ^ sy, z: nz ^ sz), value2: Hash(x: nx ^ key, y: y ^ sy, z: nz ^ sz)), value2: float.Lerp(amount: u, value1: Hash(x: x ^ key, y: ny ^ sy, z: nz ^ sz), value2: Hash(x: nx ^ key, y: ny ^ sy, z: nz ^ sz)));
 
-                sample = Mix(a: low, b: high, t: w);
+                sample = float.Lerp(amount: w, value1: low, value2: high);
             } else {
-                sample = Mix(a: Mix(a: Hash(x: x, y: y, z: key), b: Hash(x: nx, y: y, z: key), t: u), b: Mix(a: Hash(x: x, y: ny, z: key), b: Hash(x: nx, y: ny, z: key), t: u), t: v);
+                sample = float.Lerp(amount: v, value1: float.Lerp(amount: u, value1: Hash(x: x, y: y, z: key), value2: Hash(x: nx, y: y, z: key)), value2: float.Lerp(amount: u, value1: Hash(x: x, y: ny, z: key), value2: Hash(x: nx, y: ny, z: key)));
             }
             value += (amplitude * sample);
             total += amplitude;
@@ -74,11 +66,11 @@ public static partial class SdfSkyEnvironment {
         var v = ((MathF.Asin(x: Math.Clamp(max: 1f, min: -1f, value: d.Y)) * 0.15915494f) * cells);
         var soft = MathF.Max(x: pattern.Softness, y: 0f);
 
-        float Line(float coordinate) => (1f - Rise(edge: ((0.5f * pattern.Line) + soft), soft: soft, value: MathF.Abs(x: (Fraction(value: (coordinate + 0.5f)) - 0.5f))));
+        float Line(float coordinate) => (1f - Rise(edge: ((0.5f * pattern.Line) + soft), soft: soft, value: MathF.Abs(x: (VectorFunctions.Fract(x: (coordinate + 0.5f)) - 0.5f))));
         float Wave(float coordinate) {
             var width = MathF.Max(x: (0.5f * soft), y: 1e-4f);
 
-            return (Math.Clamp(((Fraction(value: coordinate) - 0.5f) / width), -1f, 1f) * Saturate(value: ((0.5f - MathF.Abs(x: (Fraction(value: coordinate) - 0.5f))) / width)));
+            return (Math.Clamp(((VectorFunctions.Fract(x: coordinate) - 0.5f) / width), -1f, 1f) * float.Clamp(max: 1f, min: 0f, value: ((0.5f - MathF.Abs(x: (VectorFunctions.Fract(x: coordinate) - 0.5f))) / width)));
         }
         var t = pattern.Shape switch {
             SdfSkyPatternShape.Stripes => Line(coordinate: v),
@@ -95,13 +87,13 @@ public static partial class SdfSkyEnvironment {
         around = ((around.Length() > 1e-6f) ? Vector2.Normalize(value: around) : Vector2.UnitX);
         var drift = (phase * SdfVolume.NoisePeriodCells);
         var wave = Fbm2(((around * (aurora.Waves * 0.15915494f)) + new Vector2(x: drift, y: 0f)), aurora.Seed, ((tier >= SdfSkyTier.High) ? 3u : 2u));
-        var rays = Fbm2(((around * (aurora.Rays * 0.15915494f)) + new Vector2(x: 0f, y: drift)), aurora.Seed ^ 0x85EBCA77u, ((tier >= SdfSkyTier.Medium) ? 2u : 1u));
+        var rays = Fbm2(((around * (aurora.Rays * 0.15915494f)) + new Vector2(x: 0f, y: drift)), aurora.Seed ^ Pcg3dLatticeNoise.NoiseSeedStreamZ, ((tier >= SdfSkyTier.Medium) ? 2u : 1u));
         var rise = ((d.Y - (aurora.Base + (aurora.Fold * ((2f * wave) - 1f)))) / aurora.Height);
 
         if (rise <= -0.05f) { return Vector4.Zero; }
-        var strength = Saturate(value: ((((rays * rays) * 1.5f) * Smooth(a: -0.05f, b: 0f, x: rise)) * MathF.Exp(x: (-3f * MathF.Max(x: rise, y: 0f)))));
+        var strength = float.Clamp(max: 1f, min: 0f, value: ((((rays * rays) * 1.5f) * VectorFunctions.Smoothstep(edge0: -0.05f, edge1: 0f, x: rise)) * MathF.Exp(x: (-3f * MathF.Max(x: rise, y: 0f)))));
 
-        return new Vector4(value: (Vector3.Lerp(aurora.Color, aurora.TopColor, Saturate(value: rise)) * aurora.Intensity), w: strength);
+        return new Vector4(value: (Vector3.Lerp(aurora.Color, aurora.TopColor, float.Clamp(max: 1f, min: 0f, value: rise)) * aurora.Intensity), w: strength);
     }
     private static Vector4 Clouds(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkyBlock block, Vector3 d) {
         if ((clouds.Coverage <= 0f) || (d.Y <= 0f)) { return Vector4.Zero; }
@@ -117,16 +109,16 @@ public static partial class SdfSkyEnvironment {
         var p = ((Turn(p: point) / MathF.Max(x: clouds.Scale, y: 1e-3f)) + clouds.DriftOffset);
 
         float Thickness(Vector2 at) {
-            var warp = Fbm2(octaves: octaves, point: (at + clouds.ShearOffset), seed: clouds.Seed ^ 0x9E3779B9u);
+            var warp = Fbm2(octaves: octaves, point: (at + clouds.ShearOffset), seed: clouds.Seed ^ Pcg3dLatticeNoise.NoiseSeedStreamY);
             var density = Fbm2((at + new Vector2(value: (clouds.Warp * (warp - 0.5f)))), clouds.Seed, octaves);
 
-            return Smooth(a: (1f - clouds.Coverage), b: ((1f - clouds.Coverage) + clouds.Softness), x: density);
+            return VectorFunctions.Smoothstep(edge0: (1f - clouds.Coverage), edge1: ((1f - clouds.Coverage) + clouds.Softness), x: density);
         }
         var thickness = Thickness(at: p);
 
         if (thickness <= 0f) { return Vector4.Zero; }
         var haze = (t - 1f);
-        var alpha = (((1f - MathF.Exp(x: (-thickness * clouds.Extinction))) * Smooth(a: 0f, b: clouds.HorizonFade, x: d.Y)) * MathF.Exp(x: (-clouds.AerialDepth * (haze * haze))));
+        var alpha = (((1f - MathF.Exp(x: (-thickness * clouds.Extinction))) * VectorFunctions.Smoothstep(edge0: 0f, edge1: clouds.HorizonFade, x: d.Y)) * MathF.Exp(x: (-clouds.AerialDepth * (haze * haze))));
 
         if (block.Quality == SdfSkyTier.Low) { return new Vector4(value: clouds.Color, w: alpha); }
         var sun = Rotate(direction: FrameDirection(block: block, direction: clouds.LightDirection), rotation: layer.Rotation);
@@ -135,13 +127,13 @@ public static partial class SdfSkyEnvironment {
         var ty = Thickness(at: (p + new Vector2(x: 0f, y: clouds.NormalTap)));
         var ts = Thickness(at: (p + ((clouds.NormalTap * 2f) * Vector2.Normalize(value: (sunTurned + new Vector2(value: 1e-5f))))));
         var normal = Vector3.Normalize(value: new Vector3(x: ((-(tx - thickness) / clouds.NormalTap) * clouds.Height), y: 1f, z: ((-(ty - thickness) / clouds.NormalTap) * clouds.Height)));
-        var diffuse = Saturate(value: Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: new Vector3(x: sunTurned.X, y: sun.Y, z: sunTurned.Y))));
-        var towardLight = Saturate(value: Vector3.Dot(vector1: d, vector2: sun));
-        var forward = Saturate(value: (clouds.ForwardScatter * (towardLight * towardLight)));
-        var shadow = Mix(a: (1f - (clouds.SelfShadow * Saturate(value: (ts - thickness)))), b: 1f, t: forward);
+        var diffuse = float.Clamp(max: 1f, min: 0f, value: Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: new Vector3(x: sunTurned.X, y: sun.Y, z: sunTurned.Y))));
+        var towardLight = float.Clamp(max: 1f, min: 0f, value: Vector3.Dot(vector1: d, vector2: sun));
+        var forward = float.Clamp(max: 1f, min: 0f, value: (clouds.ForwardScatter * (towardLight * towardLight)));
+        var shadow = float.Lerp(amount: forward, value1: (1f - (clouds.SelfShadow * float.Clamp(max: 1f, min: 0f, value: (ts - thickness)))), value2: 1f);
         var lining = ((clouds.SilverLining * MathF.Pow(x: towardLight, y: 8f)) * (1f - thickness));
 
-        return new Vector4(value: ((clouds.Color * (Mix(a: clouds.Ambient, b: 1f, t: MathF.Max(x: diffuse, y: forward)) * shadow)) + (clouds.LightColor * lining)), w: alpha);
+        return new Vector4(value: ((clouds.Color * (float.Lerp(amount: MathF.Max(x: diffuse, y: forward), value1: clouds.Ambient, value2: 1f) * shadow)) + (clouds.LightColor * lining)), w: alpha);
     }
     private static Vector4 Stars(SdfSkyStars stars, SdfSkyTier tier, Vector3 d) {
         if ((d.Y <= 0f) || (stars.Brightness <= 0f)) { return Vector4.Zero; }
@@ -168,13 +160,13 @@ public static partial class SdfSkyEnvironment {
 
             luminosity *= (1f - (stars.TwinkleDepth * flicker));
         }
-        var star = SdfOctahedral.Decode(u: ((x + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Y * Unit))) / density), v: ((y + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Z * Unit))) / density));
+        var star = SdfOctahedral.Decode(u: ((x + float.Lerp(amount: (h.Y * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density), v: ((y + float.Lerp(amount: (h.Z * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density));
         var starDirection = new Vector3(x: ((float)star.X), y: ((float)star.Z), z: ((float)star.Y));
-        var radius = (((stars.RadiusFraction * 3.14159265f) / density) * Mix(a: 0.6f, b: 1f, t: MathF.Sqrt(x: luminosity)));
+        var radius = (((stars.RadiusFraction * 3.14159265f) / density) * float.Lerp(amount: MathF.Sqrt(x: luminosity), value1: 0.6f, value2: 1f));
         // Half the squared chord equals 1 - cos(angle), without subtracting a rounded dot product from one.
         var chord = (d - starDirection);
         var separation = (0.5f * Vector3.Dot(vector1: chord, vector2: chord));
-        var coverage = Smooth(a: (0.5f * (radius * radius)), b: 0f, x: separation);
+        var coverage = VectorFunctions.Smoothstep(edge0: (0.5f * (radius * radius)), edge1: 0f, x: separation);
 
         return new Vector4(value: ((stars.Brightness * luminosity) * tint), w: coverage);
     }

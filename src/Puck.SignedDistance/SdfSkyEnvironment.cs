@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SignedDistance;
@@ -366,8 +367,6 @@ public static partial class SdfSkyEnvironment {
             return ((value >= edge) ? 1f : 0f);
         }
 
-        var t = Math.Clamp(max: 1f, min: 0f, value: ((value - (edge - soft)) / soft));
-
-        return ((t * t) * (3f - (2f * t)));
+        return VectorFunctions.Smoothstep(t: float.Clamp(max: 1f, min: 0f, value: ((value - (edge - soft)) / soft)));
     }
 }
