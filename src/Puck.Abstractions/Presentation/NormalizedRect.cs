@@ -14,32 +14,28 @@ public readonly record struct NormalizedRect(float X, float Y, float Width, floa
         Y: 0.5f
     );
 
-    private static float Interpolate(float from, float to, float t) {
-        return (from + ((to - from) * t));
-    }
-
     /// <summary>Linearly interpolates every rectangle component. <paramref name="t"/> is not clamped.</summary>
     public static NormalizedRect Lerp(NormalizedRect from, NormalizedRect to, float t) {
         return new NormalizedRect(
-            Height: Interpolate(
-                from: from.Height,
-                to: to.Height,
-                t: t
+            Height: float.Lerp(
+                value1: from.Height,
+                value2: to.Height,
+                amount: t
             ),
-            Width: Interpolate(
-                from: from.Width,
-                to: to.Width,
-                t: t
+            Width: float.Lerp(
+                value1: from.Width,
+                value2: to.Width,
+                amount: t
             ),
-            X: Interpolate(
-                from: from.X,
-                to: to.X,
-                t: t
+            X: float.Lerp(
+                value1: from.X,
+                value2: to.X,
+                amount: t
             ),
-            Y: Interpolate(
-                from: from.Y,
-                to: to.Y,
-                t: t
+            Y: float.Lerp(
+                value1: from.Y,
+                value2: to.Y,
+                amount: t
             )
         );
     }
