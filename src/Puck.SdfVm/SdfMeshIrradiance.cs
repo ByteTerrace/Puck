@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -257,8 +258,7 @@ public sealed class SdfMeshIrradiance {
     /// <param name="dims">The volume's probes along each axis.</param>
     /// <returns>The slot.</returns>
     public static int SlotOf(int x, int y, int z, (int X, int Y, int Z) dims) =>
-        (Wrap(value: x, size: dims.X) + (dims.X * (Wrap(value: y, size: dims.Y) + (dims.Y * Wrap(value: z, size: dims.Z)))));
-    private static int Wrap(int value, int size) => (((value % size) + size) % size);
+        (x.FloorModulo(modulus: dims.X) + (dims.X * (y.FloorModulo(modulus: dims.Y) + (dims.Y * z.FloorModulo(modulus: dims.Z)))));
 
     // The trace loop: batches of the window's probes that lack a sweep, fewest sweeps first and nearest the camera
     // first, until every probe of the window holds every sweep. A batch reads the cache as it stood before the batch, so
@@ -317,7 +317,7 @@ public sealed class SdfMeshIrradiance {
             _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
                 var candidate = candidates[index];
 
-                results[index] = TraceProbe(cell: candidate.Cell, layout: layout, lighting: lighting, scene: scene, sweep: candidate.Sweeps);
+                results[index] = TraceProbe(cell: candidate.Cell, layout: layout, lighting: lighting, low: low, scene: scene, sweep: candidate.Sweeps);
             });
 
             lock (m_gate) {
@@ -334,7 +334,7 @@ public sealed class SdfMeshIrradiance {
 
     // One sweep of one probe: its rays against the scene, each hit shaded under the captured lighting, the sweeps after
     // the first adding the light the hit reflects from the cached probes about it.
-    private Probe TraceProbe((int X, int Y, int Z) cell, Layout layout, Lighting lighting, SdfMeshIrradianceScene scene, int sweep) {
+    private Probe TraceProbe((int X, int Y, int Z) cell, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep) {
         var origin = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
         var rotation = RotationOf(cell: cell);
         Span<float> total = stackalloc float[6];
@@ -354,7 +354,7 @@ public sealed class SdfMeshIrradiance {
                 if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) {
                     backFaces++;
                 } else {
-                    light = Shade(lighting: lighting, normal: normal, point: (origin + (direction * distance)), scene: scene, material: scene.MaterialOf(triangle: triangle), sweep: sweep, layout: layout);
+                    light = Shade(layout: layout, lighting: lighting, low: low, material: scene.MaterialOf(triangle: triangle), normal: normal, point: (origin + (direction * distance)), scene: scene, sweep: sweep);
                 }
             }
 
@@ -381,7 +381,7 @@ public sealed class SdfMeshIrradiance {
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives):
     // the directional lights' bounce under a traced shadow, its emission, and from the second sweep the reflected light of
     // the probes about it.
-    private Vector3 Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, int sweep, Layout layout, SdfMeshIrradianceScene scene) {
+    private Vector3 Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, int sweep, Layout layout, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene) {
         var surface = lighting.MaterialAt(index: material);
         var reflected = ((surface.Albedo * (1f - surface.Metal)) * (surface.Bleed ?? Vector3.One));
         var result = Vector3.Zero;
@@ -405,27 +405,38 @@ public sealed class SdfMeshIrradiance {
             result += (((surface.Albedo * surface.Emissive) * (surface.Bleed ?? Vector3.One)) * lighting.Gains.Emission);
         }
         if (lighting.Feedback && (sweep > 0) && (reflected != Vector3.Zero)) {
-            result += ((reflected * Incoming(lighting: lighting, point: point, normal: normal, layout: layout)) * lighting.Gains.Feedback);
+            result += ((reflected * Incoming(layout: layout, lighting: lighting, low: low, normal: normal, point: point)) * lighting.Gains.Feedback);
         }
 
         return result;
     }
-    // The light a surface receives from the cached probes about it, weighted as the views pass weights them, or the open
-    // sky's when no probe about it is cached.
-    private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout) {
+    // The light a surface receives from the cached probes about it, as the views pass reads the volume
+    // (sdfMeshIrradianceAt, shade/sdf-mesh-irradiance.hlsli): the eight probes about the point pushed along its normal,
+    // only those inside the window (the volume the views pass holds), each weighted trilinearly and by how far it lies in
+    // front of the surface; the sky visibility and the reflected light fade to the open sky and to none across the
+    // window's last cell, and the open sky answers where no probe takes part.
+    private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
         var sample = ((point + (normal * (NormalBias * layout.Spacing))) / layout.Spacing) - new Vector3(value: 0.5f);
         var floor = new Vector3(x: MathF.Floor(sample.X), y: MathF.Floor(sample.Y), z: MathF.Floor(sample.Z));
         var fraction = (sample - floor);
         var squared = (normal * normal);
         var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
-        var sum = Vector3.Zero;
+        var sky = 0f;
+        var bounce = Vector3.Zero;
         var total = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
             var offset = new Vector3(x: (corner & 1), y: ((corner >> 1) & 1), z: ((corner >> 2) & 1));
             var cell = ((int)(floor.X + offset.X), (int)(floor.Y + offset.Y), (int)(floor.Z + offset.Z));
 
-            if (!m_cache.TryGetValue(key: cell, value: out var probe) || probe.Invalid) { continue; }
+            if (
+                (cell.Item1 < low.X) || (cell.Item1 >= (low.X + layout.Dims.X)) ||
+                (cell.Item2 < low.Y) || (cell.Item2 >= (low.Y + layout.Dims.Y)) ||
+                (cell.Item3 < low.Z) || (cell.Item3 >= (low.Z + layout.Dims.Z)) ||
+                !m_cache.TryGetValue(key: cell, value: out var probe) || probe.Invalid
+            ) {
+                continue;
+            }
 
             var weights = new Vector3(
                 x: ((offset.X > 0f) ? fraction.X : (1f - fraction.X)),
@@ -440,14 +451,23 @@ public sealed class SdfMeshIrradiance {
 
             if (weight <= 0f) { continue; }
 
-            var visibility = Cube(cube: probe.Sky, normal: normal, squared: squared);
-            var bounce = Cube(cube: probe.Radiance, normal: normal, squared: squared);
-
-            sum += (((skyIrradiance * visibility) + bounce) * weight);
+            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
+            bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
             total += weight;
         }
 
-        return ((total > 0f) ? (sum / total) : skyIrradiance);
+        if (total <= 0f) {
+            return skyIrradiance;
+        }
+
+        var inside = Vector3.Min(
+            value1: (sample - new Vector3(x: low.X, y: low.Y, z: low.Z)),
+            value2: (new Vector3(x: ((low.X + layout.Dims.X) - 1), y: ((low.Y + layout.Dims.Y) - 1), z: ((low.Z + layout.Dims.Z) - 1)) - sample)
+        );
+        var fade = float.Clamp(max: 1f, min: 0f, value: MathF.Min(x: inside.X, y: MathF.Min(x: inside.Y, y: inside.Z)));
+        var visibility = (1f + (fade * ((sky / total) - 1f)));
+
+        return ((skyIrradiance * visibility) + ((bounce / total) * fade));
     }
     private static float Cube(float[] cube, Vector3 normal, Vector3 squared) =>
         (((squared.X * cube[((normal.X >= 0f) ? 0 : 1)]) + (squared.Y * cube[((normal.Y >= 0f) ? 2 : 3)])) + (squared.Z * cube[((normal.Z >= 0f) ? 4 : 5)]));
@@ -465,15 +485,12 @@ public sealed class SdfMeshIrradiance {
 
         return new Vector3(x: (radius * MathF.Cos(angle)), y: z, z: (radius * MathF.Sin(angle)));
     }
-    // A fixed rotation per cell, so neighbouring probes' rays do not share directions.
+    // A fixed rotation per cell, so neighbouring probes' rays do not share directions: a uniform random rotation from the
+    // cell's PCG3D hash (Pcg3dLatticeNoise.Pcg3d, the kernels' sdfPcg3d), the same on every run and machine.
     private static Quaternion RotationOf((int X, int Y, int Z) cell) {
-        var hash = (uint)HashCode.Combine(value1: cell.X, value2: cell.Y, value3: cell.Z);
-
-        hash = ((uint)((hash ^ 0x9E3779B9u) * 0x85EBCA6Bu));
-
+        var (hash, hash2, _) = Pcg3dLatticeNoise.Pcg3d(x: unchecked((uint)cell.X), y: unchecked((uint)cell.Y), z: unchecked((uint)cell.Z));
         var u1 = ((hash & 0xFFFFu) / 65536f);
         var u2 = ((hash >> 16) / 65536f);
-        var hash2 = (hash * 0xC2B2AE35u);
         var u3 = ((hash2 >> 16) / 65536f);
         var a = MathF.Sqrt(1f - u1);
         var b = MathF.Sqrt(u1);
