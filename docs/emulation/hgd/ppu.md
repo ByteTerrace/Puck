@@ -108,8 +108,10 @@ RAM, in which case it shows the colour `v` addresses.
 The console has 2 KiB of nametable RAM, `HgdNametableRam`, but the PPU never
 addresses it directly. Every access below $3F00 reaches the cartridge, and the
 board selects which 1 KiB page answers by driving CIRAM A10, or answers from
-memory of its own. NROM's header chooses horizontal or vertical mirroring, and a
-four-screen NROM supplies its own 2 KiB for the upper two nametables.
+memory of its own. NROM's header chooses horizontal or vertical mirroring;
+MMC1's control register chooses one-screen, vertical or horizontal; MMC3's
+$A000 chooses vertical or horizontal. A four-screen image (NROM or MMC3)
+supplies its own 2 KiB for the upper two nametables.
 
 ## Not yet modelled
 

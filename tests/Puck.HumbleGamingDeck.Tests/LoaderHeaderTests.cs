@@ -121,7 +121,8 @@ public sealed class LoaderHeaderTests {
     /// <param name="mapper">The twelve-bit mapper number.</param>
     /// <param name="submapper">The four-bit submapper number.</param>
     /// <param name="name">The board name or number expected in the diagnostic.</param>
-    [InlineData(1, 0, "MMC1")]
+    [InlineData(2, 0, "UxROM")]
+    [InlineData(1, 5, "MMC1")]
     [InlineData(4, 1, "MMC3")]
     [InlineData(0, 1, "NROM")]
     [InlineData(4095, 15, "4095")]

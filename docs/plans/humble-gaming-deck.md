@@ -3,8 +3,8 @@
 The Humble Gaming Deck (`Puck.HumbleGamingDeck`, short form HGD, type prefix
 `Hgd`) is the third deterministic emulator core: the NES and Famicom,
 alongside the Humble Gaming Brick (Game Boy family) and the Advanced Gaming
-Brick (Game Boy Advance). Its NTSC machine runs NROM cartridges; the rest of
-the target below is planned. "Brick" names the handheld line and "Deck" the home
+Brick (Game Boy Advance). Its NTSC machine runs NROM, MMC1 and MMC3
+cartridges; the rest of the target below is planned. "Brick" names the handheld line and "Deck" the home
 line, after the name the console unit was sold under; the adjective names the
 generation, so the SNES would later be the Advanced Gaming Deck (AGD). The
 names are generic by design and carry no trademark.
@@ -53,6 +53,19 @@ of scope here.
 - **In progress:** NTSC accuracy. AccuracyCoin runs in the battery and reports
   every test's own result, so the stage fails while any test fails, and those
   failures are the package's work list.
+- **In progress:** common boards (package 2). MMC1 (mapper 1) and MMC3
+  (mapper 4, with the MMC3A's IRQ behaviour as submapper 4) run beside NROM
+  over one owner of board memory, `HgdBoardMemory`: MMC1's serial port with its
+  reset write and consecutive-cycle rule, every PRG and CHR mode, one-screen
+  and switchable mirroring, PRG-RAM enable, and the SUROM, SOROM and SXROM
+  outer-bank and PRG-RAM-bank bits; MMC3's bank select and data, mirroring,
+  PRG-RAM protection, and the scanline counter clocked by PPU A12 rises
+  filtered against M2. Battery PRG-RAM persists through the core's save file.
+  Hardware-behaviour laws in `Puck.HumbleGamingDeck.Tests` pin each board, and
+  the battery's determinism, fork and mid-instruction replay stages run an MMC1
+  fixture mid-serial-write and an MMC3 fixture across a counter IRQ. UxROM,
+  CNROM, AxROM, MMC6, bus conflicts, the public board test ROMs and the
+  co-simulation remain.
 - **In progress:** World cabinets (package 8). `HumbleGamingDeckEngine`
   (`humble-gaming-deck`) is registered by `Puck.HumbleGamingDeck.Forge`'s
   extension, which the World and the CLI compose as a built-in and the silo
@@ -248,7 +261,7 @@ disagreement with an oracle explained and pinned.
 ### 2. Common boards
 
 **Owns:** MMC1, UxROM, CNROM, AxROM, MMC3 and MMC6, board RAM, and bus
-conflicts.
+conflicts. MMC1, MMC3 and board RAM are in; the rest remain.
 
 **Delivers:** most of the licensed library.
 
@@ -291,8 +304,9 @@ mapper numbers:
 
 A board is accepted when all four of these hold:
 
-1. **Register fixture.** A Tier A stage, written from the board's NESdev wiki
-   specification, drives every bank register from its reset state and checks
+1. **Register fixture.** Hardware-behaviour laws in
+   `Puck.HumbleGamingDeck.Tests`, written from the board's NESdev wiki
+   specification, drive every bank register from its reset state and checks
    the mapped PRG and CHR banks, mirroring, PRG-RAM enable and protection, bus
    conflicts where the board has them, and, for a board with an IRQ, the
    counter's reload, clock, and acknowledge at the exact CPU cycle or A12 edge.

@@ -87,7 +87,7 @@ Restore rejects a different identity. Forks use the shared `MachineInstance`
 and `MachineFork` lifecycle: immutable image bytes are shared, while every
 RAM array and CPU latch belongs to one machine.
 
-## The bus, loader, and NROM
+## The bus, loader, and boards
 
 The CPU's 2 KiB work RAM mirrors through $1FFF. The PPU's eight registers
 repeat through $3FFF, and $4000–$4017 hold the APU, OAM DMA, and controller
@@ -105,14 +105,55 @@ Damaged or ambiguous legacy reserved fields produce an explicit diagnostic.
 The legacy zero PRG-RAM-size convention produces a diagnostic explaining its
 8 KiB default; NES 2.0 can declare no RAM explicitly.
 
-NROM maps 16 KiB PRG twice or 32 KiB PRG once at $8000. It has 8 KiB of CHR
-ROM or RAM, optional PRG-RAM at $6000, and header-selected nametable wiring.
-A trainer initializes $7000–$71FF when the board provides enough RAM.
-Unimplemented boards, submappers, console types, timing families, and memory
-layouts are refused explicitly. A board sees the PPU's whole window below $3F00
-with the console's nametable RAM, and routes nametable accesses to a page of it
-or to its own memory. It also observes every PPU address and M2 edge, drives an
-IRQ line, and exposes the battery-backed RAM a save file keeps.
+A board sees the PPU's whole window below $3F00 with the console's nametable
+RAM, and routes nametable accesses to a page of it or to its own memory. It
+also observes every PPU address and M2 edge, drives an IRQ line, and exposes
+the battery-backed RAM a save file keeps. Every board keeps its RAM in one
+`HgdBoardMemory`: PRG-RAM at $6000 (volatile bytes, then PRG NVRAM), CHR-RAM
+(volatile, then CHR NVRAM), a four-screen image's own nametable RAM, and the
+battery save (PRG NVRAM, then CHR NVRAM). A trainer initializes $7000–$71FF
+when the board provides enough RAM. Unimplemented boards, submappers, console
+types, timing families, and memory layouts are refused explicitly, each by
+name.
+
+- **NROM** (mapper 0) maps 16 KiB PRG twice or 32 KiB PRG once at $8000. It has
+  8 KiB of CHR ROM or RAM, optional PRG-RAM, and header-selected nametable
+  wiring.
+- **[MMC1](https://www.nesdev.org/wiki/MMC1)** (mapper 1, `HgdMmc1`) takes
+  32–512 KiB of PRG, up to 128 KiB of CHR ROM or CHR-RAM, and up to 32 KiB of
+  PRG-RAM. Writes to $8000–$FFFF feed a five-bit shift register, lowest bit
+  first; the fifth loads the control, CHR 0, CHR 1 or PRG register that address
+  bits 13–14 select, and a write with bit 7 set empties the register and sets
+  PRG mode 3. A write on the CPU cycle after another write is ignored, whatever
+  its value, so a read-modify-write instruction reaches the port only with the
+  value it writes first; the board counts cycles from M2's falling edges. PRG
+  modes switch 32 KiB, or 16 KiB with the first or last bank fixed; CHR modes
+  switch 8 KiB or two 4 KiB halves; mirroring is one-screen from either page,
+  vertical or horizontal; PRG bank bit 4 disables PRG-RAM. On SUROM and SXROM
+  (over 256 KiB of PRG) CHR register bit 4 selects the 256 KiB half, and on
+  SOROM and SXROM (16 or 32 KiB of PRG-RAM) its bits 3, or 3 and 2, select the
+  8 KiB PRG-RAM bank; in 4 KiB CHR mode the register PPU A12 last selected
+  supplies those bits. Power-on sets the control register to $0C and clears the
+  rest. SNROM's PRG-RAM disable through CHR bit 4 is not modelled: the header
+  cannot tell SNROM from the boards that use that bit otherwise.
+- **[MMC3](https://www.nesdev.org/wiki/MMC3)** (mapper 4, `HgdMmc3`) takes
+  32–512 KiB of PRG, up to 256 KiB of CHR ROM or CHR-RAM, and up to 8 KiB of
+  PRG-RAM. $8000/$8001 select and load the eight bank registers: R6 and R7
+  switch 8 KiB of PRG with the second-last bank at $C000 or, with bank select
+  bit 6, at $8000; R0–R1 switch 2 KiB and R2–R5 1 KiB of CHR, bank select bit 7
+  swapping the pattern-table halves. $A000 selects vertical or horizontal
+  mirroring (a four-screen image ignores it) and $A001 enables PRG-RAM (bit 7)
+  and denies writes to it (bit 6). The scanline counter clocks on a PPU A12
+  rise that follows three falling M2 edges with A12 low, so with background
+  patterns at $0000 and sprites at $1000 it clocks once a line at the sprite
+  fetches. A clock reloads a zero counter, or one a $C001 write asked to
+  reload, from the $C000 latch and decrements it otherwise; reaching zero with
+  IRQs enabled ($E001) raises the IRQ until $E000 acknowledges and disables it.
+  Submapper 4, the MMC3A, raises it only when the counter reaches zero from a
+  nonzero value or through a requested reload. The hardware leaves the
+  registers undefined at power-on; the board powers on with R0–R7 at 0, 2, 4,
+  5, 6, 7, 0, 1, mirroring from the header, PRG-RAM enabled and writable, and
+  the counter clear. MMC6 (submapper 1) and the other submappers are refused.
 
 ## Battery and corpora
 
@@ -125,7 +166,9 @@ dotnet run --project src/Puck.HumbleGamingDeck.Post -c Release
 
 Tier A needs no external images. It covers independent-machine determinism,
 zero steady-state allocation, fork ownership, every master phase of
-mid-instruction replay, loader and bus cases, and original reset, interrupt,
+mid-instruction replay (determinism, forks and replay each run an original
+fixture per board: NROM's register loop, MMC1 mid-serial-write, MMC3 across a
+scanline-counter IRQ), loader and bus cases, and original reset, interrupt,
 and RDY fixtures. Throughput reports actual elapsed master ticks and never
 gates correctness. The shared host-contract probes run against the Deck host
 (see [Hosting](hosting.md#verification)). Original fixture cartridges, built by

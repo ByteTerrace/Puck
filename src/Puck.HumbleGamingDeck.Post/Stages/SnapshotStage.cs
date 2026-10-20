@@ -1,6 +1,7 @@
 namespace Puck.HumbleGamingDeck.Post;
 
-/// <summary>Verifies replay and fork equivalence at each master-clock phase within instructions.</summary>
+/// <summary>Verifies replay and fork equivalence at each master-clock phase within instructions, on every board's
+/// fixture: NROM's register loop, MMC1 mid-serial-write, and MMC3 across a scanline-counter IRQ.</summary>
 internal sealed class SnapshotStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name => "mid-instruction-replay";
@@ -9,8 +10,18 @@ internal sealed class SnapshotStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
+        foreach (var fixture in PostMachine.Fixtures) {
+            if (Verify(fixture: fixture) is { } failure) {
+                return PostStageOutcome.Fail(detail: $"{fixture.Name}: {failure}");
+            }
+        }
+
+        return PostStageOutcome.Pass(detail: $"480 mid-instruction/master-phase restore and fork continuations per board ({string.Join(separator: ", ", values: PostMachine.Fixtures.Select(selector: static fixture => fixture.Name))}); four alignments; partition and overshoot equivalence");
+    }
+
+    private static string? Verify(PostFixture fixture) {
         for (var alignment = 0; (alignment < 4); ++alignment) {
-            var configuration = new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: PostMachine.CreateImage()),
+            var configuration = new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: fixture.Image),
                 powerOn: new HgdPowerOnProfile(alignmentPhase: alignment, workRamFill: 0xA5));
             using var instance = HgdMachineFactory.Create(configuration: configuration);
             using var partitioned = HgdMachineFactory.Create(configuration: configuration);
@@ -21,8 +32,9 @@ internal sealed class SnapshotStage : IPostStage<PostContext> {
                 partitioned.Machine.RunCycles(masterTicks: 1);
             }
             if (!machine.Snapshot().ContentEquals(other: partitioned.Machine.Snapshot())) {
-                return PostStageOutcome.Fail(detail: $"chunk partition differs at alignment {alignment}");
+                return $"chunk partition differs at alignment {alignment}";
             }
+            fixture.Prime(obj: machine);
             for (var tick = 0; (tick < 120); ++tick) {
                 machine.RunCycles(masterTicks: 1);
                 var middle = machine.Snapshot();
@@ -33,12 +45,12 @@ internal sealed class SnapshotStage : IPostStage<PostContext> {
                 var uninterrupted = machine.Snapshot();
 
                 if (!uninterrupted.ContentEquals(other: fork.Machine.Snapshot())) {
-                    return PostStageOutcome.Fail(detail: $"mid-cycle fork differs at alignment {alignment}, offset {tick}");
+                    return $"mid-cycle fork differs at alignment {alignment}, offset {tick}: {PostMachine.Describe(first: uninterrupted, second: fork.Machine.Snapshot())}";
                 }
                 machine.Restore(snapshot: middle);
                 machine.RunCycles(masterTicks: 997);
                 if (!uninterrupted.ContentEquals(other: machine.Snapshot())) {
-                    return PostStageOutcome.Fail(detail: $"mid-cycle restore differs at alignment {alignment}, offset {tick}");
+                    return $"mid-cycle restore differs at alignment {alignment}, offset {tick}: {PostMachine.Describe(first: uninterrupted, second: machine.Snapshot())}";
                 }
                 machine.Restore(snapshot: middle);
             }
@@ -55,10 +67,10 @@ internal sealed class SnapshotStage : IPostStage<PostContext> {
             machine.RunCycles(masterTicks: 2);
             machine.RunCycles(masterTicks: 3);
             if (!expected.ContentEquals(other: machine.Snapshot()) || (expected.TakenAt != (initial.TakenAt + 5))) {
-                return PostStageOutcome.Fail(detail: "manual-step overshoot is not carried across restore and partitioned budgets");
+                return "manual-step overshoot is not carried across restore and partitioned budgets";
             }
         }
 
-        return PostStageOutcome.Pass(detail: "480 mid-instruction/master-phase restore and fork continuations; four alignments; partition and overshoot equivalence");
+        return null;
     }
 }

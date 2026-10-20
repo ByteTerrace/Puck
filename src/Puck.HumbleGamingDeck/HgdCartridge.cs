@@ -33,36 +33,61 @@ public sealed class HgdCartridge {
     /// <exception cref="NotSupportedException">The mapper, submapper, console, or board memory layout is unimplemented.</exception>
     public static HgdCartridge Load(ReadOnlySpan<byte> image) {
         var header = HgdCartridgeHeader.Parse(header: image);
+        var board = (header.Mapper, header.Submapper) switch {
+            (0, 0) => "NROM",
+            (1, 0) => "MMC1",
+            (4, 0) or (4, 4) => "MMC3",
+            _ => throw new NotSupportedException(message: $"Unimplemented mapper {header.Mapper} ({MapperName(mapper: header.Mapper)}), submapper {header.Submapper}."),
+        };
 
-        if ((header.Mapper != 0) || (header.Submapper != 0)) {
-            throw new NotSupportedException(message: $"Unimplemented mapper {header.Mapper} ({MapperName(mapper: header.Mapper)}), submapper {header.Submapper}.");
-        }
         if (header.ConsoleType != 0) {
             throw new NotSupportedException(message: $"Unimplemented console type {header.ConsoleType}, console detail {header.ConsoleDetail:X2}.");
         }
         var prgRam = (header.PrgRamSize + header.PrgNvRamSize);
         var chrRam = (header.ChrRamSize + header.ChrNvRamSize);
+        var layout = header.Mapper switch {
+            0 => (Fits: (
+                ((header.PrgRomSize == 16384) || (header.PrgRomSize == 32768)) &&
+                ((header.ChrRomSize == 0) ? (chrRam == 8192) : ((header.ChrRomSize == 8192) && (chrRam == 0))) &&
+                (prgRam <= 8192)
+            ), Needs: "16/32 KiB PRG, 8 KiB CHR ROM or RAM, and at most 8 KiB PRG-RAM"),
+            1 => (Fits: (
+                RomFits(size: header.PrgRomSize, unit: 16384, minimum: 32768, maximum: 524288) &&
+                ((header.ChrRomSize == 0) ? RamFits(size: chrRam, minimum: 8192, maximum: 131072) : (RomFits(size: header.ChrRomSize, unit: 8192, minimum: 8192, maximum: 131072) && (chrRam == 0))) &&
+                (prgRam <= 32768) && (header.Mirroring != HgdMirroring.FourScreen)
+            ), Needs: "32-512 KiB PRG in 16 KiB banks, up to 128 KiB CHR ROM or 8-128 KiB CHR-RAM, at most 32 KiB PRG-RAM, and no four-screen RAM"),
+            _ => (Fits: (
+                RomFits(size: header.PrgRomSize, unit: 8192, minimum: 32768, maximum: 524288) &&
+                ((header.ChrRomSize == 0) ? RamFits(size: chrRam, minimum: 8192, maximum: 262144) : (RomFits(size: header.ChrRomSize, unit: 8192, minimum: 8192, maximum: 262144) && (chrRam == 0))) &&
+                (prgRam <= 8192)
+            ), Needs: "32-512 KiB PRG in 8 KiB banks, up to 256 KiB CHR ROM or 8-256 KiB CHR-RAM, and at most 8 KiB PRG-RAM"),
+        };
 
-        if (((header.PrgRomSize != 16384) && (header.PrgRomSize != 32768)) ||
-            ((header.ChrRomSize != 0) && (header.ChrRomSize != 8192)) ||
-            ((header.ChrRomSize == 0) ? (chrRam != 8192) : (chrRam != 0)) ||
-            (prgRam > 8192) || ((prgRam & (prgRam - 1)) != 0) ||
-            (header.HasTrainer && (prgRam < 8192)) || (header.MiscellaneousRomCount != 0) || header.HasBusConflicts) {
-            throw new NotSupportedException(message: "Unimplemented NROM (mapper 0, submapper 0) memory layout: needs 16/32 KiB PRG, 8 KiB CHR ROM or RAM, and at most 8 KiB PRG-RAM; a trainer requires 8 KiB PRG-RAM.");
+        if (!layout.Fits || ((prgRam & (prgRam - 1)) != 0) || (header.HasTrainer && (prgRam < 8192)) ||
+            (header.MiscellaneousRomCount != 0) || header.HasBusConflicts) {
+            throw new NotSupportedException(message: $"Unimplemented {board} (mapper {header.Mapper}, submapper {header.Submapper}) memory layout: needs {layout.Needs}; a trainer requires 8 KiB PRG-RAM.");
         }
         var expected = (((16UL + (header.HasTrainer ? 512UL : 0UL)) + header.PrgRomSize) + header.ChrRomSize);
 
         if (((ulong)image.Length) != expected) {
-            throw new InvalidDataException(message: $"Damaged NROM payload: header describes {expected} bytes, image has {image.Length}; truncated or unexplained trailing data.");
+            throw new InvalidDataException(message: $"Damaged {board} payload: header describes {expected} bytes, image has {image.Length}; truncated or unexplained trailing data.");
         }
 
         return new HgdCartridge(image: image.ToArray(), header: header);
     }
-    /// <summary>Creates a board with private writable memory over this image.</summary>
-    /// <returns>The independent NROM board.</returns>
-    public IHgdMapper CreateMapper() {
-        return new HgdNrom(cartridge: this);
-    }
+    /// <summary>Creates the header's board with private writable memory over this image, at its power-on state.</summary>
+    /// <returns>The independent NROM, MMC1 or MMC3 board.</returns>
+    public IHgdMapper CreateMapper() =>
+        Header.Mapper switch {
+            1 => new HgdMmc1(cartridge: this),
+            4 => new HgdMmc3(cartridge: this),
+            _ => new HgdNrom(cartridge: this),
+        };
+
+    private static bool RomFits(UInt128 size, int unit, int minimum, int maximum) =>
+        ((size >= ((UInt128)minimum)) && (size <= ((UInt128)maximum)) && ((size % ((UInt128)unit)) == 0));
+    private static bool RamFits(int size, int minimum, int maximum) =>
+        ((size >= minimum) && (size <= maximum) && ((size & (size - 1)) == 0));
 
     private static string MapperName(int mapper) {
         return mapper switch {

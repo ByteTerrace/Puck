@@ -52,12 +52,12 @@ internal sealed class LoaderStage : IPostStage<PostContext> {
         } catch (InvalidDataException exception) when (exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Ambiguous")) {
         }
         image = PostMachine.CreateImage();
-        image[6] = 0x10;
+        image[6] = 0x20;
         try {
             _ = HgdCartridge.Load(image: image);
 
-            return PostStageOutcome.Fail(detail: "unimplemented MMC1 was accepted");
-        } catch (NotSupportedException exception) when (exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "MMC1")) {
+            return PostStageOutcome.Fail(detail: "unimplemented UxROM was accepted");
+        } catch (NotSupportedException exception) when (exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "UxROM")) {
         }
 
         return (CheckObjectMemoryPeek() ?? (CheckOverflowReads() ?? PostStageOutcome.Pass(detail: "NES 2.0 exponent sizes, iNES diagnostic, named board refusal, RAM mirrors, register open bus, OAM register peeks and overflow reads, NROM PRG/CHR memory")));

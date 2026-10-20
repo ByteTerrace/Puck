@@ -11,7 +11,7 @@ is particular to the Deck.
 `HumbleGamingDeckExtension` registers it; the World and the CLI compose it as a
 built-in, and the silo installs the forge as an extension. Its configuration,
 `puck.humble-gaming-deck.configuration.v1`, has one field, `content.path`: an
-iNES or NES 2.0 image, mounted as raw bytes, so no content provider registers
+iNES or NES 2.0 image on an NROM, MMC1 or MMC3 board, mounted as raw bytes, so no content provider registers
 with it and a machine's `contentFolder` offers every file it holds. The engine
 takes no options and no firmware: the cartridge starts through its reset vector
 with the default power-on profile. Its operations are `content.insert`,
@@ -70,7 +70,8 @@ whole state. `NativeFrameIndex` counts completed frames by the PPU's vertical
 blank, so it stays exact even though an odd frame is one dot shorter. A
 restore discards queued audio and restarts the presentation stream at its
 configured rate. The save file contains the cartridge's declared nonvolatile
-PRG RAM followed by its nonvolatile CHR RAM; volatile RAM is excluded. Normal
+PRG RAM followed by its nonvolatile CHR RAM, on every board; volatile RAM is
+excluded. Normal
 flushes write it atomically only when it has changed, and disposal forces a
 final flush.
 

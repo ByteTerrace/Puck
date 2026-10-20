@@ -26,7 +26,7 @@ wait-state behavior, scanline rendering, direct sound, bus arbitration,
 saves, replay, performance, and evidence.
 
 The Deck core covers the NTSC console: the RP2A03G CPU with its DMA unit and
-APU, the RP2C02G PPU, standard controllers, NROM, header-based cartridge loading,
+APU, the RP2C02G PPU, standard controllers, the NROM, MMC1 and MMC3 boards, header-based cartridge loading,
 and mid-instruction snapshots and forks. Its topic pages cover the CPU and
 master clock, picture processing, audio, input and DMA, hosting, and the
 verification battery.

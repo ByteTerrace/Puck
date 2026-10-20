@@ -76,6 +76,16 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   once in a `TransferState` (a Humble mapper's `TransferRegisters`). No file
   records the layout; a deliberate layout change raises `CurrentVersion` of
   `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced).
+- **Deck boards own offsets, not memory, and time from bus edges.** NROM,
+  MMC1 (`HgdMmc1`) and MMC3 (`HgdMmc3`) keep every RAM byte, the battery save's
+  layout and its snapshot order in one `HgdBoardMemory`; a new board does the
+  same. Board timing comes only from `IHgdMapper.ObserveM2` and
+  `ObservePpuAddress`: MMC1's consecutive-cycle write rule counts M2 falls, and
+  MMC3's counter clocks on a PPU A12 rise after three M2 falls with A12 low. A
+  board's laws live in `BoardLawTests`, and its fixture joins
+  `PostMachine.Fixtures`, which the determinism, fork and mid-instruction replay
+  stages all run. A Deck program that clears the CPU's I flag inhibits the APU
+  frame IRQ (`$4017 = $40`) first, or the shared IRQ line never drops.
 - **GBA multiplayer SIOCNT has an unmodeled ready line.** `AgbSerialController.PackSioControl`
   does not derive the SD/SI bits from cable-partner presence, and
   `LinkGameReplayStage` records how far a commercial link game gets without it.

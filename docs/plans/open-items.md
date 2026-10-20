@@ -212,7 +212,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] The CPU and the bus.
 - [x] A complete NTSC machine.
 - [ ] NTSC accuracy (in progress: AccuracyCoin reports each test's own result; 35 of 144 tests fail).
-- [ ] Common boards; regional hardware; long-tail boards; expansion audio.
+- [ ] Common boards (in progress: MMC1 and MMC3 are in; UxROM, CNROM, AxROM, MMC6, bus conflicts, the public board test ROMs and the co-simulation remain); regional hardware; long-tail boards; expansion audio.
 - [ ] World cabinets (in progress: the engine, its extension, port-naming routes and two shipped test cartridges are in; ordered operations while recording, replay receipts and the canary remain).
 - [ ] The Famicom Disk System; peripherals.
 
