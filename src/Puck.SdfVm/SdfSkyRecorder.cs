@@ -170,7 +170,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         var dispatchWidth = ((m_kernel == SdfKernel.Sky) ? fieldWidth : recording.Width);
         var dispatchHeight = ((m_kernel == SdfKernel.Sky) ? fieldHeight : recording.Height);
 
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((dispatchWidth + 7) / 8), groupCountY: ((dispatchHeight + 7) / 8), groupCountZ: 1);
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: dispatchWidth.CeilingDivide(divisor: 8u), groupCountY: dispatchHeight.CeilingDivide(divisor: 8u), groupCountZ: 1);
         m_recordedView = index;
         return RenderGraphPackageOutcome.Drew;
     }

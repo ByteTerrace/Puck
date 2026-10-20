@@ -19,6 +19,7 @@ uint4 sdfProgramWord(uint index) {
 }
 #ifdef SDF_DYNAMIC_TRANSFORMS
 #include "sdf-quaternion.hlsli"
+#include "../isa/sdf-isa.hlsli"
 #ifdef SDF_MESH_BAKE_POSES
 // The mesh bake samples a group through the poses its geometry hashed (SdfMeshPathBake), staged in the point table from
 // sdfBakePoseBase: the turn from world axes into the group's frame, then three rows a slot from sdfBakePoseFirst for
@@ -215,7 +216,6 @@ uint sdfInstanceCountClamped() {
 // Written at full double precision: each rounds to the SAME float32 the shorter literal did, so naming them is
 // bytecode-identical while the digits document the exact quantity.
 #define SDF_SQRT3     1.7320508075688772   // sqrt(3)
-#define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
 #define SDF_PI        3.141592653589793
 #define SDF_TAU       6.283185307179586    // 2*pi
 
@@ -225,9 +225,9 @@ uint sdfInstanceCountClamped() {
 // blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
 #define SDF_FAR_DISTANCE 1.0e9
 
-// Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — this
-// is the one the shader still applies itself.
-#define SDF_SMOOTH_RADIUS_MIN  0.0001   // the smooth blends' radius floor (the CHAMFER blends clamp against 0.0)
+// Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder); the one the
+// shader still applies itself, the smooth blends' radius floor SDF_SMOOTH_RADIUS_MIN, and the chamfer bevel's
+// SDF_SQRT_HALF are SdfProgram's, generated into sdf-isa.hlsli.
 
 // Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
 // a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.

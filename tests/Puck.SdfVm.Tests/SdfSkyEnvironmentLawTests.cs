@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Text.RegularExpressions;
 using Puck.SignedDistance;
 using Xunit;
 
@@ -142,17 +141,6 @@ public sealed partial class SdfSkyEnvironmentLawTests {
 
         Assert.InRange(actual: worst, high: HalfDisplayCode, low: 0f);
     }
-    [Fact]
-    public void TheKernelsMapIsTheReferencesSize() {
-        var header = File.ReadAllText(path: Path.Combine(
-            path1: RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory),
-            path2: "shade/sdf-sky-environment.hlsli"
-        ));
-
-        Assert.Equal(expected: SdfSkyEnvironment.Size.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), actual: SizePattern().Match(input: header).Groups[1].Value);
-        Assert.Equal(expected: SdfSkyEnvironment.CoefficientCount.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), actual: CountPattern().Match(input: header).Groups[1].Value);
-    }
-
     // A sky of the default look but its one gradient's stops.
     private static SdfSky Gradient((Vector3 Color, float Elevation)[] stops) {
         var sky = new SdfSky();
@@ -216,8 +204,4 @@ public sealed partial class SdfSkyEnvironmentLawTests {
             condition: ((MathF.Abs(x: actual.X) <= bound.X) && (MathF.Abs(x: actual.Y) <= bound.Y) && (MathF.Abs(x: actual.Z) <= bound.Z)),
             userMessage: $"{actual} exceeds {bound}."
         );
-    [GeneratedRegex(pattern: @"static const int SdfSkyEnvironmentSize = (\d+);")]
-    private static partial Regex SizePattern();
-    [GeneratedRegex(pattern: @"static const uint SdfSkyEnvironmentCoefficients = (\d+)u;")]
-    private static partial Regex CountPattern();
 }

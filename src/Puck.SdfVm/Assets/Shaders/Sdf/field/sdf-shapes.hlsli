@@ -640,10 +640,8 @@ float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge)
 
     return (taper + (bulge * pow(s, 0.65)));
 }
-// The general path's samples along t (a power of two, so every sample's parameter is exact) and its golden-section
-// rounds about the nearest sample. KEEP IN SYNC with SdfFieldEvaluator's SweepSamples and SweepRounds.
-static const uint SDF_SWEEP_SAMPLES = 32u;
-static const uint SDF_SWEEP_ROUNDS = 12u;
+// The general path's samples along t (SDF_SWEEP_SAMPLES, a power of two, so every sample's parameter is exact) and its
+// golden-section rounds about the nearest sample (SDF_SWEEP_ROUNDS) are SdfFieldEvaluator's, generated into sdf-isa.hlsli.
 // A strand's centre at t: the centreline point, orbited by strandOffset across the tangent at the phase the twist
 // reaches there from the strand's own phase.
 float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase) {

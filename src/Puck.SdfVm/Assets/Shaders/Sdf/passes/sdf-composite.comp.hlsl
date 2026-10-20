@@ -34,7 +34,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 color = litColor.rgb;
     bool geometryOnly = (passGroup.geometryOnly != 0u);
 
-    if ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost)) {
+    if ((passGroup.debugMode == 0u) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST)) {
         ViewportData view = sdfSkyPassView();
         float3 direction = sdfSkyPassDirection(view, id.xy);
         float3 origin = view.position.xyz;
@@ -95,7 +95,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
             if (geometryOnly) { color *= coverage; }
         }
-        if (passGroup.debugMode == DebugViewModeSkyCost) {
+        if (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) {
             // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.
             color = saturate(sdfSkyCost / float3(4.0, 64.0, 16.0));
         }

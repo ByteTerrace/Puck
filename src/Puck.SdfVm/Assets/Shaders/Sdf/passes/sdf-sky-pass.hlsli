@@ -118,7 +118,7 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
         return false;
     }
     base /= total;
-    if (passGroup.debugMode == DebugViewModeSkyCost) {
+    if (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) {
         sdfSkyCost += base;
         base = float3(0.0, 0.0, 0.0);
     }

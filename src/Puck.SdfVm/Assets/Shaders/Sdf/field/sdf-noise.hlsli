@@ -54,7 +54,7 @@ float sdfValueNoise3(float3 q, uint3 seed) {
 // its three hash streams so two consumers sharing a lattice (a material's wear, a volume's advection) read different
 // noise fields.
 uint3 sdfLatticeSeeds(uint seed) {
-    return uint3(seed, (seed ^ 0x9E3779B9u), (seed ^ 0x85EBCA77u));
+    return uint3(seed, (seed ^ SDF_NOISE_SEED_STREAM_Y), (seed ^ SDF_NOISE_SEED_STREAM_Z));
 }
 float sdfLatticeNoise3(float3 q, uint seed) {
     return sdfValueNoise3(q, sdfLatticeSeeds(seed));
@@ -130,7 +130,7 @@ float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out 
         [loop] for (int y = -1; y <= 1; y++) {
             [loop] for (int x = -1; x <= 1; x++) {
                 int3 offset = int3(x, y, z);
-                uint3 hash = sdfPcg3d(asuint(cell + offset) ^ uint3(seed, seed ^ 0x9E3779B9u, seed ^ 0x85EBCA77u));
+                uint3 hash = sdfPcg3d(asuint(cell + offset) ^ uint3(seed, seed ^ SDF_NOISE_SEED_STREAM_Y, seed ^ SDF_NOISE_SEED_STREAM_Z));
                 float3 feature = 0.5 + randomness * (float3(hash >> 16u) * (1.0 / 65536.0) - 0.5);
                 float3 delta = f - (float3(offset) + feature);
                 float squared = dot(delta, delta);

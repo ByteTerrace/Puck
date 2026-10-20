@@ -42,7 +42,7 @@ float4 sdfSkyLayerValue(SdfSkyLayer layer, uint index, float3 world) {
     SdfSkySample sample;
 
     sample.world = world;
-    sample.local = sdfSkyRotate(sky, layer.Rotation);
+    sample.local = rotatePointByQuaternion(sky, layer.Rotation);
     sample.tier = sdfSky[0].Quality;
     sample.layer = index;
 

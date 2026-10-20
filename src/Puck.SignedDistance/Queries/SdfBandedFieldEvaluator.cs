@@ -18,7 +18,7 @@ namespace Puck.SignedDistance.Queries;
 /// spends a separate sample budget on those bound steps. <see cref="Overlap"/> answers identically to the exact
 /// evaluator everywhere.</para>
 /// </remarks>
-public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
+public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator, ISdfFieldMarcher {
     // The smallest advance a bound sample can produce, in world units: the slack scaled to a safe advance, floored at
     // one tick. Sizes the bound budget of a march from its reach.
     private readonly FixedQ4816 m_boundStepFloor;
@@ -114,7 +114,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
             : (((int)steps) + 1)
         );
     }
-    private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
+    MarchOutcome ISdfFieldMarcher.March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
         var sampler = new BandedSampler(evaluator: this);
 
         return SdfFieldMarch.Run(
@@ -169,7 +169,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public bool LineOfSight(FixedPosition from, FixedPosition to) =>
-        SdfFieldMarch.LineOfSight(from: from, raycast: Raycast, to: to);
+        SdfFieldMarch.LineOfSight(from: from, marcher: this, to: to);
     /// <inheritdoc/>
     /// <remarks>Answers exactly what the exact evaluator answers: the bound decides only where its scaled value
     /// already clears the radius, which the exact value then clears too.</remarks>
@@ -202,25 +202,10 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
     /// <inheritdoc/>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
-        (March(
-            direction: dir,
-            hit: out hit,
-            maxDistance: maxDist,
-            origin: origin,
-            radius: FixedQ4816.Zero
-        ) != MarchOutcome.Miss);
+        SdfFieldMarch.Raycast(direction: dir, hit: out hit, marcher: this, maxDistance: maxDist, origin: origin);
     /// <inheritdoc/>
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
-        (March(
-            direction: dir,
-            hit: out hit,
-            maxDistance: maxDist,
-            origin: origin,
-            radius: FixedQ4816.Max(
-                x: radius,
-                y: FixedQ4816.Zero
-            )
-        ) != MarchOutcome.Miss);
+        SdfFieldMarch.SphereCast(direction: dir, hit: out hit, marcher: this, maxDistance: maxDist, origin: origin, radius: radius);
     /// <inheritdoc/>
     /// <remarks>Below <see cref="Band"/> the answer is the exact evaluator's; at or above it the answer is the grid's
     /// bound at the point, which is at most the exact value and never below the band, with the nearest corner's
@@ -261,46 +246,8 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
             position: position
         );
     /// <inheritdoc/>
-    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
-        groundY = FixedQ4816.Zero;
-
-        var probeRange = (probeUp + probeDown);
-
-        if (probeRange <= FixedQ4816.Zero) {
-            return false;
-        }
-
-        var top = (position + new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: probeUp,
-            Z: FixedQ4816.Zero
-        ));
-
-        if (March(
-            direction: new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: -FixedQ4816.One,
-                Z: FixedQ4816.Zero
-            ),
-            hit: out var hit,
-            maxDistance: probeRange,
-            origin: top,
-            radius: FixedQ4816.Zero
-        ) != MarchOutcome.Hit) {
-            return false;
-        }
-
-        if (!hit.Point.TryDelta(
-            delta: out var world,
-            origin: FixedPosition.Zero
-        )) {
-            return false;
-        }
-
-        groundY = world.Y;
-
-        return true;
-    }
+    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) =>
+        SdfFieldMarch.GroundHeight(groundY: out groundY, marcher: this, position: position, probeDown: probeDown, probeUp: probeUp);
 
     // The march sampler over the grid: a bound wherever TryBound admits one for the sweep radius, the exact field
     // everywhere else.

@@ -114,20 +114,20 @@ public readonly record struct SdfAirRay(SdfSkyBlock Block, Vector3 Origin, Vecto
 /// </summary>
 public static class SdfAir {
     /// <summary>The bit of the sky block's <see cref="SdfSkyBlock.AirFlags"/> set when the fog in-scatters its authored
-    /// colour rather than the sky. KEEP IN SYNC with <c>SdfAirFogColorAuthored</c> in <c>shade/sdf-atmosphere.hlsli</c>.</summary>
+    /// colour rather than the sky. SdfIsaHlsl generates it into the kernels as <c>SDF_AIR_FOG_COLOR_AUTHORED</c>, read by <c>shade/sdf-atmosphere.hlsli</c>.</summary>
     public const uint FogColorAuthored = 1u;
     /// <summary>The most light-casting bodies the haze and the bounded media scatter: the sky block's air lights.</summary>
     public const int MaxLights = 4;
     /// <summary>The magnitude of <c>x = directionY · length / falloff</c> below which <see cref="Share"/> takes its series:
     /// a ray parallel to a height medium's base has <c>x = 0</c>, where the closed form is zero over zero. The series'
-    /// first omitted term, <c>x³/24</c>, is under 5e-11 there. KEEP IN SYNC with <c>SdfAirSeriesLimit</c>.</summary>
+    /// first omitted term, <c>x³/24</c>, is under 5e-11 there. SdfIsaHlsl generates it into the kernels as <c>SDF_AIR_SERIES_LIMIT</c>.</summary>
     public const float SeriesLimit = 1e-3f;
     /// <summary>The largest exponent a height medium's density is raised by, far below its base: <c>e^60</c> is about
-    /// 1.1e26, well inside a float, and a depth that large lets no light through anyway. KEEP IN SYNC with
-    /// <c>SdfAirExponentLimit</c>.</summary>
+    /// 1.1e26, well inside a float, and a depth that large lets no light through anyway. SdfIsaHlsl generates it into the kernels as
+    /// <c>SDF_AIR_EXPONENT_LIMIT</c>.</summary>
     public const float ExponentLimit = 60f;
     /// <summary>The <c>x</c> below which a descending ray's depth folds its two exponentials into one, so neither
-    /// overflows alone. KEEP IN SYNC with <c>SdfAirSteepLimit</c>.</summary>
+    /// overflows alone. SdfIsaHlsl generates it into the kernels as <c>SDF_AIR_STEEP_LIMIT</c>.</summary>
     public const float SteepLimit = -20f;
 
     /// <summary>Returns <c>(1 − e^−x) / x</c>, the share of a segment's length an exponential-height density integrates to

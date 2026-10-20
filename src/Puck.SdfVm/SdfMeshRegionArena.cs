@@ -83,12 +83,12 @@ public sealed class SdfMeshRegionArena {
         }
 
         // The arena's words that no named mesh holds: meshes no list names any more.
-        var unnamed = ((m_end - (((long)m_drawCapacity) * SdfMeshRegion.DrawWords)) - placedNamedWords);
+        var unnamed = ((m_end - (((long)m_drawCapacity) * SdfMeshRecord.DrawWords)) - placedNamedWords);
         var relocate = ((draws.Count > m_drawCapacity) || ((unnamed > namedWords) && (unnamed > m_retainedSlackWords)));
 
         if (relocate) {
             m_drawCapacity = Math.Min(val1: SdfMeshRegion.MaxDraws, val2: Math.Max(val1: draws.Count, val2: Math.Max(val1: MinimumDrawCapacity, val2: (2 * m_drawCapacity))));
-            m_end = checked(m_drawCapacity * SdfMeshRegion.DrawWords);
+            m_end = checked(m_drawCapacity * SdfMeshRecord.DrawWords);
             m_placements.Clear();
         }
 
@@ -98,7 +98,7 @@ public sealed class SdfMeshRegionArena {
             var mesh = draw.Mesh;
             var words = SdfMeshRegion.WordsOf(mesh: mesh);
             var vertexWord = m_end;
-            var materialWord = checked(vertexWord + (mesh.Positions.Length * SdfMeshRegion.VertexWords));
+            var materialWord = checked(vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
             var indexWord = checked(materialWord + mesh.TriangleMaterials.Length);
             var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked(indexWord + mesh.Indices.Length));
 

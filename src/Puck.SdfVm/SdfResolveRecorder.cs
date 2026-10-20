@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -109,7 +110,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: recording.Width.CeilingDivide(divisor: 8u), groupCountY: recording.Height.CeilingDivide(divisor: 8u), groupCountZ: 1);
         return RenderGraphPackageOutcome.Drew;
     }
     public ulong? Signature(in Puck.Hosting.FrameContext context, Puck.Hosting.RenderGraphExternalReads? reads) => m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Resolve, temporal: m_temporal, context: in context);

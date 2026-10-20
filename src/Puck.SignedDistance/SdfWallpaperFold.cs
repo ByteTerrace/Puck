@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -248,8 +249,8 @@ public static class SdfWallpaperFold {
             var stretch = 0f;
 
             for (var index = 1; (index <= 65536); index++) {
-                var point = new Vector2(x: ((Fraction(value: (index * 0.7548777f)) * 6f) - 3f), y: ((Fraction(value: (index * 0.5698403f)) * 6f) - 3f));
-                var angle = (Fraction(value: (index * 0.6180340f)) * (2f * MathF.PI));
+                var point = new Vector2(x: ((VectorFunctions.Fract(x: (index * 0.7548777f)) * 6f) - 3f), y: ((VectorFunctions.Fract(x: (index * 0.5698403f)) * 6f) - 3f));
+                var angle = (VectorFunctions.Fract(x: (index * 0.6180340f)) * (2f * MathF.PI));
                 var step = (0.001f * new Vector2(x: MathF.Cos(x: angle), y: MathF.Sin(x: angle)));
                 var a = Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: point);
                 var b = Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: (point + step));
@@ -260,7 +261,5 @@ public static class SdfWallpaperFold {
         }
 
         return continuity;
-
-        static float Fraction(float value) => (value - MathF.Floor(x: value));
     }
 }

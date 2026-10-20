@@ -30,7 +30,7 @@ float3 worldEnvironmentReflection(float3 direction, float roughness) {
             continue;
         }
         puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
-        float4 value = sdfSkyPanelValue(sdfSkyPanelOf(layer), sdfSkyRotate(sky, layer.Rotation), roughness);
+        float4 value = sdfSkyPanelValue(sdfSkyPanelOf(layer), rotatePointByQuaternion(sky, layer.Rotation), roughness);
         float3 scale, offset;
         sdfSkyAffine(layer.Blend, value.rgb, value.a * mask, scale, offset);
         result = result * scale + offset;

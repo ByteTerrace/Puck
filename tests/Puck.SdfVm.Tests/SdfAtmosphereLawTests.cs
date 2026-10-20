@@ -61,14 +61,8 @@ public sealed partial class SdfAtmosphereLawTests {
     public void TheKernelsHeightMediumIsTheReferences() {
         var atmosphere = CodeOf(path: "shade/sdf-atmosphere.hlsli");
 
-        // The series a ray parallel to the base takes, and the bounds, carry the reference's constants.
-        Assert.Contains(actualString: atmosphere, expectedSubstring: "((abs(x) < SdfAirSeriesLimit) ? (1.0 - (x * (0.5 - (x / 6.0)))) : ((1.0 - exp(-x)) / x))");
-        Assert.Matches(actualString: atmosphere, expectedRegexPattern: $@"static const float SdfAirSeriesLimit = {SdfAir.SeriesLimit:0.0e+0};");
-        Assert.Matches(actualString: atmosphere, expectedRegexPattern: $@"static const float SdfAirExponentLimit = {SdfAir.ExponentLimit:0.0};");
-        Assert.Matches(actualString: atmosphere, expectedRegexPattern: $@"static const float SdfAirSteepLimit = {SdfAir.SteepLimit:0.0};");
-        Assert.Matches(actualString: atmosphere, expectedRegexPattern: $@"static const uint SdfAirMaxLights = {SdfAir.MaxLights}u;");
-        Assert.Matches(actualString: atmosphere, expectedRegexPattern: $@"static const uint SdfAirFogColorAuthored = {SdfAir.FogColorAuthored}u;");
-        Assert.Matches(expectedRegexPattern: $@"static const float SdfVolumeScatterAnisotropy = {SdfVolume.ScatterAnisotropy:0.0};", actualString: CodeOf(path: "shade/shade-volumes.hlsli"));
+        // The series a ray parallel to the base takes; its guards are SdfAir's, generated into sdf-isa.hlsli.
+        Assert.Contains(actualString: atmosphere, expectedSubstring: "((abs(x) < SDF_AIR_SERIES_LIMIT) ? (1.0 - (x * (0.5 - (x / 6.0)))) : ((1.0 - exp(-x)) / x))");
     }
     [Fact]
     public void ARayCrossingTheMediumsSurfacePassesThroughEachSideInOrder() {

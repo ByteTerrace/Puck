@@ -28,7 +28,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost))) {
+    if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST))) {
         float3 direction = cameraRayDirection(sdfSkyPassView(), (float2(id.xy) + 0.5) / float2(passGroup.skyFieldExtent));
         uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
         float3 base;
@@ -36,7 +36,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
 
         sdfSkyFieldRuns(direction, base, scales, offsets);
-        skyBaseRW[id.xy] = float4(((passGroup.debugMode == DebugViewModeSkyCost) ? sdfSkyCost : base), 1.0);
+        skyBaseRW[id.xy] = float4(((passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) ? sdfSkyCost : base), 1.0);
         puckCountDetail(0u, 0u, 1u, 0u, 0u, 0u);
         if (upper > 0u) {
             skyUpper0RW[id.xy] = float4(scales[0], offsets[0].x);

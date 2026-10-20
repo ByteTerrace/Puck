@@ -27,7 +27,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
     /// <summary>The words one output pixel holds in the history surface: its identity, its ray distance with its gathered
-    /// weight, and its transport's two words. KEEP IN SYNC with <c>SdfHistorySurfaceWords</c> in
+    /// weight, and its transport's two words. SdfIsaHlsl generates it into the kernels as <c>SDF_HISTORY_SURFACE_WORDS</c>, read by
     /// <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
     public const uint HistorySurfaceWords = 4;
 

@@ -70,7 +70,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
     );
     /// <summary>Gets the widest radius <see cref="Overlap"/> and <see cref="SphereCast"/> accept against this
     /// artifact — <see cref="MaxRadiusCells"/> of its own cells, saturating at the scalar carrier.</summary>
-    public FixedQ4816 MaxRadius => FixedQ4816.FromRawBits(value: ClampToLong(value: (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw)));
+    public FixedQ4816 MaxRadius => FixedQ4816.FromRawBits(value: long.CreateSaturating(value: (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw)));
 
     // Saturating raw addition: a sum overflows exactly when both addends share a sign the sum does not.
     private static long AddRawSaturating(long left, long right) {
@@ -274,20 +274,6 @@ public sealed class BakedWorldQuery : IWorldQuery {
             );
         }
     }
-    private static int ClampIndex(Int128 value, int maximum) =>
-        ((value < Int128.Zero)
-            ? 0
-            : ((value > maximum)
-                ? maximum
-                : ((int)value)
-        ));
-    private static long ClampToLong(Int128 value) =>
-        ((value < long.MinValue)
-            ? long.MinValue
-            : ((value > long.MaxValue)
-                ? long.MaxValue
-                : ((long)value)
-        ));
     private long ColumnMaxXRaw(int column) => GridCoordinate(
         index: (column + 1),
         originRaw: m_artifact.OriginXRaw
@@ -300,51 +286,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
     // exact whenever the quotient is exact, saturating at the carrier. Every slab entry takes the floor and every
     // slab exit the ceiling, which is what keeps truncation from closing an interval the segment really enters.
     private static long DivideRawDirected(long numeratorRaw, long denominatorRaw, bool roundUp) {
-        var highBits = (numeratorRaw >> 47);
+        var numerator = (((Int128)numeratorRaw) << FixedQ4816.FractionBitCount);
 
-        // A numerator narrower than 48 signed bits — every coordinate difference a room-scale grid can produce —
-        // shifts into a long without loss, and a 64-bit divide is an order of magnitude cheaper than a 128-bit one.
-        if (
-            (highBits == 0L) ||
-            (highBits == -1L)
-        ) {
-            var narrowNumerator = (numeratorRaw << 16);
-            var narrowQuotient = (narrowNumerator / denominatorRaw);
-            var narrowRemainder = (narrowNumerator % denominatorRaw);
-
-            if (narrowRemainder != 0L) {
-                var narrowPositive = ((narrowRemainder > 0L) == (denominatorRaw > 0L));
-
-                if (roundUp) {
-                    if (narrowPositive) {
-                        narrowQuotient++;
-                    }
-                } else if (!narrowPositive) {
-                    narrowQuotient--;
-                }
-            }
-
-            return narrowQuotient;
-        }
-
-        var numerator = ((((Int128)numeratorRaw)) << 16);
-        var denominator = ((Int128)denominatorRaw);
-        var quotient = (numerator / denominator);
-        var remainder = (numerator % denominator);
-
-        if (remainder != Int128.Zero) {
-            var positive = ((numerator > Int128.Zero) == (denominatorRaw > 0L));
-
-            if (roundUp) {
-                if (positive) {
-                    quotient += Int128.One;
-                }
-            } else if (!positive) {
-                quotient -= Int128.One;
-            }
-        }
-
-        return ClampToLong(value: quotient);
+        return long.CreateSaturating(value: (roundUp
+            ? FixedDirectedRounding.CeilingQuotient(denominator: denominatorRaw, numerator: numerator)
+            : FixedDirectedRounding.FloorQuotient(denominator: denominatorRaw, numerator: numerator)
+        ));
     }
     private long GridCoordinate(long originRaw, int index) =>
         ((long)(((Int128)originRaw) + (((Int128)index) * m_artifact.CellSizeRaw)));
@@ -495,7 +442,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         originRaw: m_artifact.OriginZRaw
     );
     private static long ScaleRawSaturating(long valueRaw, long scaleRaw) =>
-        ClampToLong(value: (((((Int128)valueRaw)) * scaleRaw) >> 16));
+        long.CreateSaturating(value: (((((Int128)valueRaw)) * scaleRaw) >> 16));
     private void ScanColumn(in Sweep sweep, int column, long windowEnterRaw, long windowExitRaw, ref Contact contact) {
         // Both coordinates are linear in the sweep parameter, so the Z the sweep can reach inside this column is
         // bounded by its values at the window's two ends, dilated by the radius. One tick of slack absorbs the
@@ -700,14 +647,16 @@ public sealed class BakedWorldQuery : IWorldQuery {
             return false;
         }
 
-        first = ClampIndex(
-            maximum: (axisCells - 1),
+        first = ((int)Int128.Clamp(
+            max: (axisCells - 1),
+            min: Int128.Zero,
             value: lowIndex
-        );
-        last = ClampIndex(
-            maximum: (axisCells - 1),
+        ));
+        last = ((int)Int128.Clamp(
+            max: (axisCells - 1),
+            min: Int128.Zero,
             value: highIndex
-        );
+        ));
 
         return true;
     }

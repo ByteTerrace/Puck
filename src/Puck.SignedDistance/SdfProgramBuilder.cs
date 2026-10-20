@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -330,28 +331,10 @@ public sealed partial class SdfProgramBuilder {
             : (recolor.ReachPerUnit * raw)
         );
     }
-    // Host-side unorm2x16 pack of an atlas UV: 16-bit u in the low half, v in the high half, matching sdfGlyphUnpackUv
-    // (KEEP IN SYNC). An integer pack reinterpreted as float bits, so it is bit-identical across both DXC backends.
-    private static float PackUv(Vector2 uv) {
-        var u = ((uint)Math.Clamp(
-            value: ((int)MathF.Round(x: (MathF.Max(
-                x: 0f,
-                y: uv.X
-            ) * 65535f))),
-            min: 0,
-            max: 65535
-        ));
-        var v = ((uint)Math.Clamp(
-            value: ((int)MathF.Round(x: (MathF.Max(
-                x: 0f,
-                y: uv.Y
-            ) * 65535f))),
-            min: 0,
-            max: 65535
-        ));
-
-        return BitConverter.UInt32BitsToSingle(value: u | (v << 16));
-    }
+    // The atlas UV's unorm2x16 word (VectorFunctions.PackUnorm2x16, which sdfGlyphUnpackUv decodes) reinterpreted as
+    // float bits, so it is bit-identical across both DXC backends.
+    private static float PackUv(Vector2 uv) =>
+        BitConverter.UInt32BitsToSingle(value: VectorFunctions.PackUnorm2x16(uv: uv));
     // Pairs the active positional recolor with the shape it recolors, producing the (base material, max delta, scope)
     // WINDOW the Build()-time gate judges once the palette is final. The scope recorded is the INNERMOST one open at
     // this shape's emission — the same one ApplyPositionalMaterialScopeClamp resolves against — because that is the
@@ -446,9 +429,7 @@ public sealed partial class SdfProgramBuilder {
         var unit = Vector3.Normalize(value: value);
 
         if (
-            !float.IsFinite(f: unit.X) ||
-            !float.IsFinite(f: unit.Y) ||
-            !float.IsFinite(f: unit.Z)
+            !VectorFunctions.IsFinite(vector: unit)
         ) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must have a non-zero length (it is normalized host-side).",
@@ -466,8 +447,7 @@ public sealed partial class SdfProgramBuilder {
     }
     private static void RequireFinite(Vector2 value, string paramName, string subject) {
         if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y)
+            !VectorFunctions.IsFinite(vector: value)
         ) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must be finite on every component.",
@@ -555,13 +535,10 @@ public sealed partial class SdfProgramBuilder {
                     x: MathF.Abs(x: halfWidth),
                     y: MathF.Abs(x: halfHeight)
                 ),
-                y: (((MathF.Abs(x: halfWidth) + MathF.Abs(x: halfHeight)) - chamfer) * SqrtHalf)
+                y: (((MathF.Abs(x: halfWidth) + MathF.Abs(x: halfHeight)) - chamfer) * SdfProgram.SqrtHalf)
             )
         );
     }
-
-    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/field/sdf-program.hlsli and SdfProgram's private copy.
-    private const float SqrtHalf = 0.70710678f;
 
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
     /// never past the profile's own inradius, and — for <see cref="SdfLift.Extrude"/> — never past the lift
@@ -877,8 +854,7 @@ public sealed partial class SdfProgramBuilder {
     }
     private static void RequireNonNegative(Vector2 value, string paramName, string subject) {
         if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
+            !VectorFunctions.IsFinite(vector: value) ||
             (value.X < 0f) ||
             (value.Y < 0f)
         ) {
@@ -890,9 +866,7 @@ public sealed partial class SdfProgramBuilder {
     }
     private static void RequireNonNegative(Vector3 value, string paramName, string subject) {
         if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z) ||
+            !VectorFunctions.IsFinite(vector: value) ||
             (value.X < 0f) ||
             (value.Y < 0f) ||
             (value.Z < 0f)
@@ -969,9 +943,7 @@ public sealed partial class SdfProgramBuilder {
     private static void RequireRotation(Quaternion value, string paramName, string subject) {
         if (
             !float.IsFinite(f: value.W) ||
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z)
+            !VectorFunctions.IsFinite(rotation: value)
         ) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must be finite on every component.",
@@ -983,9 +955,7 @@ public sealed partial class SdfProgramBuilder {
 
         if (
             !float.IsFinite(f: unit.W) ||
-            !float.IsFinite(f: unit.X) ||
-            !float.IsFinite(f: unit.Y) ||
-            !float.IsFinite(f: unit.Z)
+            !VectorFunctions.IsFinite(rotation: unit)
         ) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must have a non-zero length (it is normalized host-side).",

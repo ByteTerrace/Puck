@@ -54,9 +54,6 @@ public sealed class SdfTemporalHistory {
     /// <summary>Gets whether the preceding render belongs to this epoch, independently of whether jitter is enabled.</summary>
     public bool HasPreviousView { get; private set; }
 
-    /// <summary>The number of samples in one convergence period.</summary>
-    public const uint Period = 8;
-
     /// <summary>Gets the epoch the latest render was prepared in.</summary>
     public SdfTemporalEpoch Epoch => m_epoch;
     /// <summary>Gets the number of preceding samples in the current epoch.</summary>
@@ -68,7 +65,7 @@ public sealed class SdfTemporalHistory {
     /// <param name="index">The accumulated sample index, wrapped to the period.</param>
     /// <returns>The render-pixel ray offset.</returns>
     public static Vector2 Sample(uint index) {
-        index %= Period;
+        index %= SdfTemporalSamples.Period;
         return ((index == 0) ? Vector2.Zero : new Vector2(x: (RadicalInverse(index: index, radix: 2) - 0.5f), y: (RadicalInverse(index: index, radix: 3) - 0.5f)));
     }
     /// <summary>Returns whether a pass in an epoch reads the previous view and the previous transform tables: the
@@ -147,7 +144,7 @@ public sealed class SdfTemporalHistory {
     /// <summary>Returns whether a render taken now would feed the instance's passes the temporal inputs its latest
     /// completed render fed them, so that render's output may stand: the same jitter, and, where the pass reads motion
     /// (<see cref="ReadsMotion"/>), the same previous view and previous poses. A temporally resolved view instead stands
-    /// once its history holds one <see cref="Period"/> of samples and it has rendered a period since its inputs last
+    /// once its history holds one <see cref="SdfTemporalSamples.Period"/> of samples and it has rendered a period since its inputs last
     /// changed (<see cref="Changed"/>): its converged output stands, whatever jitter would come next.</summary>
     /// <param name="epoch">The epoch a render taken now would be prepared in.</param>
     /// <param name="previousPoses">The pose revision the residency's previous transform tables would hold for that
@@ -161,7 +158,7 @@ public sealed class SdfTemporalHistory {
         var continues = Continues(epoch: epoch, previousPoses: previousPoses);
 
         if (epoch.Temporal && Sampling(epoch: epoch)) {
-            return (continues && (Frames >= Period) && (m_settled >= Period));
+            return (continues && (Frames >= SdfTemporalSamples.Period) && (m_settled >= SdfTemporalSamples.Period));
         }
         if (JitterAt(epoch: epoch, frames: (continues ? Frames : 0U)) != m_standing.Jitter) {
             return false;

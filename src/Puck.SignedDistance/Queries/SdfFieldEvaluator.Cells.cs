@@ -22,8 +22,8 @@ public sealed partial class SdfFieldEvaluator {
                 for (var x = -1; (x <= 1); x++) {
                     var h = Pcg3dLatticeNoise.Pcg3d(
                         x: unchecked((uint)(cx + x)) ^ seed,
-                        y: unchecked((uint)(cy + y)) ^ (seed ^ 0x9E3779B9u),
-                        z: unchecked((uint)(cz + z)) ^ (seed ^ 0x85EBCA77u)
+                        y: unchecked((uint)(cy + y)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamY),
+                        z: unchecked((uint)(cz + z)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamZ)
                     );
                     var delta = (new FixedVector3(
                         X: ((FixedQ4816.FromInteger(value: x) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.X >> 16)) - Half))),

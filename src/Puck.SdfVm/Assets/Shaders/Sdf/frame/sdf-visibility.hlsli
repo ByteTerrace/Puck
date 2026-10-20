@@ -45,8 +45,6 @@ static const uint SdfVisibilityFrameSlotWord = 4u;
 static const uint SdfVisibilityNormalWord = 5u;
 static const uint SdfVisibilityShadingWord = 6u;
 static const uint SdfVisibilityShadowWord = 7u;
-static const float SdfVisibilityNormalScale = 32767.0;
-static const uint SdfVisibilityZeroNormal = 0x80008000u;
 // The largest finite half: curvature past it saturates rather than becoming infinite.
 static const float SdfVisibilityHalfMax = 65504.0;
 
@@ -88,21 +86,21 @@ float4 sdfFrameLanes(int frameSlot) {
 // other; the zero normal a miss carries is a sentinel no unit normal encodes to.
 uint sdfVisibilityPackNormal(float3 normal) {
     if (dot(normal, normal) == 0.0) {
-        return SdfVisibilityZeroNormal;
+        return SDF_VISIBILITY_ZERO_NORMAL;
     }
 
-    int2 q = (int2)round(clamp(sdfOctEncode(normal), -1.0, 1.0) * SdfVisibilityNormalScale);
+    int2 q = (int2)round(clamp(sdfOctEncode(normal), -1.0, 1.0) * SDF_VISIBILITY_NORMAL_SCALE);
 
     return (((uint)q.x & 0xFFFFu) | (((uint)q.y & 0xFFFFu) << 16u));
 }
 float3 sdfVisibilityUnpackNormal(uint packed) {
-    if (packed == SdfVisibilityZeroNormal) {
+    if (packed == SDF_VISIBILITY_ZERO_NORMAL) {
         return float3(0.0, 0.0, 0.0);
     }
 
     int2 q = int2((((int)(packed << 16u)) >> 16), (((int)packed) >> 16));
 
-    return sdfOctDecode(float2(q) / SdfVisibilityNormalScale);
+    return sdfOctDecode(float2(q) / SDF_VISIBILITY_NORMAL_SCALE);
 }
 SdfVisibility sdfLoadVisibility(uint record) {
     SdfVisibility visibility;

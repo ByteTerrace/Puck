@@ -20,7 +20,7 @@
 #define SKY_KINDS_CLOUDS_HLSLI
 
 float sdfSkyCloudThickness(SdfSkyClouds clouds, SdfSkyLayer layer, float2 p, float threshold, uint octaves) {
-    float warp = sdfPeriodicFbm2((p + clouds.ShearOffset), (clouds.Seed ^ 0x9E3779B9u), octaves);
+    float warp = sdfPeriodicFbm2((p + clouds.ShearOffset), (clouds.Seed ^ SDF_NOISE_SEED_STREAM_Y), octaves);
     float density = sdfPeriodicFbm2((p + (clouds.Warp * (warp - 0.5))), clouds.Seed, octaves);
 
     sdfCountSky(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);
@@ -65,7 +65,7 @@ float4 sdfSkyCloudsLayer(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkySample sa
 
     // The light in the layer frame, then in the layer's turned frame (the rotation the layer point took), so the lighting
     // follows the wind.
-    float3 sun = sdfSkyRotate(sdfSkyFrameDirection(clouds.LightDirection), layer.Rotation);
+    float3 sun = rotatePointByQuaternion(sdfSkyFrameDirection(clouds.LightDirection), layer.Rotation);
     float2 sunTurned = float2(((sun.x * cosAngle) - (sun.z * sinAngle)), ((sun.x * sinAngle) + (sun.z * cosAngle)));
     float thicknessX = sdfSkyCloudThickness(clouds, layer, (p + float2(clouds.NormalTap, 0.0)), threshold, octaves);
     float thicknessY = sdfSkyCloudThickness(clouds, layer, (p + float2(0.0, clouds.NormalTap)), threshold, octaves);

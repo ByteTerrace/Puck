@@ -384,12 +384,12 @@ public sealed class SdfMeshPathBakeLawTests {
 
         var skin = (int)words[32];
 
-        Assert.Equal(expected: SdfMeshRegion.SkinFlag, actual: (words[20] & SdfMeshRegion.SkinFlag));
+        Assert.Equal(expected: SdfMeshRecord.SkinFlag, actual: (words[20] & SdfMeshRecord.SkinFlag));
         Assert.Equal(expected: 1u, actual: words[skin]);
         Assert.Equal(expected: 1u, actual: words[skin + 1]);
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: member.Orientation.W), actual: words[skin + 8]);
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            Assert.Equal(expected: ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]), actual: words[skin + 1 + SdfMeshRegion.MemberWords + vertex]);
+            Assert.Equal(expected: ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]), actual: words[skin + 1 + SdfMeshRecord.MemberWords + vertex]);
         }
 
         // Another run loads the group from the store with its members.

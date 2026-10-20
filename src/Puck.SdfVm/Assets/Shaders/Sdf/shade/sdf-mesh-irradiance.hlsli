@@ -1,13 +1,11 @@
 // The baked-mesh path's indirect light (views only): the irradiance volume SdfMeshIrradiance traces on the CPU against the
-// static meshes, read at a shaded point by the eight probes about it. It performs no field query. The probe layout, the key,
-// the toroidal slot, the normal bias and the probe weights are SdfMeshIrradiance's: KEEP IN SYNC with
-// src/Puck.SdfVm/SdfMeshIrradiance.cs (ProbeWords, KeyOf, SlotOf, WrittenFlag, NormalBias, Incoming).
+// static meshes, read at a shaded point by the eight probes about it. It performs no field query. The probe record and the
+// normal bias are SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-isa.hlsli (SDF_MESH_IRRADIANCE_*); the
+// key, the toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's KeyOf, SlotOf and Incoming, the CPU
+// trace's read of the same volume.
 #ifndef SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
-
-static const uint SdfMeshIrradianceProbeWords = 13u;
-static const uint SdfMeshIrradianceWritten = 0x40000000u;
-static const float SdfMeshIrradianceNormalBias = 0.35;
+#include "../isa/sdf-isa.hlsli"
 
 bool sdfMeshIrradianceEnabled() {
     return (passGroup.meshIrradianceVolume.x != 0u);
@@ -64,7 +62,7 @@ void sdfMeshIrradianceAt(float3 position, float3 normal, out float skyVisibility
         return;
     }
 
-    float3 lattice = (((position + (normal * (SdfMeshIrradianceNormalBias * spacing))) / spacing) - 0.5);
+    float3 lattice = (((position + (normal * (SDF_MESH_IRRADIANCE_NORMAL_BIAS * spacing))) / spacing) - 0.5);
     float3 base = floor(lattice);
     float3 fraction = (lattice - base);
     int3 first = int3(base);
@@ -80,9 +78,9 @@ void sdfMeshIrradianceAt(float3 position, float3 normal, out float skyVisibility
             continue;
         }
 
-        uint address = (sdfMeshIrradianceSlot(cell, dims) * SdfMeshIrradianceProbeWords);
+        uint address = (sdfMeshIrradianceSlot(cell, dims) * SDF_MESH_IRRADIANCE_PROBE_WORDS);
 
-        if (((address + SdfMeshIrradianceProbeWords) > count) || (sdfMeshIrradiance[address] != (sdfMeshIrradianceKey(cell) | SdfMeshIrradianceWritten))) {
+        if (((address + SDF_MESH_IRRADIANCE_PROBE_WORDS) > count) || (sdfMeshIrradiance[address] != (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN))) {
             continue;
         }
 

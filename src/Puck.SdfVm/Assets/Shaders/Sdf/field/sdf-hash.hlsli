@@ -3,27 +3,23 @@
 // so any pass may include it.
 #ifndef SDF_HASH_HLSLI
 #define SDF_HASH_HLSLI
+#include "../isa/sdf-isa.hlsli"
 
 // Every hashed DECISION in the ISA is integer-only on purpose: DXC lowers multiply/add/xor/shift bit-identically to
 // both SPIR-V and DXIL, while float codegen drifts +-1 LSB between the two. A cell index, a noise lattice, and a
 // dither pattern therefore come out the SAME on Vulkan and Direct3D.
 
-// Knuth's LCG step, the mixing core of PCG3D.
-#define SDF_PCG_MULTIPLIER 1664525u
-#define SDF_PCG_INCREMENT  1013904223u
-// Decorrelation multipliers for deriving independent hash streams from one seed (the golden-ratio and Murmur3 finalizer
-// constants). SDF_HASH_TUMBLE keys the CellJitter tumble stream apart from the position and material streams.
-#define SDF_HASH_STREAM_A 0x9E3779B9u
-#define SDF_HASH_STREAM_B 0x85EBCA6Bu
-#define SDF_HASH_TUMBLE   0x27D4EB2Fu
+// PCG3D's LCG step (SDF_PCG_MULTIPLIER, SDF_PCG_INCREMENT), the decorrelation multipliers that derive independent hash
+// streams from one seed (SDF_HASH_STREAM_A and _B, the golden-ratio and Murmur3 finalizer constants; SDF_HASH_TUMBLE keys
+// the CellJitter tumble stream apart from the position and material streams), the 3D value noise's seed streams
+// (SDF_NOISE_SEED_STREAM_Y, _Z) and the R2 lattice's increments (SDF_R2_ALPHA1, _2) are Pcg3dLatticeNoise's and
+// LowDiscrepancy's (Puck.Maths), generated into sdf-isa.hlsli.
 // 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
 // rounds UP to 2^32, so the product can be exactly 1.0. Every consumer is written to tolerate that.
 #define SDF_INV_2POW32 (1.0 / 4294967296.0)
-// The R2 low-discrepancy lattice: alpha_i = round(2^32 / phi2^i) for the plastic number
-// phi2 = 1.32471795724474602596 (the real root of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the
-// fractional part of the additive recurrence — so the lattice is exact in fixed point.
-#define SDF_R2_ALPHA1 3242174889u
-#define SDF_R2_ALPHA2 2447445414u
+// The R2 low-discrepancy lattice's SDF_R2_ALPHA1/2 are round(2^32 / phi2^i) for the plastic number phi2 (the real root
+// of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the fractional part of the additive recurrence, so the
+// lattice is exact in fixed point.
 // The R3 siblings: alpha_i = round(2^32 / phi3^i) for phi3 = 1.2207440846057596 (the real root of x^4 = x + 1).
 // SDF_OP_CELL_JITTER's Blue flavor rotates these three across its axes so the offset components decorrelate.
 #define SDF_R3_ALPHA1 3518319155u

@@ -106,7 +106,7 @@ public sealed partial class SdfFieldEvaluator {
         public static ChainCertificate Unknown => default;
 
         public void Translate(in CompiledInstruction instruction) {
-            var (x, y, z) = (Units(value: instruction.Data0X), Units(value: instruction.Data0Y), Units(value: instruction.Data0Z));
+            var (x, y, z) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
             var length = Length(x: x, y: y, z: z);
 
             OriginX += ((((M00 * x) + (M01 * y)) + (M02 * z)) * Scale);
@@ -117,7 +117,7 @@ public sealed partial class SdfFieldEvaluator {
             BoxDA += (BoxDB * length);
         }
         public void Rotate(in CompiledInstruction instruction) {
-            var (x, y, z, w) = (Units(value: instruction.Data0X), Units(value: instruction.Data0Y), Units(value: instruction.Data0Z), Units(value: instruction.Data0W));
+            var (x, y, z, w) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z), ((double)instruction.Data0W));
             var vectorSquared = (((x * x) + (y * y)) + (z * z));
             var normSquared = (vectorSquared + (w * w));
 
@@ -195,7 +195,7 @@ public sealed partial class SdfFieldEvaluator {
                 return;
             }
 
-            var scale = Units(value: instruction.Data0W);
+            var scale = ((double)instruction.Data0W);
 
             var (sx, sy, sz) = (((double)Math.Sign(value: instruction.Data0X.Value)), ((double)Math.Sign(value: instruction.Data0Y.Value)), ((double)Math.Sign(value: instruction.Data0Z.Value)));
 
@@ -345,7 +345,7 @@ public sealed partial class SdfFieldEvaluator {
 
         switch ((SdfShapeType)instruction.Shape) {
             case SdfShapeType.Sphere: {
-                    var radius = Math.Abs(value: Units(value: instruction.Data0X));
+                    var radius = Math.Abs(value: ((double)instruction.Data0X));
 
                     return Separable(radius: radius);
                 }
@@ -360,20 +360,20 @@ public sealed partial class SdfFieldEvaluator {
                         return null;
                     }
 
-                    return Separable(radius: Length(x: Units(value: instruction.Data0X), y: Units(value: instruction.Data0Y), z: Units(value: instruction.Data0Z)));
+                    return Separable(radius: Length(x: ((double)instruction.Data0X), y: ((double)instruction.Data0Y), z: ((double)instruction.Data0Z)));
                 }
             case SdfShapeType.Cylinder: {
                     if ((instruction.Data0X < FixedQ4816.Zero) || (instruction.Data0Y < FixedQ4816.Zero)) {
                         return null;
                     }
 
-                    return Separable(radius: (Length(x: Units(value: instruction.Data0X), y: Units(value: instruction.Data0Y), z: 0.0) + Math.Abs(value: Units(value: instruction.Data1W))));
+                    return Separable(radius: (Length(x: ((double)instruction.Data0X), y: ((double)instruction.Data0Y), z: 0.0) + Math.Abs(value: ((double)instruction.Data1W))));
                 }
             case SdfShapeType.Torus: {
-                    return Separable(radius: (Math.Abs(value: Units(value: instruction.Data0X)) + Math.Abs(value: Units(value: instruction.Data0Y))));
+                    return Separable(radius: (Math.Abs(value: ((double)instruction.Data0X)) + Math.Abs(value: ((double)instruction.Data0Y))));
                 }
             case SdfShapeType.Capsule: {
-                    var (x, y, z) = (Units(value: instruction.Data0X), Units(value: instruction.Data0Y), Units(value: instruction.Data0Z));
+                    var (x, y, z) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
 
                     // The rounded parameter is clamped into [0, 1], so the point it picks lies on the segment and the
                     // length to it is at least the distance to the segment; the interval rule reads h's range, so no box.
@@ -387,7 +387,7 @@ public sealed partial class SdfFieldEvaluator {
                         CenterY: (0.5 * y),
                         CenterZ: (0.5 * z),
                         PointSlack: Slack,
-                        Radius: ((0.5 * Length(x: x, y: y, z: z)) + Math.Abs(value: Units(value: instruction.Data0W)))
+                        Radius: ((0.5 * Length(x: x, y: y, z: z)) + Math.Abs(value: ((double)instruction.Data0W)))
                     );
                 }
             case SdfShapeType.Trapezoid: {
@@ -430,7 +430,7 @@ public sealed partial class SdfFieldEvaluator {
     // at most 6√2·ω₂ + |r2 − r1| (cb's components each read the box twice through the projection, ca's x the half-width's
     // range where Q crosses y = 0) and the other at most 2(ρ0 + 2ω₂ + h); the extrusion at most doubles it and adds 4ω.
     private static ShapeSphere? TryTrapezoidSphere(in CompiledInstruction instruction) {
-        var (r1, r2, h) = (Units(value: instruction.Data0X), Units(value: instruction.Data0Y), Units(value: instruction.Data0Z));
+        var (r1, r2, h) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
         var (kx, ky) = ((r2 - r1), (2.0 * h));
         var slantSquared = ((kx * kx) + (ky * ky));
 
@@ -446,8 +446,8 @@ public sealed partial class SdfFieldEvaluator {
         var widest = Math.Max(val1: r1, val2: r2);
         var profile = Length(x: widest, y: h, z: 0.0);
         var inner = Length(x: (2.0 * widest), y: h, z: 0.0);
-        var lift = Math.Abs(value: Units(value: instruction.Data0W));
-        var rounding = Math.Abs(value: Units(value: instruction.Data1W));
+        var lift = Math.Abs(value: ((double)instruction.Data0W));
+        var rounding = Math.Abs(value: ((double)instruction.Data1W));
         var extruded = (instruction.Data1Y > Half);
         var margin = (((2.0 * inner) + h) + (16.0 * RawUnit));
         var flatWidth = Math.Max(val1: Math.Abs(value: kx), val2: (2.0 * (inner + h)));
@@ -475,7 +475,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return (widest * RawUnit);
     }
-    private static double Units(FixedQ4816 value) => (value.Value * RawUnit);
     private static double Length(double x, double y, double z) => Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
 
     // A box a walk asks about, with what every box test reads of it: its doubled centre in raws, so a half raw stays
@@ -631,7 +630,7 @@ public sealed partial class SdfFieldEvaluator {
         private static ulong Scaled(ulong magnitude, ulong factor) => ((ulong)((((UInt128)magnitude) * factor) >> 32));
         private static ulong ScaledUp(ulong magnitude, ulong factor) => ((ulong)(((((UInt128)magnitude) * factor) + uint.MaxValue) >> 32));
         private static long SpreadRaws(ulong factor, long omega) => ((long)Math.Min(val1: ScaledUp(factor: factor, magnitude: ((ulong)omega)), val2: ((ulong)(long.MaxValue / 4L))));
-        private static long Clamp(Int128 value) => ((value <= (long.MinValue / 2L)) ? (long.MinValue / 2L) : ((value >= (long.MaxValue / 2L)) ? (long.MaxValue / 2L) : ((long)value)));
+        private static long Clamp(Int128 value) => ((long)Int128.Clamp(max: (long.MaxValue / 2L), min: (long.MinValue / 2L), value: value));
         private static ulong GainBits(double gain) => ((ulong)Math.Floor(d: ((gain * (1.0 - DoublePadding)) * Q32)));
         private static ulong InverseGainBits(double gain) => (((ulong)Math.Ceiling(a: (((1.0 + DoublePadding) / gain) * Q32))) + 1UL);
         private static ulong FactorUp(double factor) => (((ulong)Math.Ceiling(a: ((factor * (1.0 + DoublePadding)) * Q32))) + 1UL);

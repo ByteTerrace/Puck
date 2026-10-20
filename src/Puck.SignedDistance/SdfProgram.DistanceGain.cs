@@ -8,8 +8,9 @@ public sealed partial class SdfProgram {
     // The relative evaluation error a gauge's computed norm is allowed before its certificate stops holding. The
     // influence contract already requires the evaluated zero set to stay inside the reach the stamper charges.
     private const float GaugeEvaluationMargin = (1f - (1f / 1024f));
-    // The smooth blends' radius floor, SDF_SMOOTH_RADIUS_MIN in field/sdf-program.hlsli.
-    private const float SmoothRadiusMin = 0.0001f;
+    /// <summary>The smooth blends' radius floor; the chamfer blends clamp against zero instead. <c>SdfIsaHlsl</c> writes it
+    /// into the kernels as <c>SDF_SMOOTH_RADIUS_MIN</c>, and the query evaluator derives its fixed-point copy from it.</summary>
+    public const float SmoothRadiusMin = 0.0001f;
 
     /// <summary>The part entry's distance-gain bits, below <see cref="PartDistanceGainShift"/>: <c>k</c> encodes
     /// <c>k * PartDistanceGainUnit</c>, and the full mask encodes exactly 1.</summary>

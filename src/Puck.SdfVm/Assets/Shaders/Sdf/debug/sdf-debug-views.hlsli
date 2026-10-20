@@ -1,5 +1,5 @@
 // The debug views: each numbered mode replaces the view's color with a diagnostic of the pixel's surface sample. Mode 0
-// and every mode from DebugViewModeCount on keep the final shading. KEEP IN SYNC with DebugViewModes.Names
+// and every mode from SDF_DEBUG_VIEW_COUNT on keep the final shading. The mode indices are DebugViewModes.Names's, generated as SDF_DEBUG_VIEW_*
 // (src/Puck.SdfVm/DebugViewModes.cs), whose order is the pass block's debugMode.
 #ifndef DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
@@ -24,7 +24,7 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = float3(depth, depth, depth);
             break;
         }
-        case DebugViewModeNormals: { // surface normals
+        case SDF_DEBUG_VIEW_NORMALS: { // surface normals
             viewColor = (s.hit ? ((s.normal * 0.5) + 0.5) : float3(0.0, 0.0, 0.0));
             break;
         }
@@ -36,11 +36,11 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = (s.hit ? materialPalette(s.material) : float3(0.0, 0.0, 0.0));
             break;
         }
-        case DebugViewModeVisibility: { // the kind of the pixel's visibility record: background dark blue, mesh orange
+        case SDF_DEBUG_VIEW_VISIBILITY: { // the kind of the pixel's visibility record: background dark blue, mesh orange
             viewColor = (s.hit ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28));
             break;
         }
-        case DebugViewModeMotion: { // red/green encode previous minus current pixel position at 1/32 per pixel; blue is one
+        case SDF_DEBUG_VIEW_MOTION: { // red/green encode previous minus current pixel position at 1/32 per pixel; blue is one
                                     // for valid reprojection. A still surface is (0.5, 0.5, 1), invalid history is black.
             float2 previousPixel;
             float previousT;
@@ -49,11 +49,11 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = (valid ? float3(saturate(0.5 + ((previousPixel - (float2(p.pixel) + 0.5)) / 32.0)), 1.0) : 0.0);
             break;
         }
-        case DebugViewModeAo: { // the filtered ambient occlusion views shades with
+        case SDF_DEBUG_VIEW_AO: { // the filtered ambient occlusion views shades with
             viewColor = (s.hit ? s.ambient.xxx : float3(0.0, 0.0, 0.0));
             break;
         }
-        case DebugViewModeShadow: { // the filtered key-light shadow visibility views shades with
+        case SDF_DEBUG_VIEW_SHADOW: { // the filtered key-light shadow visibility views shades with
             viewColor = (s.hit ? s.shadows.xxx : float3(0.0, 0.0, 0.0));
             break;
         }

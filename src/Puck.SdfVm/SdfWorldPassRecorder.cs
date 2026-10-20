@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Puck.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -545,11 +546,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         var (x, y) = m_part switch {
             SdfWorldPackage.Parts.Mask => ((uint)SdfWorldPackage.MeshBakeBatch, 1u),
-            SdfWorldPackage.Parts.Bake => (((uint)(m_bakeSlots[recording.Slot].Batch!.Samples + 63) / 64u), 1u),
+            SdfWorldPackage.Parts.Bake => (((uint)m_bakeSlots[recording.Slot].Batch!.Samples).CeilingDivide(divisor: 64u), 1u),
             // One invocation a texel of the pyramid's first level, half the extent rounded up.
-            SdfWorldPackage.Parts.Pyramid => (((((recording.Width + 1u) / 2u) + 7u) / 8u), ((((recording.Height + 1u) / 2u) + 7u) / 8u)),
-            _ => (((recording.Width + (SdfVisibility.GroupEdgePixels - 1)) / SdfVisibility.GroupEdgePixels),
-                ((recording.Height + (SdfVisibility.GroupEdgePixels - 1)) / SdfVisibility.GroupEdgePixels)),
+            SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
+            _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
         };
 
         recorder.Dispatch(

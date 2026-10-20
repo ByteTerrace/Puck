@@ -10,7 +10,7 @@
 
 // Each row's sums: the nine coefficients' three channels, then the weights.
 #define SDF_SKY_REDUCE_SUMS 28
-groupshared float sdfSkyReduce[SDF_SKY_REDUCE_SUMS][SdfSkyEnvironmentSize];
+groupshared float sdfSkyReduce[SDF_SKY_REDUCE_SUMS][SDF_SKY_ENVIRONMENT_SIZE];
 // Each sum's total over the rows.
 groupshared float sdfSkyReduced[SDF_SKY_REDUCE_SUMS];
 
@@ -22,14 +22,14 @@ void CSMain(uint3 id : SV_GroupThreadID) {
     [unroll] for (uint sum = 0u; sum < (uint)SDF_SKY_REDUCE_SUMS; sum++) {
         sums[sum] = 0.0;
     }
-    [loop] for (uint column = 0u; column < (uint)SdfSkyEnvironmentSize; column++) {
+    [loop] for (uint column = 0u; column < (uint)SDF_SKY_ENVIRONMENT_SIZE; column++) {
         float3 direction = sdfSkyEnvironmentDirection(uint2(column, row));
         float weight = sdfSkyEnvironmentSolidAngle(direction);
-        float3 color = sdfSkyEnvironmentUnpack(sdfSkyEnvironment[((row * (uint)SdfSkyEnvironmentSize) + column)]) - sdfSkyEnvironmentUnpack(sdfSkyEnvironment[0]);
+        float3 color = sdfSkyEnvironmentUnpack(sdfSkyEnvironment[((row * (uint)SDF_SKY_ENVIRONMENT_SIZE) + column)]) - sdfSkyEnvironmentUnpack(sdfSkyEnvironment[0]);
         float basis[9];
 
         sdfSkyEnvironmentBasis(direction, basis);
-        [unroll] for (uint k = 0u; k < SdfSkyEnvironmentCoefficients; k++) {
+        [unroll] for (uint k = 0u; k < SDF_SKY_ENVIRONMENT_COEFFICIENTS; k++) {
             float3 term = ((weight * basis[k]) * color);
 
             sums[(k * 3u)] += term.r;
@@ -45,13 +45,13 @@ void CSMain(uint3 id : SV_GroupThreadID) {
     if (row < (uint)SDF_SKY_REDUCE_SUMS) {
         float total = 0.0;
 
-        [loop] for (uint added = 0u; added < (uint)SdfSkyEnvironmentSize; added++) {
+        [loop] for (uint added = 0u; added < (uint)SDF_SKY_ENVIRONMENT_SIZE; added++) {
             total += sdfSkyReduce[row][added];
         }
         sdfSkyReduced[row] = total;
     }
     GroupMemoryBarrierWithGroupSync();
-    if (row < SdfSkyEnvironmentCoefficients) {
+    if (row < SDF_SKY_ENVIRONMENT_COEFFICIENTS) {
         float normalization = (12.566370614359172 / sdfSkyReduced[(SDF_SKY_REDUCE_SUMS - 1)]);
 
         sdfSkyCoefficientsRW[row] = float4((sdfSkyReduced[(row * 3u)] * normalization), (sdfSkyReduced[((row * 3u) + 1u)] * normalization), (sdfSkyReduced[((row * 3u) + 2u)] * normalization), 0.0);

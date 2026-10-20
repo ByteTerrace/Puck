@@ -9,10 +9,9 @@
 #include "../field/sdf-noise.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 #include "sdf-atmosphere.hlsli"
-// The table's capacity in volumes. KEEP IN SYNC with SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
-static const uint SdfVolumeCount = 64u;
-// The phase anisotropy a medium scatters the bodies' light by. KEEP IN SYNC with SdfVolume.ScatterAnisotropy.
-static const float SdfVolumeScatterAnisotropy = 0.3;
+#include "../isa/sdf-isa.hlsli"
+// The table's capacity in volumes is SDF_MAX_VOLUMES (SdfProgramBuilder.MaxVolumes) and the phase anisotropy a medium
+// scatters the bodies' light by SDF_VOLUME_SCATTER_ANISOTROPY (SdfVolume.ScatterAnisotropy).
 struct SdfVolumeData {
     float3 position;
     int dynamicSlot;
@@ -214,11 +213,11 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
     float spanEnd = (skyShare ? farDistance : surfaceDistance);
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
-    uint previousIndex = SdfVolumeCount;
-    [loop] for (uint rank = 0u; rank < SdfVolumeCount; rank++) {
-        uint selected = SdfVolumeCount;
+    uint previousIndex = SDF_MAX_VOLUMES;
+    [loop] for (uint rank = 0u; rank < SDF_MAX_VOLUMES; rank++) {
+        uint selected = SDF_MAX_VOLUMES;
         float selectedNear = -3.402823e+38;
-        [loop] for (uint index = 0u; index < SdfVolumeCount; index++) {
+        [loop] for (uint index = 0u; index < SDF_MAX_VOLUMES; index++) {
             SdfVolumeData v = sdfLoadVolume(index);
             // PackVolumes writes a contiguous prefix and zeroes every trailing bound.
             if (all(v.halfExtent <= 0.0)) break;
@@ -228,12 +227,12 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
             if (min(interval.y, spanEnd) <= max(interval.x, nearDistance)) continue;
             bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
             bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
-            if (beforeCursor && (selected == SdfVolumeCount || nearerChoice)) {
+            if (beforeCursor && (selected == SDF_MAX_VOLUMES || nearerChoice)) {
                 selected = index;
                 selectedNear = interval.x;
             }
         }
-        if (selected == SdfVolumeCount) break;
+        if (selected == SDF_MAX_VOLUMES) break;
         SdfVolumeData v = sdfLoadVolume(selected);
         float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
         float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
@@ -242,7 +241,7 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
         float skyEnd = min(interval.y, farDistance);
         float surfaceEnd = min(interval.y, surfaceDistance);
         v.intensity *= sdfVolumeIntensityScale(v);
-        float3 bodies = ((v.scatter > 0.0) ? (v.scatter * sdfAirBodies(rayDirection, SdfVolumeScatterAnisotropy)) : float3(0.0, 0.0, 0.0));
+        float3 bodies = ((v.scatter > 0.0) ? (v.scatter * sdfAirBodies(rayDirection, SDF_VOLUME_SCATTER_ANISOTROPY)) : float3(0.0, 0.0, 0.0));
         float3 radiance = float3(0.0, 0.0, 0.0);
         float transmission = 1.0;
         if (skyShare) {

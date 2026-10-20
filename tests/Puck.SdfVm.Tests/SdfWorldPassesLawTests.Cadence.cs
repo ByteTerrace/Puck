@@ -153,7 +153,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.Stood());
         rig.SourceFrame.Lights.Set(index: 0, light: rig.SourceFrame.Lights[0] with { Color = new Vector3(x: 0.3f, y: 0.5f, z: 0.7f) });
         rig.SourceFrame = rig.SourceFrame with { };
-        for (var sample = 0; (sample < SdfTemporalHistory.Period); sample++) {
+        for (var sample = 0; (sample < SdfTemporalSamples.Period); sample++) {
             rig.Produce();
             Assert.False(condition: rig.Stood(), userMessage: $"lighting sample {sample}");
             Assert.Contains(SdfWorldPackage.Resolve, Executed(work: CadenceWork(rig: rig)));
