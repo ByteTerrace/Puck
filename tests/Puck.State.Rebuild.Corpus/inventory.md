@@ -23,7 +23,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `if` | 0 | 1 |  |
 | `paintField` | 0 | 0 |  |
 | `planarImpulse` | 0 | 0 |  |
-| `pose` | 0 | 0 |  |
+| `pose` | 1 | 0 | `debug` |
 | `poseCell` | 0 | 0 |  |
 | `pushState` | 0 | 0 |  |
 | `release` | 0 | 0 |  |
@@ -33,9 +33,9 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `rewindGroup` | 0 | 0 |  |
 | `save` | 0 | 0 |  |
 | `scaleVerticalVelocity` | 0 | 0 |  |
-| `scheduleState` | 1 | 1 | `avatars/moth` |
+| `scheduleState` | 2 | 1 | `avatars/moth` |
 | `setIdentityFact` | 0 | 0 |  |
-| `setState` | 7 | 8 | `avatars/moth` |
+| `setState` | 9 | 8 | `avatars/moth` |
 | `setVerticalVelocity` | 0 | 0 |  |
 | `startTimer` | 0 | 0 |  |
 | `transaction` | 0 | 1 |  |
@@ -47,9 +47,9 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `all` | 2 | 1 | `avatars/moth` |
-| `any` | 0 | 0 |  |
-| `compareState` | 6 | 7 | `avatars/moth` |
+| `all` | 5 | 1 | `avatars/moth` |
+| `any` | 1 | 0 | `avatars/moth` |
+| `compareState` | 14 | 7 | `avatars/moth`, `debug` |
 | `compareValue` | 0 | 1 |  |
 | `held` | 0 | 0 |  |
 | `not` | 0 | 1 |  |
@@ -93,7 +93,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `advance` | 0 | 2 |  |
 | `cycle` | 0 | 0 |  |
 | `draw` | 1 | 0 | `avatars/moth` |
-| `dynamics` | 2 | 0 | `avatars/moth` |
+| `dynamics` | 3 | 0 | `avatars/moth` |
 | `evicts` | 0 | 4 |  |
 | `inverse` | 0 | 0 |  |
 | `knowledge` | 0 | 0 |  |
@@ -124,60 +124,65 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `each` | 12 | 1 | `avatars/moth` |
-| `fact` | 2 | 0 | `avatars/moth` |
-| `tick` | 3 | 0 | `avatars/moth` |
+| `bodies` | 1 | 0 | `debug` |
+| `bodyPosition` | 1 | 0 | `debug` |
+| `bodyState` | 4 | 0 | `avatars/moth` |
+| `each` | 18 | 1 | `avatars/moth`, `debug` |
+| `fact` | 3 | 0 | `avatars/moth` |
+| `tick` | 4 | 0 | `avatars/moth` |
 
 ## Syntax nodes
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
 | `AddCellStatementNode` | 0 | 1 |  |
-| `AndPredicateNode` | 2 | 1 | `avatars/moth` |
-| `ArgumentNode` | 352 | 53 | `avatars/moth`, `debug`, `garden`, `skies` |
-| `ArrayExpressionNode` | 1157 | 16 | `avatars/moth`, `debug`, `garden`, `skies` |
-| `BinaryExpressionNode` | 5 | 1 | `avatars/moth` |
-| `BlockNode` | 381 | 34 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
-| `CallExpressionNode` | 159 | 8 | `avatars/moth`, `debug`, `garden`, `skies` |
+| `AndPredicateNode` | 5 | 1 | `avatars/moth` |
+| `ArgumentNode` | 842 | 53 | `avatars/moth`, `debug`, `garden`, `shapes`, `skies`, `studio` |
+| `ArrayExpressionNode` | 2686 | 16 | `avatars/moth`, `controls`, `debug`, `garden`, `shapes` and 2 more |
+| `BinaryExpressionNode` | 14 | 1 | `avatars/moth`, `debug`, `shapes` |
+| `BlockNode` | 1015 | 34 | `avatars/moth`, `controls`, `debug`, `garden`, `quality` and 4 more |
+| `CallExpressionNode` | 482 | 8 | `avatars/moth`, `debug`, `garden`, `shapes`, `skies`, `studio` |
 | `ColorExpressionNode` | 0 | 2 |  |
-| `ComparisonPredicateNode` | 6 | 8 | `avatars/moth` |
+| `ComparisonPredicateNode` | 14 | 8 | `avatars/moth`, `debug` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 5 | 6 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
+| `DocumentNode` | 9 | 6 | `avatars/moth`, `controls`, `debug`, `garden`, `quality` and 4 more |
 | `EmbeddedBlockNode` | 0 | 1 |  |
-| `ExpressionStatementNode` | 23 | 1 | `avatars/moth`, `debug` |
+| `ExpressionStatementNode` | 139 | 1 | `avatars/moth`, `debug`, `shapes` |
 | `FlagStatementNode` | 6 | 1 | `avatars/moth`, `debug`, `garden` |
-| `ForStatementNode` | 3 | 0 | `avatars/moth` |
-| `IdentifierExpressionNode` | 503 | 31 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
+| `ForStatementNode` | 5 | 0 | `avatars/moth`, `debug`, `shapes` |
+| `IdentifierExpressionNode` | 901 | 31 | `avatars/moth`, `controls`, `debug`, `garden`, `quality` and 3 more |
 | `IfStatementNode` | 0 | 1 |  |
-| `ImportNode` | 2 | 2 | `avatars/moth`, `debug` |
-| `IndexExpressionNode` | 7 | 2 | `avatars/moth` |
-| `InterpolatedStringNode` | 3 | 0 | `avatars/moth` |
-| `LetNode` | 42 | 8 | `avatars/moth`, `debug`, `garden` |
-| `LiteralExpressionNode` | 5013 | 173 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
+| `ImportNode` | 8 | 2 | `avatars/moth`, `debug`, `garden` |
+| `IndexExpressionNode` | 8 | 2 | `avatars/moth` |
+| `InterpolatedStringNode` | 5 | 0 | `avatars/moth`, `debug`, `shapes` |
+| `LambdaExpressionNode` | 2 | 0 | `debug`, `studio` |
+| `LetNode` | 86 | 8 | `avatars/moth`, `controls`, `debug`, `garden`, `shapes`, `studio` |
+| `LiteralExpressionNode` | 12313 | 173 | `avatars/moth`, `controls`, `debug`, `garden`, `quality` and 4 more |
 | `LocalStatementNode` | 0 | 1 |  |
 | `NotPredicateNode` | 0 | 1 |  |
-| `ObjectExpressionNode` | 355 | 15 | `avatars/moth`, `debug`, `garden`, `skies` |
-| `OperandExpressionNode` | 21 | 39 | `avatars/moth` |
+| `ObjectExpressionNode` | 1038 | 15 | `avatars/moth`, `controls`, `debug`, `garden`, `shapes` and 2 more |
+| `OperandExpressionNode` | 64 | 39 | `avatars/moth`, `debug` |
 | `OptionBlockNode` | 0 | 1 |  |
-| `PropertyNode` | 3196 | 115 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
+| `OrPredicateNode` | 1 | 0 | `avatars/moth` |
+| `PropertyNode` | 7925 | 115 | `avatars/moth`, `controls`, `debug`, `garden`, `quality` and 4 more |
 | `RangeExpressionNode` | 0 | 3 |  |
-| `RhsOperandNode` | 7 | 8 | `avatars/moth` |
+| `RhsOperandNode` | 9 | 8 | `avatars/moth` |
 | `RhsTextNode` | 0 | 1 |  |
-| `RowRefNode` | 8 | 10 | `avatars/moth` |
-| `RuleBlockNode` | 4 | 6 | `avatars/moth` |
-| `ScheduleStatementNode` | 1 | 1 | `avatars/moth` |
+| `RowRefNode` | 11 | 10 | `avatars/moth` |
+| `RuleBlockNode` | 7 | 6 | `avatars/moth`, `debug` |
+| `ScheduleStatementNode` | 2 | 1 | `avatars/moth` |
 | `ScoreStatementNode` | 0 | 1 |  |
-| `SetCellStatementNode` | 7 | 8 | `avatars/moth` |
-| `StateCellEntryNode` | 2 | 23 | `avatars/moth` |
+| `SetCellStatementNode` | 9 | 8 | `avatars/moth` |
+| `StateCellEntryNode` | 41 | 23 | `avatars/moth`, `controls` |
 | `StateGridDeclarationNode` | 0 | 2 |  |
 | `StateModifierNode` | 0 | 26 |  |
 | `StatePileDeclarationNode` | 0 | 1 |  |
 | `StatePileTokenNode` | 0 | 3 |  |
 | `StateSlotDeclarationNode` | 0 | 6 |  |
-| `StateTableDeclarationNode` | 2 | 12 | `avatars/moth` |
-| `TemplateNode` | 15 | 1 | `avatars/moth`, `debug`, `skies` |
-| `TemplateParameterNode` | 28 | 3 | `avatars/moth`, `debug`, `skies` |
+| `StateTableDeclarationNode` | 6 | 12 | `avatars/moth`, `controls` |
+| `TemplateNode` | 29 | 1 | `avatars/moth`, `debug`, `shapes`, `skies`, `studio` |
+| `TemplateParameterNode` | 34 | 3 | `avatars/moth`, `debug`, `shapes`, `skies` |
 | `TransactionStatementNode` | 0 | 1 |  |
 | `TransformStatementNode` | 0 | 5 |  |
-| `UnaryExpressionNode` | 13 | 0 | `avatars/moth` |
-| `WhenStatementNode` | 4 | 6 | `avatars/moth` |
+| `UnaryExpressionNode` | 17 | 0 | `avatars/moth` |
+| `WhenStatementNode` | 7 | 6 | `avatars/moth`, `debug` |
