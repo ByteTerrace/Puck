@@ -304,7 +304,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         var mapped = placement;
 
         foreach (var stage in path) {
-            var yaw = FixedQ4816.FromDouble(value: (mapped.YawDegrees * (Math.PI / 180.0)));
+            var yaw = FixedQ4816.FromDegrees(degrees: mapped.YawDegrees);
             var forward = FixedQuaternion.FromAxisAngle(
                 axis: new FixedVector3(
                     X: FixedQ4816.Zero,
@@ -330,10 +330,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 source: stage.Neighbour,
                 destination: stage.Source
             ).ToVector3(),
-                YawDegrees = ((float)(((double)FixedQ4816.Atan2(
+                YawDegrees = ((float)double.RadiansToDegrees(radians: ((double)FixedQ4816.Atan2(
                 y: mappedForward.X,
                 x: mappedForward.Z
-            )) * (180.0 / Math.PI))),
+            )))),
             };
         }
         return mapped;

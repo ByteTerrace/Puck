@@ -144,9 +144,9 @@ public static class WorldPlacementFrameCompilation {
     /// <param name="degrees">Yaw in degrees.</param>
     /// <returns>The rotated vector at the document boundary.</returns>
     public static Vector3 RotateY(Vector3 vector, float degrees) {
-        // The same degrees-to-fixed-radians yaw about the Y axis WorldColliderSet and WorldPlacementAttachment use for
-        // a placement's yaw, kept once here so a chain of composed rotations reads identically to a single one.
-        var angle = FixedQ4816.FromDouble(value: (degrees * (Math.PI / 180.0)));
+        // The placement yaw every fixed-point reader takes (FixedQ4816.FromDegrees, one rounding of the exact
+        // radians), so a chain of composed rotations reads identically to a single one.
+        var angle = FixedQ4816.FromDegrees(degrees: degrees);
         var rotation = FixedQuaternion.FromAxisAngle(
             angle: angle,
             axis: FixedVector3.UnitY

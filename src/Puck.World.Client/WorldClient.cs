@@ -1160,7 +1160,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var register = m_definition.TargetRegisters[registerIndex];
         var halfAngle = register.MaximumHalfAngleDegrees;
         var range = FixedQ4816.FromDouble(value: register.MaximumRange);
-        var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngle * (Math.PI / 180.0))));
+        var minimumDot = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: halfAngle));
         var origin = FixedVector3.FromVector3(value: m_currentPosition[sourceBody]);
         var forward = FixedVector3.FromVector3(value: Vector3.Transform(
             value: -Vector3.UnitZ,
