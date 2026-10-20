@@ -261,7 +261,11 @@ to step along it.
   `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
   box and sphere stretches as the sphere slides away from the pose it baked in.
   Pause or scrub `galleryClock` and the group bakes again at the held pose
-  half a second later (`world.wait bakes 30`, then capture); compare against
+  half a second later (`world.wait 30`, `world.wait bakes 60`, then capture).
+  The pause is a `world.row.set`, a document edit whose new program bakes every
+  group at the pose of its frame anyway; a scrub after it (`world.state.cell.set
+  galleryClock $value 1.3`) changes state alone, so only the settle rebake moves
+  the seam (`sdf.mesh-settle.queued` and `done` count it). Compare against
   `motion-state-blend` at x = 29 with `galleryInputs probe` at the same offset.
   `world.counters sdf.mesh-settle` read twice while the clock runs shows
   `moving` climbing and `queued` still.
