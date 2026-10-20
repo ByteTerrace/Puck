@@ -1,6 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.Overlays;
 using Puck.World.Client;
 
@@ -237,7 +237,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         // Converted once, here, so the authored seconds never turn into ticks inside the per-frame decision.
         state.Grace.BeginGesture(graceTicks: BindingWheelGeometry.SelectionGraceTicks(
             seconds: wheel.Style.SelectionGraceSeconds,
-            ticksPerSecond: EngineTicks.PerSecond
+            ticksPerSecond: FixedTickConversion.TicksPerSecond
         ));
         state.ActiveRing = wheel.Style.InitialRing;
         state.AxisExcursionRing = -1;

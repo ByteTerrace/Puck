@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -80,8 +80,8 @@ public static partial class WorldDefinitionValidator {
                 ticks: out var ticks
             )) {
                 errors.Add(item: (((ticks == 0UL) || !double.IsFinite(d: period))
-                    ? $"{path}.periodSeconds must be finite and at least one engine tick (1/{EngineTicks.PerSecond} s)."
-                    : $"{path}.periodSeconds {period} is not a whole number of engine ticks (1/{EngineTicks.PerSecond} s); the nearest is {(ticks / ((double)EngineTicks.PerSecond))} s."));
+                    ? $"{path}.periodSeconds must be finite and at least one engine tick (1/{FixedTickConversion.TicksPerSecond} s)."
+                    : $"{path}.periodSeconds {period} is not a whole number of engine ticks (1/{FixedTickConversion.TicksPerSecond} s); the nearest is {(ticks / ((double)FixedTickConversion.TicksPerSecond))} s."));
 
                 continue;
             }

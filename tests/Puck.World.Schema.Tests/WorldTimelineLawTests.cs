@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -74,7 +75,7 @@ public sealed class WorldTimelineLawTests {
         var clock = new WorldClock(Name: "day", PeriodSeconds: 1200d, SpanSeconds: 86400d, StartSeconds: 21600d);
         var period = WorldClocks.PeriodTicks(clock: clock);
 
-        Assert.Equal(actual: period, expected: (1200UL * EngineTicks.PerSecond));
+        Assert.Equal(actual: period, expected: (1200UL * FixedTickConversion.TicksPerSecond));
         Assert.Equal(expected: (period / 4UL), actual: WorldClocks.StartTicks(clock: clock));
         // Six hours into a twenty-four hour span at tick zero, then a whole period later past 2^32 ticks.
         Assert.Equal(expected: 0.25d, actual: WorldClocks.Phase(clock: clock, tick: new PresentedTick(Fraction: 0d, Whole: 0UL)));

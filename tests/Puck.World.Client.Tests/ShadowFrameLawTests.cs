@@ -2,6 +2,7 @@ using System.Numerics;
 
 using Puck.Assets.Documents;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 
@@ -43,7 +44,7 @@ public sealed class ShadowFrameLawTests {
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
-        var crossing = (EngineTicks.PerSecond / 4UL);
+        var crossing = (FixedTickConversion.TicksPerSecond / 4UL);
 
         mirror.Advance(engineTick: crossing, tick: 1);
         mirror.Advance(engineTick: (crossing + 8), tick: 2);
@@ -81,7 +82,7 @@ public sealed class ShadowFrameLawTests {
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
-        var crossing = (EngineTicks.PerSecond / 4UL);
+        var crossing = (FixedTickConversion.TicksPerSecond / 4UL);
 
         mirror.Advance(engineTick: crossing, tick: 1);
         mirror.Advance(engineTick: (crossing + 16), tick: 2);
@@ -132,9 +133,9 @@ public sealed class ShadowFrameLawTests {
 
         Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
         mirror.Apply(fraction: 0f);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 2UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 2UL), tick: 1UL);
 
-        Assert.Equal(expected: "rising", actual: Assert.Single(collection: Slots(resolver: resolver, tick: (EngineTicks.PerSecond / 2UL))).Candidate.Name);
+        Assert.Equal(expected: "rising", actual: Assert.Single(collection: Slots(resolver: resolver, tick: (FixedTickConversion.TicksPerSecond / 2UL))).Candidate.Name);
         mirror.Apply(fraction: 0.25f);
         Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
         mirror.Apply(fraction: 1f);
@@ -152,11 +153,11 @@ public sealed class ShadowFrameLawTests {
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
         mirror.Apply(fraction: 0f);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 2UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 2UL), tick: 1UL);
 
         Assert.Equal(expected: new Vector4(w: 1f, x: 0f, y: 0f, z: 0f), actual: mirror.Color(color: color, fallback: Vector4.One));
         Assert.Equal(expected: Vector4.One, actual: mirror.Color(color: color, fallback: Vector4.Zero, delivered: true));
-        Assert.Equal(expected: "brightening", actual: Assert.Single(collection: Slots(resolver: resolver, tick: (EngineTicks.PerSecond / 2UL))).Candidate.Name);
+        Assert.Equal(expected: "brightening", actual: Assert.Single(collection: Slots(resolver: resolver, tick: (FixedTickConversion.TicksPerSecond / 2UL))).Candidate.Name);
         mirror.Apply(fraction: 1f);
         Assert.Equal(expected: 0, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
     }
@@ -184,15 +185,15 @@ public sealed class ShadowFrameLawTests {
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
         mirror.Apply(fraction: 0f);
-        mirror.Advance(engineTick: EngineTicks.PerSecond, tick: 1UL);
+        mirror.Advance(engineTick: FixedTickConversion.TicksPerSecond, tick: 1UL);
 
-        Assert.Equal(expected: "steady", actual: Assert.Single(collection: Slots(resolver: resolver, tick: EngineTicks.PerSecond)).Candidate.Name);
-        mirror.Advance(engineTick: (2UL * EngineTicks.PerSecond), tick: 2UL);
+        Assert.Equal(expected: "steady", actual: Assert.Single(collection: Slots(resolver: resolver, tick: FixedTickConversion.TicksPerSecond)).Candidate.Name);
+        mirror.Advance(engineTick: (2UL * FixedTickConversion.TicksPerSecond), tick: 2UL);
         mirror.Apply(fraction: 0f);
 
         Assert.Equal(expected: 2f, actual: mirror.Scalar(scalar: weight, fallback: -1f));
         Assert.Equal(expected: 4f, actual: mirror.Scalar(delivered: true, fallback: -1f, scalar: weight));
-        var selected = Assert.Single(collection: Slots(resolver: resolver, tick: (2UL * EngineTicks.PerSecond)));
+        var selected = Assert.Single(collection: Slots(resolver: resolver, tick: (2UL * FixedTickConversion.TicksPerSecond)));
 
         Assert.Equal(expected: "bound", actual: selected.Candidate.Name);
         Assert.Equal(expected: (4d * 0.2126d), actual: selected.Candidate.Luminance, precision: 12);
@@ -209,11 +210,11 @@ public sealed class ShadowFrameLawTests {
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 2UL), tick: 2UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 4UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 2UL), tick: 2UL);
         mirror.Apply(fraction: 1f);
         var frame = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
-        var selected = Slots(resolver: resolver, tick: (EngineTicks.PerSecond / 2UL));
+        var selected = Slots(resolver: resolver, tick: (FixedTickConversion.TicksPerSecond / 2UL));
 
         Assert.Equal(expected: ["third", "first"], actual: selected.Select(selector: slot => slot.Candidate.Name).ToArray());
         Assert.Equal(expected: [0, 1], actual: selected.Select(selector: slot => slot.Slot).ToArray());
@@ -394,7 +395,7 @@ public sealed class ShadowFrameLawTests {
 
         Assert.Equal(expected: 0, actual: initial.Lights.ShadowSlots[0]);
         Assert.Equal(expected: 0, actual: initial.Sky.First<SdfSkyDisc>().Light);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
         var crossed = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
 
@@ -440,14 +441,14 @@ public sealed class ShadowFrameLawTests {
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
         _ = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
         var reordered = definition with { RenderRaw = definition.Render with { Lighting = Lighting(reordered: true) } };
         var frame = resolver.Resolve(definition: reordered, revision: 1, mirror: mirror);
 
         Assert.Equal(expected: 1, actual: frame.Lights.ShadowSlots[0]);
-        var slots = Slots(resolver: resolver, tick: (EngineTicks.PerSecond / 4UL));
+        var slots = Slots(resolver: resolver, tick: (FixedTickConversion.TicksPerSecond / 4UL));
 
         Assert.Equal(expected: new[] { "first", "second" }, actual: slots.Select(selector: slot => slot.Candidate.Name));
         Assert.Equal(expected: new[] { 2, 1 }, actual: slots.Select(selector: slot => slot.Rank));

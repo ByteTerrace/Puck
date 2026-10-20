@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.Launcher.Tests;
@@ -9,7 +10,7 @@ namespace Puck.Launcher.Tests;
 /// the stops that keep the time owed: a drain that changes the simulation's rate, and a step that owes the host a
 /// frame, and the clock a holding pump withholds while that frame is unserved.</summary>
 public sealed class FixedStepPumpStepGateTests {
-    private const ulong StepTicks = (EngineTicks.PerSecond / 30UL);
+    private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / 30UL);
 
     private sealed class CountingSimulation : IFixedStepSimulation {
         // Answers AwaitsFrame from the completed step count, the way a capture armed at one tick owes one frame.

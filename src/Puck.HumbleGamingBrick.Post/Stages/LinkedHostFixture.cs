@@ -1,6 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.Machines;
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -16,7 +16,7 @@ internal static class LinkedHostFixture {
 
     /// <summary>The engine-tick budget of one 60&#160;Hz host step — the same fixed-step budget a world tick hands a
     /// machine.</summary>
-    public const ulong FrameTicks = (EngineTicks.PerSecond / 60UL);
+    public const ulong FrameTicks = (FixedTickConversion.TicksPerSecond / 60UL);
     /// <summary>The work-RAM address the seat program publishes its own sampled joypad image to.</summary>
     public const ushort JoypadImageAddress = 0xC0F2;
     /// <summary>The work-RAM address the seat program publishes the last byte received over the cable to.</summary>

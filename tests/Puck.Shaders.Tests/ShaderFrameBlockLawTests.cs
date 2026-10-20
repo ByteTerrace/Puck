@@ -50,7 +50,7 @@ public sealed class ShaderFrameBlockLawTests {
         [ShaderFrameInterface.Time] = [Bits(value: 13.5f)],
         [ShaderFrameInterface.TimeDelta] = [Bits(value: 0.25f)],
         [ShaderFrameInterface.Frame] = [77],
-        [ShaderFrameInterface.TickRate] = [((uint)Puck.Hosting.EngineTicks.PerSecond)],
+        [ShaderFrameInterface.TickRate] = [((uint)Puck.Maths.FixedTickConversion.TicksPerSecond)],
         [ShaderFrameInterface.PointerDown] = [1],
         [ShaderFrameInterface.PointerPresses] = [12],
         [ShaderFrameInterface.CameraPosition] = [Bits(value: 1.5f), Bits(value: 2.5f), Bits(value: 3.5f)],

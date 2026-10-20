@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -119,7 +118,7 @@ public static class WorldClockAnchors {
         if (
             (row.Kind != CellKind.Fixed) ||
             (rateHz <= 0) ||
-            ((EngineTicks.PerSecond % ((ulong)rateHz)) != 0UL)
+            ((FixedTickConversion.TicksPerSecond % ((ulong)rateHz)) != 0UL)
         ) {
             return (0L, 0UL);
         }
@@ -141,11 +140,11 @@ public static class WorldClockAnchors {
             return (0L, 0UL);
         }
 
-        var step = (EngineTicks.PerSecond / ((ulong)rateHz));
+        var step = (FixedTickConversion.TicksPerSecond / ((ulong)rateHz));
         // The raw advance per engine tick, as the measure the row's trait allocates by; every authoritative tick adds
         // the same amount exactly when its span of engine ticks covers whole periods of that allocation.
         var measure = DiscreteMeasure.Rational(
-            denominator: (((BigInteger)advance.PerSecondDenominator) * EngineTicks.PerSecond),
+            denominator: (((BigInteger)advance.PerSecondDenominator) * FixedTickConversion.TicksPerSecond),
             numerator: (BigInteger.Abs(value: advance.PerSecondNumerator) << FixedQ4816.FractionBitCount)
         );
 

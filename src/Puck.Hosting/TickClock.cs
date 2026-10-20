@@ -1,7 +1,9 @@
+using Puck.Maths;
+
 namespace Puck.Hosting;
 
 /// <summary>Measures the host time elapsed between samples of a <see cref="TimeProvider"/>, in
-/// <see cref="EngineTicks"/>, carrying the conversion remainder so no time is lost between samples. A host loop reads its
+/// <see cref="FixedTickConversion"/>, carrying the conversion remainder so no time is lost between samples. A host loop reads its
 /// wall clock only through this and the same provider's timestamps, so a law can hand it a clock of its own.</summary>
 public struct TickClock {
     private readonly ulong m_frequency;
@@ -25,7 +27,7 @@ public struct TickClock {
 
         m_previousTimestamp = now;
 
-        var scaled = ((elapsed * EngineTicks.PerSecond) + m_remainder);
+        var scaled = ((elapsed * FixedTickConversion.TicksPerSecond) + m_remainder);
 
         (var quotient, m_remainder) = Math.DivRem(
             left: scaled,

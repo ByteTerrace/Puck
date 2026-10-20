@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -438,7 +439,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
-        m_seats.AdvanceSeatViews(deltaSeconds: ((float)EngineTicks.ToSeconds(ticks: stepTicks)));
+        m_seats.AdvanceSeatViews(deltaSeconds: ((float)FixedTickConversion.ToSeconds(ticks: stepTicks)));
 
         if (!stepsBoot) {
             return;
@@ -562,7 +563,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// with tick numbering staying contiguous for free (the freeze mechanism already used for pause/stop). A swap to
     /// rate 0 needs no separate handling here: the ordinary rate&gt;0 check already refuses every call after the one
     /// that applied the swap, so "the world that just swapped does not step again" already holds — calling
-    /// <see cref="EngineTicks.PerRate"/> for a rate of 0 would be the durable-stop's own forbidden division, which is
+    /// <see cref="FixedTickConversion.PerRate"/> for a rate of 0 would be the durable-stop's own forbidden division, which is
     /// exactly why the width check is short-circuited to run only once the ordinary rate check already passed.</remarks>
     /// <param name="stepTicks">This call's own pump-supplied step width (<see cref="FixedStepContext.StepTicks"/>) —
     /// compared against what the boot instance's current rate demands.</param>
@@ -577,7 +578,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         return (
             !boot.IsPaused &&
             (rateHz > 0) &&
-            (stepTicks == EngineTicks.PerRate(ratePerSecond: ((uint)rateHz)))
+            (stepTicks == FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)))
         );
     }
     /// <summary>Advances every row except a desktop's own boot row on its own authored schedule — the boot row (when
@@ -657,7 +658,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
             instance.ScheduleAccumulatorTicks += masterDeltaTicks;
 
-            var stepWidth = EngineTicks.PerRate(ratePerSecond: ((uint)rateHz));
+            var stepWidth = FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz));
 
             while (instance.ScheduleAccumulatorTicks >= stepWidth) {
                 instance.ScheduleAccumulatorTicks -= stepWidth;

@@ -18,7 +18,7 @@ capability authentication.
   receives device-loss notifications without changing simulation state. The
   World's root is the render graph runtime's node, so everything a frame shows
   is an instance of that graph rather than a child of the root.
-- *Deterministic fixed-step context:* `EngineTicks` provides an integer time
+- *Deterministic fixed-step context:* `Puck.Maths.FixedTickConversion` provides an integer time
   base that divides common update rates exactly. `FrameContext` keeps
   authoritative simulation ticks separate from presentation-only wall time and
   interpolation.
@@ -48,7 +48,7 @@ becomes.
 ```mermaid
 graph LR
     Input(["⌨️ Captured input"]) --> Commands["📋 CommandSnapshot"]
-    Clock["⏱️ EngineTicks fixed-step clock"] --> Pump["🔁 Host pump"]
+    Clock["⏱️ FixedTickConversion fixed-step clock"] --> Pump["🔁 Host pump"]
     Commands --> Pump
     Pump --> Simulation["🌍 Deterministic simulation"]
     Pump --> Context["🧭 FrameContext"]
@@ -154,9 +154,9 @@ and whether the capability is held.
 
 ## Clocks and fixed-step timing
 
-`EngineTicks.PerSecond` is 50,400. Common simulation rates—including 24, 25,
+`FixedTickConversion.TicksPerSecond` (in `Puck.Maths`) is 50,400. Common simulation rates—including 24, 25,
 30, 48, 50, 60, 72, 90, 120, 144, and 240 updates per second—divide that base
-without a fractional tick. `EngineTicks.PerRate(rate)` returns the exact step
+without a fractional tick. `FixedTickConversion.PerRate(rate)` returns the exact step
 size and rejects a rate that does not divide the base.
 
 Hosting uses several clocks because they answer different questions:
@@ -168,7 +168,7 @@ Hosting uses several clocks because they answer different questions:
 | `OsTimeCorrelator` | Where does a native 32-bit millisecond event stamp belong on the input timeline? | Handles wraparound and clamps the result to the observed engine-time window |
 | `FrameContext` | What fixed-step instant is being presented? | Integer ticks are authoritative; seconds and interpolation are derived at the presentation seam |
 
-`IFixedStepSimulation.RatePerSecond` must divide `EngineTicks.PerSecond`
+`IFixedStepSimulation.RatePerSecond` must divide `FixedTickConversion.TicksPerSecond`
 exactly. For each completed step, the launcher constructs a
 `FixedStepContext`, builds and applies one `CommandSnapshot`, and then calls
 `Step`. A windowed frame may contain zero, one, or several fixed steps; an
@@ -581,7 +581,7 @@ intermediate publications is correct.
 | Area | Types | Purpose |
 |---|---|---|
 | Render root | `IRenderRoot` | The surface a host presents each frame, and its device-loss and teardown lifecycle |
-| Fixed-step time | `EngineTicks`, `TickClock`, `FrameContext`, `FixedStepContext`, `IFixedStepSimulation` | Integer simulation time and presentation context |
+| Fixed-step time | `TickClock`, `FrameContext`, `FixedStepContext`, `IFixedStepSimulation` | Integer simulation time and presentation context |
 | Input time | `InputClock`, `OsTimeCorrelator` | Monotonic capture timestamps and native event correlation |
 | Host scope | `IHostContext`, `HostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
 | Delegation | `HeldCapabilityGrants`, `ICapabilityTakeBack`, `IHeldCapabilityLeaseSource` | Revocable held-capability chains |
@@ -622,7 +622,7 @@ this project; [Extensions](extensions.md) explains them.
 The machine-neutral queued-host substrate (`QueuedMachineWorker`,
 `IQueuedMachineCore`, `MachineTimeTravel<TInput>`, `QueuedHostContractProbe`)
 lives in [Machine hosting runtime](../emulation/shared/machine-hosting.md), which depends
-on this project for `EngineTicks`.
+on this project.
 
 ## Local console attachment
 

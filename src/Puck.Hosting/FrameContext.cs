@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Hosting;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace Puck.Hosting;
 /// device chain it renders offscreen on (every node in an in-process tree composites on one device) and any service
 /// its host publishes — the deterministic timing, and the pixel extent its parent is asking it to fill. A node
 /// rebuilds its render targets when <see cref="TargetWidth"/>/<see cref="TargetHeight"/> change. Timing is carried
-/// in integer engine ticks (<see cref="EngineTicks"/>) rather than floating point so the running total accumulates
+/// in integer engine ticks (<see cref="FixedTickConversion"/>) rather than floating point so the running total accumulates
 /// exactly and never drifts; the host advances the simulation in whole fixed steps, and a node converts to whatever
 /// real-number unit it needs at the point of use.
 /// </summary>
@@ -35,13 +37,13 @@ public readonly record struct FrameContext(
 ) {
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>
-        EngineTicks.ToSeconds(ticks: DeltaTicks);
+        FixedTickConversion.ToSeconds(ticks: DeltaTicks);
     /// <summary>Gets the fixed-step simulation clock in seconds (<see cref="ElapsedTicks"/> as seconds).</summary>
     public double ElapsedSeconds =>
-        EngineTicks.ToSeconds(ticks: ElapsedTicks);
+        FixedTickConversion.ToSeconds(ticks: ElapsedTicks);
     /// <summary>Gets <see cref="FrameDeltaTicks"/> in seconds: the interval this frame's presentation spans. Presentation-only; never simulation time.</summary>
     public double FrameDeltaSeconds =>
-        EngineTicks.ToSeconds(ticks: FrameDeltaTicks);
+        FixedTickConversion.ToSeconds(ticks: FrameDeltaTicks);
     /// <summary>Gets how far this frame sits between the last and next fixed update, in <c>[0, 1)</c>, for interpolating render state.</summary>
     public double InterpolationAlpha =>
         ((StepTicks == 0UL)
@@ -50,7 +52,7 @@ public readonly record struct FrameContext(
         );
     /// <summary>Gets the continuous render-time clock in seconds (<see cref="RenderTicks"/> as seconds).</summary>
     public double RenderSeconds =>
-        EngineTicks.ToSeconds(ticks: RenderTicks);
+        FixedTickConversion.ToSeconds(ticks: RenderTicks);
     /// <summary>Gets the continuous render-time clock in engine ticks (the fixed-step <see cref="ElapsedTicks"/> plus the unconsumed <see cref="AccumulatorTicks"/>).</summary>
     public ulong RenderTicks =>
         (ElapsedTicks + AccumulatorTicks);

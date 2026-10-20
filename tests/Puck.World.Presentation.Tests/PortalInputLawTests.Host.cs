@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -6,7 +6,7 @@ using Puck.World.Server;
 namespace Puck.World.Presentation.Tests;
 
 public sealed partial class PortalInputLawTests {
-    private static readonly ulong PortalStep = EngineTicks.PerRate(ratePerSecond: 30u);
+    private static readonly ulong PortalStep = FixedTickConversion.PerRate(ratePerSecond: 30u);
 
     // The boot row over a real file, so the destination it references resolves beside it.
     private static (WorldInstance Instance, TemporaryDirectory StateDirectory) FileBackedRow(string name, string path, WorldDefinition definition) {

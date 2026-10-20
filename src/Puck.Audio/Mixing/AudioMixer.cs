@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.Audio.Mixing;
@@ -557,7 +556,7 @@ public sealed class AudioMixer {
     /// mutable field, array slot, or <see langword="ref"/> local — never a <see langword="readonly"/> field or
     /// collection indexer (see <see cref="FixedRateAccumulator"/>'s own remarks) — and persist its
     /// <see cref="FixedRateAccumulator.Remainder"/> anywhere the caller's own state must reproduce this exactly.</param>
-    /// <param name="stepTicks">The engine ticks the step covers (<c>Puck.Hosting.EngineTicks.PerRate</c> at the
+    /// <param name="stepTicks">The engine ticks the step covers (<c>Puck.Maths.FixedTickConversion.PerRate</c> at the
     /// world's simulation rate).</param>
     /// <returns>The non-negative frame count this step renders.</returns>
     public static int AdvanceStepFrames(ref FixedRateAccumulator accumulator, ulong stepTicks) {
@@ -575,11 +574,11 @@ public sealed class AudioMixer {
     /// <summary>Binds a fresh exact-remainder accumulator for advancing audio frames in lockstep with sim steps —
     /// the same <see cref="FixedRateAccumulator"/> technique the simulation's motion integration already uses,
     /// reused here rather than a second hand-rolled remainder (see <see cref="AdvanceStepFrames"/>).
-    /// Works at any simulation rate that divides <see cref="Puck.Hosting.EngineTicks.PerSecond"/>, including ones
+    /// Works at any simulation rate that divides <see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/>, including ones
     /// like 90 and 45 Hz that do not divide <see cref="SampleRate"/>.</summary>
     /// <returns>A fresh accumulator bound to the engine tick base, ready for <see cref="AdvanceStepFrames"/>.</returns>
     public static FixedRateAccumulator CreateStepAccumulator() =>
-        new(ticksPerSecond: ((long)EngineTicks.PerSecond));
+        new(ticksPerSecond: ((long)FixedTickConversion.TicksPerSecond));
     /// <summary>Computes the ceiling of one sim step's audio-frame count at <paramref name="simulationRateHz"/> —
     /// safe as a one-off slack margin (a cue-life padding, for instance) precisely because it never understates. No single per-step frame count is exact for every step when
     /// <see cref="SampleRate"/> is not a multiple of <paramref name="simulationRateHz"/> (90 Hz: 533⅓ frames/step);

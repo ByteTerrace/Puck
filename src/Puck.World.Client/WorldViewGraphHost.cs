@@ -4,6 +4,7 @@ using System.Numerics;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.Shaders;
 
@@ -581,7 +582,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public static ShaderFrameValues PresentedFrame(WorldStateMirror mirror, float fraction, double previousSeconds) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
-        var seconds = (mirror.PresentedEngineTick(fraction: fraction) / EngineTicks.PerSecond);
+        var seconds = (mirror.PresentedEngineTick(fraction: fraction) / FixedTickConversion.TicksPerSecond);
 
         return new ShaderFrameValues(
             CameraFov: 0f,

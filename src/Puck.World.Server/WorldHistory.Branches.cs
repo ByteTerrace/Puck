@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -266,7 +266,7 @@ public sealed partial class WorldHistory {
             utf8Json: checkpoint!.Server.DefinitionJson
         );
         var rate = ((uint)Math.Max(val1: 0, val2: definition.SimulationRateHz));
-        var width = ((rate == 0U) ? 0UL : EngineTicks.PerRate(ratePerSecond: rate));
+        var width = ((rate == 0U) ? 0UL : FixedTickConversion.PerRate(ratePerSecond: rate));
         var ticks = new List<WorldReplayTickInput>();
         var hashes = new List<ulong>();
         var steps = new List<ulong>();

@@ -229,7 +229,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             // merely up to the rate's own rounding.
             Advance: new StateAdvance(
                 PerSecondDenominator: 1,
-                PerSecondNumerator: unchecked((long)Puck.Hosting.EngineTicks.PerSecond)
+                PerSecondNumerator: unchecked((long)Puck.Maths.FixedTickConversion.TicksPerSecond)
             ),
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,

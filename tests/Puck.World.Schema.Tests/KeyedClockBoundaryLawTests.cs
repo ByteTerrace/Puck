@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -14,7 +15,7 @@ public sealed class KeyedClockBoundaryLawTests {
             new WorldKey<float>(At: 0d, Ease: WorldEase.Step, Value: 0f),
             new WorldKey<float>(At: 29d, Ease: WorldEase.Step, Value: 1f),
         ]);
-        var at = ((periods * WorldClocks.PeriodTicks(clock: clock)) + (29UL * EngineTicks.PerSecond));
+        var at = ((periods * WorldClocks.PeriodTicks(clock: clock)) + (29UL * FixedTickConversion.TicksPerSecond));
 
         foreach (var (tick, expected) in new[] { ((at - 1UL), 0f), (at, 1f), ((at + 1UL), 1f), (at, 1f) }) {
             Assert.Equal(expected: expected, actual: WorldKeyResolver.Scalar(

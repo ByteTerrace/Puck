@@ -1,5 +1,5 @@
 using Puck.Commands;
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -293,7 +293,7 @@ public sealed partial class WorldReplaySnapshot {
     }
     /// <summary>Derives the engine-tick step width <see cref="Drive"/> re-runs each recorded tick at — the one place
     /// <see cref="SimulationRate"/>'s "0 means a static world that never steps" contract and
-    /// <c>Puck.Hosting.EngineTicks.PerRate</c>'s "0 has no representable step width" contract meet. Extracted as its
+    /// <c>Puck.Maths.FixedTickConversion.PerRate</c>'s "0 has no representable step width" contract meet. Extracted as its
     /// own testable primitive because exercising it through a real <see cref="Drive"/> call requires an embedded
     /// <see cref="WorldDefinition"/> that itself authors <c>simulation.rateHz</c> 0 — not buildable end to end through
     /// the ordinary document pipeline until a separate <c>WorldDefinitionValidator</c> change admits that
@@ -320,7 +320,7 @@ public sealed partial class WorldReplaySnapshot {
 
         return ((simulationRate == 0U)
             ? 0UL
-            : EngineTicks.PerRate(ratePerSecond: simulationRate)
+            : FixedTickConversion.PerRate(ratePerSecond: simulationRate)
         );
     }
     /// <summary>Encodes a recording in the <c>.puckreplay</c> binary form.</summary>
