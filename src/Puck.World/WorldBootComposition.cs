@@ -1537,6 +1537,20 @@ public static class WorldBootComposition {
             IsHeld: true
         ));
         services.AddSingleton<ICommandModule, WorldPassthroughCommandModule>();
+        // The cursor the window shows after each batch of events: locked for a seat's camera drag, the system arrow over a
+        // passthrough source's window.
+        services.AddSingleton(implementationFactory: static sp => {
+            var passthrough = sp.GetRequiredService<WorldSourcePassthrough>();
+
+            return new HostCapabilityContribution(
+                CapabilityType: typeof(IWindowCursorPolicy),
+                Instance: new WorldCursorPolicy(
+                    steering: sp.GetRequiredService<WorldSeatViewInput>().IsSteering,
+                    windowHoldsPointer: () => passthrough.HoldsPointer
+                ),
+                IsHeld: true
+            );
+        });
 
         // The authored world-scope AND player-scope HUD's STRUCTURE store (world panels reconciled from the
         // delivered definition on revision move; seat panels recomposed every tick from the roster + each joined

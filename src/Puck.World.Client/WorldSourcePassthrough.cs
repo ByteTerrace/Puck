@@ -52,9 +52,9 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
 
     /// <summary>Gets the router that hosts the keyboard focus.</summary>
     public SourcePassthroughRouter Router { get; }
-    /// <inheritdoc/>
-    /// <remarks>Read against the panes the display published last, so a pane hidden or moved under a resting pointer
-    /// gives the pointer back without waiting for it to move.</remarks>
+    /// <summary>Gets whether the pointer belongs to a passthrough source's window rather than the game
+    /// (<see cref="SourcePassthroughRouter.HoldsPointer"/>), read against the panes the display published last, so a pane
+    /// hidden or moved under a resting pointer gives the pointer back without waiting for it to move.</summary>
     public bool HoldsPointer {
         get {
             PublishPanes();

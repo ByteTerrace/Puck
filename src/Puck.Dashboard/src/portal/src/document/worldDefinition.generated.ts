@@ -689,6 +689,7 @@ export type BindingCommandDefinition = {
   value?: CommandValue | null;
   mode?: BindingEntryMode;
   text?: string | null;
+  passThrough?: boolean;
 };
 
 export type BindingContextDefinition = {

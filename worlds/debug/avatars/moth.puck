@@ -554,6 +554,22 @@ bindingOverlays [
             id: "base"
           }
         }
+        // Both mouse buttons held, in either order, walk her forward until either is released. The chord passes each
+        // press through to the button's own binding, so the right button keeps steering her (steer outranks the left
+        // button's orbit) and a button left held after the other's release keeps its own drag.
+        {
+          held [
+            "mouse.button1"
+            "mouse.button2"
+          ]
+          group: "play"
+          command {
+            channel: "forward"
+            label: "Forward"
+            passThrough: true
+            scale: 1
+          }
+        }
       ]
       modifiers []
       version: "puck.input.bindings.v1"

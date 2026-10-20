@@ -255,10 +255,11 @@ before the `IWindowInputObserver` and the command router. An event the filter
 consumes reaches neither of them. A pointer position is never consumed, so the
 game keeps the pointer's position over a passthrough pane, but its relative
 motion there is consumed, so a drawn cursor that shows only on motion fades out. The filter
-reports instead whether it holds the pointer (`IWindowInputFilter.HoldsPointer`,
-`SourcePassthroughRouter.HoldsPointer`): the pointer lies on a passthrough
+reports instead whether it holds the pointer
+(`SourcePassthroughRouter.HoldsPointer`): the pointer lies on a passthrough
 pane's source whose window is still there, or a button pressed on a source is
-still held. After each batch of events the pump sets the window's
+still held. After each batch of events the pump reads the host's optional
+`IWindowCursorPolicy` (the World's `WorldCursorPolicy`) and sets the window's
 `INativeWindowCursor.ShowsSystemCursor` from it, so a window that hides the
 system cursor over its client area (`NativeWindowOptions.HideMouseCursor`, as
 the World's does) shows the system arrow while the pointer is over the captured
@@ -270,6 +271,20 @@ cursor shape: the shape a window sets follows the input queue of the window unde
 the pointer, which is the World's. On Win32 the change applies at once to a
 pointer resting over the client area, and `WM_SETCURSOR` keeps it as the pointer
 moves.
+
+The same policy locks the pointer for a drag that reads only its motion
+(`IWindowCursorPolicy.LocksPointer`; the World's is any seat holding
+`player.orbit` or `player.steer`). While `INativeWindowCursor.LocksPointer` is
+set, the Win32 window hides the cursor, holds the mouse capture, confines the
+cursor to its client area, freezes the reported pointer position, and after
+each pump of its events moves the cursor back to the client area's centre, so
+the drag's relative motion never ends at a window or screen edge. Raw relative
+input sees no motion from that move; the window-message fallback and
+absolute-mode input (a Remote Desktop session's mouse) rebase on it: an
+absolute report nearer the centre than the last report is the first after the
+move, and one nearer the last report was sent before the device followed it.
+Clearing the lock frees the cursor where the drag began; losing focus or the
+capture ends it without moving the cursor.
 
 A source's window is an `ISourcePassthroughWindow`. On Windows a window
 capture's feed supplies it (`INativeImageCaptureFeed.Window`,

@@ -8,11 +8,6 @@ namespace Puck.Input;
 /// call.
 /// </summary>
 public interface IWindowInputFilter {
-    /// <summary>Gets whether the pointer rests where the filter sends it outside the game, such as over a pane that passes
-    /// it to an external window, so the window pump shows the system cursor there in place of the game's. Read on the
-    /// window-pump thread after each batch of events. Defaults to <see langword="false"/>.</summary>
-    bool HoldsPointer => false;
-
     /// <summary>Offers one raw window input event, in the window's order, on the window-pump thread.</summary>
     /// <param name="inputEvent">The dequeued event.</param>
     /// <returns><see langword="true"/> when the filter consumed the event.</returns>

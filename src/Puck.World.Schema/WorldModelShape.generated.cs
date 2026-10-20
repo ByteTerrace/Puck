@@ -121,6 +121,7 @@ public static partial class WorldModelShape {
                 M("value", typeof(global::System.Nullable<global::Puck.Commands.CommandValue>), typeof(global::Puck.Commands.BindingCommandDefinition), "Value", Read | Write, static value => ((global::Puck.Commands.BindingCommandDefinition)value).Value),
                 M("mode", typeof(global::Puck.Commands.BindingEntryMode), typeof(global::Puck.Commands.BindingCommandDefinition), "Mode", Read | Write, static value => ((global::Puck.Commands.BindingCommandDefinition)value).Mode),
                 M("text", typeof(global::System.String), typeof(global::Puck.Commands.BindingCommandDefinition), "Text", Read | Write, static value => ((global::Puck.Commands.BindingCommandDefinition)value).Text),
+                M("passThrough", typeof(global::System.Boolean), typeof(global::Puck.Commands.BindingCommandDefinition), "PassThrough", Read | Write, static value => ((global::Puck.Commands.BindingCommandDefinition)value).PassThrough),
             ],
             []),
         T(typeof(global::Puck.Commands.BindingContextDefinition), true, JsonTypeInfoKind.Object, null,

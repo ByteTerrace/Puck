@@ -161,6 +161,10 @@
                         "null"
                       ],
                       "default": null
+                    },
+                    "passThrough": {
+                      "type": "boolean",
+                      "default": false
                     }
                   },
                   "additionalProperties": false,
