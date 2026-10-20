@@ -38,7 +38,7 @@ public readonly record struct RigidContactPolicy(
     public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
         RestLinearThreshold: FixedQ4816.FromDouble(value: policy.RigidRestLinearSpeed),
         RestAngularThreshold: FixedQ4816.FromDouble(value: policy.RigidRestAngularSpeed),
-        RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: policy.RigidRestHoldSeconds)),
+        RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)policy.RigidRestHoldSeconds)),
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
         SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
         SubstepCeiling: policy.RigidSubstepCeiling,

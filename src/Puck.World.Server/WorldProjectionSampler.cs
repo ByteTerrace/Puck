@@ -134,7 +134,7 @@ public sealed class WorldProjectionSampler {
         }
 
         m_updateTicks = ((updateSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: updateSeconds))
+            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)updateSeconds))
             : 0UL
         );
         m_updateSeconds = updateSeconds;
