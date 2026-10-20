@@ -143,8 +143,13 @@ public sealed partial class WorldMachineHost {
 
         try {
             var current = live.Declaration;
+            // A machine that booted with its authored content absent runs without it, so an operation built from its
+            // configuration (a reset) recreates the machine it runs rather than reading the absent file.
             var requestForProvider = new MachineCreationRequest(
-                Configuration: current.Configuration.Clone(),
+                Configuration: WithoutFields(
+                    configuration: current.Configuration,
+                    fieldPaths: live.Lease.AbsentContent
+                ),
                 Assets: live.Lease.Assets,
                 AudioSampleRate: MachineAudioRate.SampleRate
             );
@@ -159,6 +164,7 @@ public sealed partial class WorldMachineHost {
                     return false;
                 case MachineOperationPreparation.Replacement replacement: {
                         var requestForReplacement = PrepareCreation(
+                            absentContent: out _,
                             engine: engine,
                             configuration: replacement.Configuration,
                             documentDirectory: m_documentDirectory
@@ -600,6 +606,7 @@ public sealed partial class WorldMachineHost {
                     engine,
                     declaration.Configuration,
                     candidate.DocumentDirectory,
+                    absentContent: out var absentContent,
                     declaredBy: declaration.Name
                 );
                 var runtime = engine.CreateMachine(request: request);
@@ -607,7 +614,9 @@ public sealed partial class WorldMachineHost {
                     runtime,
                     plan.NextGeneration++,
                     request.Assets
-                );
+                ) {
+                    AbsentContent = absentContent,
+                };
 
                 plan.Created.Add(item: lease);
                 ValidateRuntimeOutputs(
@@ -681,7 +690,7 @@ public sealed partial class WorldMachineHost {
     // machine with no cartridge, named once, so a world whose content lives only on some machines boots everywhere; an
     // operation that names absent content is refused.
     private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory,
-        string? declaredBy = null) {
+        out IReadOnlyList<string> absentContent, string? declaredBy = null) {
         MachineConfigurationValidation.Validate(
             descriptor: engine.Descriptor.Configuration,
             value: configuration
@@ -764,32 +773,45 @@ public sealed partial class WorldMachineHost {
                 );
             }
         );
-        if (absent.Count > 0) {
-            // The absent field's whole object leaves the configuration the engine builds from, so the engine creates
-            // its empty machine rather than asking for an asset that was never read.
-            foreach (var fieldPath in absent) {
-                var segments = fieldPath.Split(separator: '.');
-                var removed = Math.Max(val1: 0, val2: (segments.Length - 2));
-                JsonNode? holder = tree;
-
-                for (var index = 0; (index < removed); index++) {
-                    holder = holder?[segments[index]];
-                }
-                _ = (holder as JsonObject)?.Remove(propertyName: segments[removed]);
-                if (m_narrationHub is { HasNarrationSink: true }) {
-                    m_narrationHub.Narrate(
-                        channel: "machine",
-                        text: $"[machine: '{declaredBy}' configuration.{fieldPath} names content absent here; it runs with no cartridge]"
-                    );
-                }
+        foreach (var fieldPath in absent) {
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub.Narrate(
+                    channel: "machine",
+                    text: $"[machine: '{declaredBy}' configuration.{fieldPath} names content absent here; it runs with no cartridge]"
+                );
             }
-            configuration = JsonSerializer.SerializeToElement(value: tree);
         }
+        absentContent = absent;
+        configuration = WithoutFields(
+            configuration: configuration,
+            fieldPaths: absent
+        );
         return new(
             configuration.Clone(),
             assets.ToFrozenDictionary(comparer: StringComparer.Ordinal),
             MachineAudioRate.SampleRate
         );
+    }
+    // A configuration without the named content fields: each field's whole object leaves it, so the engine creates its
+    // empty machine rather than asking for an asset that was never read.
+    private static JsonElement WithoutFields(JsonElement configuration, IReadOnlyList<string> fieldPaths) {
+        if (fieldPaths.Count == 0) {
+            return configuration.Clone();
+        }
+
+        var tree = JsonNode.Parse(configuration.GetRawText())!.AsObject();
+
+        foreach (var fieldPath in fieldPaths) {
+            var segments = fieldPath.Split(separator: '.');
+            var removed = Math.Max(val1: 0, val2: (segments.Length - 2));
+            JsonNode? holder = tree;
+
+            for (var index = 0; (index < removed); index++) {
+                holder = holder?[segments[index]];
+            }
+            _ = (holder as JsonObject)?.Remove(propertyName: segments[removed]);
+        }
+        return JsonSerializer.SerializeToElement(value: tree);
     }
     private static void ValidateRuntimeOutputs(MachineEngineDescriptor descriptor, IMachineRuntime runtime) {
         ValidatePorts(
@@ -861,6 +883,9 @@ public sealed partial class WorldMachineHost {
         public IMachineRuntime Runtime { get; } = runtime;
         public ulong Generation { get; set; } = generation;
         public IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
+        // The configuration's content fields whose files were absent when the runtime was created, so it runs without
+        // them.
+        public IReadOnlyList<string> AbsentContent { get; init; } = [];
 
         public long CompletedSteps { get; set; }
     }

@@ -207,6 +207,21 @@ public sealed class MachineContentFolderLawTests {
             Assert.Contains(expectedSubstring: "mounted=\"no cartridge\" mountable=0 refused=0", actualString: listed.Output);
             Assert.Null(@object: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
             Assert.Contains(expectedSubstring: "names no file the folders hold (none)", actualString: registry.Submit(line: "machine.swap cabinet boot").Output);
+
+            // A reset recreates the machine it runs, with no cartridge, rather than reading the absent file.
+            var booted = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value;
+            var reset = registry.Submit(line: $"machine.operation cabinet {booted.Generation} machine.reset {{\"schema\":\"puck.gaming-brick.machine-reset.v1\"}}");
+
+            Assert.False(condition: reset.IsError, userMessage: reset.Output);
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: reset.Output);
+
+            var after = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value;
+
+            Assert.NotEqual(expected: booted.Generation, actual: after.Generation);
+            Assert.Null(@object: after.Content);
+            Assert.Contains(expectedSubstring: "mounted=\"no cartridge\"", actualString: registry.Submit(line: "machine.content cabinet").Output);
+            fixture.Step();
+            Assert.Null(@object: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Fault);
         }
     }
     // A folder that empties or vanishes while the World runs: the next listing shows it, a swap no longer finds its
