@@ -8,7 +8,7 @@ namespace Puck.World;
 /// <c>IHostContext.HoldsCapability</c> resolves exactly one instance per capability type and two observers (the
 /// camera-orbit sink, the console text sink) both need every raw event.
 /// </summary>
-internal sealed class WorldWindowInputObservers : IWindowInputObserver {
+public sealed class WorldWindowInputObservers : IWindowInputObserver {
     private readonly IWindowInputObserver[] m_observers;
 
     /// <summary>Initializes a new instance of the <see cref="WorldWindowInputObservers"/> class.</summary>

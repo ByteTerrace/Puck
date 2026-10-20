@@ -12,7 +12,7 @@ namespace Puck.Cli.CartridgeCost;
 /// largest per-frame iteration count each sustains, the evidence <c>CartridgeCost</c>'s weights are folded from.
 /// </summary>
 public static class CartridgeCostCommand {
-    private static readonly string[] Targets = ["cgb", "agb"];
+    private static readonly string[] Targets = ["cgb", "dmg", "agb"];
 
     // Every probe boots its own machine and shares nothing with another, so shapes are measured concurrently and
     // reported in sweep order; the counts do not depend on the schedule.
@@ -57,6 +57,9 @@ public static class CartridgeCostCommand {
 
         using var humble = new VerifyMachineDriver(
             label: "cartridge-cost",
+            model: ((compiled.Target == "dmg")
+                ? ConsoleModel.DmgC
+                : ConsoleModel.CgbE),
             rom: compiled.Rom
         );
 
@@ -68,14 +71,14 @@ public static class CartridgeCostCommand {
     }
 
     public static Command Create() {
-        var target = new Option<string?>(name: "--target") { Description = "Measure one target only: cgb or agb. Both are measured when omitted." };
+        var target = new Option<string?>(name: "--target") { Description = "Measure one target only: cgb, dmg or agb. Every target is measured when omitted." };
 
         target.AcceptOnlyFromAmong(values: Targets);
         var command = new Command(
             description: """
             Measure each cartridge primitive's sustained per-frame capacity on the real machines.
 
-            Boots probe cartridges on the Color and Advanced machines and bisects, per shape, the largest per-frame
+            Boots probe cartridges on the Color, monochrome and Advanced machines and bisects, per shape, the largest per-frame
             iteration count each machine sustains at full frame rate. Cost per iteration is inversely proportional to
             that capacity; fold the reported capacities into CartridgeCost's weights and CartridgeCostProfile's
             reservations. A row marked CLIPPED reached the search's ceiling rather than the machine's.

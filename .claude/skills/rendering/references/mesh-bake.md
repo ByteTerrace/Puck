@@ -183,7 +183,8 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   unsnapped.
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
-  `Load` reset the drawn count, or a still group keeps drawing the old mesh.
+  `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
+  draws stale, or a still group keeps drawing the old mesh.
 
 ## The mesh region
 

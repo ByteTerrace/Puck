@@ -31,7 +31,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         // A member that keeps sliding never settles, however far it drifted.
         for (var time = 1f; (time < 2f); time += 0.05f) {
-            _ = bake.Dress(frame: SettleFrame(groups: 1, offset: (0.45f + (0.02f * MathF.Sin(10f * time))), program: program, time: time));
+            _ = bake.Dress(frame: SettleFrame(groups: 1, offset: (0.45f + (0.02f * MathF.Sin(x: (10f * time)))), program: program, time: time));
             Assert.False(condition: bake.Pending);
         }
         Assert.Equal(expected: 0L, actual: settles.Read(kind: SdfMeshSettle.Queued));
@@ -45,7 +45,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var waiting = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f)).MeshDraws).Mesh;
 
         Assert.True(condition: bake.Pending);
-        Assert.Same(expected: baked, actual: waiting);
+        Assert.Same(actual: waiting, expected: baked);
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Queued));
         DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f), index: ref index);
 
@@ -55,7 +55,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Done));
         Assert.Equal(expected: (58f / SdfMeshSettle.PositionSteps), actual: member.Position.X, tolerance: 1.0e-5f);
         // The new mesh holds the member's box where it settled: a vertex on its far face, which the old one had at 0.45.
-        Assert.Contains(collection: settled.Positions.ToArray(), filter: static point => (MathF.Abs(point.X - (0.1f + (58f / SdfMeshSettle.PositionSteps))) < 0.01f));
+        Assert.Contains(collection: settled.Positions.ToArray(), filter: static point => (MathF.Abs(x: (point.X - (0.1f + (58f / SdfMeshSettle.PositionSteps)))) < 0.01f));
 
         // A bake sharing the library takes the settled geometry's mesh for a member settling near the same pose.
         var other = new SdfMeshPathBake { Library = library, Residency = "shared" };
@@ -162,18 +162,20 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         for (var lattice = 0; (lattice < batch.Lattices.Length); lattice++) {
             var request = batch.Lattices[lattice];
+
             var (first, rows) = batch.Poses[lattice];
             var member = ((request.Selector + 1) - first);
             var shapes = new Shape[] {
                 new(Center: Vector3.Zero, Half: OwnHalf, Rotation: Quaternion.Identity, Material: 0),
                 new(Center: new Vector3(x: rows.Span[(1 + (3 * member))].X, y: rows.Span[(1 + (3 * member))].Y, z: rows.Span[(1 + (3 * member))].Z), Half: MemberHalf, Rotation: Quaternion.Identity, Material: 0),
             };
-            var spacing = (0.015625f * MathF.Min(request.Cell.X, MathF.Min(request.Cell.Y, request.Cell.Z)));
+            var spacing = (0.015625f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
 
             for (var local = 0; (local < request.Samples); local++, sample++) {
                 var position = (request.Points.IsEmpty
                     ? (request.Origin + (new Vector3(x: (local % request.Dims.X), y: ((local / request.Dims.X) % request.Dims.Y), z: (local / (request.Dims.X * request.Dims.Y))) * request.Cell))
                     : new Vector3(x: request.Points.Span[local].X, y: request.Points.Span[local].Y, z: request.Points.Span[local].Z));
+
                 var (value, shape) = (empty ? (1f, 0) : Nearest(count: 2, first: 0, point: position, shapes: shapes));
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 

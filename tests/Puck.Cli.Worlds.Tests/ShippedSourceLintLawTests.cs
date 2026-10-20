@@ -26,10 +26,10 @@ public sealed class ShippedSourceLintLawTests {
             strict: true
         ));
 
-        var findings = output.Split(separator: '\n').Where(predicate: static line => (line.Contains(value: ": warning ", comparisonType: StringComparison.Ordinal) || line.Contains(value: ": error ", comparisonType: StringComparison.Ordinal))).ToArray();
+        var findings = output.Split(separator: '\n').Where(predicate: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: ": warning ") || line.Contains(comparisonType: StringComparison.Ordinal, value: ": error "))).ToArray();
 
         Assert.True(
-            condition: ((exitCode == 0) || ((findings.Length > 0) && findings.All(predicate: static line => line.Contains(value: $": warning {PuckDiagnosticCodes.MovingBlend}:", comparisonType: StringComparison.Ordinal)))),
+            condition: ((exitCode == 0) || ((findings.Length > 0) && findings.All(predicate: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: $": warning {PuckDiagnosticCodes.MovingBlend}:")))),
             userMessage: $"puck lint --strict {relativePath} exited {exitCode}:{Environment.NewLine}{output}"
         );
     }

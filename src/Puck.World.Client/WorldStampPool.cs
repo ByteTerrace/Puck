@@ -50,6 +50,7 @@ public sealed partial class WorldStampPool {
     /// <summary>Gets the operator's live shape isolation (<c>view.isolate</c>), which every live <see cref="Emit"/>
     /// applies to its registrations and the boot scene applies to its static placements.</summary>
     public WorldShapeIsolation Isolation { get; } = new();
+
     // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
     // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
@@ -1361,6 +1362,7 @@ public sealed partial class WorldStampPool {
 
         return true;
     }
+
     // A live registration's shape as the last PackTransforms drew it: the rest or frame pose, the composed delta (own
     // swings and slides, the parent chain, effector corrections) and the part follower, all read off the latch that
     // pack left. PackRegistration is the one evaluator; this reads its results, because the drivers advance once a
@@ -1372,6 +1374,7 @@ public sealed partial class WorldStampPool {
             frameCursor: live.EffectiveCursor,
             live: live
         );
+
         var (localPosition, localRotation) = BasePose(
             poses: poses,
             shape: shapes[shapeSlot]
@@ -1408,6 +1411,7 @@ public sealed partial class WorldStampPool {
             Orientation: Quaternion.Normalize(value: (rootRotation * localRotation))
         );
     }
+
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>

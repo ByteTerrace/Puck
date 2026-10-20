@@ -46,11 +46,13 @@ public class CartridgeRoundTripTests {
         return lowered.Value;
     }
 
+    // Every target folder's sources; shared/ holds the modules they import, which are no document of their own.
     public static IEnumerable<object[]> CommittedSources() => Directory.EnumerateFiles(
         RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
         "*.puck",
         SearchOption.AllDirectories
     )
+        .Where(predicate: static path => (Path.GetFileName(path: Path.GetDirectoryName(path: path)) != "shared"))
         .Order(comparer: StringComparer.Ordinal).Select(selector: path => new object[] { path });
     [Fact]
     public void TestACartridgeRuleBodyRefusesAColonBeforeAContainer() {
@@ -276,7 +278,30 @@ public class CartridgeRoundTripTests {
     [MemberData(nameof(CommittedSources))]
     [Theory]
     public void TestCommittedSourceCompilesToTheCommittedDocument(string sourcePath) {
-        var compiled = CanonicalJsonDocument.Serialize(node: Compile(source: File.ReadAllText(path: sourcePath)));
+        var diagnostics = new DiagnosticBag();
+        var parsed = PuckParser.ParseDocumentWithDiagnostics(
+            source: File.ReadAllText(path: sourcePath),
+            diagnostics: diagnostics
+        ).Value;
+
+        Assert.NotNull(@object: parsed);
+
+        var lowered = CartridgeDocumentEmitter.LowerSource(
+            cancellationToken: TestContext.Current.CancellationToken,
+            diagnostics: diagnostics,
+            document: parsed,
+            sourcePath: sourcePath
+        );
+
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: string.Join(
+                separator: "\n",
+                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
+            )
+        );
+
+        var compiled = CanonicalJsonDocument.Serialize(node: lowered.Value!);
 
         // Both artifacts are committed, so this is the regeneration gate: the source and the document it generates
         // can never drift apart without failing here.
@@ -287,6 +312,30 @@ public class CartridgeRoundTripTests {
             )),
             compiled
         );
+    }
+    [Fact]
+    public void TestAnImportThatDoesNotResolveRefusesTheSource() {
+        var diagnostics = new DiagnosticBag();
+        var parsed = PuckParser.ParseDocumentWithDiagnostics(
+            source: """
+                schema: "puck.cartridge.v1"
+                import "missing-module"
+                target: "dmg"
+                """,
+            diagnostics: diagnostics
+        ).Value!;
+        var lowered = CartridgeDocumentEmitter.LowerSource(
+            cancellationToken: TestContext.Current.CancellationToken,
+            diagnostics: diagnostics,
+            document: parsed,
+            sourcePath: Path.Combine(
+                path1: Path.GetTempPath(),
+                path2: "puck-cartridge-import-probe.puck"
+            )
+        );
+
+        Assert.Null(@object: lowered.Value);
+        Assert.True(condition: diagnostics.HasErrors);
     }
     [Fact]
     public void TestCompilingTwiceProducesTheSameBytes() {

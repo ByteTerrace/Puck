@@ -280,8 +280,9 @@ placements {
   }
 }
 
-// Each machine boots its first cartridge and swaps to any file `machine.content` lists from its folder. The three brick
-// models share the CGB cartridges; the DMG's firmware holds on its logo for them, since the forge has no DMG target.
+// Each machine boots its first cartridge and swaps to any file `machine.content` lists from its folder. The DMG runs
+// the forge's dmg target, since a Color-only image parks a monochrome processor; the CGB and the AGB mode share the
+// CGB cartridges.
 machines [
   {
     name: "brick-dmg"
@@ -290,10 +291,10 @@ machines [
       schema: "puck.gaming-brick.configuration.v1"
       model: "dmg"
       content {
-        path: "../cartridges/cgb/tetromino.cgb.cartridge.json"
+        path: "../cartridges/dmg/tetromino.dmg.cartridge.json"
       }
     }
-    contentFolder: "../cartridges/cgb"
+    contentFolder: "../cartridges/dmg"
   }
   {
     name: "brick-cgb"
@@ -354,8 +355,8 @@ machines [
   }
 ]
 
-// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and rise
-// is start.
+// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and the
+// start channel (the pad's Start, Enter on a keyboard) is start.
 kits {
   rows [
     {
@@ -393,7 +394,7 @@ kits {
         strafe: "LeftStickX"
         jump: "South"
         flight: "East"
-        rise: "Start"
+        start: "Start"
       }
     }
   ]

@@ -86,7 +86,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "A rotating background needs the advanced machine; the cgb target's backgrounds only scroll.",
+                message: $"A rotating background needs the advanced machine; the {document.Target} target's backgrounds only scroll.",
                 path: "affine"
             );
             return;
@@ -227,7 +227,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "A per-pixel surface needs the advanced machine; the cgb target draws only from tiles.",
+                message: $"A per-pixel surface needs the advanced machine; the {document.Target} target draws only from tiles.",
                 path: "bitmap"
             );
             return;
@@ -277,7 +277,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 (document.Target != "agb")
             ) {
                 Error(
-                    message: $"A calendar {field} needs the advanced machine; the cgb clock counts days rather than dates.",
+                    message: $"A calendar {field} needs the advanced machine; the {document.Target} clock counts days rather than dates.",
                     path: ("clock." + field)
                 );
             }
@@ -576,7 +576,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "Extra scrolling backgrounds need the advanced machine; the cgb target has one background and a panel.",
+                message: $"Extra scrolling backgrounds need the advanced machine; the {document.Target} target has one background and a panel.",
                 path: "layers"
             );
             return;
@@ -1110,7 +1110,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             if (sound.Sample is { } pcm) {
                 if (document.Target != "agb") {
                     Error(
-                        message: "Recorded sound needs the advanced machine's digital sound path; the cgb target has none.",
+                        message: $"Recorded sound needs the advanced machine's digital sound path; the {document.Target} target has none.",
                         path: (path + ".sample")
                     );
                     continue;
@@ -1496,7 +1496,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                     // The Color machine has no blend unit; its fade works by rebaking palettes, which cannot mix two
                     // surfaces because a palette entry knows nothing about what is drawn beneath it.
                     Error(
-                        message: "Blending two surfaces is an agb capability; the cgb target has no blend unit.",
+                        message: $"Blending two surfaces is an agb capability; the {document.Target} target has no blend unit.",
                         path: path
                     );
                 }
@@ -1774,9 +1774,9 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
             return m_errors;
         }
-        if (document.Target is not ("cgb" or "agb")) {
+        if (document.Target is not ("cgb" or "dmg" or "agb")) {
             Error(
-                message: "Expected cgb or agb.",
+                message: "Expected cgb, dmg or agb.",
                 path: "target"
             );
         }
@@ -2107,7 +2107,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             if (sprite.Turn is { } turn) {
                 if (document.Target != "agb") {
                     Error(
-                        message: "Turning an object needs the advanced machine; the cgb target can only mirror one.",
+                        message: $"Turning an object needs the advanced machine; the {document.Target} target can only mirror one.",
                         path: (path + ".turn")
                     );
                 } else {

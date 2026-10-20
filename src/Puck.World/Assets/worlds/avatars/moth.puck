@@ -460,6 +460,15 @@ bindingOverlays [
                 ]
               }
               {
+                channel: "start"
+                id: "start"
+                scale: 1
+                sources [
+                  "keyboard.enter"
+                  "gamepad.start"
+                ]
+              }
+              {
                 command: "view.override"
                 id: "camera1"
                 sources [
@@ -1706,6 +1715,12 @@ channels [
     name: "rise"
     role: MoveUp
     shape: Bipolar
+  }
+  // The pad's start button, which the Moth herself ignores: an engaged machine reads it as its own start.
+  {
+    composition: true
+    name: "start"
+    shape: Binary
   }
 ]
 

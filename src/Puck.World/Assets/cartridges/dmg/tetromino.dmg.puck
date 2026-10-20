@@ -1,0 +1,17 @@
+schema: "puck.cartridge.v1"
+
+import "../shared/tetromino"
+
+target: "dmg"
+
+// The playfield is dark: colour 0 black, 1 white, 2 light grey and 3 dark grey, so a block's highlight, fill and
+// outline stay three distinct shades against it. The dmg target shades every cell from the first background palette
+// and every sprite from one of the first two object palettes, whichever palette a cell or a piece selects.
+let shades = [0, 32767, 21140, 10570]
+
+palettes {
+  background [shades]
+  object: map(range(0, 3), slot => shades)
+}
+
+tetromino()

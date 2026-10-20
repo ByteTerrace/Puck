@@ -11,7 +11,7 @@ public sealed record CartridgeDocument {
 
     /// <summary>Gets the declared schema; absence is invalid.</summary>
     public required string Schema { get; init; }
-    /// <summary>Gets the target: cgb or agb.</summary>
+    /// <summary>Gets the target: cgb, dmg or agb.</summary>
     public required string Target { get; init; }
     /// <summary>Gets the ASCII cartridge title, at most twelve characters.</summary>
     public required string Title { get; init; }

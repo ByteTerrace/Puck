@@ -31,6 +31,12 @@ public static class Hw {
     public const ushort ObjectAttributeMemory = 0xFE00;
     /// <summary>The auto-increment bit for the Color palette index ports.</summary>
     public const byte PaletteAutoIncrement = 0x80;
+    /// <summary>BGP — the monochrome background shade register: two bits of darkness per colour index.</summary>
+    public const byte PortBgShades = 0x47;
+    /// <summary>OBP0 — the monochrome shade register of objects whose attribute bit 4 is clear.</summary>
+    public const byte PortObj0Shades = 0x48;
+    /// <summary>OBP1 — the monochrome shade register of objects whose attribute bit 4 is set.</summary>
+    public const byte PortObj1Shades = 0x49;
     /// <summary>BGPD — the Color background palette data window.</summary>
     public const byte PortBgPaletteData = 0x69;
     /// <summary>BGPI — the Color background palette index (bit 7 = auto-increment).</summary>

@@ -7,7 +7,6 @@ using Puck.GamingBricks.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
-using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler;
 using Puck.World;
@@ -261,20 +260,18 @@ public static partial class CompileCommand {
             return null;
         }
 
-        if (imports == ImportHandling.Validate) {
-            ModuleResolver.ValidateImportGraph(
+        json =((imports == ImportHandling.Ignore)
+            ? CartridgeDocumentEmitter.LowerWithDiagnostics(
                 diagnostics: diagnostics,
-                rootDoc: documentNode,
-                rootPath: sourcePath,
-                vocabulary: vocabulary
-            );
-        }
-
-        json = CartridgeDocumentEmitter.LowerWithDiagnostics(
-            diagnostics: diagnostics,
-            document: documentNode,
-            sourceMap: sourceMap
-        ).Value;
+                document: documentNode,
+                sourceMap: sourceMap
+            )
+            : CartridgeDocumentEmitter.LowerSource(
+                diagnostics: diagnostics,
+                document: documentNode,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
+            )).Value;
 
         return documentNode;
     }

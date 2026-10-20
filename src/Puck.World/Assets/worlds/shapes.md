@@ -295,10 +295,6 @@ to step along it.
 Each of these was seen in a Direct3D 12 capture of the gallery.
 `docs/plans/open-items.md` tracks them.
 
-- **A live scale edit does not change the drawn size.**
-  `world.row.set creations shape-capsule document.shapes[name=subject].scale [0.3, 1.6, 0.3]`
-  applies, and `creation.shape shape-capsule subject` reads the new scale,
-  but the capsule draws at its old size; a position edit shows.
 - **Moving blends stretch while they move.** `motion-smooth-blend`,
   `motion-carve` and `motion-pulse` join shapes that move independently
   (PUCK122 names each at authoring time) and skin one baked seam while they

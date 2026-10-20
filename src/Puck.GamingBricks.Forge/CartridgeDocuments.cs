@@ -57,7 +57,7 @@ public static class CartridgeDocuments {
         );
     }
     /// <summary>Creates an empty, editable cartridge whose defaults are explicit source data.</summary>
-    /// <param name="target">cgb or agb.</param>
+    /// <param name="target">cgb, dmg or agb.</param>
     /// <param name="title">The player's title.</param>
     /// <returns>A blank document with one empty tile and no game rules.</returns>
     public static CartridgeDocument Create(string target, string title) {
@@ -106,7 +106,7 @@ public static class CartridgeDocuments {
     public static (CostBound Frame, long Reservation) Estimate(CartridgeDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var profile = ((document.Target is "agb" or "cgb")
+        var profile = ((document.Target is "agb" or "cgb" or "dmg")
             ? CartridgeCostProfile.For(target: document.Target)
             : CartridgeCostProfile.Humble
         );

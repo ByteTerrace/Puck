@@ -51,7 +51,7 @@ public static class FrameworkCartridge {
         rom[0x014E] = ((byte)((globalSum >> 8) & 0xFF));
         rom[0x014F] = ((byte)(globalSum & 0xFF));
     }
-    private static void WriteHeader(byte[] rom, string title, int bankCount, bool clock, byte[]? logo) {
+    private static void WriteHeader(byte[] rom, string title, int bankCount, bool clock, byte[]? logo, bool monochrome) {
         // Entry point (0x0100): nop; jp EntryAddress.
         rom[EntryPoint] = 0x00;
         rom[(EntryPoint + 1)] = OpcodeJumpAbsolute;
@@ -66,7 +66,11 @@ public static class FrameworkCartridge {
             rom[(0x0134 + index)] = titleBytes[index];
         }
 
-        rom[0x0143] = 0xC0; // CGB flag: Color REQUIRED.
+        // The colour flag: 0xC0 marks a Color-only cartridge, zero one written for the monochrome machine, which a
+        // Color machine runs in its compatibility mode.
+        rom[0x0143] = ((byte)(monochrome
+            ? 0x00
+            : 0xC0));
         // Cartridge type. MBC5 pages without MBC1's bank-number aliasing, but only MBC3 carries a real-time clock,
         // so a cartridge wanting one takes MBC3's smaller reach in exchange.
         rom[0x0147] = ((byte)(clock
@@ -116,8 +120,9 @@ public static class FrameworkCartridge {
     /// into 0x4000..0x7FFF by writing its number to 0x2000, so a bank's contents are only readable while selected.</param>
     /// <param name="logo">The 48-byte logo the header carries, or null for the era one. Puck's compatible firmware
     /// accepts either logo; strict Era/House boot policies and hardware firmware may require a matching bitmap.</param>
+    /// <param name="monochrome">Whether the cartridge is written for the monochrome machine rather than the Color one.</param>
     /// <returns>The ROM image, sized to hold every bank.</returns>
-    public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0, byte[]? logo = null) {
+    public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0, byte[]? logo = null, bool monochrome = false) {
         ArgumentException.ThrowIfNullOrEmpty(title);
         ArgumentNullException.ThrowIfNull(routine);
         ArgumentNullException.ThrowIfNull(data);
@@ -184,6 +189,7 @@ public static class FrameworkCartridge {
             bankCount: bankCount,
             clock: clock,
             logo: logo,
+            monochrome: monochrome,
             rom: rom,
             title: title
         );

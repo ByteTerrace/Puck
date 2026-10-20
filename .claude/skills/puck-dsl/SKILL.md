@@ -122,7 +122,8 @@ puck test <path-or-dir>               # boots each test block headless, one verd
 
 **Source and generated documents.** A committed cartridge source has its
 `.cartridge.json` twin committed beside it and regenerated in the same change
-(`CartridgeRoundTripTests` byte-compares them). A world source has no committed
+(`CartridgeRoundTripTests` byte-compares them); a module it imports, under
+`cartridges/shared/`, contributes templates and has no twin. A world source has no committed
 document: the build compiles it. `--world foo.puck` boots straight from source,
 `world.reload` recompiles it, and `world.save` writes edits back through the
 printer (generated rows refuse by name).

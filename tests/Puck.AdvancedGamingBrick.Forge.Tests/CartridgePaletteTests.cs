@@ -79,6 +79,7 @@ public sealed class CartridgePaletteTests {
         target: "cgb",
         title: "PALBAD"
     );
+
     private static int[] Palette(int colors, int ink) {
         var entries = new int[colors];
 
@@ -178,6 +179,64 @@ public sealed class CartridgePaletteTests {
                 x: 76,
                 y: 12
             )
+        );
+    }
+    [Fact]
+    public void MonochromeShadesIgnoreCellPalettesAndPickAnObjectRegister() {
+        // Object palette zero inks black and palette one light grey. Every cell selects the black background palette,
+        // which the monochrome machine has no attribute to honour, so the background stays white.
+        var white = new[] { 0x7FFF, 0x7FFF, 0x7FFF, 0x7FFF };
+        var solid = new CartridgeTile(
+            Name: "solid",
+            Pixels: [.. Enumerable.Repeat(
+                count: 8,
+                element: "11111111"
+            )]
+        );
+        var document = CartridgeDocuments.Create(
+            target: "dmg",
+            title: "SHADES"
+        ) with {
+            Palettes = new CartridgePalettes(
+                Background: [white, [0, 0, 0, 0]],
+                Object: [[0, 0, 0, 0], [0, 0x56B5, 0, 0]]
+            ),
+            MapPalettes = [.. Enumerable.Repeat(
+                count: 1024,
+                element: 1
+            )],
+            Tiles = [CartridgeDocuments.Create(target: "dmg", title: "T").Tiles[0], solid],
+            Sprites = [.. new[] { 0, 1 }.Select(selector: slot => new CartridgeSprite(
+                Name: $"s{slot}",
+                Tile: CartridgeExpressions.Of(constant: 1),
+                X: CartridgeExpressions.Of(constant: (16 + (slot * 32))),
+                Y: CartridgeExpressions.Of(constant: 16),
+                Visible: CartridgeExpressions.Of(constant: 1),
+                Palette: CartridgeExpressions.Of(constant: slot)
+            ))],
+        };
+        using var machine = CartridgeProbe.Boot(
+            document: document,
+            frames: 20,
+            label: "shades"
+        );
+
+        var background = machine.Pixel(
+            x: 100,
+            y: 100
+        );
+        var first = machine.Pixel(
+            x: 20,
+            y: 20
+        );
+        var second = machine.Pixel(
+            x: 52,
+            y: 20
+        );
+
+        Assert.Equal(
+            expected: 3,
+            actual: new[] { background, first, second }.Distinct().Count()
         );
     }
     [MemberData(memberName: nameof(RefusalNames))]

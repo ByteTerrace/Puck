@@ -89,7 +89,7 @@ public static partial class CreationCommand {
     private static Command ShapeCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string>(name: "--prototype") { Description = "The prototype id whose creation to read.", Required = true };
-        var shapeOption = new Option<string[]>(name: "--shape") { Description = "Limit to the named shapes (default: every shape).", AllowMultipleArgumentsPerToken = true };
+        var shapeOption = new Option<string[]>(name: "--shape") { AllowMultipleArgumentsPerToken = true, Description = "Limit to the named shapes (default: every shape)." };
         var command = new Command(
             description: "Reads back each shape's law, as the in-engine creation.shape does: what the renderer lowers it to, whether that field is exact, a bound (its gain and step scale) or uncertified, whether the fixed-point evaluator interprets it, and what deterministic contact makes of it on a solid placement.",
             name: "shape"

@@ -9,7 +9,6 @@ namespace Puck.World.Authoring;
 /// <param name="Group">The group's id.</param>
 /// <param name="Blend">The blend <paramref name="Shape"/> joins the group by.</param>
 public readonly record struct CreationMovingBlend(int Shape, int Other, int Group, SdfBlendOp Blend);
-
 /// <summary>
 /// What moves a creation's shapes, read off its document: whether it animates at all, and which shape's motion each
 /// shape inherits. An animated creation's shapes each ride a slot of their own in the stamp pool, and a pooled blend
@@ -168,7 +167,7 @@ public static class CreationMotion {
             var (firstTurn, firstShift) = FrameMotion(document: document, frame: frame, index: first);
             var (secondTurn, secondShift) = FrameMotion(document: document, frame: frame, index: second);
 
-            if ((MathF.Abs(Quaternion.Dot(quaternion1: firstTurn, quaternion2: secondTurn)) < (1f - Tolerance)) || (Vector3.Distance(value1: firstShift, value2: secondShift) > Tolerance)) {
+            if ((MathF.Abs(x: Quaternion.Dot(quaternion1: firstTurn, quaternion2: secondTurn)) < (1f - Tolerance)) || (Vector3.Distance(value1: firstShift, value2: secondShift) > Tolerance)) {
                 return false;
             }
         }

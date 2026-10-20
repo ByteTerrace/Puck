@@ -1,9 +1,9 @@
-﻿# Cartridge Forge and puck.cartridge.v1 authoring
+# Cartridge Forge and puck.cartridge.v1 authoring
 
 Players author ROMs as `puck.cartridge.v1` JSON documents. This package owns
 the source model, validation, canonical source hash, JSON Pointer editor, and
 compiler contract. It has no World or platform dependency. The
-[HGB compiler](../hgb/forge.md) emits CGB cartridges;
+[HGB compiler](../hgb/forge.md) emits CGB and DMG cartridges;
 the [AGB compiler](../agb/forge.md) emits AGB
 cartridges. The exported bytes run on their native emulators without a managed
 game interpreter. There are no embedded sample games.
@@ -44,13 +44,13 @@ and submits it through the machine's content provider, preserving the source
 hash and symbols at bind. The server reports acceptance or refusal. Existing
 engagement and pad mappings provide player input.
 
-`forge.new agb PLAYER` starts an AGB source instead. To change an existing
+`forge.new agb PLAYER` starts an AGB source instead, and `forge.new dmg PLAYER` a monochrome one. To change an existing
 CGB source to AGB, set `/target` to `"agb"` and widen each palette under `/palettes/background` and
 `/palettes/object` to 16 RGB555 integers. Check target-specific features before building.
 
 | Command | Effect |
 |---|---|
-| `forge.new <cgb|agb> <title>` | Replace this author's draft with explicit blank source. |
+| `forge.new <cgb|dmg|agb> <title>` | Replace this author's draft with explicit blank source. |
 | `forge.open <source-path>` | Replace the draft with validated JSON from disk. |
 | `forge.show [pointer]` | Read the whole draft or a subtree as JSON. |
 | `forge.set <pointer> <json>` | Set a field/element; a final `/-` appends an array element. |
@@ -88,6 +88,15 @@ slot with the same message `forge.check` would print; an engine with no
 compiler refuses the path when the world document validates. The shipped
 cartridges under `src/Puck.World/Assets/cartridges/` are the worked examples.
 
+A source may `import` a module library, named without its `.puck` suffix, for
+the templates and constants it declares; nothing else in the module becomes part
+of the cartridge. That is how one game serves several targets:
+`cartridges/shared/tetromino.puck` holds the game as `template tetromino()`, and
+`cgb/tetromino.cgb.puck` and `dmg/tetromino.dmg.puck` each
+`import "../shared/tetromino"`, declare their `target` and `palettes`, and call
+`tetromino()`. `puck compile` resolves imports beside the source; a module
+compiles to no document of its own.
+
 ## Source contract
 
 All top-level fields are required. `forge.show` prints a complete starting
@@ -96,13 +105,13 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | Field | Meaning and limits |
 |---|---|
 | `schema` | Exactly `puck.cartridge.v1`. |
-| `target` | `cgb` or `agb`. CGB uses the Color hardware, not DMG compatibility. |
+| `target` | `cgb`, `dmg` or `agb`. `cgb` uses the Color hardware at double speed and its image refuses to run on a DMG; `dmg` builds for the monochrome machine at single speed, which a Color machine also runs in its compatibility mode. |
 | `title` | 1–12 printable ASCII characters, canonicalized to uppercase. |
 | `gameCode` | Four ASCII characters; used by the AGB header. |
-| `palettes` | `{background,object}`, each 1–8 palettes on CGB or 1–16 on AGB. A palette is 4 RGB555 integers on CGB, 16 on AGB. Object color zero is transparent. |
+| `palettes` | `{background,object}`, each 1–8 palettes on CGB and DMG or 1–16 on AGB. A palette is 4 RGB555 integers on CGB and DMG, 16 on AGB. DMG shades each colour by its luma into one of four greys, the background from the first palette and sprites from the first two. Object color zero is transparent. |
 | `tiles` | 1–256 named 8×8 tiles. Each `pixels` array has eight strings of eight hexadecimal palette indices. Sprite color zero is transparent. |
 | `map` | Exactly 1024 tile indices, row-major over a 32×32 background. |
-| `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. |
+| `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. DMG accepts every per-cell selection (here, a map step's `palette`, a screen's `palettes`) and shades every cell from palette zero. |
 | `bitmap` | Optional `{clear}` per-pixel drawing surface, 240 by 160, one byte per pixel indexing the background palette bank read as one flat run of 256 colours. It replaces the tile background entirely, so it cannot share a document with a panel, a turning background or extra layers; sprites still draw over it. `clear` is the colour it is filled with each frame, or absent to leave it as drawn. AGB only. |
 | `layers` | Up to 2 `{map,mapPalettes,scrollX,scrollY,priority,visible}` scrolling backgrounds behind the document's own, each with its own 32×32 map and scroll. `priority` is 0 (nearest) through 3. A turning background occupies the nearer of the two hardware surfaces, so declaring one leaves room for a single layer. AGB only. |
 | `window` | Optional `{map,mapPalettes,x,y,visible}` panel drawn over the background from its corner down and right, out of its own 32×32 map. |
@@ -117,7 +126,7 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
 | `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. Variables contribute their full one- or two-byte representation; arrays contribute all elements. |
 | `rules` | Up to 1024 `{name,body,when}` rules; a gate reaches at most 8 comparisons however it composes them, and one body holds at most 64 steps nested at most 8 deep. Rules cost CODE, which the image's own windows bound, so the real refusal is `CartridgeCapacityException`; declaring `scene` is what keeps per-frame work flat as the count grows. |
-| `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field is an expression; `palette` is optional and selects an object palette. |
+| `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field is an expression; `palette` is optional and selects an object palette (on DMG, its low bit picks the first or second). |
 | `scrollX`, `scrollY` | Background offsets in pixels, each an expression. |
 
 Names are unique within each collection, case-sensitive, 1–64 ASCII letters,

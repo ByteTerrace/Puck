@@ -6,6 +6,7 @@ namespace Puck.SdfVm;
 public sealed partial class SdfMeshPathBake {
     // The presentation times of the latest settle rebakes this bake started, oldest first, for SdfMeshSettle.MaxPerSecond.
     private readonly float[] m_settleStarts = new float[SdfMeshSettle.MaxPerSecond];
+
     private int m_settleStartCount;
 
     // Watches every skinned dynamic group's members against the pose its mesh was baked at, and plans a group again at
@@ -74,7 +75,7 @@ public sealed partial class SdfMeshPathBake {
         moved = !group.Seeded;
         for (var member = 0; (member < slots.Length); member++) {
             var (position, orientation) = PoseOf(transform: transforms[slots[member]]);
-            var relative = Vector3.Transform(value: (position - ownPosition), rotation: inverse);
+            var relative = Vector3.Transform(rotation: inverse, value: (position - ownPosition));
             var turn = Quaternion.Normalize(value: (inverse * orientation));
 
             group.CurrentPositions![member] = relative;
@@ -155,5 +156,5 @@ public sealed partial class SdfMeshPathBake {
         (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
     // The angle, in radians, one unit quaternion turns from another; q and -q turn alike.
     private static float Angle(Quaternion a, Quaternion b) =>
-        (2f * MathF.Acos(x: MathF.Min(1f, MathF.Abs(Quaternion.Dot(quaternion1: a, quaternion2: b)))));
+        (2f * MathF.Acos(x: MathF.Min(x: 1f, y: MathF.Abs(x: Quaternion.Dot(quaternion1: a, quaternion2: b)))));
 }

@@ -1,0 +1,50 @@
+schema: "puck.cartridge.v1"
+
+target: "dmg"
+
+title: "TESTCARD"
+
+gameCode: "TCRD"
+
+// The monochrome test card: four shade bars, white through black, each eight map columns wide, drifting one pixel left
+// every frame. The background map is 32 columns (256 pixels) wide and `drift` is a byte, so the scroll wraps exactly
+// where the map does and the bars cycle without a seam. A picture that stops drifting is a machine that stopped
+// running.
+let mapColumns = 32
+let barColumns = 8
+
+// White, light grey, dark grey and black, as 15-bit BGR words; the dmg target shades each by its brightness.
+let shades = [32767, 21140, 10570, 0]
+
+palettes {
+  background [shades]
+  object [shades]
+}
+
+tiles: map(range(0, 4), bar => { name: $"bar{bar}", pixels: map(range(0, 8), row => $"{bar}{bar}{bar}{bar}{bar}{bar}{bar}{bar}") })
+
+map: map(range(0, mapColumns * mapColumns), cell => floor(cell % mapColumns / barColumns))
+
+variables [
+  { name: "drift", initial: 0 }
+]
+
+arrays []
+
+screens []
+
+sprites []
+
+layers []
+
+raster []
+
+sounds []
+
+scrollX: "drift"
+
+scrollY: "0"
+
+rule "drift" {
+  drift += 1
+}

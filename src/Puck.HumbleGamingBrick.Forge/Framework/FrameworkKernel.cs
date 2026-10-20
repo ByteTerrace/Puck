@@ -16,6 +16,9 @@ namespace Puck.HumbleGamingBrick.Forge.Framework;
 /// <param name="RasterRows">How many mid-picture scroll changes the cartridge carries; zero leaves the status interrupt off.</param>
 /// <param name="RestoreFixedBank">Pages bank one back in once the video copies are done. Everything the running
 /// game reads from the switchable window lives in bank one, so leaving another bank selected strands all of it.</param>
+/// <param name="Monochrome">The monochrome machine's shade registers, or null for the Color machine. When present the
+/// boot leaves the processor at single speed, writes these registers in place of palette memory, and touches neither
+/// video-memory bank one nor the work-RAM bank register, none of which the monochrome machine has.</param>
 public readonly record struct FrameworkBootSpec(
     RomTable BgPalettes,
     RomTable ObjPalettes,
@@ -29,7 +32,13 @@ public readonly record struct FrameworkBootSpec(
     Action<Sm83Emitter>? SelectMapBank = null,
     Action<Sm83Emitter>? SelectAttributeBank = null,
     Action<Sm83Emitter>? RestoreFixedBank = null,
-    int RasterRows = 0);
+    int RasterRows = 0,
+    FrameworkShades? Monochrome = null);
+/// <summary>The monochrome machine's three shade registers, each two bits of darkness per colour index.</summary>
+/// <param name="Background">The background register (BGP).</param>
+/// <param name="Object0">The register of objects with attribute bit 4 clear (OBP0).</param>
+/// <param name="Object1">The register of objects with attribute bit 4 set (OBP1).</param>
+public readonly record struct FrameworkShades(byte Background, byte Object0, byte Object1);
 /// <summary>
 /// The interrupt-driven kernel: the fixed 3-byte <c>jp boot</c> prologue that pins the VBlank handler at
 /// <see cref="Hw.VBlankHandlerAddress"/>; the handler itself (save registers → <c>call 0xFF80</c> for the HRAM OAM-DMA
@@ -66,11 +75,10 @@ public static class FrameworkKernel {
     }
     // The VBlank handler (fixed at 0x0153): registers saved, shadow OAM DMA-copied via the HRAM trampoline, the
     // background write queue drained while VRAM is open, the frame counter advanced, registers restored, reti.
-    private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm = null) {
+    private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm, bool monochrome) {
         var noQueue = emitter.NewLabel();
         var attributeLoop = emitter.NewLabel();
         var drainLoop = emitter.NewLabel();
-        var noCounterHigh = emitter.NewLabel();
 
         emitter.Push(pair: StackPair.Af);
         emitter.Push(pair: StackPair.Bc);
@@ -80,7 +88,9 @@ public static class FrameworkKernel {
         emitter.Call(address: FrameworkMemoryMap.DmaTrampoline);
 
         // Two passes over the same run, because a cell's tile and its attribute live at one address in two different
-        // video-memory banks: tiles with the bank register at zero, then attributes with it at one.
+        // video-memory banks: tiles with the bank register at zero, then attributes with it at one. The monochrome
+        // machine has no second bank and ignores the bank register, so an attribute pass there would overwrite the
+        // tiles it just wrote; it takes the first pass only.
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
         emitter.Arithmetic(
             op: AluOp.Or,
@@ -117,6 +127,17 @@ public static class FrameworkKernel {
             condition: Condition.NotZero,
             label: drainLoop
         );
+        if (monochrome) {
+            emitter.XorA();
+            emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
+            emitter.MarkLabel(label: noQueue);
+            EmitVBlankTail(
+                emitter: emitter,
+                rasterRearm: rasterRearm
+            );
+
+            return;
+        }
         emitter.LoadAImmediate(value: 0x01);
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
@@ -151,6 +172,14 @@ public static class FrameworkKernel {
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
         emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
         emitter.MarkLabel(label: noQueue);
+        EmitVBlankTail(
+            emitter: emitter,
+            rasterRearm: rasterRearm
+        );
+    }
+    // The handler's shared tail: rearm the raster walk, advance the frame counter, restore, reti.
+    private static void EmitVBlankTail(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm) {
+        var noCounterHigh = emitter.NewLabel();
 
         rasterRearm?.Invoke(obj: emitter);
 
@@ -303,10 +332,13 @@ public static class FrameworkKernel {
 
         // Double speed, which the Color machine runs at when a cartridge asks: arm the switch, then stop. The stall is
         // about two frames and happens here, before anything is on screen. Interrupts must already be off, because the
-        // stop only switches when nothing dispatches out of it.
-        emitter.LoadAImmediate(value: 0x01);
-        emitter.StoreAToHighPage(port: Hw.PortSpeedSwitch);
-        emitter.Stop();
+        // stop only switches when nothing dispatches out of it. The monochrome machine has no switch: its stop would
+        // park the processor until a key is pressed.
+        if (spec.Monochrome is null) {
+            emitter.LoadAImmediate(value: 0x01);
+            emitter.StoreAToHighPage(port: Hw.PortSpeedSwitch);
+            emitter.Stop();
+        }
 
         // A clean slate: the framework page, the shadow OAM (Y = 0 hides every sprite), and the first game pages — but
         // SPLIT AROUND the 16-byte victory-share source slot (0xC0F0..0xC0FF), which the host seeds BEFORE the game
@@ -338,6 +370,29 @@ public static class FrameworkKernel {
         emitter.StoreAToHighPage(port: Hw.PortLcdControl);
         emitter.StoreAToHighPage(port: Hw.PortScrollY);
         emitter.StoreAToHighPage(port: Hw.PortScrollX);
+        if (spec.Monochrome is { } shades) {
+            EmitShades(
+                emitter: emitter,
+                shades: shades
+            );
+            spec.SelectTileBank?.Invoke(obj: emitter);
+            EmitBlockCopy(
+                emitter: emitter,
+                sourceAddress: spec.Tiles.Address,
+                destinationAddress: Hw.VramTiles,
+                byteCount: ((ushort)spec.TileByteCount)
+            );
+            spec.SelectMapBank?.Invoke(obj: emitter);
+            EmitBlockCopy(
+                emitter: emitter,
+                sourceAddress: spec.InitialMap.Address,
+                destinationAddress: Hw.VramBackgroundMap,
+                byteCount: 0x0400
+            );
+            spec.RestoreFixedBank?.Invoke(obj: emitter);
+
+            return;
+        }
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
 
         // Pin the switchable work-RAM bank so state above 0xD000 is addressable without any further selection.
@@ -462,7 +517,9 @@ public static class FrameworkKernel {
     /// <param name="emitter">The routine emitter.</param>
     /// <param name="bootLabel">The boot label the prologue jumps to (marked later by the boot emission).</param>
     /// <param name="rasterRearm">Rearms the mid-picture scroll walk each frame, or null when there is none.</param>
-    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel, Action<Sm83Emitter>? rasterRearm = null) {
+    /// <param name="monochrome">Whether the cartridge targets the monochrome machine, whose handler drains map writes
+    /// without the Color machine's attribute pass.</param>
+    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel, Action<Sm83Emitter>? rasterRearm = null, bool monochrome = false) {
         ArgumentNullException.ThrowIfNull(emitter);
 
         if (emitter.Length != 0) {
@@ -477,7 +534,32 @@ public static class FrameworkKernel {
 
         EmitVBlankHandler(
             emitter: emitter,
+            monochrome: monochrome,
             rasterRearm: rasterRearm
         );
+    }
+    /// <summary>Emits writes of the monochrome machine's three shade registers as immediates. Clobbers A.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="shades">The register values.</param>
+    public static void EmitShades(Sm83Emitter emitter, FrameworkShades shades) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        emitter.LoadAImmediate(value: shades.Background);
+        emitter.StoreAToHighPage(port: Hw.PortBgShades);
+        emitter.LoadAImmediate(value: shades.Object0);
+        emitter.StoreAToHighPage(port: Hw.PortObj0Shades);
+        emitter.LoadAImmediate(value: shades.Object1);
+        emitter.StoreAToHighPage(port: Hw.PortObj1Shades);
+    }
+    /// <summary>Emits writes of the monochrome machine's three shade registers from the three bytes HL points at,
+    /// leaving HL past them. Clobbers A.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    public static void EmitShadesFromHl(Sm83Emitter emitter) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        foreach (var port in new[] { Hw.PortBgShades, Hw.PortObj0Shades, Hw.PortObj1Shades }) {
+            emitter.LoadAFromHlIncrement();
+            emitter.StoreAToHighPage(port: port);
+        }
     }
 }

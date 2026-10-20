@@ -9,8 +9,8 @@ namespace Puck.GamingBricks.Forge;
 /// <remarks>
 /// <para>
 /// Each machine has its own reservation because they do not sustain the same work: the Color machine runs its
-/// processor at double speed and the advanced one fetches through the cartridge prefetch, and those are different
-/// multiples of each machine's own base rate. A document is costed against its own target's profile, so flipping the
+/// processor at double speed, the monochrome one at single speed, and the advanced one fetches through the cartridge
+/// prefetch, and those are different multiples of each machine's own base rate. A document is costed against its own target's profile, so flipping the
 /// target re-asks the question rather than carrying the other machine's answer.
 /// </para>
 /// <para>
@@ -126,6 +126,13 @@ public sealed record CartridgeCostProfile(
         StepShift: 34L,
         TargetArray: 10L
     );
+    /// <summary>The monochrome machine's reservation and weights: the Color machine's weights at half its reservation,
+    /// because the same code runs at single speed and every measured capacity is half the Color machine's.</summary>
+    public static CartridgeCostProfile Monochrome { get; } = Humble with {
+        FrameUnits = 12500L,
+        Name = "puck.cartridge.dmg.v1",
+        OperandLight = null,
+    };
 
     /// <summary>Returns a value indicating whether a cost fits the reservation.</summary>
     /// <param name="bound">The cost to test.</param>
@@ -139,6 +146,7 @@ public sealed record CartridgeCostProfile(
     public static CartridgeCostProfile For(string target) => target switch {
         "agb" => Advanced,
         "cgb" => Humble,
+        "dmg" => Monochrome,
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(target),
         actualValue: target,

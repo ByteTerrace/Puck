@@ -171,7 +171,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                                     EngineId: compiler.EngineId,
                                     Options: ((result.Target == "agb")
                                 ? null
-                                : "cgb")
+                                : result.Target)
                                 ),
                                 principal: principal
                             );
@@ -196,10 +196,9 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
     private ICartridgeCompiler ResolveCompiler(string target) {
         if (m_compilers is not null) {
             foreach (var compiler in m_compilers) {
-                if (string.Equals(
-                    a: compiler.Target,
-                    b: target,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
+                if (compiler.Targets.Contains(
+                    comparer: StringComparer.OrdinalIgnoreCase,
+                    value: target
                 )) {
                     return compiler;
                 }
@@ -220,7 +219,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Command(
             detail: "Creates a blank cartridge document.",
-            grammar: "<cgb|agb> <title>",
+            grammar: "<cgb|dmg|agb> <title>",
             name: "new"
         );
         yield return Command(
