@@ -69,7 +69,7 @@ authors it today.
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
-bar draws. The live example is `Assets/worlds/controls.puck`, which the debug world
+bar draws. The live example is `worlds/debug/controls.puck`, which the debug world
 and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
 right stick's press; `modifiers: false` and `pageLabel: false` drop the modifier row and the page name, and an
@@ -289,7 +289,7 @@ The newest mouse or axis selection wins; axis switch hysteresis never locks
 out a later mouse selection. Losing the pointer ends its hover.
 
 Axis selection, ring navigation, commit, and cancel sources are ordinary entries
-on each hold page. `Assets/worlds/controls.puck`'s `play-primary` is the live
+on each hold page. `worlds/debug/controls.puck`'s `play-primary` is the live
 example: two hold pages (Tab, LB) that inherit the resting page, and one ring
 whose labels and icons read `state.wheelLabels`/`state.wheelIcons`.
 `WorldWheelFeed` owns presentation;

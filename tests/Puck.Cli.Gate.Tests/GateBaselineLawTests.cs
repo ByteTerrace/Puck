@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.Cli.Gate.Tests;
 
 public sealed class GateBaselineLawTests : GateRunLaws {
-    [InlineData("src/Puck.World/Assets/worlds/game.puck", "corpus-inventory")]
+    [InlineData("worlds/debug/game.puck", "corpus-inventory")]
     [InlineData("build/trigger.props", "browser-parity,corpus-inventory,maths-ledger")]
     [InlineData("docs/only.md", "")]
     [Theory]

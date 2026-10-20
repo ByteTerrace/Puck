@@ -41,6 +41,6 @@ public sealed class CartridgesCommandTests {
     public void TheShippedDeckCartridgesAreTheOnesTheForgeBuilds() =>
         Assert.Equal(
             expected: 0,
-            actual: SuiteRoot.Invoke(args: ["cartridges", "deck", "--output", RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/deck"), "--check"])
+            actual: SuiteRoot.Invoke(args: ["cartridges", "deck", "--output", RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/deck"), "--check"])
         );
 }

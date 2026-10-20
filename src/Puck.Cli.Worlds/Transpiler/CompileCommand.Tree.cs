@@ -210,22 +210,17 @@ public static partial class CompileCommand {
         WorldDocumentName.IsSourceFile(path: file) &&
         WorldSourceIndex.IsWorldSourceFile(path: file)
     ));
-    private static bool IsModuleLibrary(string file) => (
-        WorldDocumentName.IsSourceFile(path: file) &&
-        (WorldSourceIndex.Declaration(path: file) is { EmitsDocument: false, Worlds.Count: 0 })
-    );
     // Every other file of the tree lands at its own place under the output, so the output is the tree as a bootable
     // package: its manifest, the files its documents name (fonts, tunes, cartridges, pipeline sources a package key
-    // reads beside the document), and anything else it carries. A module library compiles to nothing, so a copy is how
-    // it travels: a cartridge's shared module names no schema of its own. A compiled world, or a document a source
-    // carries, is the run's to write, never a copy.
+    // reads beside the document), and anything else it carries. A world source, a compiled world, or a document a
+    // source carries, is the run's to compile or write, never a copy.
     private static int CopyTreeFiles(string root, string directory, Dictionary<string, string> written) {
         foreach (var file in Directory.EnumerateFiles(
             path: root,
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         ).Order(comparer: StringComparer.Ordinal)) {
-            if ((IsTreeSource(file: file) && !IsModuleLibrary(file: file)) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: CompiledWorld.Extension)) {
+            if (IsTreeSource(file: file) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: CompiledWorld.Extension)) {
                 continue;
             }
 

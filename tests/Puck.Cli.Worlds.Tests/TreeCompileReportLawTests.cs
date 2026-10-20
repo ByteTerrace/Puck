@@ -9,8 +9,7 @@ namespace Puck.Cli.Worlds.Tests;
 
 /// <summary>CONTRACT UNDER TEST: a <c>puck compile --tree</c> run reports, in its <c>--written</c> file, exactly the
 /// files it left under its output, and a caller reads that report rather than deriving it, since only
-/// a compile knows which sources emit documents. A module library compiles to nothing and travels as a copy of
-/// itself, as every other file of the tree does; a hand-authored
+/// a compile knows which sources emit documents. A module library writes and reports nothing; a hand-authored
 /// <c>.world.json</c> beside a library of its name ships as it stands, since the library carries no document name; and a
 /// <c>.world.json</c> beside the world source of its name never ships, since the source wins.</summary>
 public sealed class TreeCompileReportLawTests {
@@ -234,7 +233,7 @@ public sealed class TreeCompileReportLawTests {
             userMessage: log
         );
 
-        string[] expected = ["games/field.puckb", "games/field.world.json", "hub.puck", "hub.puckb", "hub.world.json", "modules/rooms.puck"];
+        string[] expected = ["games/field.puckb", "games/field.world.json", "hub.puckb", "hub.world.json"];
 
         Assert.Equal(
             actual: File.ReadAllText(path: report),

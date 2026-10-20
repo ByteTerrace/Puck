@@ -13,17 +13,18 @@ a portal.
 Run from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --control --world src/Puck.World/Assets/worlds/debug.puck
+dotnet run --project src/Puck.World -c Release -- --control --world worlds/debug
 ```
 
-The debug world is the World's default, so `--world` only matters when you
-want `world.reload` to recompile your edits to the source. It opens on the
+`--world worlds/debug` boots the package's entry, `debug.puck`, from source, so
+`world.reload` recompiles your edits to it; `Puck.World` boots nothing without
+`--world`. It opens on the
 Moth basis's chase camera (the `play` layout, which 5 returns to): it follows
 the avatar from behind, shows the frame ahead and to the right with the far
 frame inside it, and follows the avatar through every crossing. Keys 1 to 4
 switch to the fixed inspection cameras. `--control` opens the
 Operator attachment an MCP client drives
-([setup](../../../Puck.Mcp/README.md)). Where several Worlds run, start the
+([setup](../../src/Puck.Mcp/README.md)). Where several Worlds run, start the
 adapter with `--attach <file>`, naming the file the World prints on stderr
 (`[world.control: operator attachment <file>]`); without it, the adapter keeps
 whichever World it attached to first.
@@ -69,7 +70,7 @@ front, the clear quarter, an oblique profile and the braid-side quarter. These
 shots frame the collar through the hips. They use the same neutral platform,
 body pose and overlay switches as the boot study. The torso follows the cream
 cuirass, lavender rib armor and compact waist of the
-[original concept sheets](../../../../docs/game/art/moth-concept-pack/README.md).
+[original concept sheets](../../docs/game/art/moth-concept-pack/README.md).
 
 `view.override layout studio-armor` frames the rebuilt pauldrons and surface
 wear: front and clear quarter above, rear quarter and full body below. Use
@@ -137,7 +138,7 @@ garbage collection of about 12 ms lands near the frame. The first crossing of a 
 publish), and a frame of 50 to 56 ms after it while the garden's mesh region
 grows to take the body. Under Vulkan a warm crossing still costs 21 to 36 ms back
 to the debug world and 34 to 143 ms into the garden, its upload submission
-blocking in the driver at worst ([open item](../../../../docs/plans/open-items.md#rendering)).
+blocking in the driver at worst ([open item](../../docs/plans/open-items.md#rendering)).
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
   `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
@@ -186,7 +187,7 @@ with the pose it set; add `pose`, `orbit`, `turn`, `swing`, `move` or `fov` to
 place or nudge it, and read it back with `world.view.state`. `view.override
 camera auto` restores the seat's chase camera. Yaw 0 faces -Z, 180 faces +Z
 (toward the frame's far side), and the verbs are listed in
-[the World README](../../README.md#the-console).
+[the World README](../../src/Puck.World/README.md#the-console).
 
 Crossings narrate on stdout as they happen: `world.portal: 'boot' portal/glass
 seat 1 entered -> queued transfer…` and `world.transfer: … departed -> … arrived`.

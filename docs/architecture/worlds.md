@@ -122,11 +122,12 @@ world and names no repository path
 
 `puck compile --tree <package> --output <out>` writes a bootable copy of a
 package: each world source's documents and compiled worlds, every other file of
-the package (its manifest, fonts, tunes, cartridges and their sources, module
-libraries, pipeline sources), and the shader package store at the output's root.
+the package (its manifest, fonts, tunes, cartridges and their sources, pipeline
+sources), and the shader package store at the output's root.
 A world source is selected by its `schema:` line, never by its folder or suffix,
 so a cartridge source inside a package is copied rather than compiled as a
-world. `puck world prepare <package>`, `puck official build --worlds <package>`
+world; a cartridge module (`cartridges/shared/`) declares the cartridge schema
+for the same reason, since a source naming none is a world module library. `puck world prepare <package>`, `puck official build --worlds <package>`
 and the silo image take the same folder.
 
 ## Compiled worlds

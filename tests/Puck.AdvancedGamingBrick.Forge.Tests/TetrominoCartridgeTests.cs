@@ -13,7 +13,7 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 /// </summary>
 public sealed class TetrominoCartridgeFixture {
     public TetrominoCartridgeFixture() {
-        Document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/cgb/tetromino.cgb.cartridge.json")));
+        Document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/tetromino.cgb.cartridge.json")));
         Result = new HgbCartridgeCompiler().Compile(document: Document);
 
         using var machine = Boot(label: "tetromino-fixture");

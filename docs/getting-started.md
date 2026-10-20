@@ -39,7 +39,7 @@ names the failed dependency or tool.
 ## Run a world
 
 ```powershell
-dotnet run --project src/Puck.World -c Release --no-build -- --exit-after-seconds 10 --state-dir artifacts/getting-started/state
+dotnet run --project src/Puck.World -c Release --no-build -- --world worlds/debug --exit-after-seconds 10 --state-dir artifacts/getting-started/state
 ```
 
 World reports the document it loaded and opens a window. This command closes
@@ -54,7 +54,7 @@ Headless mode runs the World host without GPU presentation. It is useful for
 checking documents and simulation; it does not test rendering.
 
 ```powershell
-'world.status' | dotnet run --project src/Puck.World -c Release --no-build -- --headless --exit-after-seconds 3 --state-dir artifacts/getting-started/headless
+'world.status' | dotnet run --project src/Puck.World -c Release --no-build -- --world worlds/debug --headless --exit-after-seconds 3 --state-dir artifacts/getting-started/headless
 ```
 
 Look for the loaded-world information and the status response. If startup fails,

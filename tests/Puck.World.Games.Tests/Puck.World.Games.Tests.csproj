@@ -59,6 +59,5 @@
         <!-- A copy of the patch fixture beside the test executable, which WorldDocumentPathLawTests proves a document's
              relative row never reads. -->
         <None Include="../Shared/World/Assets/patches/**" LinkBase="Assets/patches" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

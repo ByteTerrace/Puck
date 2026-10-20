@@ -927,7 +927,7 @@ successful execution through the CLI alone cannot prove that the ordinary worker
 has its providers installed.
 
 `puck world prepare` packages the hosted primary world, the debug world
-(`src/Puck.World/Assets/worlds/debug.puck`, hosted as `debug`, the deployment's
+(`worlds/debug/debug.puck`, hosted as `debug`, the deployment's
 configured `worldName`), and any neighbours it references. Official release
 preparation pins the complete inventory, with a distinct retained signing key for
 each world and a matching door budget. Orleans membership is explicitly local. Checkpoints and journals live in

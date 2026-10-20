@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.Cli.Worlds.Tests;
 
 /// <summary><c>puck lint --strict</c> passes every source the repository ships: the asset packages under
-/// <c>worlds</c>, the World's own worlds and cartridges under <c>src/Puck.World/Assets</c>, the transpiler's samples under
+/// <c>worlds</c>, their worlds, cartridges and cartridge modules among them, the transpiler's samples under
 /// <c>src/Puck.World.Transpiler/Samples</c>, and the verdict worlds
 /// under <c>tests/Puck.World.Verdicts</c>. Each source runs through the verb itself, so an error or a warning in any of
 /// them fails here with the report the verb printed. The one warning a shipped source may carry is PUCK122, a blend
@@ -14,7 +14,6 @@ namespace Puck.Cli.Worlds.Tests;
 public sealed class ShippedSourceLintLawTests {
     public static TheoryData<string> Sources() => TrackedPuckSources.Under(
         "src/Puck.World.Transpiler/Samples",
-        "src/Puck.World/Assets",
         "tests/Puck.World.Verdicts",
         "worlds"
     );

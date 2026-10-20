@@ -113,7 +113,7 @@ public sealed class ShadowQualityLawTests {
     [Theory]
     public void SharedQualitySourceAuthorsTheCurrentInstantShadowPolicy(QualityTier tier, int slots) {
         var compilation = WorldCompiler.CompileFile(allowMultiple: true, cancellationToken: TestContext.Current.CancellationToken,
-            path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/quality.puck"));
+            path: RepositoryPaths.Resolve(relativePath: "worlds/debug/quality.puck"));
 
         Assert.True(condition: compilation.Success, userMessage: "quality.puck must compile before its policy is inspected.");
         Assert.True(condition: WorldJsonPayload.TryParse(

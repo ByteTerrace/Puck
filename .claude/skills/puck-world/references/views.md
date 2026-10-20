@@ -37,7 +37,7 @@ Primary code:
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`bodies.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The live seat camera
-is authored in the Moth basis (`src/Puck.World/Assets/worlds/avatars/moth.puck`),
+is authored in the Moth basis (`worlds/debug/avatars/moth.puck`),
 which the debug world and the garden inherit:
 
 ```text

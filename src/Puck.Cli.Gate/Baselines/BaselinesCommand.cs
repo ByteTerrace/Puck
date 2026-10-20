@@ -24,7 +24,7 @@ public static class BaselinesCommand {
             CheckedFiles: null,
             CommittedDirectory: "tests/Puck.State.Rebuild.Corpus",
             Description: "The author-expression corpus inventory, inventory.md.",
-            Inputs: ["src/Puck.World/Assets/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
+            Inputs: ["worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
             Name: "corpus-inventory",
             Project: "Puck.State.Rebuild.Corpus",
             RunArguments: CliTestRun.Class(fullName: "Puck.State.Rebuild.Corpus.CorpusInventoryTests"),

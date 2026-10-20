@@ -344,7 +344,7 @@ library on both machines under the determinism gate.
 ## Verification summary
 
 ```bash
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
 ```
 
 ```bash

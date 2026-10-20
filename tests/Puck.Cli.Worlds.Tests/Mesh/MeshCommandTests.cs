@@ -26,7 +26,7 @@ public sealed class MeshCommandTests {
     private static (int ExitCode, string Output) Invoke(params string[] args) =>
         ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: args));
     private static string TempWorldCopy(TemporaryDirectory directory) => directory.WriteBytes(
-        bytes: ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/avatars/moth.puck")),
+        bytes: ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/debug/avatars/moth.puck")),
         name: "moth.world.json"
     );
     // The world's rest scene and its planned groups, as the verb plans them.

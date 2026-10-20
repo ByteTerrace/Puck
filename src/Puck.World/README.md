@@ -114,9 +114,9 @@ OAuth-protected remote HTTP; see [setup and trust](../Puck.Mcp/README.md).
 
 For the debug world's portals (a window onto a second world, walking through
 it, and a portal seen through a portal) and the verbs that inspect them, see
-[Debug world portals](Assets/worlds/debug.md).
+[Debug world portals](../../worlds/debug/debug.md).
 
-For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/avatars/moth.md).
+For the standalone avatar prototype, see the [Moth flight studio](../../worlds/debug/avatars/moth.md).
 It is a rebuilt SDF avatar with inspection cameras, walking and flight poses,
 and live document reload.
 
@@ -143,7 +143,7 @@ declared footprints through a guarded, undoable placement-and-payment batch. The
 and its current boundaries.
 
 ```bash
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 6
 ```
 
 `--exit-after-seconds 0` (or omitting the flag) runs until the window closes.
@@ -189,8 +189,8 @@ world that is not a composition each refuse the boot by name.
 A document reference inside a world (`basis`, `imports`, `references`) names a
 document, such as `games/poker`, never a file. It resolves to the `.puck`
 source beside the referrer when one exists and to the `.world.json` document
-otherwise, so the source tree and the built output (`Assets/worlds` beside the
-executable, which carries compiled documents only) boot the same worlds.
+otherwise, so a package's source tree and its compiled copy
+(`puck compile --tree`, which carries compiled documents) boot the same worlds.
 
 A `.puck` source compiles once: the boot, every basis and import it reads, and
 `world.reload` compile through one cache, kept per user in `compilations` under
@@ -206,8 +206,8 @@ report reads.
 
 A boot takes its drawn definition from a
 [compiled world](../../docs/architecture/worlds.md#compiled-worlds) when one
-holds for the document: the `<name>.puckb` beside it, which the build ships for
-every world in `Assets/worlds` and `puck compile` writes, or the one a previous
+holds for the document: the `<name>.puckb` beside it, which `puck compile` writes
+(a compiled package carries one for every world), or the one a previous
 boot wrote into the per-user `compiled-worlds` cache, which every boot shares
 whatever its `--state-dir`. A boot that finds none, or finds chunks that no
 longer hold, derives them and writes the whole compiled world into that cache.
@@ -216,8 +216,8 @@ The entry point names the per-user caches a boot reads and fills
 `WorldCacheRoots`, so a host or test that composes World services uses
 directories of its own.
 
-Boot prints one line naming the world-definition file it loaded (an explicit
-`--world <path>` or the shipped `Assets/worlds/debug.world.json`, compiled from `debug.puck`), one
+Boot prints one line naming the world-definition file it loaded (the `--world`
+document, or a package's entry after a `[world] package:` line), one
 `[world] compiled world:` line naming the compiled world it read, the chunks it
 kept and derived, and where it wrote one, one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
@@ -355,7 +355,7 @@ with no window, no GPU device, no swapchain, and no audio device—the
 authoritative server, console, and tape only:
 
 ```bash
-dotnet run --project src/Puck.World -c Release -- --headless --exit-after-seconds 6
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --headless --exit-after-seconds 6
 ```
 
 `--headless` is a developer/CI reflection of `host.presentation`, never a
@@ -661,8 +661,9 @@ names an instance of a
 one-pass graph, or a shader package directory written by
 `puck shaders package`, which loads from its precompiled binaries with its
 source tree gone and no compiler on the machine. A document or shader source
-loads the package the game's build stored for it in `Assets/worlds/packages`
-when one matches, which is every source a shipped world names, and otherwise
+loads the package `puck compile --tree` stored for it in `packages/` beside the
+booted document when one matches, which is every source a compiled package's
+worlds name, and otherwise
 compiles in the background, which needs `dxc`; without `dxc` it is refused by
 `SHADERPKG_ABSENT` (see
 [the build's package store](../../docs/reference/shaders.md#the-builds-package-store)).
@@ -1151,15 +1152,16 @@ Facts a script needs:
   validated against.
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
-- `Assets/`—the shipped worlds. While the current campaign runs, the one live
-  world is `worlds/debug.puck` (the boot default, compiled to
-  `debug.world.json`), with its basis `worlds/avatars/moth.puck`, the
-  `quality.puck` presets that avatar imports, the `skies.puck` and `shapes.puck`
-  modules it imports, the `theme.puck` theme and the `controls.puck` cursor, key
-  hints, icons, binding bar and play wheel it and the garden import, and
-  `worlds/garden.puck`, the destination its portal frame opens onto
-  ([the portal demo](Assets/worlds/debug.md));
-  every other world named in this bullet is quarantined at the same path under
+- `Assets/`—the engine's own content: the default recording. The World ships no
+  world. While the current campaign runs, the one live world is the asset
+  package `worlds/debug/` at the repository root (`--world worlds/debug`): its
+  entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
+  presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
+  imports, the `theme.puck` theme and the `controls.puck` cursor, key hints,
+  icons, binding bar and play wheel it and the garden import, and
+  `garden.puck`, the destination its portal frame opens onto
+  ([the portal demo](../../worlds/debug/debug.md));
+  every other world named in this bullet is quarantined under
   `experimental/src/Puck.World/Assets/worlds/`
   ([decision](../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
   The quarantined island, `worlds/puck.world.json`, is a delta over
@@ -1791,7 +1793,7 @@ authority; `screen.insert`, `forge.play` and `machine.swap` (a file from the
 machine's authored `contentFolders`, which `machine.content` lists) use that
 executor for named producers, while `screen.eject` detaches the display. The debug
 world's device row runs one of each machine
-([`devices.md`](Assets/worlds/devices.md)). The screen operations (insert, eject,
+([`devices.md`](../../worlds/debug/devices.md)). The screen operations (insert, eject,
 select, options, link, unlink) remain their own ordered payload kind beside the
 generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
@@ -2123,7 +2125,7 @@ The `render.skyFieldScale` boot value and a preset's `skyFieldScale` default
 to one; preset application and `world.save` retain the selected fraction. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
-`Assets/worlds/quality.puck`: the Moth basis imports it, and a world on
+`worlds/debug/quality.puck`: the Moth basis imports it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers. Render scale applies
 to both seat views and named cameras as each view's ceiling. A layout
@@ -2468,7 +2470,7 @@ A typical assertion session over a pipe:
 
 ```bash
 printf 'world.status\nbody.where 0\nworld.grants console\n' |
-  dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
+  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 6
 ```
 
 `world.screenshot <path.png>` is the cheap pixel assertion, but it REQUESTS a

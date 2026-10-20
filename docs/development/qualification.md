@@ -116,7 +116,7 @@ from readiness rather than from boot.
 
 | Workload | World | What a cell does |
 |---|---|---|
-| `debug` | `Assets/worlds/debug.world.json` | Warms up 900 ticks, long enough for the boot's mesh bake, soaks 1800, reloads the world twice with a 900-tick warm-up after each, and soaks 1800 again. |
+| `debug` | `worlds/debug/debug.world.json` | Warms up 900 ticks, long enough for the boot's mesh bake, soaks 1800, reloads the world twice with a 900-tick warm-up after each, and soaks 1800 again. |
 
 The `debug` workload boots the debug world, the one live world. A workload may
 also churn a pipeline (`pipeline`: reloads, resizes, loads and unloads of a

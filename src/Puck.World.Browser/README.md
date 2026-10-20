@@ -421,7 +421,7 @@ with an undefined `SystemJS_ExecuteTimerCallback`). Two documents: the island
 (`experimental/src/Puck.World/Assets/worlds/puck.world.json` with
 `standard.puck` and its imports, mounted together with the live tree it still
 imports from, composing to a 1.14 MB standalone document) and the debug world
-(`src/Puck.World/Assets/worlds/debug.puck`, the one live world, composing to
+(`worlds/debug/debug.puck`, the one live world, composing to
 286 KB). "Cold" is the first call in a fresh process and "warm" the median of
 the next two, one machine. No test re-measures them: the browser tests assert
 behavior, never elapsed time.

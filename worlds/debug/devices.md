@@ -10,18 +10,18 @@ git-ignored `roms/` at the repository root.
 
 | x | Device | Instance | Engine and model | Screen | Boots | `contentFolders` |
 |---|---|---|---|---|---|---|
-| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.dmg` | `../cartridges/dmg`, `roms/hgb` |
-| -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `../cartridges/cgb`, `roms/hgb` |
-| -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb`, `roms/hgb` |
-| -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb`, `roms/agb` |
+| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.dmg` | `cartridges/dmg`, `roms/hgb` |
+| -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `cartridges/cgb`, `roms/hgb` |
+| -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `cartridges/cgb`, `roms/hgb` |
+| -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `cartridges/agb`, `roms/agb` |
 | -22 | Tune jukebox | `tune-jukebox` | `tune-instrument` | 4 | `arrival-tune.audio.json` | `tunes` |
-| -25 | Humble Gaming Deck | `gaming-deck` | `humble-gaming-deck` | 5 | `colour-bars.nes` | `../cartridges/deck`, `roms/hgd` |
+| -25 | Humble Gaming Deck | `gaming-deck` | `humble-gaming-deck` | 5 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
 
-A `roms/` folder is spelled `../../../../roms/<device>` beside this file, so it
-resolves when the world boots from its source
-(`--world src/Puck.World/Assets/worlds/debug.puck`, the recipe in
-[`debug.md`](debug.md)). Wherever it does not exist (CI, the Azure deploy, the
-compiled copy beside the executable, any machine without the owner's ROMs)
+A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
+resolves when the world boots from its package in the checkout
+(`--world worlds/debug`, the recipe in [`debug.md`](debug.md)). Wherever it does
+not exist (CI, the Azure deploy, a compiled copy of the package, any machine
+without the owner's ROMs)
 `machine.content` lists it `present=false` and the world boots and validates the
 same: every device boots a shipped cartridge. The files in it are the owner's
 and never enter the repository, a build output or a package.
@@ -55,7 +55,7 @@ bars drifting the same way (`machine.swap brick-dmg test-card`). The deck's two 
 `puck cartridges deck` rather than compiled from a source:
 `colour-bars.nes` shows eight bars that A, B and select tint and start turns
 grey, and `moving-sprite.nes` bounces a ball the d-pad steers
-([the Deck's hosting page](../../../../docs/emulation/hgd/hosting.md#test-cartridges)).
+([the Deck's hosting page](../../docs/emulation/hgd/hosting.md#test-cartridges)).
 
 ## Devices
 

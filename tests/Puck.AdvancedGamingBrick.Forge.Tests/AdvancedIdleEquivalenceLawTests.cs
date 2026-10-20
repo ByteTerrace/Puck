@@ -25,7 +25,7 @@ public sealed class AdvancedIdleEquivalenceLawTests {
     [InlineData("agb/pip.agb")]
     [InlineData("cgb/tetromino.cgb")]
     public void TheAdvancedMachineIdlesExactlyAsItsHaltedStepsWould(string cartridge) {
-        var document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/cartridges/{cartridge}.cartridge.json")));
+        var document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"worlds/debug/cartridges/{cartridge}.cartridge.json")));
         // An advanced palette holds sixteen colours; a Colour one, four.
         static int[][] Widen(int[][] palettes) =>
             [.. palettes.Select(selector: static palette => palette.Concat(second: new int[(16 - palette.Length)]).ToArray())];

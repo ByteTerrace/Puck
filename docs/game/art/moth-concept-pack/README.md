@@ -26,7 +26,7 @@ preference for two subtle shells and supersede the earlier folding-fan proposal.
 
 ## Preserve the character
 
-The Moth's implementation is the native SDF creation in [moth.puck](../../../../src/Puck.World/Assets/worlds/avatars/moth.puck); [the flight studio guide](../../../../src/Puck.World/Assets/worlds/avatars/moth.md) covers launching, the inspection layouts and live editing. These concept sheets are the visual standard it is built toward.
+The Moth's implementation is the native SDF creation in [moth.puck](../../../../worlds/debug/avatars/moth.puck); [the flight studio guide](../../../../worlds/debug/avatars/moth.md) covers launching, the inspection layouts and live editing. These concept sheets are the visual standard it is built toward.
 
 Keep warm brown skin, expressive brown eyes, black swept hair and one thick braid rooted beside her right cheek through the front helmet opening. The braid can trail during movement; its attachment does not change or move through the helmet back. The hood has an ivory face rim and lilac shell. Its opening follows the forehead and cheeks with a continuous shaped curve. Avoid a box or pentagonal house surrounding the face.
 
@@ -56,4 +56,4 @@ reproduce that.
 
 The owner source and subsequent owner feedback take precedence. Sheet 1 anchors overall identity and costume; sheet 2 clarifies surface treatment and expression. Sheet 5 anchors the compact pack; sheet 6 supplies its movement intent. Sheets 3–4 remain historical explorations. Generated perspective views are not exact orthographic blueprints: use one shared rig to verify hinge travel, armor clearance and exhaust separation through the complete motions. Small perspective or seam differences do not authorize new parts or outlets. Incidental slogans on the sheets are not game copy, lore or implementation requirements.
 
-For implementation priorities, use the [hero brief](../armored-chibi-hero-brief.md). The [studio guide](../../../../src/Puck.World/Assets/worlds/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.
+For implementation priorities, use the [hero brief](../armored-chibi-hero-brief.md). The [studio guide](../../../../worlds/debug/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.

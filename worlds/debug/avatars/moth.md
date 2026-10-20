@@ -1,7 +1,7 @@
 # Moth flight studio
 
 [moth.puck](moth.puck) contains a playable SDF character with directly authored
-dimensions and rig. The [original concept sheets](../../../../../docs/game/art/moth-concept-pack/README.md)
+dimensions and rig. The [original concept sheets](../../../docs/game/art/moth-concept-pack/README.md)
 are the visual standard.
 
 The character renders inside Puck as a native SDF creation. It uses curved ivory shin
@@ -16,13 +16,13 @@ edge weathering.
 Run from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 With an existing Release build:
 
 ```powershell
-dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 The initial view is the seat's chase camera; 1 switches to the native model's
@@ -194,7 +194,7 @@ and pelvis displacement as the body settles after impact.
 Check document admission and the stamp budget:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.puck --prototype moth
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world worlds/debug/avatars/moth.puck --prototype moth
 ```
 
 Then inspect the live front, rear and face views. Exercise the airborne pose

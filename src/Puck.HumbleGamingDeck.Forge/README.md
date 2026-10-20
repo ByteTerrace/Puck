@@ -8,7 +8,7 @@ shipped test cartridges (`DeckTestCartridges`) are both written with it.
 which mounts iNES and NES 2.0 images as raw bytes, so no content provider
 registers beside it.
 
-`puck cartridges deck --output src/Puck.World/Assets/cartridges/deck` rebuilds
+`puck cartridges deck --output worlds/debug/cartridges/deck` rebuilds
 the shipped `.nes` images, and `--check` compares them byte for byte without
 writing.
 

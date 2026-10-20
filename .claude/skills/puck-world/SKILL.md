@@ -15,8 +15,8 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 `sdf-authoring`; the `.puck` language core to `puck-dsl`; the renderer to
 `rendering`.
 
-**One live world.** The debug world (`src/Puck.World/Assets/worlds/debug.puck`,
-basis `avatars/moth`) is the only live world and the default boot, with the
+**One live world.** The debug world, the asset package `worlds/debug/` (entry
+`debug.puck`, basis `avatars/moth`), is the only live world, with the
 garden (`garden.puck`) its portal frame opens onto; `debug.md` beside them is
 the portal demo and its inspection verbs. It boots on the Moth's seat chase
 camera: the first authored `views` layout is what a boot shows, and the Moth's
@@ -123,7 +123,7 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 | `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
 | `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompiler`, `WorldCompileCache`, `Vocabulary/` |
 | `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
-| `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder, the shipped worlds under `Assets/` |
+| `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder; it ships no world (the debug world is the package `worlds/debug/`) |
 | `src/Puck.World.Silo` | The hosted multi-world silo (Orleans activation lifecycle only; game traffic rides the World's own wire) |
 | `src/Puck.World.Browser` | The engine in a browser tab: a `browser-wasm` publish of Schema, State and the `.puck` toolchain |
 | `src/Puck.World.AgentBridge`, `.AgentHarness`, `.AgentHarness.Azure`, `.Azure`, `.Embeddings` | Optional extensions (agent participants, Azure resource operations, text embeddings); no base world project references them |
@@ -218,7 +218,7 @@ Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
 ## Running it
 
 ```text
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
 
 - **Build first.** A failed build leaves the previous binaries in place, so a
@@ -228,7 +228,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `--state-dir`, shows the behavior. Report what ran (build, command, script,
   what it showed); the commit body carries it.
 - `--exit-after-seconds 0` or absent runs until the window closes. `--world`
-  takes a `.puck` or JSON path. `Program.cs` parses the full flag surface;
+  is required: a package folder (its `manifest.json` names the entry), a
+  `.puck` source or a JSON document; without it the boot refuses. `Program.cs` parses the full flag surface;
   host flags are deployment overrides of the document's `host` section.
 - `--state-dir <dir>` gives a hermetic state root; parallel runs each need
   their own.
@@ -285,7 +286,7 @@ Smoke session:
 
 ```text
 printf 'world.status\nbody.where 0\nworld.grants console\n' |
-  dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6 --state-dir "$TMP/puck-state"
+  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 6 --state-dir "$TMP/puck-state"
 ```
 
 ## Subsystem index

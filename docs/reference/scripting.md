@@ -442,7 +442,7 @@ A resolved name lands on its row's document-order ordinal in the world's `channe
 counting from `0`. A row that claims a `ChannelRole` also resolves that role to its ordinal, which
 is how the motion model finds the channel it reads (`RoleChannelOrdinals`); a row that claims no
 role is a composition channel, and a kit's own `Actions` binding decides what it does. The moth
-avatar (`src/Puck.World/Assets/worlds/avatars/moth.puck`) declares:
+avatar (`worlds/debug/avatars/moth.puck`) declares:
 
 | Ordinal | Channel | Shape | What the host does with `A` |
 |---|---|---|---|

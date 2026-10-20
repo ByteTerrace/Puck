@@ -82,7 +82,7 @@ whose command no longer breaks its rule, until the row is deleted.
 
 | Verb | What it is |
 |---|---|
-| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites, worlds and catalog check, and `--run --gpu` the canaries too. |
+| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -270,8 +270,8 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 ## `puck cartridges`—tool-built cartridges
 
 ```sh
-puck cartridges deck --output src/Puck.World/Assets/cartridges/deck
-puck cartridges deck --output src/Puck.World/Assets/cartridges/deck --check
+puck cartridges deck --output worlds/debug/cartridges/deck
+puck cartridges deck --output worlds/debug/cartridges/deck --check
 ```
 
 `deck` writes one `.nes` image per Humble Gaming Deck test cartridge, each assembled by `DeckProgram` in
@@ -327,7 +327,7 @@ including hidden files.
 world (its `.puck` source or `.world.json` document) and the neighbours it
 references under canonical hosted file names; no reference may leave the primary
 world's directory. The silo image and the Azure release prepare the debug world,
-`src/Puck.World/Assets/worlds/debug.puck`, which production hosts as `debug`. It
+`worlds/debug/debug.puck`, which production hosts as `debug`. It
 rebases provider-declared asset paths from nested documents to the common worlds
 directory; the image retains the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
@@ -573,7 +573,7 @@ refused, and so is the exact name beside `beacons/north.world.json` or
 file and never to the declared world. Each role is derived from the document: `shard` under
 `shards/`, `basis` for `standard`, `world` for a document with a `documentId`,
 and `fragment` otherwise. The root is the world production hosts, `debug`
-(`src/Puck.World/Assets/worlds/debug.puck`, the same world `world prepare`
+(`worlds/debug/debug.puck`, the same world `world prepare`
 packages for the silo). It resolves by name like every other document, so it can
 be authored as `.puck` or as `.world.json`, and the build refuses when it is
 missing. `composed[].name` is the root's document name, `debug`.
@@ -792,10 +792,6 @@ base, so passing both is refused.
   repository-relative data globs declared beside its artifact. The plan lists
   them in ordinal name order; `puck gate` runs their checks. A docs-only change
   selects none.
-- **The catalog**: a change to a shipped world under
-  `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
-  a project the composer or the shader packager is built from, chooses `puck compile --tree … --output … --check` over the
-  game's Release catalog.
 - **Worlds**: a changed `.puck` source that declares `test` blocks is run with
   [`puck test`](#puck-testtest-worlds).
 - **Canaries** follow what they exercise. A canary is chosen when a changed
@@ -814,18 +810,18 @@ base, so passing both is refused.
   to, so a canary whose manifest names the source reaches what the document
   does.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
-- A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
+- A changed `.puck` or `.world.json` under `worlds/`
   chooses no canary when the document named by its stem compiles to the same
   value at the base and in the working tree. Both sides use the world's document
-  reader, with the base's `src/Puck.World/Assets` exported from git. Object
+  reader, with the base's `worlds/` exported from git. Object
   member order and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
   array order and every member's value do. A JSON-to-source replacement judges
-  both paths. The owner's suites, catalog check and changed test blocks still
+  both paths. The owner's suites and changed test blocks still
   run, and neither path is listed as `unmapped` or unplaced `deleted`.
   Libraries and compositions keep ordinary selection, as do missing documents
   and failed compilations: none establishes that the compiled value is unchanged.
 - A C# edit whose syntax is equivalent after stripping trivia chooses no suite,
-  canary, catalog or baseline. Roslyn parses the base text from git and the
+  canary or baseline. Roslyn parses the base text from git and the
   working text with the same options, without a base build. Comments, XML
   documentation, whitespace and regions do not count; other directive tokens
   must match. Files with conditional directives are not judged because the
@@ -888,23 +884,16 @@ base, so passing both is refused.
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `editors/` and
   `experimental/` choose nothing.
 
-The plan names each choice and prints the catalog's build and check commands:
+The plan names each choice:
 
 ```text
 suite Puck.World.Tests
-test src/Puck.World/Assets/worlds/games/reversi.puck
+test worlds/debug/debug.puck
 canary pipeline-ink
-catalog src/Puck.World/bin/Release/net11.0/Assets/worlds
-dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -nodeReuse:false -v q -nologo
-puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net11.0/Assets/worlds --check
 parity
 ```
 
-A `test` line is a `.puck` source run with `puck test`. The `catalog` line
-names the game's Release catalog, the compiled worlds the build writes, which
-holds no test worlds. The following two lines are the exact commands `--run`
-uses to build that catalog and check it, in that order. Each runs from the
-repository root; the compile selects the tree's sources itself.
+A `test` line is a `.puck` source run with `puck test`.
 
 Each `baseline <artifact>` line is followed by its exact
 `puck baselines <artifact> --check` command. The gate owns these checks;
@@ -913,8 +902,8 @@ Each `baseline <artifact>` line is followed by its exact
 `--run` first strictly loads and lists the prose-edited manifests, then builds
 the chosen suites once, in one build over a solution filter of exactly those
 projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
-side on that build, then `puck test` on the chosen worlds, then the catalog
-check, and exits 1 when any of them fails. At most `--suite-jobs` suites run at
+side on that build, then `puck test` on the chosen worlds,
+and exits 1 when any of them fails. At most `--suite-jobs` suites run at
 once (default: a quarter of the logical processors). A heavy suite
 (`Puck.World.Tests` or `Puck.World.Presentation.Tests`) starts first and, before its run, waits on the one
 machine-wide heavy-suite admission the gate uses (see
@@ -974,7 +963,7 @@ against the merge base of `HEAD` and `--merge-base` (default
 4. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
 5. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
-   for the selected suites, side by side, worlds and catalog check. The gate's
+   for the selected suites, side by side, and worlds. The gate's
    `--suite-jobs` sets the bound.
 6. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
@@ -2278,7 +2267,7 @@ root README, and the engine manual's entry and topic pages) for citations that
 stopped resolving: relative markdown links, backticked rooted repository
 paths (`src/...`, `docs/...`, `tests/...`, `build/...`), and backticked bare
 filenames (looked up in an index swept from `src/`, `docs/`, `tests/`,
-`build/`, and `.claude/skills/`—enforced under `src/`, advisory elsewhere,
+`build/`, `worlds/`, and `.claude/skills/`—enforced under `src/`, advisory elsewhere,
 since a `docs/` document legitimately names out-of-repo files). Naming
 repository-relative markdown files checks exactly those instead.
 
@@ -2626,7 +2615,7 @@ separate evidence, and unresolved rows remain unmodeled.
 ### `puck bench world`
 
 The `Puck.World.Server` tick-path lane: `puck bench world [world]` loads one
-world, the debug world (`src/Puck.World/Assets/worlds/debug.puck`) unless a
+world, the debug world (`worlds/debug/debug.puck`) unless a
 `.puck` source or `.world.json` document is named, builds its server without a
 device, and prints one row per number—server construction time, idle-tick time
 and quiet-tick allocation (median over a sampled window, after a warmup), and
@@ -3058,7 +3047,7 @@ successful outputs in place. `--output` and `--watch` require exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
 world document is written to the same relative place under the `--output`
 directory, every other file of the tree (a package manifest, fonts, tunes,
-cartridges and their sources, module libraries, pipeline sources) is copied to
+cartridges and their sources, pipeline sources) is copied to
 the same place, and any other `*.world.json` or `*.puckb` under that
 directory is removed once all sources compiled, so the output is the tree as a
 bootable package. No run writes one

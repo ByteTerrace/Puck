@@ -31,7 +31,7 @@ shape is what it is, an ordering rule, a refusal condition, a worked trap.
 **`.puck` is the authoring surface; JSON is the compiled wire form.** Every
 JSON block in this reference and its split files is what a `.puck` source
 compiles to, not the recommended way to type it; every live world under
-`src/Puck.World/Assets/worlds/` is `.puck` source. The `.puck`
+`worlds/` is `.puck` source. The `.puck`
 language itself — grammar, `let`/`template`/`import`/`export`, units, the
 compile-time collection builtins, string/indexing forms, and the
 `compile`/`decompile`/`lint`/`format`/`lsp` CLI verbs and `PUCKnnn` diagnostics —

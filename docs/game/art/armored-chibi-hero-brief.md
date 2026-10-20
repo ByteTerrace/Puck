@@ -10,7 +10,7 @@ The current owner-selected prototype is **Moth**, from the subsequent character
 collage: ivory/lilac armor, warm brown skin, an open hood, a side braid, and folding
 flight vanes. Virtual On and Power Stone join the broad style references. These
 choices supersede the island-ranger palette and helmet defaults below. The
-[Moth studio guide](../../../src/Puck.World/Assets/worlds/avatars/moth.md) owns the current authored
+[Moth studio guide](../../../worlds/debug/avatars/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
 The [Moth concept pack](moth-concept-pack/README.md) expands the selected
@@ -112,8 +112,8 @@ These are implementation entry points inspected while preparing this brief, not 
 | Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldStampPool](../../../src/Puck.World.Client/WorldStampPool.cs) |
 | Primitive composition and scope behavior | [CreationStampEmitter](../../../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
 | Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../../examples/creations/adventurer.creation.json) |
-| Existing studio district for staging | [studio.puck](../../../src/Puck.World/Assets/worlds/modules/studio.puck) |
-| Production world integration | [puck.world.json](../../../src/Puck.World/Assets/worlds/puck.world.json) |
+| Existing studio district for staging | [studio.puck](../../../worlds/debug/studio.puck) |
+| Production world integration | [debug.puck](../../../worlds/debug/debug.puck) |
 | Shared material and lighting implementation | [SdfMaterial](../../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-material.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-material.hlsli), [sdf-lighting.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-lighting.hlsli) |
 
 Use the existing creation-look, prototype, and body appearance routes. Resolve which rows actually control the local character and mirrored appearances before changing them. Use compiler-backed references when tracing C# usage. A static statue in the studio does not prove the body-worn route works.
@@ -243,7 +243,7 @@ Use the running `Puck.World`; a build proves compilation, not the character. Con
 The baseline launch shape is:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 0 --state-dir <isolated-state-directory>
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 0 --state-dir <isolated-state-directory>
 ```
 
 Replace the placeholder with a real task-owned directory. Feed script input using the supported process/console route; do not paste POSIX input redirection into PowerShell. Use UTF-8 without a BOM and capture stdout and stderr separately. Consult current command help before adding backend overrides or look-selection verbs.

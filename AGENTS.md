@@ -63,7 +63,7 @@ agent works in that mode by default, without asking:
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
-    prepare` and the Azure release build from `debug.puck`.
+    prepare` and the Azure release build from its package, `worlds/debug`.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.
@@ -192,7 +192,7 @@ It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 it once a parity world exists, and none does while the campaign runs
 ([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
 runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
-hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,
+hold every world but the debug world (the package `worlds/debug/`,
 the one live world), each file at its old repository
 path, with the fixtures, laws, baselines and ledgers that only booted or tested
 them ([decision](docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),

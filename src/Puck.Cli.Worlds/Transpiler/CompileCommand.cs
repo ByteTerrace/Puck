@@ -131,9 +131,9 @@ public static partial class CompileCommand {
         var jsonObject = (loweredJson ?? new JsonObject());
         var jsonBytes = CanonicalJsonDocument.Serialize(node: jsonObject);
 
-        // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
+        // A module is a fragment whichever root imports it supplies fields for, so validating one as a cartridge
         // reports refusals that belong to that root, not to this file. `lint` applies the same rule.
-        if (validate && !diagnostics.HasErrors) {
+        if (validate && !diagnostics.HasErrors && !CartridgeLanguageServices.IsModule(document: jsonObject)) {
             CartridgeLanguageServices.Validate(
                 jsonObject,
                 sourceMap,

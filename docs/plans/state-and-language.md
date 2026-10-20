@@ -1031,11 +1031,11 @@ puck schema --check
 ```
 
 ```bash
-puck format src/Puck.World/Assets/worlds --only puck --check
+puck format worlds --only puck --check
 ```
 
 ```bash
-puck test src/Puck.World/Assets/worlds
+puck test worlds
 ```
 
 ```bash

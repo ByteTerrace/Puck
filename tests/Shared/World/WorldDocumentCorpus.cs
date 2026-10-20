@@ -19,7 +19,7 @@ internal static class WorldDocumentCorpus {
     /// <summary>The refusal <see cref="TryBoot"/> reports for a module library.</summary>
     public const string ModuleLibrary = "a module library emits no document";
 
-    // The trees of the game's shipped world documents; the root worlds/ packages are quarantined under experimental/.
+    // The trees of the world packages.
     private static readonly string[] ShippedTrees = [
         ShippedWorldDocuments.WorldDirectory,
     ];

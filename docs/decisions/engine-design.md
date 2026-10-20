@@ -40,8 +40,9 @@ document and the files it names therefore move together, whether they are
 copied into a build's output, staged under a state directory, or saved
 somewhere new.
 
-The engine's own content is different. The default world, fonts, shaders and
-probe kinds ship beside the executable and resolve there. The two kinds of
+The engine's own content is different. Fonts, shaders, probe kinds and the
+default recording ship beside the executable and resolve there; the engine ships
+no world, and a boot names the asset package it runs with `--world`. The two kinds of
 lookup never share a resolver, and neither falls back to the other: a
 document-relative path that is missing beside its document is refused, rather
 than found by accident in the executable's directory.
@@ -140,11 +141,11 @@ and the [play programme](../plans/play.md) own that experience.
 ## One live world while the campaign runs
 
 While the current engine campaign is in progress, the debug world
-([`debug.puck`](../../src/Puck.World/Assets/worlds/debug.puck)) is the only
+([`debug.puck`](../../worlds/debug/debug.puck)) is the only
 live world, and the World boots it when no `--world` is given. Its own
 dependencies stay live with it: the Moth avatar it takes as its basis, the
 quality presets that avatar imports, the skies it imports, the garden its
-portal frame opens onto ([`garden.puck`](../../src/Puck.World/Assets/worlds/garden.puck)), and the shipped
+portal frame opens onto ([`garden.puck`](../../worlds/debug/garden.puck)), and the shipped
 fonts, schemas and audio assets live code reads.
 
 Every other world is quarantined in [`experimental/`](../../experimental/README.md),

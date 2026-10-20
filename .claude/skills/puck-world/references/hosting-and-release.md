@@ -185,7 +185,7 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys. 
 Endpoint naming and world/host alias conventions are owned by
 [CI and releases](../../../../docs/development/ci.md); deployment values belong in `main.bicepparam`.
 
-Azure CI packages the debug world, `Assets/worlds/debug.puck`, and any neighbours it references
+Azure CI packages the debug world, the package `worlds/debug`, and any neighbours it references
 with `puck world prepare`; hosted references use canonical world file
 names. The storage-neighbour resolver parses and migrates the composed document
 with state-expression binding, then reduces it to seam facts; it does not validate

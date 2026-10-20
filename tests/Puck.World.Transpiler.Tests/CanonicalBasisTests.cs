@@ -32,7 +32,7 @@ public class CanonicalBasisTests {
         using var directory = new TemporaryDirectory();
         var avatars = Directory.CreateDirectory(path: directory.PathOf(name: "avatars")).FullName;
 
-        var shipped = ShippedWorlds.PathOf(relativePath: "avatars/moth.puck");
+        var shipped = ShippedWorlds.PathOf(relativePath: "debug/avatars/moth.puck");
 
         // The source with every file it composes from, at their places relative to it.
         File.Copy(

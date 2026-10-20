@@ -66,7 +66,7 @@ internal static class ShippedWorlds {
         path1: FindDirectory(),
         path2: relativePath
     );
-    /// <summary>Returns the absolute path of <c>src/Puck.World/Assets/worlds</c>, walked up from the test
+    /// <summary>Returns the absolute path of the repository's world packages, <c>worlds/</c>, walked up from the test
     /// runner's own directory.</summary>
     /// <returns>The worlds directory.</returns>
     public static string FindDirectory() {
@@ -75,20 +75,18 @@ internal static class ShippedWorlds {
         while (dir is not null) {
             var candidate = Path.Combine(
                 dir,
-                "src",
-                "Puck.World",
-                "Assets",
-                "worlds"
+                "worlds",
+                "debug"
             );
 
             if (Directory.Exists(path: candidate)) {
-                return candidate;
+                return Path.GetDirectoryName(path: candidate)!;
             }
 
             dir = Path.GetDirectoryName(path: dir);
         }
 
-        throw new DirectoryNotFoundException(message: "Could not locate src/Puck.World/Assets/worlds directory from test runner.");
+        throw new DirectoryNotFoundException(message: "Could not locate the worlds/ package directory from test runner.");
     }
     /// <summary>Returns every <c>*.puck</c> world source under the worlds directory, recursively, as forward-slashed
     /// paths relative to it, in ordinal order. A source is selected by its <c>schema:</c>

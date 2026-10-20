@@ -20,7 +20,7 @@ reasoning behind every decision is in
   are authored as `.puck`. Five migrations remain unstarted:
   `puck.world.json` and `shards/quilt-ne.world.json`, `quilt-nw.world.json`,
   `quilt-se.world.json` and `quilt-sw.world.json`, all under
-  `src/Puck.World/Assets/worlds`. The JSON resolver prerequisite is implemented.
+  `experimental/src/Puck.World/Assets/worlds`. The JSON resolver prerequisite is implemented.
   Each migration must preserve the composed definition and its state baseline,
   replace source-facing references, and keep executable-relative references
   naming the generated `.world.json` output. The build ships those generated

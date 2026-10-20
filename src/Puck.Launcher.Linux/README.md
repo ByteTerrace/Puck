@@ -41,12 +41,12 @@ git clone <repo-url> ~/src/Puck && cd ~/src/Puck
 dotnet restore Puck.slnx
 dotnet build Puck.slnx -c Release
 dotnet build src/Puck.Platform.Linux/Puck.Platform.Linux.csproj -c Release
-dotnet run --project src/Puck.World -c Release -- --backend vulkan --headless --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --backend vulkan --headless --exit-after-seconds 2
 ```
 
 The last command verifies a
 headless boot, no window. Windowed Linux—`dotnet run --project src/Puck.World
--c Release -- --backend vulkan --exit-after-seconds 2` opening a real Wayland
+-c Release -- --world worlds/debug --backend vulkan --exit-after-seconds 2` opening a real Wayland
 or Xcb window—is verified only on real Linux hardware (Steam Deck/Steam
 Machine, per `docs/development/contributing.md`'s supported GPU floor). That has not
 happened; do not claim otherwise.

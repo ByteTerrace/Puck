@@ -17,7 +17,7 @@ dotnet test tests/Puck.State.Rebuild.Corpus -c Release
 
 The corpus is three trees, enumerated where they live rather than copied:
 
-- `src/Puck.World/Assets/worlds/**/*.puck` — the shipped worlds, including the
+- `worlds/**/*.puck` — the world packages' world sources (a cartridge source is selected out by its `schema:`), including the
   nine games decompiled from hand-authored JSON.
 - Quarantined: the asset packages moved to `experimental/worlds/`, and the laws
   over them to `experimental/tests/Puck.State.Rebuild.Corpus/`, so this tree is

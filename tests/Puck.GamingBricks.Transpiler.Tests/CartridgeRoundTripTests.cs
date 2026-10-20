@@ -13,7 +13,7 @@ namespace Puck.GamingBricks.Transpiler.Tests;
 public class CartridgeRoundTripTests {
     // The shipped tetromino cartridge, which exercises every action kind, both condition kinds, all eight arithmetic
     // operations and nested control flow.
-    private static readonly string TetrominoPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/cgb/tetromino.cgb.cartridge.json");
+    private static readonly string TetrominoPath = RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/tetromino.cgb.cartridge.json");
 
     // Both sides go through the emitter's own canonicalizer, so the comparison is about content rather than about
     // which order the two producers happened to write their keys in.
@@ -48,7 +48,7 @@ public class CartridgeRoundTripTests {
 
     // Every target folder's sources; shared/ holds the modules they import, which are no document of their own.
     public static IEnumerable<object[]> CommittedSources() => Directory.EnumerateFiles(
-        RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
+        RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges"),
         "*.puck",
         SearchOption.AllDirectories
     )

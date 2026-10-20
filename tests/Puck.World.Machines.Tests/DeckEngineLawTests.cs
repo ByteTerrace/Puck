@@ -20,7 +20,7 @@ public sealed class DeckEngineLawTests {
     );
 
     private static string Cartridge(string file) => Path.Combine(
-        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/deck"),
+        path1: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/deck"),
         path2: file
     );
     private static WorldScreen Screen(WorldScreenSource source, WorldScreenRoute route) => new(

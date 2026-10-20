@@ -293,10 +293,10 @@ machines [
       schema: "puck.gaming-brick.configuration.v1"
       model: "dmg"
       content {
-        path: "../cartridges/dmg/tetromino.dmg.cartridge.json"
+        path: "cartridges/dmg/tetromino.dmg.cartridge.json"
       }
     }
-    contentFolders ["../cartridges/dmg", "../../../../roms/hgb"]
+    contentFolders ["cartridges/dmg", "../../roms/hgb"]
   }
   {
     name: "brick-cgb"
@@ -305,10 +305,10 @@ machines [
       schema: "puck.gaming-brick.configuration.v1"
       model: "cgb"
       content {
-        path: "../cartridges/cgb/tetromino.cgb.cartridge.json"
+        path: "cartridges/cgb/tetromino.cgb.cartridge.json"
       }
     }
-    contentFolders ["../cartridges/cgb", "../../../../roms/hgb"]
+    contentFolders ["cartridges/cgb", "../../roms/hgb"]
   }
   {
     name: "brick-agb"
@@ -317,10 +317,10 @@ machines [
       schema: "puck.gaming-brick.configuration.v1"
       model: "agb"
       content {
-        path: "../cartridges/cgb/hgb-mirror.cgb.cartridge.json"
+        path: "cartridges/cgb/hgb-mirror.cgb.cartridge.json"
       }
     }
-    contentFolders ["../cartridges/cgb", "../../../../roms/hgb"]
+    contentFolders ["cartridges/cgb", "../../roms/hgb"]
   }
   {
     name: "advanced-brick"
@@ -328,10 +328,10 @@ machines [
     configuration {
       schema: "puck.advanced-gaming-brick.config.v1"
       content {
-        path: "../cartridges/agb/pip.agb.cartridge.json"
+        path: "cartridges/agb/pip.agb.cartridge.json"
       }
     }
-    contentFolders ["../cartridges/agb", "../../../../roms/agb"]
+    contentFolders ["cartridges/agb", "../../roms/agb"]
   }
   {
     name: "tune-jukebox"
@@ -350,10 +350,10 @@ machines [
     configuration {
       schema: "puck.humble-gaming-deck.configuration.v1"
       content {
-        path: "../cartridges/deck/colour-bars.nes"
+        path: "cartridges/deck/colour-bars.nes"
       }
     }
-    contentFolders ["../cartridges/deck", "../../../../roms/hgd"]
+    contentFolders ["cartridges/deck", "../../roms/hgd"]
   }
 ]
 

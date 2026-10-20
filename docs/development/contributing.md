@@ -261,13 +261,13 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 ### Edit to running
 
 The target is under 30 seconds from saving an engine C# or HLSL file to seeing
-it in the running debug world (`src/Puck.World/Assets/worlds/debug.puck`, the
-World's default), on Direct3D 12, the World's default backend on Windows.
+it in the running debug world (the package `worlds/debug/`, booted with
+`--world worlds/debug`), on Direct3D 12, the World's default backend on Windows.
 
 **C#**: build and boot in one command, restore skipped:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release --no-restore
+dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug
 ```
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
@@ -522,7 +522,7 @@ that runner.
 Run the application to check composed game behavior, alongside relevant World tests:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
 ```
 
 Use `Puck.World` for game verification. Do not add a `--validate-*` mode or
