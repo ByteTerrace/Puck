@@ -181,7 +181,9 @@ Every inspection the debug world offers works on an exhibit:
   --prototype <id>` says which of its shapes are exact distances.
 - `world.wait bakes 60` waits for the bake after a `world.reload` or a state
   write that rebakes, so a capture shows the baked mesh and not the bake in
-  progress.
+  progress. It holds until a frame captured after it has built the new program
+  and that program has baked, so one wait covers a change whose program was
+  still queued when the wait armed.
 
 ## Motion controls
 
@@ -290,9 +292,6 @@ to step along it.
 Each of these was seen in a Direct3D 12 capture of the gallery.
 `docs/plans/open-items.md` tracks them.
 
-- **Pooled labels.** The motion rows' plinth labels bake frayed, letters
-  broken into slivers. The same labels on the still rows bake crisp, because
-  the static stamper refines a text group toward its glyphs.
 - **Moving blends keep their baked pose.** `motion-smooth-blend` and
   `motion-pulse` bake their blend group once and skin it. The seam stretches,
   and the pulse's petals stay fused into the core's baked silhouette as they

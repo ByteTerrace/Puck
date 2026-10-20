@@ -36,6 +36,14 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, and the finest
     /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice.</summary>
     public List<(Vector3 Center, float Radius, float Detail)> Members { get; } = [];
+    /// <summary>Gets the finest feature, in world units, any of the group's instances declares
+    /// (<see cref="SdfInstanceRange.Detail"/>); zero for none.</summary>
+    public float Detail { get; private set; }
+    /// <summary>Gets the low corner of the box the group's detailed instances' bounds cover, in the group's frame: the
+    /// region a lattice of one instance or slot refines toward <see cref="Detail"/>.</summary>
+    public Vector3 DetailLow { get; private set; }
+    /// <summary>Gets the high corner of the box the group's detailed instances' bounds cover, in the group's frame.</summary>
+    public Vector3 DetailHigh { get; private set; }
     /// <summary>Gets the geometry the group bakes while its instances are appended: a world group's names its segments'
     /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
     public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
@@ -121,6 +129,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             }
             if (!instance.IsDynamic) {
                 group.Members.Add(item: (instance.Center, radius, instance.Detail));
+            }
+            if (instance.Detail > 0f) {
+                var low = (center - new Vector3(value: radius));
+                var high = (center + new Vector3(value: radius));
+                var first = (group.Detail <= 0f);
+
+                group.DetailLow = (first ? low : Vector3.Min(value1: group.DetailLow, value2: low));
+                group.DetailHigh = (first ? high : Vector3.Max(value1: group.DetailHigh, value2: high));
+                group.Detail = (first ? instance.Detail : MathF.Min(group.Detail, instance.Detail));
             }
             staticRun = (instance.IsDynamic ? null : group);
             // A bound past the reach bakes over the reach instead, which the geometry then holds.

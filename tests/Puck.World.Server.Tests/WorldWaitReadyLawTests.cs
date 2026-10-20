@@ -6,7 +6,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <c>world.wait ready &lt;seconds&gt;</c> holds only its issuing session until the engine
 /// readiness it was composed with reads ready, whatever the tick, and a host that composes no renderer refuses it by
-/// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the mesh-bake readiness reads settled, and a host
+/// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the mesh-bake readiness reads settled since the frame mark it armed on, and a host
 /// that composes no renderer refuses it by name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed
 /// capture has landed, and a host that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
 /// run a real engine.
@@ -33,8 +33,10 @@ public sealed partial class WorldWaitReadyLawTests {
         );
     }
     private sealed class FlagBakes : IWorldBakeReadiness {
+        public long Frames { get; set; }
         public bool IsSettled { get; set; }
-        public string? PendingReason => (IsSettled ? null : "still baking: world");
+        public bool IsSettledSince(long mark) => (IsSettled && (Frames > mark));
+        public string? PendingReasonSince(long mark) => (IsSettledSince(mark: mark) ? null : "still baking: world");
     }
     // Answers at once, so its answer shows whether the session behind a wait was drained.
     private sealed class ProbeModule : ICommandModule {
@@ -140,7 +142,7 @@ public sealed partial class WorldWaitReadyLawTests {
             definition: Fixtures.BuildDocument(),
             name: "boot"
         );
-        var bakes = new FlagBakes();
+        var bakes = new FlagBakes { Frames = 5 };
 
         var (source, session, answered) = Console(
             bakes: bakes,
@@ -166,7 +168,14 @@ public sealed partial class WorldWaitReadyLawTests {
             expected: ("world.wait bakes 600", false, "[world.wait: holding until the bakes are settled, at most 600 seconds, from tick 0]")
         );
 
+        // Settled bakes of the program held when the wait armed do not release it: a change delivered before the wait
+        // may still be queued, so the hold waits for a frame captured since its mark.
         bakes.IsSettled = true;
+        source.Collect();
+
+        Assert.Single(collection: answered);
+
+        bakes.Frames = 6;
         source.Collect();
 
         Assert.Equal(

@@ -1,43 +1,54 @@
 namespace Puck.World;
 
-// The presentation's mesh-path bakes as the console reads them (world.wait bakes): settled once the engine is ready
-// (WorldRenderProbe.IsReady, so the world's residency has drawn the program it bakes) and neither the world's residency
-// (ViewHost) nor any residency the binder renders besides it, a session view's, a routed scene's or an infinity
-// layer's, owes a group of its program (SdfMeshPathBake.Pending). Read on the host pump.
+// The presentation's mesh-path bakes as the console reads them (world.wait bakes): settled since a mark once the engine is
+// ready (WorldRenderProbe.IsReady), the world's presenter has captured a frame after the mark and holds the program that
+// frame's content called for (SdfCompositionFrameSource.Building false), the world's residency (ViewHost) bakes that very
+// program, and neither it nor any residency the binder renders besides it, a session view's, a routed scene's or an
+// infinity layer's, owes a group of its program (SdfMeshPathBake.Pending). Without the frame and the program, a change
+// delivered before the wait (a world.reload) reads settled while its program is still queued or building, since the
+// residency's bake of the program before it is done. Read on the host pump.
 public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
     /// <inheritdoc/>
-    public bool IsSettled => (
+    public long Frames => (Presenter?.Composed.Frames ?? 0L);
+
+    /// <inheritdoc/>
+    public bool IsSettledSince(long mark) => (
         (m_renderProbe?.IsReady ?? false) &&
-        (ViewHost is { MeshPathBake.Pending: false }) &&
+        (Presenter is { } presenter) &&
+        (presenter.Composed.Frames > mark) &&
+        !presenter.Composed.Building &&
+        (ViewHost is { MeshPathBake: { Pending: false } bake }) &&
+        ReferenceEquals(objA: bake.Program, objB: presenter.Composed.Program) &&
         !ViewsBake()
     );
     /// <inheritdoc/>
-    public string? PendingReason {
-        get {
-            if (IsSettled) {
-                return null;
-            }
-            if (!(m_renderProbe?.IsReady ?? false) || (ViewHost is not { } world)) {
-                return "the engine is not ready, so the world has drawn no program to bake";
-            }
-
-            var names = new List<string>();
-
-            if (world.MeshPathBake.Pending) {
-                names.Add(item: world.Name);
-            }
-            foreach (var residency in m_routedResidencies.Values) {
-                if (residency.MeshPathBake.Pending) { names.Add(item: residency.Name); }
-            }
-            foreach (var view in m_viewResidencies.Values) {
-                if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.Name); }
-            }
-            foreach (var entry in InfinityEntries()) {
-                if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.Name); }
-            }
-
-            return $"still baking: {string.Join(separator: ", ", values: names)}";
+    public string? PendingReasonSince(long mark) {
+        if (IsSettledSince(mark: mark)) {
+            return null;
         }
+        if (!(m_renderProbe?.IsReady ?? false) || (ViewHost is not { } world) || (Presenter is not { } presenter)) {
+            return "the engine is not ready, so the world has drawn no program to bake";
+        }
+        if ((presenter.Composed.Frames <= mark) || presenter.Composed.Building) {
+            return "the world's program is still being built from the content the wait armed on";
+        }
+
+        var names = new List<string>();
+
+        if (world.MeshPathBake.Pending || !ReferenceEquals(objA: world.MeshPathBake.Program, objB: presenter.Composed.Program)) {
+            names.Add(item: world.Name);
+        }
+        foreach (var residency in m_routedResidencies.Values) {
+            if (residency.MeshPathBake.Pending) { names.Add(item: residency.Name); }
+        }
+        foreach (var view in m_viewResidencies.Values) {
+            if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.Name); }
+        }
+        foreach (var entry in InfinityEntries()) {
+            if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.Name); }
+        }
+
+        return $"still baking: {string.Join(separator: ", ", values: names)}";
     }
 
     // Whether a residency besides the world's own still owes its bake; allocates nothing, so a hold polls it every drain.
