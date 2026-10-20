@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 
@@ -82,9 +83,13 @@ public static class WorldImageLight {
     /// <summary>Returns the light a packed RGBA8 fill color casts, normalized to 0–1.</summary>
     /// <param name="rgba">The packed color, red in the low byte.</param>
     /// <returns>The red, green and blue.</returns>
-    public static Vector3 OfFill(uint rgba) => new(
-        x: ((rgba & 0xFFU) / 255f),
-        y: (((rgba >> 8) & 0xFFU) / 255f),
-        z: (((rgba >> 16) & 0xFFU) / 255f)
-    );
+    public static Vector3 OfFill(uint rgba) {
+        var unpacked = VectorFunctions.UnpackRgba8(packed: rgba);
+
+        return new Vector3(
+            x: unpacked.X,
+            y: unpacked.Y,
+            z: unpacked.Z
+        );
+    }
 }

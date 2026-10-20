@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using Puck.Abstractions.Sources;
+using Puck.Maths;
 
 namespace Puck.Platform.Windows.Recording;
 
@@ -12,19 +14,30 @@ namespace Puck.Platform.Windows.Recording;
 // work). A scalar path carries correctness on any CPU.
 internal static class PixelToNv12Converter {
     private const int CBias = (128 << Shift);
-    private const int CbB = 112;  //  0.4392 * 224/255 * 256
-    private const int CbG = -87;  // -0.3386 * 224/255 * 256
-    private const int CbR = -26;  // -0.1006 * 224/255 * 256
-    private const int CrB = -10;  // -0.0403 * 224/255 * 256
-    private const int CrG = -102; // -0.3989 * 224/255 * 256
-    private const int CrR = 112;  //  0.4392 * 224/255 * 256
     private const int Half = (1 << (Shift - 1));
     // BT.709 limited range, Q8 fixed point. Y = 16 + (Kr*R + Kg*G + Kb*B); Cb/Cr = 128 + (...).
     private const int Shift = 8;
-    private const int YB = 16;    // 0.0620 * 219/255 * 256
     private const int YBias = (16 << Shift);
-    private const int YG = 157;   // 0.6142 * 219/255 * 256
-    private const int YR = 47;    // 0.1826 * 219/255 * 256
+
+    // The weights are the ImageSourceConversion BT.709 Kr and Kb, scaled to the limited range's luma (219/255) and
+    // chroma (224/255) spans and rounded to Q8; none lies on a tie. They are 47, 157 and 16 for Y, and -26, -87, 112
+    // and 112, -102, -10 for Cb and Cr.
+    private static readonly (double Kr, double Kb) Rec709Luma = ImageSourceConversion.Coefficients(matrix: ImageYuvMatrix.Bt709);
+    private static readonly int CbB = Q8(value: (0.5 * (224.0 / 255.0)));
+    private static readonly int CbG = Q8(value: (-(Kg / (2.0 * (1.0 - Rec709Luma.Kb))) * (224.0 / 255.0)));
+    private static readonly int CbR = Q8(value: (-(Rec709Luma.Kr / (2.0 * (1.0 - Rec709Luma.Kb))) * (224.0 / 255.0)));
+    private static readonly int CrB = Q8(value: (-(Rec709Luma.Kb / (2.0 * (1.0 - Rec709Luma.Kr))) * (224.0 / 255.0)));
+    private static readonly int CrG = Q8(value: (-(Kg / (2.0 * (1.0 - Rec709Luma.Kr))) * (224.0 / 255.0)));
+    private static readonly int CrR = Q8(value: (0.5 * (224.0 / 255.0)));
+    private static readonly int YB = Q8(value: (Rec709Luma.Kb * (219.0 / 255.0)));
+    private static readonly int YG = Q8(value: (Kg * (219.0 / 255.0)));
+    private static readonly int YR = Q8(value: (Rec709Luma.Kr * (219.0 / 255.0)));
+
+    private static double Kg => ((1.0 - Rec709Luma.Kr) - Rec709Luma.Kb);
+    private static int Q8(double value) => ((int)Math.Round(
+        mode: MidpointRounding.ToEven,
+        value: (value * (1 << Shift))
+    ));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void Accumulate(ReadOnlySpan<byte> pixels, bool blueFirst, int width, int x, int y, out int r, out int g, out int b) {
@@ -236,8 +249,8 @@ internal static class PixelToNv12Converter {
     public static void Convert(ReadOnlySpan<byte> pixels, GpuPixelFormat format, int width, int height, Span<byte> destination) {
         // The two supported layouts differ only in whether byte 0 is red or blue.
         var blueFirst = (format != GpuPixelFormat.R8G8B8A8Unorm);
-        var chromaWidth = ((width + 1) / 2);
-        var chromaHeight = ((height + 1) / 2);
+        var chromaWidth = width.CeilingDivide(divisor: 2);
+        var chromaHeight = height.CeilingDivide(divisor: 2);
         var ySize = (width * height);
         var yPlane = destination[..ySize];
         var chromaPlane = destination.Slice(
@@ -263,5 +276,5 @@ internal static class PixelToNv12Converter {
         );
     }
     /// <summary>The tightly packed NV12 byte count for a frame extent (Y plane + half-size interleaved chroma).</summary>
-    public static int Nv12Size(int width, int height) => checked(((width * height) + ((2 * ((width + 1) / 2)) * ((height + 1) / 2))));
+    public static int Nv12Size(int width, int height) => checked(((width * height) + ((2 * width.CeilingDivide(divisor: 2)) * height.CeilingDivide(divisor: 2))));
 }

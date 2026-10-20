@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Abstractions.Sources;
+using Puck.Maths;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D10;
@@ -413,8 +415,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
             ppUnorderedAccessViews: &targetView
         );
         m_context->Dispatch(
-            ThreadGroupCountX: checked((uint)((m_width + 7) / 8)),
-            ThreadGroupCountY: checked((uint)((m_height + 7) / 8)),
+            ThreadGroupCountX: checked((uint)m_width.CeilingDivide(divisor: 8)),
+            ThreadGroupCountY: checked((uint)m_height.CeilingDivide(divisor: 8)),
             ThreadGroupCountZ: 1
         );
 
@@ -495,17 +497,17 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
     /// GPU conversion does not support.</exception>
     public static float[] ConversionConstants(Win32CameraColorimetry colorimetry) {
         var conversion = colorimetry.Resolve();
-        var limited = (Win32YuvRange.Limited == conversion.Range);
-        var bt709 = (Win32YuvMatrix.Bt709 == conversion.Matrix);
+        var limited = (ImageYuvRange.Limited == conversion.Range);
+        var matrix = ImageSourceConversion.YuvToRgbCoefficients(matrix: conversion.Matrix);
         float[] constants = [
             (limited ? 16f : 0f),
             (limited ? 219f : 255f),
             (limited ? 224f : 255f),
             0f,
-            (bt709 ? 1.5748f : 1.402f),
-            (bt709 ? 0.187324f : 0.344136f),
-            (bt709 ? 0.468124f : 0.714136f),
-            (bt709 ? 1.8556f : 1.772f),
+            ((float)matrix.RedFromV),
+            ((float)matrix.GreenFromU),
+            ((float)matrix.GreenFromV),
+            ((float)matrix.BlueFromU),
             (conversion.ChromaHorizontallyCosited ? 0f : 0.5f),
             (conversion.ChromaVerticallyCosited ? 0f : 0.5f),
             0f,
