@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Puck.Abstractions.Lighting;
+using Puck.Maths;
 using Windows.Win32;
 using Windows.Win32.Devices.HumanInterfaceDevice;
 using Windows.Win32.Foundation;
@@ -370,7 +371,7 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
 
         // Convert accumulated bit spans into byte lengths, including the leading report id byte.
         foreach (var reportId in m_reportLengthById.Keys.ToArray()) {
-            m_reportLengthById[reportId] = (1 + ((m_reportLengthById[reportId] + 7) / 8));
+            m_reportLengthById[reportId] = (1 + m_reportLengthById[reportId].CeilingDivide(divisor: 8));
         }
     }
     private int ReportLength(byte reportId) {
@@ -423,7 +424,7 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         m_boundingBoxHeight = ((int)height);
         m_boundingBoxDepth = ((int)depth);
         m_kind = ToKind(value: kind);
-        m_minUpdateIntervalMs = ((int)((minInterval + 999U) / 1000U));
+        m_minUpdateIntervalMs = ((int)minInterval.CeilingDivide(divisor: 1000U));
 
         return (lampCount > 0);
     }
@@ -522,7 +523,7 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
             BlueLevelCount: ((byte)blueLevels),
             IntensityLevelCount: ((byte)intensityLevels),
             IsProgrammable: (isProgrammable != 0),
-            UpdateLatencyInMilliseconds: ((int)((latency + 999U) / 1000U))
+            UpdateLatencyInMilliseconds: ((int)latency.CeilingDivide(divisor: 1000U))
         );
 
         return true;

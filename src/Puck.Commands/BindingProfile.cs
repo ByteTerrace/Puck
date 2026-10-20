@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.Commands;
 
@@ -756,12 +757,7 @@ public static class BindingProfile {
                 paramName: paramName
             );
         }
-        if (
-            !float.IsFinite(f: constant.Raw.X) ||
-            !float.IsFinite(f: constant.Raw.Y) ||
-            !float.IsFinite(f: constant.Raw.Z) ||
-            !float.IsFinite(f: constant.Raw.W)
-        ) {
+        if (!VectorFunctions.IsFinite(vector: constant.Raw)) {
             throw new ArgumentException(
                 message: $"{path} Value components must be finite.",
                 paramName: paramName

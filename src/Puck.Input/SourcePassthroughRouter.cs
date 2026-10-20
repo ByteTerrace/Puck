@@ -354,10 +354,7 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
             : m_panes[index]
         );
     }
-    private static FixedVector2 ToFixed(Vector2 point) => new(
-        X: FixedQ4816.FromDouble(value: point.X),
-        Y: FixedQ4816.FromDouble(value: point.Y)
-    );
+    private static FixedVector2 ToFixed(Vector2 point) => FixedVector2.FromVector2(value: point);
     // The client point of a source coordinate on the window the source shows now.
     private static bool TryPoint(ISourcePassthroughWindow window, SourceMapping mapping, FixedVector2 coordinate, out SourcePassthroughPoint point) {
         if (!window.TryDescribe(window: out var described)) {

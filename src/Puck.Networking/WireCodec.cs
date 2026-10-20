@@ -288,12 +288,7 @@ public ref struct WireReader {
             z: z
         );
 
-        if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z) ||
-            !float.IsFinite(f: value.W)
-        ) {
+        if (!VectorFunctions.IsFinite(rotation: value)) {
             Fail(
                 detail: $"{field} is not finite",
                 refusal: WireRefusal.PayloadMalformed
@@ -312,11 +307,7 @@ public ref struct WireReader {
             z: ReadSingle()
         );
 
-        if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z)
-        ) {
+        if (!VectorFunctions.IsFinite(vector: value)) {
             Fail(
                 detail: $"{field} is not finite",
                 refusal: WireRefusal.PayloadMalformed

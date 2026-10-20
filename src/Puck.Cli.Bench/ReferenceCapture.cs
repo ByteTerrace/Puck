@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 
 namespace Puck.Cli.Bench;
 
@@ -780,6 +781,16 @@ public static class ReferenceCapture {
         }
         return (summary, pressure);
     }
+    // The equal-weight median of a nonempty sample; an even-sized sample takes the exact mean of its middle two.
+    private static Rational Median(IReadOnlyList<Rational> samples) {
+        var ordered = samples.Order().ToArray();
+        var middle = (ordered.Length / 2);
+
+        return (((ordered.Length % 2) == 1)
+            ? ordered[middle]
+            : ((ordered[(middle - 1)] + ordered[middle]) / Rational.Two)
+        );
+    }
     private static string Summarize(JsonNode? node) => (node switch {
         null => "nothing",
         JsonArray entries => $"{entries.Count} entry/entries",
@@ -932,7 +943,7 @@ public static class ReferenceCapture {
                     pinned["scalarIntegerAddService"] = new JsonObject {
                         ["form"] = plan.ScalarIntegerAddForm,
                         ["latency"] = add.Latency,
-                        ["reciprocalThroughput"] = ReferenceJson.Rational(value: ReferenceRational.Of(value: add.ReciprocalThroughput)),
+                        ["reciprocalThroughput"] = ReferenceJson.Ratio(value: Rational.FromDecimal(value: add.ReciprocalThroughput)),
                         ["q"] = add.Service,
                     };
                 }
@@ -971,7 +982,7 @@ public static class ReferenceCapture {
             pinned["sources"] = sources;
 
             var prices = new JsonObject();
-            var normalized = new Dictionary<string, List<ReferenceRational>>(comparer: StringComparer.Ordinal);
+            var normalized = new Dictionary<string, List<Rational>>(comparer: StringComparer.Ordinal);
             var resolved = true;
 
             foreach (var plan in plans) {
@@ -987,9 +998,9 @@ public static class ReferenceCapture {
                         continue;
                     }
 
-                    var ratio = ReferenceRational.Of(
-                        denominator: measured.ScalarIntegerAdd[row.Model].Service,
-                        numerator: row.Price.Cycles
+                    var ratio = new Rational(
+                        Denominator: measured.ScalarIntegerAdd[row.Model].Service,
+                        Numerator: row.Price.Cycles
                     );
 
                     if (!normalized.TryGetValue(
@@ -1003,7 +1014,7 @@ public static class ReferenceCapture {
                         propertyName: row.Model,
                         value: new JsonObject {
                             ["cycles"] = row.Price.Cycles,
-                            ["normalizedToScalarIntegerAdd"] = ReferenceJson.Rational(value: ratio),
+                            ["normalizedToScalarIntegerAdd"] = ReferenceJson.Ratio(value: ratio),
                             ["maximumPathInstructions"] = row.Trace.Count,
                             ["mca"] = new JsonObject {
                                 ["totalCycles"] = row.Simulation.GetValueOrDefault(key: "Total Cycles"),
@@ -1019,20 +1030,20 @@ public static class ReferenceCapture {
             pinned["targets"] = prices;
             if (resolved && (normalized.Count == plans.Count)) {
                 var medians = new JsonObject();
-                var samples = new List<ReferenceRational>();
+                var samples = new List<Rational>();
 
                 foreach (var plan in plans) {
-                    var median = ReferenceRational.Median(samples: normalized[plan.Family]);
+                    var median = Median(samples: normalized[plan.Family]);
 
                     medians.Add(
                         propertyName: plan.Family,
-                        value: ReferenceJson.Rational(value: median)
+                        value: ReferenceJson.Ratio(value: median)
                     );
                     samples.Add(item: median);
                 }
                 pinned["representativeService"] = new JsonObject {
                     ["familyMedians"] = medians,
-                    ["cycles"] = ReferenceRational.Median(samples: samples).Ceiling,
+                    ["cycles"] = ((long)Median(samples: samples).Ceiling()),
                 };
             } else {
                 pinned["representativeService"] = new JsonObject { ["unmodeled"] = "at least one pinned evidence target left this kernel unresolved; see targets" };
@@ -1072,7 +1083,7 @@ public static class ReferenceCapture {
                     propertyName: target.Id,
                     value: new JsonObject {
                         ["latency"] = measurement.Latency,
-                        ["reciprocalThroughput"] = ReferenceJson.Rational(value: ReferenceRational.Of(value: measurement.ReciprocalThroughput)),
+                        ["reciprocalThroughput"] = ReferenceJson.Ratio(value: Rational.FromDecimal(value: measurement.ReciprocalThroughput)),
                         ["q"] = measurement.Service,
                     }
                 );

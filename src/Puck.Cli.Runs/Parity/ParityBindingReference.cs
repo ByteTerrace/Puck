@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.World;
 
@@ -46,17 +47,6 @@ public sealed class ParityBindingReference {
     /// <summary>Gets the image's height in pixels.</summary>
     public uint Height { get; }
 
-    private static uint Hash(uint value) {
-        unchecked {
-            value ^= (value >> 16);
-            value *= 0x7FEB352Du;
-            value ^= (value >> 15);
-            value *= 0x846CA68Bu;
-            value ^= (value >> 16);
-        }
-
-        return value;
-    }
     // A bound field reads the value of the last step at or before the tick; before its first step, and when the
     // contract states none, it reads the graph default.
     private uint At(string pass, string field, uint fallback, ulong tick) {
@@ -200,7 +190,7 @@ public sealed class ParityBindingReference {
         var seed = At(fallback: m_seed, field: "seed", pass: GrainPass, tick: tick);
         var tickRate = ((uint)EngineTicks.PerSecond);
         var grainFrame = unchecked((((uint)(tick * m_stepTicks)) / Math.Max(val1: 1U, val2: (tickRate / Math.Max(val1: 1U, val2: flickerHz)))));
-        var grainKey = Hash(value: unchecked(seed ^ (grainFrame * 0x9E3779B9u)));
+        var grainKey = InvertibleBitMix.Mix(value: unchecked(seed ^ (grainFrame * 0x9E3779B9u)));
 
         uint Seed(uint x, uint y, int channel) => channel switch {
             0 => (((x * 37U) + (y * 11U)) & 255U),
@@ -212,7 +202,7 @@ public sealed class ParityBindingReference {
             for (var x = 0U; (x < width); x++) {
                 var centreX = Math.Min(val1: (((x / cell) * cell) + (cell / 2U)), val2: (width - 1U));
                 var centreY = Math.Min(val1: (((y / cell) * cell) + (cell / 2U)), val2: (height - 1U));
-                var noise = Hash(value: unchecked((x + (y * 4099U)) ^ grainKey));
+                var noise = InvertibleBitMix.Mix(value: unchecked((x + (y * 4099U)) ^ grainKey));
                 var offset = (((int)(noise % ((2U * amplitude) + 1U))) - ((int)amplitude));
                 var at = checked((((((int)y) * ((int)width)) + ((int)x)) * 4));
 
