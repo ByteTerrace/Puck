@@ -513,6 +513,7 @@ public static partial class WorldSubmissionCodec {
             field: "Rebuild.Definition",
             maxBytes: WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Rebuild)
         );
+        var directory = reader.ReadNullableString(field: "Rebuild.DocumentDirectory");
 
         if (reader.Failed) {
             return null;
@@ -521,7 +522,10 @@ public static partial class WorldSubmissionCodec {
         WorldDefinition definition;
 
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: json);
+            definition = WorldDefinitionSerialization.Deserialize(
+                documentDirectory: directory,
+                utf8Json: json
+            );
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException)) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.PayloadMalformed,
@@ -1271,6 +1275,9 @@ public static partial class WorldSubmissionCodec {
                     ));
                 }
                 w.WriteBlock(value: json);
+                // The serializer omits the directory the document's relative paths resolve beside (a machine's content
+                // among them), so it rides beside the document.
+                w.WriteNullableString(value: definition.DocumentDirectory);
             }
         );
     }

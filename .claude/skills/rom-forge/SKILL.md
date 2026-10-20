@@ -20,7 +20,7 @@ this file is corrected in the same change.
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
 | Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
-| Shipped sources | `src/Puck.World/Assets/cartridges/*.cgb.puck`, `*.agb.puck`, each with its committed `.cartridge.json` |
+| Shipped sources | `src/Puck.World/Assets/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/` and `agb/`, which a world names as a machine's `contentFolder`), each with its committed `.cartridge.json` |
 
 Both compilers consume the same rules, variables, sprites and input conditions.
 Source data determines behavior: never add a game-name switch or copy gameplay

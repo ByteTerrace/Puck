@@ -22,8 +22,8 @@ public sealed class AdvancedIdleEquivalenceLawTests {
     // pip is the shipped advanced cartridge; it is silent, so tetromino, built for this machine, carries music through
     // every channel the spans must leave exactly as the single steps would.
     [Theory]
-    [InlineData("pip.agb")]
-    [InlineData("tetromino.cgb")]
+    [InlineData("agb/pip.agb")]
+    [InlineData("cgb/tetromino.cgb")]
     public void TheAdvancedMachineIdlesExactlyAsItsHaltedStepsWould(string cartridge) {
         var document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/cartridges/{cartridge}.cartridge.json")));
         // An advanced palette holds sixteen colours; a Colour one, four.

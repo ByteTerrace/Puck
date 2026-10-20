@@ -73,10 +73,9 @@ Reversi, Hearts or Snake, keeps it. A citation of a real product as prior art,
 such as an emulator reference or a game named for its feel, is not a shipped
 name.
 
-**Every house cartridge has a `.puck` source.** `pip.agb` is the one exception
-today: its source is the hand-authored `pip.agb.cartridge.json` under
-`Assets/cartridges`. It gets a `.puck` by decompiling that document, reproduced
-byte for byte through `puck compile`.
+**Every house cartridge has a `.puck` source.** Each sits beside its compiled
+document under `Assets/cartridges/<target>`, one folder per forge target, and
+`puck compile` reproduces the document byte for byte.
 
 **Licensed images stay usable as evidence, recorded by hash only.** Their bytes
 never enter the repository; the ledger records id and SHA-256, and the battery

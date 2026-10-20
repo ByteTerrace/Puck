@@ -802,6 +802,7 @@ public sealed class MachineConfigurationLawTests {
         public string CompositionFingerprint => (fingerprint ?? string.Empty);
 
         public bool CanPrepare(string engineId, string contentPath) => false;
+        public bool HasContentProvider(string engineId) => false;
         public static MachineEngineDescriptor Engine(MachineObjectDescriptor configuration) =>
             new(
                 AudioOutputs: [],

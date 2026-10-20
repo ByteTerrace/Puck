@@ -10,6 +10,12 @@ namespace Puck.World;
 /// <param name="Running">Whether the host advances this instance. A stopped instance retains its hardware state.</param>
 /// <param name="Memory">Ordered hardware bindings, independent of any display.</param>
 /// <param name="Cable">The optional standing cable endpoint owned by this machine instance.</param>
+/// <param name="ContentFolder">The folder holding the content this device can swap to, relative to the declaring
+/// document (<see cref="WorldDocumentPaths"/>), or <see langword="null"/> for a device with no swappable content.
+/// <c>machine.content</c> lists the files in it the device's engine can mount (<see cref="WorldMachineContentFolder"/>)
+/// and <c>machine.swap</c> mounts one by name; nothing outside the folder is listed. Omitted from the wire when
+/// null.</param>
 public sealed record WorldMachine(string Name, string Engine, JsonElement Configuration, bool Running = true,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachineMemory>? Memory = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ContentFolder = null);
