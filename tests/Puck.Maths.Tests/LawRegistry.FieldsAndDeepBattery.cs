@@ -374,10 +374,6 @@ internal static partial class LawRegistry {
             id: "sampling.digital-net-identities-and-net-property"
         ),
         ClaimCase(
-            claim: Subjects.FieldNoiseBoundsAndTwins,
-            id: "sampling.field-noise-bounds-and-gradient"
-        ),
-        ClaimCase(
             claim: Subjects.Pcg3dLatticeNoiseReferenceAndCorners,
             id: "sampling.pcg3d-lattice-noise-reference-and-corners"
         ),
@@ -790,13 +786,6 @@ internal static partial class LawRegistry {
             id: "sampling.certified-low-discrepancy-measured-across-scales"
         ),
     ];
-    private static LawCase[] FieldNoiseCases() => [
-        // ---- field noise + low discrepancy ----
-        ClaimCase(
-            claim: SamplingClaims.FieldNoisePeriodicityAndDistributionSurface,
-            id: "sampling.field-noise-periodicity-canary-and-distribution"
-        ),
-    ];
     private static LawCase[] CertifiedLowDiscrepancyCases() => [
         // ---- CertifiedLowDiscrepancy ----
         ClaimCase(
@@ -1180,10 +1169,6 @@ internal static partial class LawRegistry {
             id: "core.bitwise-pair-signed-narrow-and-wide-carriers"
         ),
         ClaimCase(
-            claim: FixedPointContractClaims.FieldNoiseWidePositionAliasAndRebaseSurface,
-            id: "sampling.field-noise-wide-position-alias-and-rebase"
-        ),
-        ClaimCase(
             claim: FixedPointContractClaims.UnsignedSquareRootUInt128CarrierBoundarySurface,
             id: "core.unsigned-square-root-uint128-carrier-boundary"
         ),
@@ -1210,10 +1195,6 @@ internal static partial class LawRegistry {
         ClaimCase(
             claim: Subjects.CyclicRotationPlaneCountIsCoxeterConjugacyPairCount,
             id: "scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy"
-        ),
-        ClaimCase(
-            claim: FieldNoiseOracleClaims.FieldNoiseSampleMatchesExactOracle,
-            id: "sampling.field-noise-sample-vs-exact-oracle"
         ),
     ];
     private static LawCase[] PresentedStructureCases() => [

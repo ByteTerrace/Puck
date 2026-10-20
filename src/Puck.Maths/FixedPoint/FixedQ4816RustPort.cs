@@ -665,7 +665,7 @@ const FRACTION_MASK: u64 = (1u64 << FRACTION_BITS) - 1;
 
         sb.Append(value: """
 // Signed (x*y) >> 62 via one 128-bit widened multiply and an arithmetic shift — equivalent to the host's
-// Math.BigMul-based reconstruction (BigMulShift62) because the high:low halves of a signed 64x64->128
+// Math.BigMul-based reconstruction (BigMulShift at shift 62) because the high:low halves of a signed 64x64->128
 // multiply are exactly the two's-complement bit pattern of `(x as i128) * (y as i128)`, and arithmetic-
 // shifting that by 62 then truncating to the low 64 bits reassembles exactly what the host computes from
 // high/low. `|x*y|` must stay below 2^125 for the truncation to be lossless (the host carries the same

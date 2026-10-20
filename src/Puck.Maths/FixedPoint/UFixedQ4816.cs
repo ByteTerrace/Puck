@@ -116,9 +116,9 @@ public readonly partial record struct UFixedQ4816(ulong Value)
             y: y
         ).Value;
 
-        return new UFixedQ4816(Value: FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: RawHalf,
+        return new UFixedQ4816(Value: FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: RawHalf,
             truncated: truncated
         ));
     }
@@ -155,9 +155,9 @@ public readonly partial record struct UFixedQ4816(ulong Value)
         // The remainder ties against its own complement, not against a fixed half: the divisor is the unit here.
         var remainderComplement = (y.Value - remainder);
 
-        return new UFixedQ4816(Value: FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: remainderComplement,
+        return new UFixedQ4816(Value: FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: remainderComplement,
             truncated: truncated
         ));
     }

@@ -51,30 +51,6 @@ internal static partial class Subjects {
         public static double ToDouble(FixedQ4816 value) => ((double)value);
         public static FixedQ4816 Truncate(FixedQ4816 value) => FixedQ4816.Truncate(value: value);
     }
-    private readonly struct Q1648Adapter : ISignedFixedPointAdapter<FixedQ1648> {
-        public static FixedQ1648 Epsilon => FixedQ1648.Epsilon;
-        public static int FractionBitCount => FixedQ1648.FractionBitCount;
-        public static int IntegerBitCount => FixedQ1648.IntegerBitCount;
-        public static int TotalBitCount => FixedQ1648.TotalBitCount;
-
-        public static FixedQ1648 Ceiling(FixedQ1648 value) => FixedQ1648.Ceiling(value: value);
-        public static FixedQ1648 Construct(long value) => new(Value: value);
-        public static FixedQ1648 Floor(FixedQ1648 value) => FixedQ1648.Floor(value: value);
-        public static FixedQ1648 Fractional(FixedQ1648 value) => FixedQ1648.Fractional(value: value);
-        public static FixedQ1648 FromDouble(double value) => FixedQ1648.FromDouble(value: value);
-        public static FixedQ1648 FromInteger(long value) => FixedQ1648.FromInteger(value: value);
-        public static FixedQ1648 FromRaw(long value) => FixedQ1648.FromRawBits(value: value);
-        public static FixedQ1648 Lerp(FixedQ1648 from, FixedQ1648 to, FixedQ1648 amount) =>
-            FixedQ1648.Lerp(
-                amount: amount,
-                from: from,
-                to: to
-            );
-        public static long Raw(FixedQ1648 value) => value.Value;
-        public static FixedQ1648 Round(FixedQ1648 value) => FixedQ1648.Round(value: value);
-        public static double ToDouble(FixedQ1648 value) => ((double)value);
-        public static FixedQ1648 Truncate(FixedQ1648 value) => FixedQ1648.Truncate(value: value);
-    }
     private readonly struct Q3232Adapter : ISignedFixedPointAdapter<FixedQ3232> {
         public static FixedQ3232 Epsilon => FixedQ3232.Epsilon;
         public static int FractionBitCount => FixedQ3232.FractionBitCount;

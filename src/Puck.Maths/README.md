@@ -2,7 +2,11 @@
 
 Puck.Maths provides deterministic numerics for simulation, including fixed-point
 values, reproducible random streams, exact integer and algebraic operations, and
-quantized signed 8-bit vector arithmetic (`SignedByteVectorFunctions`).
+quantized signed 8-bit vector arithmetic (`SignedByteVectorFunctions`). The one
+home for the float helpers presentation code shares is `VectorFunctions`: the
+vector admission checks, angle wraps, easings, shortest arc and perpendicular,
+−Z-forward attitude readbacks and unorm packers, all outside the determinism
+contract.
 
 ## Documentation
 

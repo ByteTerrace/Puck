@@ -352,9 +352,9 @@ internal static class SignedFixedPointArithmetic {
         var magnitude = unchecked((ulong)((value ^ sign) - sign));
         var truncated = (magnitude >> narrowShift);
         var remainder = magnitude & narrowBitMask;
-        var rounded = FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: narrowHalf,
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: narrowHalf,
             truncated: truncated
         );
         var result = unchecked((long)rounded);

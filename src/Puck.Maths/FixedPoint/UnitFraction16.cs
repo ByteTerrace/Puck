@@ -80,9 +80,9 @@ public readonly record struct UnitFraction16(ushort Value)
         var truncated = (product >> FractionBitCount);
         var remainder = product & FractionBitMask;
 
-        return new(Value: ((ushort)FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: RawHalf,
+        return new(Value: ((ushort)FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: RawHalf,
             truncated: truncated
         )));
     }
@@ -97,9 +97,9 @@ public readonly record struct UnitFraction16(ushort Value)
         var remainder = (dividend - (quotient * y.Value));
         // The doubled remainder ties against the divisor itself, so the threshold is the divisor, not a fixed half.
         var twiceRemainder = (remainder << 1);
-        var rounded = FixedPointRounding.RoundHalfToEven(
-            remainder: twiceRemainder,
-            threshold: ((uint)y.Value),
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: twiceRemainder,
+            distanceToNext: ((uint)y.Value),
             truncated: quotient
         );
 

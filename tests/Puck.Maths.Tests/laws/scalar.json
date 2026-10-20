@@ -1519,7 +1519,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "FixedQ4816.Sin and FixedQ4816.Cos",
         "Against": "the two components of FixedQ4816.SinCos",
-        "Shared": "Identical ReduceSinCosAngle, SinCosResidual, BigMulShift60 and NarrowSinCosQ60 arithmetic; singles reconstruct one component while the pair reconstructs both",
+        "Shared": "Identical ReduceSinCosAngle, SinCosResidual, BigMulShift and NarrowSinCosQ60 arithmetic; singles reconstruct one component while the pair reconstructs both",
         "Citation": "The independent series leg pins the arithmetic; this leg pins exact single/pair agreement despite separate reconstruction paths.",
         "Absolute": ""
       },

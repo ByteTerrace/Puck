@@ -358,136 +358,9 @@ internal static partial class LawRegistry {
         ),
 
     ];
-    private static LawCase[] FixedQ1648Cases() => [
-        // ---- FixedQ1648 (Q16.48): a range-for-resolution scalar leaning toward resolution. Non-transcendental
-        // sibling of the scalar family above, retargeted at forty-eight fraction bits and a sixteen-bit integer
-        // range; its distinguishing law is the FixedQ4816 peer conversion. ----
-        Case(
-            id: "q1648.mul-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: Q1648Scalar,
-                lawId: "q1648.mul-vs-oracle",
-                oracle: Subjects.Q1648MultiplyOracle,
-                subject: Subjects.Q1648Multiply,
-                tier: Tier.Default
-            )
-        ),
-        Case(
-            id: "q1648.add-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: Q1648Scalar,
-                lawId: "q1648.add-vs-oracle",
-                oracle: Subjects.Q1648AddOracle,
-                subject: Subjects.Q1648Add,
-                tier: Tier.Default
-            )
-        ),
-        Case(
-            id: "q1648.mul-purity",
-            run: () => Laws.PureScalarBinary(
-                domain: Q1648Scalar,
-                lawId: "q1648.mul-purity",
-                op: Subjects.Q1648Multiply,
-                tier: Tier.Default
-            )
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648GridAndConstruction,
-            id: "q1648.grid-and-construction"
-        ),
-        SweptCase(
-            claim: Subjects.Q1648AdditiveOpsExact,
-            domain: Q1648Scalar,
-            id: "q1648.additive-ops-vs-oracle",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.Q1648CheckedOpsRefuse,
-            domain: Q1648Scalar,
-            id: "q1648.checked-ops-refuse",
-            width: 1
-        ),
-        Case(
-            id: "q1648.divide-vs-oracle",
-            run: () => Laws.ScalarBinaryMatchesOracle(
-                domain: Q1648ScalarDivision,
-                lawId: "q1648.divide-vs-oracle",
-                oracle: Subjects.Q1648DivideOracle,
-                subject: Subjects.Q1648Divide,
-                tier: Tier.Default
-            )
-        ),
-        SweptCase(
-            claim: Subjects.Q1648ModulusExact,
-            domain: Q1648Scalar,
-            id: "q1648.modulus-vs-oracle",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.Q1648OrderExact,
-            domain: Q1648Scalar,
-            id: "q1648.order-vs-oracle",
-            width: 2
-        ),
-        SweptCase(
-            claim: Subjects.Q1648MagnitudeSelectionExact,
-            domain: Q1648Scalar,
-            id: "q1648.magnitude-selection-vs-oracle",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.Q1648IntegralPartsExact,
-            domain: Q1648Scalar,
-            id: "q1648.integral-parts-vs-oracle",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.Q1648PredicatesClassify,
-            domain: Q1648Scalar,
-            id: "q1648.predicates-classify",
-            width: 1
-        ),
-        SweptCase(
-            claim: Subjects.Q1648LerpEndpointsAndOracle,
-            domain: Q1648Scalar,
-            id: "q1648.lerp-endpoints-and-oracle",
-            width: 2
-        ),
-        SweptCase(
-            claim: Subjects.Q1648TextRoundTrip,
-            domain: Q1648Scalar,
-            id: "q1648.text-round-trip",
-            width: 1
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648TextRefusals,
-            id: "q1648.text-refusals"
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648StyledParseIsGenuine,
-            id: "q1648.styled-parse-is-genuine"
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648TextParseTies,
-            id: "q1648.text-parse-ties"
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648DecimalConversionModes,
-            id: "q1648.decimal-conversion-modes"
-        ),
-        ClaimCase(
-            claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
-            id: "core.scale-decimal-wide-reaches-canonical-core"
-        ),
-        ClaimCase(
-            claim: Subjects.Q1648PeerConversionExact,
-            id: "q1648.peer-conversion-vs-fixedq4816"
-        ),
-
-    ];
     private static LawCase[] FixedQ3232Cases() => [
-        // ---- FixedQ3232 (Q32.32): a scalar splitting integer and fraction bits evenly, the balanced point between
-        // FixedQ4816's range-leaning and FixedQ1648's resolution-leaning splits. Non-transcendental sibling of the
+        // ---- FixedQ3232 (Q32.32): a scalar splitting integer and fraction bits evenly, against FixedQ4816's
+        // range-leaning split. Non-transcendental sibling of the
         // scalar family above, retargeted at thirty-two fraction bits and a thirty-two-bit integer range; its
         // distinguishing law is the FixedQ4816 peer conversion. ----
         Case(
@@ -602,6 +475,10 @@ internal static partial class LawRegistry {
         ClaimCase(
             claim: Subjects.Q3232DecimalConversionModes,
             id: "q3232.decimal-conversion-modes"
+        ),
+        ClaimCase(
+            claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
+            id: "core.scale-decimal-wide-reaches-canonical-core"
         ),
         ClaimCase(
             claim: Subjects.Q3232PeerConversionExact,

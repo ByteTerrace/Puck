@@ -109,8 +109,7 @@ public static class FixedPointConvert {
     /// <returns>One ties-to-even rounding of <c>value·2^fractionBitCount</c>, exactly — <see cref="BigInteger"/>
     /// carries the full width, so nothing here can wrap the way a fixed-width intermediate would.</returns>
     /// <remarks>This is the decimal boundary for a carrier whose fraction bit count exceeds
-    /// <see cref="ScaleDecimal"/>'s thirty-one-bit cap — <see cref="FixedQ1648"/> (forty-eight) and
-    /// <see cref="FixedQ3232"/> (thirty-two) today: past that cap <see cref="ScaleDecimal"/>'s <see cref="UInt128"/>
+    /// <see cref="ScaleDecimal"/>'s thirty-one-bit cap — <see cref="FixedQ3232"/> (thirty-two) today: past that cap <see cref="ScaleDecimal"/>'s <see cref="UInt128"/>
     /// intermediate is not wide enough to stay exact, and reusing it anyway would silently wrap instead of throwing
     /// — a correctness bug, not a documented policy. This overload is not on either Q48.16 carrier's hot path and is
     /// not called by either of them.</remarks>
@@ -566,12 +565,6 @@ public static class FixedPointConvert {
             return Unsafe.As<FixedQ4816, TSelf>(source: ref converted);
         }
 
-        if (typeof(TSelf) == typeof(FixedQ1648)) {
-            var converted = FixedQ1648.FromDouble(value: value);
-
-            return Unsafe.As<FixedQ1648, TSelf>(source: ref converted);
-        }
-
         var q3232 = FixedQ3232.FromDouble(value: value);
 
         return Unsafe.As<FixedQ3232, TSelf>(source: ref q3232);
@@ -787,9 +780,9 @@ public static class FixedPointConvert {
         var magnitude = unchecked((ulong)((Raw(value: value) ^ sign) - sign));
         var truncated = (magnitude >> shift);
         var remainder = magnitude & ((1UL << shift) - 1UL);
-        var rounded = FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: (1UL << (shift - 1)),
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: (1UL << (shift - 1)),
             truncated: truncated
         );
         var narrowedRaw = unchecked((long)rounded);

@@ -451,15 +451,15 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         // reconstruction) per-axis separations. The addition below cannot overflow: the true separation on every axis
         // that moves is strictly larger than that axis's own step, so the landed point stays strictly between
         // current and target on the real line, a range both endpoints already witness is representable.
-        var dx = FixedVectorMath.SignedFromMagnitude(
+        var dx = FusedArithmetic.WrapSignedMagnitude(
             magnitude: (separationX >> 1),
             negative: !targetGreaterX
         );
-        var dy = FixedVectorMath.SignedFromMagnitude(
+        var dy = FusedArithmetic.WrapSignedMagnitude(
             magnitude: (separationY >> 1),
             negative: !targetGreaterY
         );
-        var dz = FixedVectorMath.SignedFromMagnitude(
+        var dz = FusedArithmetic.WrapSignedMagnitude(
             magnitude: (separationZ >> 1),
             negative: !targetGreaterZ
         );

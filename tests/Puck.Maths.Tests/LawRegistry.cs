@@ -201,24 +201,8 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
-    // The signed Q16.48 band (FixedQ1648) — sixteen integer bits, forty-eight fraction bits, a range/resolution lean
-    // opposite FixedQ4816's own. Same shared EdgeRaws battery as every other signed sixty-four-bit carrier; its own
-    // peer-conversion boundary (the sixteen-bit integer range) is swept separately by its own fixed ladder, not by
-    // this domain.
-    private static readonly Domain Q1648Scalar = new(
-        Key: "q1648-scalar",
-        Block: 512,
-        EdgeFraction: 0.4,
-        NeighborhoodFraction: 0.3
-    );
-    private static readonly Domain Q1648ScalarDivision = new(
-        Key: "q1648-scalar-division",
-        Block: 512,
-        EdgeFraction: 0.4,
-        NeighborhoodFraction: 0.3
-    );
-    // The signed Q32.32 band (FixedQ3232) — an even thirty-two/thirty-two split, the balanced point between
-    // FixedQ4816's and FixedQ1648's opposite leans. Same shared EdgeRaws battery; its own peer-conversion boundary
+    // The signed Q32.32 band (FixedQ3232) — an even thirty-two/thirty-two split against FixedQ4816's range lean.
+    // Same shared EdgeRaws battery; its own peer-conversion boundary
     // (the thirty-two-bit integer range) is swept separately by its own fixed ladder, not by this domain.
     private static readonly Domain Q3232Scalar = new(
         Key: "q3232-scalar",
@@ -783,7 +767,6 @@ internal static partial class LawRegistry {
         .. RootCoreCases(),
         .. CostModelCases(),
         .. FixedQ4816Cases(),
-        .. FixedQ1648Cases(),
         .. FixedQ3232Cases(),
         .. ContributionFoldCases(),
         .. UFixedQ4816Cases(),
@@ -893,7 +876,6 @@ internal static partial class LawRegistry {
         .. PcgReferenceCases(),
         .. PcgExtendedCases(),
         .. Log2GaussianAliasCases(),
-        .. FieldNoiseCases(),
         .. CertifiedLowDiscrepancyCases(),
         .. SymmetryLatticeCases(),
         .. HilbertCurveCases(),

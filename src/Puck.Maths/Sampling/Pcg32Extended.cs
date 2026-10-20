@@ -65,27 +65,6 @@ public struct Pcg32Extended : IDrawGenerator {
         m_indexMask = ((ulong)(extension.Length - 1));
     }
 
-    // O'Neill's affine skip (Brown's algorithm) over a 32-bit LCG — the same binary-exponentiation shape
-    // Pcg32XshRr.Advance uses over sixty-four bits, narrowed to the extension word's own carrier.
-    private static uint Advance32(uint state, uint delta, uint multiplier, uint increment) {
-        var accumulatedMultiplier = 1U;
-        var accumulatedIncrement = 0U;
-        var currentMultiplier = multiplier;
-        var currentIncrement = increment;
-
-        while (delta > 0U) {
-            if ((delta & 1U) != 0U) {
-                accumulatedMultiplier = unchecked((accumulatedMultiplier * currentMultiplier));
-                accumulatedIncrement = unchecked(((accumulatedIncrement * currentMultiplier) + currentIncrement));
-            }
-
-            currentIncrement = unchecked(((currentMultiplier + 1U) * currentIncrement));
-            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
-            delta >>= 1;
-        }
-
-        return unchecked(((accumulatedMultiplier * state) + accumulatedIncrement));
-    }
     // The bulk table advance (pcg-cpp's extended<>::advance_table(delta, true)): the same mixed-radix increment,
     // generalized to `delta` ticks at once, in O(k) time regardless of how large delta is.
     private void AdvanceTableBy(ulong delta) {
@@ -171,7 +150,7 @@ public struct Pcg32Extended : IDrawGenerator {
         );
         var crossesZero = (distanceToZero <= delta);
 
-        state = Advance32(
+        state = Pcg32XshRr.Skip(
             delta: delta,
             increment: increment,
             multiplier: ExtMultiplier,

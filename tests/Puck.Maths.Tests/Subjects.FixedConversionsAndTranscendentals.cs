@@ -110,8 +110,8 @@ internal static partial class Subjects {
         return null;
     }
     // The source's exact value at an arbitrary fixed-point scale, from the decimal's own bits — the same route
-    // ScaledDecimal uses at FixedQ4816's fixed Q16, generalized to any fraction bit count so FixedQ1648's Q48 and
-    // FixedQ3232's Q32 can both reuse it without touching FixedPointConvert.ScaleDecimalWide itself.
+    // ScaledDecimal uses at FixedQ4816's fixed Q16, generalized to any fraction bit count so FixedQ3232's Q32 and a
+    // forty-eight-bit scale can both reuse it without touching FixedPointConvert.ScaleDecimalWide itself.
     private static BigInteger ScaledDecimalAt(decimal value, int fractionBitCount) {
         var (numerator, decimalExponent) = DecimalParts(value: value);
 
@@ -136,15 +136,17 @@ internal static partial class Subjects {
     /// available.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? ScaleDecimalWideReachesCanonicalCore() {
+        // The widest scale the public member admits is any count; forty-eight is the widest a 64-bit raw can carry.
+        const int WideFractionBitCount = 48;
         (decimal Value, int FractionBitCount)[] samples = [
-            (0.5m, FixedQ1648.FractionBitCount), (-0.5m, FixedQ1648.FractionBitCount),
-            (1.5m, FixedQ1648.FractionBitCount), (-1.5m, FixedQ1648.FractionBitCount),
-            (0.4999999999999999999999999999m, FixedQ1648.FractionBitCount),
-            (0.5000000000000000000000000001m, FixedQ1648.FractionBitCount),
+            (0.5m, WideFractionBitCount), (-0.5m, WideFractionBitCount),
+            (1.5m, WideFractionBitCount), (-1.5m, WideFractionBitCount),
+            (0.4999999999999999999999999999m, WideFractionBitCount),
+            (0.5000000000000000000000000001m, WideFractionBitCount),
             (0.5m, FixedQ3232.FractionBitCount), (-1.5m, FixedQ3232.FractionBitCount),
             (0.4999999999999999999999999999m, FixedQ3232.FractionBitCount),
             (0.5000000000000000000000000001m, FixedQ3232.FractionBitCount),
-            (decimal.MaxValue, FixedQ1648.FractionBitCount), (decimal.MinValue, FixedQ3232.FractionBitCount),
+            (decimal.MaxValue, WideFractionBitCount), (decimal.MinValue, FixedQ3232.FractionBitCount),
         ];
 
         foreach (var (value, fractionBitCount) in samples) {
@@ -166,64 +168,6 @@ internal static partial class Subjects {
                 return $"ScaleDecimalWide({value}, {fractionBitCount}) = {actual}, but RoundRational on the same decomposed (numerator={numerator}, denominator=10^{decimalExponent}) is {expected}";
             }
         }
-
-        return null;
-    }
-    /// <summary>Proves the three <c>INumberBase</c> conversion modes through a <c>decimal</c> source into
-    /// <see cref="FixedQ1648"/> — one of the two public routes to <c>FixedPointConvert.ScaleDecimalWide</c>, the
-    /// other being <see cref="Q3232DecimalConversionModes"/>: <see cref="GenericConversionModes"/> exercises the
-    /// same three modes but only ever targets <see cref="FixedQ4816"/>/<see cref="UFixedQ4816"/>, both of which
-    /// route decimal through the narrower <c>ScaleDecimal</c> instead. <c>decimal.MaxValue</c>'s exact scaled value
-    /// at Q16.48 is independently derived
-    /// here from its own documented bit layout (a scale-zero, <c>2⁹⁶ − 1</c> mantissa) rather than through
-    /// <c>ScaleDecimalWide</c> itself: checked must refuse it, saturating must clamp to <see cref="FixedQ1648.MaxValue"/>,
-    /// and truncating must keep exactly its low sixty-four bits — raw <c>0xFFFF000000000000</c>, signed
-    /// <c>−281474976710656</c>. <c>decimal.MinValue</c> mirrors it by sign, and an in-range decimal exercises the
-    /// branch where all three modes must agree.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Q1648DecimalConversionModes() {
-        const long ExpectedTruncatingAtMax = unchecked((long)0xFFFF000000000000UL);
-        var scaledMax = ScaledDecimalAt(
-            fractionBitCount: FixedQ1648.FractionBitCount,
-            value: decimal.MaxValue
-        );
-
-        if (scaledMax != (((BigInteger.One << 96) - BigInteger.One) << FixedQ1648.FractionBitCount)) { return "the independently-derived scaled value of decimal.MaxValue does not match its hand-derived bit layout"; }
-
-        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ1648, decimal>(value: decimal.MaxValue))) { return "CreateChecked accepted decimal.MaxValue instead of refusing it"; }
-
-        var saturatedMax = ConvertSaturating<FixedQ1648, decimal>(value: decimal.MaxValue);
-
-        if (saturatedMax != FixedQ1648.MaxValue) { return $"CreateSaturating of decimal.MaxValue is {saturatedMax}, expected MaxValue"; }
-
-        var truncatedMax = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MaxValue).Value;
-
-        if (truncatedMax != ExpectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {ExpectedTruncatingAtMax}"; }
-
-        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ1648, decimal>(value: decimal.MinValue))) { return "CreateChecked accepted decimal.MinValue instead of refusing it"; }
-
-        var saturatedMin = ConvertSaturating<FixedQ1648, decimal>(value: decimal.MinValue);
-
-        if (saturatedMin != FixedQ1648.MinValue) { return $"CreateSaturating of decimal.MinValue is {saturatedMin}, expected MinValue"; }
-
-        var truncatedMin = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MinValue).Value;
-
-        if (truncatedMin != unchecked(-ExpectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-ExpectedTruncatingAtMax)}"; }
-
-        // An in-range decimal: all three modes must agree with each other and with the independent oracle.
-        var inRangeExpected = ((long)ScaledDecimalAt(
-            fractionBitCount: FixedQ1648.FractionBitCount,
-            value: 1.5m
-        ));
-        var exact = ConvertChecked<FixedQ1648, decimal>(value: 1.5m).Value;
-        var saturatedInRange = ConvertSaturating<FixedQ1648, decimal>(value: 1.5m).Value;
-        var truncatedInRange = ConvertTruncating<FixedQ1648, decimal>(value: 1.5m).Value;
-
-        if (
-            (exact != inRangeExpected) ||
-            (saturatedInRange != inRangeExpected) ||
-            (truncatedInRange != inRangeExpected)
-        ) { return $"the three modes disagree on the in-range decimal 1.5: checked={exact}, saturating={saturatedInRange}, truncating={truncatedInRange}, expected {inRangeExpected}"; }
 
         return null;
     }

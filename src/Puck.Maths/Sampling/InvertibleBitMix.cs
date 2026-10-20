@@ -1,7 +1,8 @@
 namespace Puck.Maths;
 
 /// <summary>
-/// An invertible mixing map on 32-bit words, built only from operations whose bijectivity is a theorem: exclusive-or
+/// An invertible mixing map on 32-bit words, and its 64-bit sibling, built only from operations whose bijectivity is a
+/// theorem: exclusive-or
 /// with a right shift of the word itself, and multiplication by an odd constant. Both directions are exposed with
 /// closed forms, so the map is a named permutation rather than a hash whose invertibility is merely hoped for.
 /// </summary>
@@ -14,8 +15,9 @@ namespace Puck.Maths;
 /// of bijections is a bijection, which is the whole argument.
 /// </para>
 /// <para>
-/// The particular constants are the <c>lowbias32</c> avalanche pair. Avalanche quality is a tuning property and
-/// carries no proof; bijectivity is the property this type exists to name, and it holds for any odd multiplier.
+/// The 32-bit constants are the <c>lowbias32</c> avalanche pair and the 64-bit ones SplitMix64's output finalizer.
+/// Avalanche quality is a tuning property and carries no proof; bijectivity is the property this type exists to name,
+/// and it holds for any odd multiplier.
 /// </para>
 /// </remarks>
 public static class InvertibleBitMix {

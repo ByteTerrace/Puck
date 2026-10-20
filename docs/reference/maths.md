@@ -139,6 +139,10 @@ for the detailed contract.
 | A direction, a velocity, a displacement | `FixedVector2` / `FixedVector3`. A vector is a **displacement**, never a position | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedvector2-and-fixedvector3) |
 | A world position at planet scale | `FixedPosition`—a coarse 64-bit cell index plus a small centred local offset, so precision is the same everywhere on the map | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedposition) |
 | A 2D rotation | `FixedComplex`—`FromAngle`, `*` composes turns, `Rotate` applies one | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedcomplex) |
+| An angle authored in degrees, or π, 2π and a wrap onto one turn | `FixedQ4816.FromDegrees` (one rounding against `PiQ189`), `FixedQ4816.Pi`/`HalfPi`/`Tau`, `FixedQ4816.WrapAngle` | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedq4816) |
+| A sphere, cone or length clamp on a displacement | `FixedVector3.IsWithin` (exact squares), `IsWithinCone`, `ClampLength`/`WithLength` (toward zero), `RejectFrom` | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedvector2-and-fixedvector3) |
+| Authored seconds to engine ticks, or ticks back to seconds | `FixedTickConversion.DurationTicks(decimal, rate)` rounds the exact decimal up; `SecondsOf` rounds to nearest | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md) |
+| A presentation float helper (angle wrap, smoothstep, shortest arc, yaw/pitch of a facing, unorm packing) | `VectorFunctions`, outside the determinism contract | [Puck.Maths](../../src/Puck.Maths/README.md) |
 | A 3D rotation | `FixedQuaternion`; add a translation and it becomes `FixedRigidTransform` | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedquaternion) |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `FixedQ4816.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp` (the screw) | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedq4816) |
 | Drift-free rate integration (velocity → position, acceleration → velocity) | `FixedRateAccumulator` / `FixedVector3RateAccumulator`—the division remainder carries across ticks | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#fixedrateaccumulator-and-fixedvector3rateaccumulator) |
@@ -147,7 +151,7 @@ for the detailed contract.
 | A seeded RNG you can snapshot and resume | `Pcg32XshRr`—one stream per system | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg32xshrr) |
 | To shuffle a list reproducibly | `Pcg32XshRr.Shuffle`—in-place Fisher–Yates from the high end down | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg32xshrr) |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` in constant time with two generator advances | [Sampling](../../src/Puck.Maths/Sampling/README.md#weightedsampler-and-aliastabletelement) |
-| Smooth spatial noise | `FieldNoise`—a pure function of `(seed, position)`, nothing to persist | [Sampling](../../src/Puck.Maths/Sampling/README.md#fieldnoise) |
+| Smooth spatial noise or a scattered point | `Pcg3dLatticeNoise`—a pure function of `(seed, cell)`, nothing to persist | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg3dlatticenoise) |
 | Points that spread out without clumping | `LowDiscrepancy.R1`/`R2` for an even-looking spread; `DigitalNetSampler` when supported subdivisions must contain an exact share of the samples | [Sampling](../../src/Puck.Maths/Sampling/README.md#choosing-a-primitive) |
 | Cryptographic randomness | `SecureRandom`—and never in simulation state; it is not reproducible | [Sampling](../../src/Puck.Maths/Sampling/README.md#securerandom) |
 | Arithmetic over fixed-size bit patterns, written `GF(2^k)` | `BinaryField<T>` over a chosen modulus, or the canonical `BinaryFields.Degree8/16/32/64/128` | [FiniteFields](../../src/Puck.Maths/FiniteFields/README.md#binaryfieldt) |

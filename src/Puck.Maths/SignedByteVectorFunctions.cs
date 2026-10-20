@@ -79,7 +79,7 @@ public static class SignedByteVectorFunctions {
         var quotient = (numerator / r);
         var remainder = (numerator % r);
         var distanceToNext = (r - remainder);
-        var rounded = FixedPointRounding.RoundHalfToEven(remainder: remainder, threshold: distanceToNext, truncated: quotient);
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: distanceToNext, distanceToTruncated: remainder, truncated: quotient);
         var raw = ((dot < 0L) ? -((long)rounded) : (long)rounded);
 
         return Math.Clamp(max: 65536L, min: -65536L, value: raw);

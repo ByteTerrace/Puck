@@ -655,22 +655,27 @@ public readonly partial record struct FixedQ4816(long Value)
         var r = residualQ62;
         var acc = Exp2PolyC4Q62;
 
-        acc = (Exp2PolyC3Q62 + BigMulShift62(
+        acc = (Exp2PolyC3Q62 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Exp2PolyC2Q62 + BigMulShift62(
+        acc = (Exp2PolyC2Q62 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Exp2PolyC1Q62 + BigMulShift62(
+        acc = (Exp2PolyC1Q62 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
 
-        return BigMulShift62(
+        return BigMulShift(
+            shift: 62,
             x: ((long)Exp2TableQ62[index]),
-            y: ((1L << 62) + BigMulShift62(
+            y: ((1L << 62) + BigMulShift(
+                shift: 62,
                 x: r,
                 y: acc
             ))
@@ -781,27 +786,33 @@ public readonly partial record struct FixedQ4816(long Value)
 
         var acc = Log2PolyC7Q61;
 
-        acc = (Log2PolyC6Q61 + BigMulShift62(
+        acc = (Log2PolyC6Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC5Q61 + BigMulShift62(
+        acc = (Log2PolyC5Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC4Q61 + BigMulShift62(
+        acc = (Log2PolyC4Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC3Q61 + BigMulShift62(
+        acc = (Log2PolyC3Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC2Q61 + BigMulShift62(
+        acc = (Log2PolyC2Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC1Q61 + BigMulShift62(
+        acc = (Log2PolyC1Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
@@ -1660,16 +1671,19 @@ public readonly partial record struct FixedQ4816(long Value)
         var h = ((long)(z - (((ulong)index) << 55)));
         var acc = AtanDerivative3TableQ61[index];
 
-        acc = (AtanDerivative2TableQ61[index] + BigMulShift62(
+        acc = (AtanDerivative2TableQ61[index] + BigMulShift(
+            shift: 62,
             x: h,
             y: acc
         ));
-        acc = (AtanDerivative1TableQ61[index] + BigMulShift62(
+        acc = (AtanDerivative1TableQ61[index] + BigMulShift(
+            shift: 62,
             x: h,
             y: acc
         ));
 
-        var angle = (AtanTableQ61[index] + BigMulShift62(
+        var angle = (AtanTableQ61[index] + BigMulShift(
+            shift: 62,
             x: h,
             y: acc
         ));
@@ -1736,18 +1750,6 @@ public readonly partial record struct FixedQ4816(long Value)
         product: productSum
     );
 
-    // Signed (x·y) >> 62 via one 64×64→128 multiply; |x·y| must stay below 2^125.
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long BigMulShift62(long x, long y) {
-        var high = Math.BigMul(
-            a: x,
-            b: y,
-            low: out var low
-        );
-
-        return (high << 2) | ((long)(((ulong)low) >> 62));
-    }
-
     // Fractional base-2 log of a Q62 mantissa in [1, 2), at Q61: 128-interval inverse table plus a quartic in the
     // residual r = m/d_i − 1 ≤ 2^-7 (total error ≤ ~2^-36; inverse rounding can leave r, and therefore the result,
     // a few raw units negative). Shared by Log2 and the Gaussian sampler.
@@ -1761,20 +1763,24 @@ public readonly partial record struct FixedQ4816(long Value)
         var r = unchecked((long)(((high << 2) | (low >> 62)) - (1UL << 62)));
         var acc = Log2PolyC4Q61;
 
-        acc = (Log2PolyC3Q61 + BigMulShift62(
+        acc = (Log2PolyC3Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC2Q61 + BigMulShift62(
+        acc = (Log2PolyC2Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
-        acc = (Log2PolyC1Q61 + BigMulShift62(
+        acc = (Log2PolyC1Q61 + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));
 
-        return (((long)Log2TableQ61[index]) + BigMulShift62(
+        return (((long)Log2TableQ61[index]) + BigMulShift(
+            shift: 62,
             x: r,
             y: acc
         ));

@@ -10,7 +10,6 @@ namespace Puck.Cli.Bench;
 public class LatticeKernels {
     private const int Count = 4096;
 
-    private FixedVector3[] m_positions = [];
     private HexagonalCoordinate[] m_cells = [];
     private (long Numerator, long Denominator)[] m_cusps = [];
     private ModularTransform m_word;
@@ -19,25 +18,10 @@ public class LatticeKernels {
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_positions = new FixedVector3[Count];
         m_cells = new HexagonalCoordinate[Count];
         m_cusps = new (long, long)[Count];
 
         for (var i = 0; (i < Count); ++i) {
-            m_positions[i] = new(
-                X: FixedQ4816.FromRawBits(value: rng.NextInt64(
-                    maxValue: (1L << 30),
-                    minValue: -(1L << 30)
-                )),
-                Y: FixedQ4816.FromRawBits(value: rng.NextInt64(
-                    maxValue: (1L << 30),
-                    minValue: -(1L << 30)
-                )),
-                Z: FixedQ4816.FromRawBits(value: rng.NextInt64(
-                    maxValue: (1L << 30),
-                    minValue: -(1L << 30)
-                ))
-            );
             m_cells[i] = new(
                 Q: rng.Next(
                     maxValue: (1 << 20),
@@ -58,33 +42,6 @@ public class LatticeKernels {
         }
 
         m_word = (((ModularTransform.T * ModularTransform.S) * ModularTransform.T) * ModularTransform.T);
-    }
-    [Benchmark]
-    public long FieldNoiseSample() {
-        var sink = 0L;
-
-        for (var i = 0; (i < Count); ++i) {
-            sink ^= FieldNoise.Sample(
-                position: m_positions[i],
-                seed: 42UL
-            ).Value;
-        }
-
-        return sink;
-    }
-    [Benchmark]
-    public long FieldNoiseFourOctaves() {
-        var sink = 0L;
-
-        for (var i = 0; (i < Count); ++i) {
-            sink ^= FieldNoise.Sample(
-                octaves: 4,
-                position: m_positions[i],
-                seed: 42UL
-            ).Value;
-        }
-
-        return sink;
     }
     [Benchmark]
     public long LatticeValueNoise() {

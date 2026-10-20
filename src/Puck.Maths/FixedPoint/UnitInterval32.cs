@@ -220,9 +220,9 @@ public readonly record struct UnitInterval32
         var truncated = ((ulong)(product >> FractionBitCount));
         var remainder = ((ulong)product) & FractionBitMask;
 
-        return new(value: FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: RawHalf,
+        return new(value: FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: RawHalf,
             truncated: truncated
         ));
     }
@@ -246,9 +246,9 @@ public readonly record struct UnitInterval32
         // product's mask has nothing left to do.
         var remainder = ((ulong)product);
 
-        return new(value: FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: TripleHalf,
+        return new(value: FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: TripleHalf,
             truncated: truncated
         ));
     }
@@ -277,9 +277,9 @@ public readonly record struct UnitInterval32
         var truncated = (Value >> NarrowShift);
         var remainder = Value & NarrowBitMask;
 
-        return FixedQ4816.FromRawBits(value: ((long)FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: NarrowHalf,
+        return FixedQ4816.FromRawBits(value: ((long)FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToTruncated: remainder,
+            distanceToNext: NarrowHalf,
             truncated: truncated
         )));
     }

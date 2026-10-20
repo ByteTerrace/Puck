@@ -9,14 +9,13 @@ namespace Puck.Maths;
 /// the represented real number scaled by 2^32. Range approximately ±2,147,483,648; resolution 2⁻³² ≈ 2.33×10⁻¹⁰.
 /// </summary>
 /// <remarks>
-/// This splits its sixty-four bits evenly, between the two unequal leans its <see cref="long"/>-carrier siblings
-/// take: <see cref="FixedQ4816"/> (Q48.16) spends forty-eight bits on range and sixteen on resolution, and
-/// <see cref="FixedQ1648"/> (Q16.48) spends the opposite — sixteen on range and forty-eight on resolution. This
-/// format is the balanced point between them: a whole-number range of roughly ±2.1 billion at a resolution of
+/// This splits its sixty-four bits evenly, where its <see cref="long"/>-carrier sibling <see cref="FixedQ4816"/>
+/// (Q48.16) spends forty-eight bits on range and sixteen on resolution. This format is the balanced split: a
+/// whole-number range of roughly ±2.1 billion at a resolution of
 /// <c>2⁻³²</c>, suited to a quantity that needs both meaningfully wide range AND finer-than-Q48.16 resolution at
-/// once — neither lean alone is enough there. It is a distinct carrier from both — not a convention on
-/// <see cref="long"/> — because a Q32.32 raw, a Q48.16 raw and a Q16.48 raw are all <see langword="long"/>, and
-/// confusing any two of them is a silent scale error wherever more than one appears. Every operation is
+/// once — neither lean alone is enough there. It is a distinct carrier — not a convention on
+/// <see cref="long"/> — because a Q32.32 raw and a Q48.16 raw are both <see langword="long"/>, and
+/// confusing the two is a silent scale error wherever both appear. Every operation is
 /// deterministic: identical inputs produce identical bits on every machine.
 /// </remarks>
 /// <param name="Value">The raw underlying storage — the represented real number scaled by <c>2³²</c>.</param>

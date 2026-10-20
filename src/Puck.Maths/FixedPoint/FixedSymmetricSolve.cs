@@ -9,8 +9,7 @@ namespace Puck.Maths;
 /// it drives the resulting inverse inertia against an angular impulse (<see cref="TryApplySymmetric3"/>). Every operand is
 /// a raw carrier at whatever scale the caller is using; the solve is transient and never stored, so there is no
 /// persisted format for a caller to confuse it with — the reason this stays a static kernel family
-/// rather than a wrapping value type, the opposite choice from <see cref="FixedQ1648"/>, which exists precisely
-/// because its quantity IS stored. Every kernel here follows <see cref="FixedVectorMath"/>'s shape: precondition by
+/// rather than a wrapping value type. Every kernel here follows <see cref="FixedVectorMath"/>'s shape: precondition by
 /// one common power of two, accumulate the whole expression exactly in sign-plus-<see cref="UInt128"/> magnitude
 /// (<see cref="FusedArithmetic"/>), and round the returned value exactly once
 /// (<see cref="FusedArithmetic.TryDivideMagnitudeRounded"/>).

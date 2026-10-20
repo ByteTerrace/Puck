@@ -92,7 +92,7 @@ public static class FixedVectorMath {
             shift: shift,
             value: y
         );
-        var denominator = NormalizationDenominator(squaredSum: (Square(value: x) + Square(value: y)));
+        var denominator = NormalizationDenominator(squaredSum: (FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)));
 
         return (
             NormalizeComponent(
@@ -133,7 +133,7 @@ public static class FixedVectorMath {
             shift: shift,
             value: z
         );
-        var denominator = NormalizationDenominator(squaredSum: ((Square(value: x) + Square(value: y)) + Square(value: z)));
+        var denominator = NormalizationDenominator(squaredSum: ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)));
 
         return (
             NormalizeComponent(
@@ -185,7 +185,7 @@ public static class FixedVectorMath {
             shift: shift,
             value: w
         );
-        var denominator = NormalizationDenominator(squaredSum: (((Square(value: x) + Square(value: y)) + Square(value: z)) + Square(value: w)));
+        var denominator = NormalizationDenominator(squaredSum: (((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)) + FusedArithmetic.SquareMagnitude(value: w)));
 
         return (
             NormalizeComponent(
@@ -221,20 +221,6 @@ public static class FixedVectorMath {
             ? unchecked((((ulong)targetRaw) - ((ulong)currentRaw)))
             : unchecked((((ulong)currentRaw) - ((ulong)targetRaw)))),
             TargetIsGreater: targetIsGreater
-        );
-    }
-    /// <summary>Reconstructs a signed raw from a non-negative magnitude and a sign — the same two's-complement
-    /// identity <see cref="ScaleRaw"/> and its siblings use: a magnitude of exactly <c>2⁶³</c> negated reproduces
-    /// <see cref="long.MinValue"/> unchanged, so the full magnitude range <c>[0, 2⁶³]</c> round-trips.</summary>
-    /// <param name="magnitude">The non-negative magnitude, at most <c>2⁶³</c>.</param>
-    /// <param name="negative">Whether the result is negative.</param>
-    /// <returns>The signed raw.</returns>
-    internal static long SignedFromMagnitude(ulong magnitude, bool negative) {
-        var raw = unchecked((long)magnitude);
-
-        return (negative
-            ? unchecked(-raw)
-            : raw
         );
     }
     /// <summary>Returns the nearest raw Q16 square root of an exact raw Q32 sum; no integral halfway case exists, so no tie rule is needed.</summary>
@@ -324,7 +310,7 @@ public static class FixedVectorMath {
             shift: directionShift,
             value: w
         );
-        var denominator = NormalizationDenominator(squaredSum: (((Square(value: x) + Square(value: y)) + Square(value: z)) + Square(value: w)));
+        var denominator = NormalizationDenominator(squaredSum: (((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)) + FusedArithmetic.SquareMagnitude(value: w)));
 
         // NormalizeComponent(preconditioned, denominator) represents preconditioned * 2^32 / denominator.
         // Retain the preconditioner's power of two in the numerator so every caller-supplied component receives
@@ -342,7 +328,7 @@ public static class FixedVectorMath {
             return false;
         }
 
-        return (((Square(value: x) + Square(value: y)) + Square(value: z)) <= Square(value: bound));
+        return (((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)) <= FusedArithmetic.SquareMagnitude(value: bound));
     }
     // The exact planar predicate x² + y² ≤ bound².
     internal static bool IsMagnitudeAtMost(long x, long y, long bound) {
@@ -350,7 +336,7 @@ public static class FixedVectorMath {
             return false;
         }
 
-        return ((Square(value: x) + Square(value: y)) <= Square(value: bound));
+        return ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) <= FusedArithmetic.SquareMagnitude(value: bound));
     }
     // (x, y, z) rescaled to a magnitude of at most `length` along its own direction, each lane rounded TOWARD ZERO so
     // the result never exceeds `length`: the lanes are landed by an exact left shift so the largest sits in
@@ -391,7 +377,7 @@ public static class FixedVectorMath {
             value: z
         );
 
-        var root = FusedArithmetic.CeilingSquareRoot(radicand: ((Square(value: x) + Square(value: y)) + Square(value: z)));
+        var root = FusedArithmetic.CeilingSquareRoot(radicand: ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)));
 
         return (
             ScaleLaneTowardZero(
@@ -439,7 +425,7 @@ public static class FixedVectorMath {
             value: y
         );
 
-        var root = FusedArithmetic.CeilingSquareRoot(radicand: (Square(value: x) + Square(value: y)));
+        var root = FusedArithmetic.CeilingSquareRoot(radicand: (FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)));
 
         return (
             ScaleLaneTowardZero(
@@ -495,8 +481,8 @@ public static class FixedVectorMath {
             return (CompareConeSides(
                 cosineRaw: cosineRaw,
                 dotMagnitude: ((UInt128)dot),
-                forwardSquares: ((Square(value: fx) + Square(value: fy)) + Square(value: fz)),
-                offsetSquares: ((Square(value: ox) + Square(value: oy)) + Square(value: oz))
+                forwardSquares: ((FusedArithmetic.SquareMagnitude(value: fx) + FusedArithmetic.SquareMagnitude(value: fy)) + FusedArithmetic.SquareMagnitude(value: fz)),
+                offsetSquares: ((FusedArithmetic.SquareMagnitude(value: ox) + FusedArithmetic.SquareMagnitude(value: oy)) + FusedArithmetic.SquareMagnitude(value: oz))
             ) >= 0);
         }
 
@@ -507,8 +493,8 @@ public static class FixedVectorMath {
         return (CompareConeSides(
             cosineRaw: -cosineRaw,
             dotMagnitude: ((UInt128)(-dot)),
-            forwardSquares: ((Square(value: fx) + Square(value: fy)) + Square(value: fz)),
-            offsetSquares: ((Square(value: ox) + Square(value: oy)) + Square(value: oz))
+            forwardSquares: ((FusedArithmetic.SquareMagnitude(value: fx) + FusedArithmetic.SquareMagnitude(value: fy)) + FusedArithmetic.SquareMagnitude(value: fz)),
+            offsetSquares: ((FusedArithmetic.SquareMagnitude(value: ox) + FusedArithmetic.SquareMagnitude(value: oy)) + FusedArithmetic.SquareMagnitude(value: oz))
         ) <= 0);
     }
 
@@ -569,8 +555,8 @@ public static class FixedVectorMath {
     // exact in 128 bits for every pair. The reported magnitude rounds and saturates a monotone root of the sum, so the
     // side this compare calls longer never reports the shorter magnitude.
     internal static int CompareMagnitude(long x, long y, long z, long otherX, long otherY, long otherZ) {
-        var sum = ((Square(value: x) + Square(value: y)) + Square(value: z));
-        var otherSum = ((Square(value: otherX) + Square(value: otherY)) + Square(value: otherZ));
+        var sum = ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z));
+        var otherSum = ((FusedArithmetic.SquareMagnitude(value: otherX) + FusedArithmetic.SquareMagnitude(value: otherY)) + FusedArithmetic.SquareMagnitude(value: otherZ));
 
         return ((sum < otherSum)
             ? -1
@@ -580,7 +566,7 @@ public static class FixedVectorMath {
     }
 
     public static bool TryMagnitude(long x, long y, out FixedQ4816 result) {
-        var squaredSum = (Square(value: x) + Square(value: y));
+        var squaredSum = (FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y));
 
         return TryRoot(
             squaredSum: squaredSum,
@@ -588,7 +574,7 @@ public static class FixedVectorMath {
         );
     }
     public static bool TryMagnitude(long x, long y, long z, out FixedQ4816 result) {
-        var squaredSum = ((Square(value: x) + Square(value: y)) + Square(value: z));
+        var squaredSum = ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z));
 
         return TryRoot(
             squaredSum: squaredSum,
@@ -596,8 +582,8 @@ public static class FixedVectorMath {
         );
     }
     public static bool TryMagnitude(long x, long y, long z, long w, out FixedQ4816 result) {
-        var squaredSum = ((Square(value: x) + Square(value: y)) + Square(value: z));
-        var fourthSquare = Square(value: w);
+        var squaredSum = ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z));
+        var fourthSquare = FusedArithmetic.SquareMagnitude(value: w);
         var completeSum = (squaredSum + fourthSquare);
 
         // Four Int64 squares can total exactly 2^128. Any carry implies a root of at least 2^64, which cannot fit the
@@ -624,7 +610,7 @@ public static class FixedVectorMath {
         out long unitZ,
         out ulong rawMagnitude
     ) {
-        var squaredSum = ((Square(value: x) + Square(value: y)) + Square(value: z));
+        var squaredSum = ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z));
 
         if (squaredSum == UInt128.Zero) {
             unitX = 0L;
@@ -694,13 +680,13 @@ public static class FixedVectorMath {
 
     internal static bool TrySquaredMagnitude(long x, long y, out FixedQ4816 result) =>
         TryRoundSquaredSum(
-            squaredSum: (Square(value: x) + Square(value: y)),
+            squaredSum: (FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)),
             overflowed: false,
             out result
         );
     internal static bool TrySquaredMagnitude(long x, long y, long z, out FixedQ4816 result) =>
         TryRoundSquaredSum(
-            squaredSum: ((Square(value: x) + Square(value: y)) + Square(value: z)),
+            squaredSum: ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z)),
             overflowed: false,
             out result
         );
@@ -720,8 +706,8 @@ public static class FixedVectorMath {
         );
     }
     internal static bool TrySumSquares(long x, long y, long z, long w, out UInt128 squaredSum) {
-        var firstThree = ((Square(value: x) + Square(value: y)) + Square(value: z));
-        var complete = (firstThree + Square(value: w));
+        var firstThree = ((FusedArithmetic.SquareMagnitude(value: x) + FusedArithmetic.SquareMagnitude(value: y)) + FusedArithmetic.SquareMagnitude(value: z));
+        var complete = (firstThree + FusedArithmetic.SquareMagnitude(value: w));
 
         squaredSum = complete;
         return (complete >= firstThree);
@@ -810,11 +796,6 @@ public static class FixedVectorMath {
             ? unchecked(-raw)
             : raw
         );
-    }
-    private static UInt128 Square(long value) {
-        var magnitude = FusedArithmetic.RawMagnitude(value: value);
-
-        return Math.BigMul(a: magnitude, b: magnitude);
     }
     private static bool TryRoot(UInt128 squaredSum, out FixedQ4816 result) {
         // A sum inside 64 bits roots in 64 bits: its floor root is below 2³², so the square and the remainder test

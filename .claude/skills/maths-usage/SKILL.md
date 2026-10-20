@@ -34,7 +34,13 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | Sequential random draws | `Pcg32XshRr` | `System.Random`, `Random.Shared` |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` | A per-call cumulative scan over floats |
 | A shuffle | `Pcg32XshRr.Shuffle` | `OrderBy(_ => random)` |
-| Spatial noise or per-cell randomness | `FieldNoise` | A per-call RNG |
+| Spatial noise, per-cell randomness or a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`) | A per-call RNG; a second copy of the block formula |
+| A one-shot weighted pick | `WeightedSampler.SampleOnce` | A cumulative scan; a table built to be thrown away |
+| A 64-bit mix with an inverse | `InvertibleBitMix.Mix64` (SplitMix64's finalizer) | A hand-rolled multiply-xorshift |
+| An angle in degrees entering the sim | `FixedQ4816.FromDegrees` (one rounding against `PiQ189`) | `FromDouble(degrees * (Math.PI / 180))`, a rounded radians-per-degree factor |
+| π, π/2, 2π, or an angle reduced to one turn | `FixedQ4816.Pi`/`HalfPi`/`Tau`, `FixedQ4816.WrapAngle` | `FromDouble(Math.PI)`, `Pi + Pi` (one raw short of `Tau`), a floor-and-correct wrap |
+| A vector shortened to a length, or rejected from an axis | `FixedVector3.ClampLength`/`WithLength` (toward zero, never above), `RejectFrom`/`TryRejectNormalized` | `(v / v.Length) * limit`, which can land above the limit |
+| A sphere or cone test | `FixedVector3.IsWithin` (exact `\|d\|² ≤ r²`), `IsWithinCone` (apex inside, normalized forward) | `LengthSquared > r * r` (rounded twice), a cone that rejects its apex |
 | Spread points, or stratification that must be a theorem | `LowDiscrepancy` (R1, R2), `DigitalNetSampler` | Plain random scatter |
 | A per-tick state hash for a replay probe | `Fnv1aHash` | `string.GetHashCode` or `HashCode.Combine` (randomly seeded per process) |
 | Hex cells, tile or chunk order, rings | `HexagonalCoordinate`, `HilbertCurve`, `LayerSequence` | Hand-rolled axial math |
@@ -43,7 +49,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | The Nth prime, a prime count, a uniformly random prime | `PrimeExtensions.NthPrime` / `PrimeCountingFunction`, `PrimeExploration.TryRandomPrime` | A sieve walk from zero; "a random integer, then the next prime" |
 | A graph, lattice, language or finite structure | The `Oracle/` presented algebra | A bespoke solver |
 
-`FixedQ1648`, `FixedQ3232`, `FixedInterval`, `FixedMassProperties`,
+`FixedQ3232`, `FixedInterval`, `FixedMassProperties`,
 `FixedSymmetricSolve`, `CurvatureSpline`, the transforms (NTT, Walsh-Hadamard,
 fixed FFT and DCT) and the `Research/` wing are in the wing READMEs' "At a
 glance" tables. [references/complete-reference.md](references/complete-reference.md)
@@ -80,6 +86,11 @@ maps each question to its wing and README section.
 - **Do not reassociate a rounded product.** `(a * b) * c` and `a * (b * c)`
   differ over `FixedQ4816`; the fused kernels round a whole expression once.
   Finite-field products are exact and may be reassociated.
+- **Float presentation helpers live in `VectorFunctions`.** The angle wraps,
+  easings, shortest arc, −Z-forward attitude readbacks and unorm packers every
+  presentation seam shares are in `Puck.Maths.VectorFunctions`, outside the
+  determinism contract and in every project's closure; a second float copy in
+  a client or shader-side file is a defect.
 - **Floats stay out of state.** Authoring in (`FromDouble`, a document weight)
   and presentation out (`ToVector3`, `ToQuaternion`,
   `FixedPosition.ToRenderRelative`) are the two boundaries; presentation seams

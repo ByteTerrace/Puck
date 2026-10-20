@@ -105,25 +105,40 @@ public struct Pcg32XshRr : IDrawGenerator {
     /// <param name="count">The number of single-draw advances to apply; <c>2⁶⁴ − n</c> steps backward by <c>n</c>.</param>
     /// <remarks>Only whole-state advances are counted: a bounded draw that internally rejected samples consumed more
     /// than one advance, so seek arithmetic must count advances, not calls.</remarks>
-    public void Advance(ulong count) {
-        // The affine skip: compose (state -> state·m + c) with itself by binary exponentiation.
-        var accumulatedMultiplier = 1UL;
-        var accumulatedIncrement = 0UL;
-        var currentMultiplier = m_multiplier;
-        var currentIncrement = m_increment;
+    public void Advance(ulong count) =>
+        m_state = Skip(
+            delta: count,
+            increment: m_increment,
+            multiplier: m_multiplier,
+            state: m_state
+        );
+    /// <summary>Jumps an affine congruential state forward by <paramref name="delta"/> steps in logarithmic time:
+    /// the map <c>state ↦ state·multiplier + increment</c> composed with itself by binary exponentiation (Brown's
+    /// algorithm), over any word width.</summary>
+    /// <typeparam name="T">The state's word, whose arithmetic wraps.</typeparam>
+    /// <param name="state">The state to advance.</param>
+    /// <param name="delta">The number of steps; the word's wrap makes <c>2^width − n</c> a step backward by <c>n</c>.</param>
+    /// <param name="multiplier">The step's multiplier.</param>
+    /// <param name="increment">The step's increment.</param>
+    /// <returns>The advanced state.</returns>
+    internal static T Skip<T>(T state, T delta, T multiplier, T increment) where T : IBinaryInteger<T> {
+        var accumulatedMultiplier = T.One;
+        var accumulatedIncrement = T.Zero;
+        var currentMultiplier = multiplier;
+        var currentIncrement = increment;
 
-        while (count > 0UL) {
-            if ((count & 1UL) != 0UL) {
-                accumulatedMultiplier = unchecked((accumulatedMultiplier * currentMultiplier));
-                accumulatedIncrement = unchecked(((accumulatedIncrement * currentMultiplier) + currentIncrement));
+        while (delta != T.Zero) {
+            if ((delta & T.One) != T.Zero) {
+                accumulatedMultiplier *= currentMultiplier;
+                accumulatedIncrement = ((accumulatedIncrement * currentMultiplier) + currentIncrement);
             }
 
-            currentIncrement = unchecked(((currentMultiplier + 1UL) * currentIncrement));
-            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
-            count >>= 1;
+            currentIncrement = ((currentMultiplier + T.One) * currentIncrement);
+            currentMultiplier *= currentMultiplier;
+            delta >>>= 1;
         }
 
-        m_state = unchecked(((accumulatedMultiplier * m_state) + accumulatedIncrement));
+        return ((accumulatedMultiplier * state) + accumulatedIncrement);
     }
     /// <summary>Creates a generator from a seed and a stream id using the default multiplier.</summary>
     /// <param name="state">The seed; every 64-bit value is valid (there are no weak seeds).</param>

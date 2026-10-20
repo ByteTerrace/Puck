@@ -5,7 +5,7 @@ namespace Puck.Maths.Tests;
 
 /// <summary>
 /// Claims over <see cref="Pcg32XshRr"/> against the published reference generator, the gaussian/alias sampling
-/// surface, <c>FieldNoise</c>, and <see cref="CertifiedLowDiscrepancy"/> — each one covering evidence the standing
+/// surface and <see cref="CertifiedLowDiscrepancy"/> — each one covering evidence the standing
 /// <c>sampling.*</c> Default-tier cases in <see cref="LawRegistry"/> explicitly admit as a gap, via an
 /// <c>ENVELOPE</c> or an <c>OWED</c> citation. What those cases already pin is not restated here: Log2/Exp2/Pow's
 /// accuracy belongs to the <c>scalar.*</c> family, and the PCG published vector, the snapshot/advance/adapter
@@ -248,123 +248,6 @@ internal static class SamplingClaims {
             expected: "pointCount",
             actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => golden.DiscrepancyBound(pointCount: 0L)).ParamName
         );
-
-        return null;
-    }
-    // ---- field noise (R1/R2's recurrence and coverage are sampling.low-discrepancy-recurrence's) ----
-
-    public static string? FieldNoisePeriodicityAndDistributionSurface() {
-        // Two former linear-hash aliasing regressions, restated as relative canaries with no absolute sibling:
-        // FieldNoise carries no independent value-level oracle anywhere in this tree (worklist R4). The honest
-        // evidence is that translating the position or
-        // the seed by the amount the OLD linear hash would have folded away must still move the sample.
-        const long NoisePeriodX = 852_863L;
-        const long NoisePeriodY = 1_285_698L;
-        const long NoisePeriodZ = 183_727L;
-        const ulong FormerSeedCombineConstant = 0x9E3779B97F4A7C15UL;
-
-        for (var probe = 0; (probe < 32); ++probe) {
-            var position = new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: ((probe * 65_537L) + 12_345L)),
-                Y: FixedQ4816.FromRawBits(value: ((probe * -31_337L) + 22_222L)),
-                Z: FixedQ4816.FromRawBits(value: ((probe * 9_973L) - 33_333L))
-            );
-            var periodShifted = new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: (position.X.Value + (NoisePeriodX << FixedQ4816.FractionBitCount))),
-                Y: FixedQ4816.FromRawBits(value: (position.Y.Value + (NoisePeriodY << FixedQ4816.FractionBitCount))),
-                Z: FixedQ4816.FromRawBits(value: (position.Z.Value + (NoisePeriodZ << FixedQ4816.FractionBitCount)))
-            );
-            var unitTranslated = (position + new FixedVector3(
-                X: FixedQ4816.One,
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
-            ));
-            var probeSeed = unchecked((ulong)(97 + probe));
-
-            if (FieldNoise.Sample(
-                position: position,
-                seed: probeSeed
-            ) == FieldNoise.Sample(
-                position: periodShifted,
-                seed: probeSeed
-            )) {
-                return $"probe {probe}: the sample still aliases at the former hash period, which must no longer alias";
-            }
-            if (FieldNoise.Sample(
-                position: position,
-                seed: unchecked((probeSeed + FormerSeedCombineConstant))
-            ) == FieldNoise.Sample(
-                position: unitTranslated,
-                seed: probeSeed
-            )) {
-                return $"probe {probe}: seeding by the former combine constant still matches a unit translation, which must no longer hold";
-            }
-        }
-
-        // The octave-wrap seam at raw 2^62: a five-octave sample must not jump by more than the interior lattice
-        // continuity bound across the wrap boundary.
-        var seamRaw = (1L << 62);
-        var seamLeft = FieldNoise.Sample(
-            seed: 42UL,
-            position: new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: (seamRaw - 1L)),
-                Y: FixedQ4816.FromRawBits(value: 17_123L),
-                Z: FixedQ4816.FromRawBits(value: -9_321L)
-            ),
-            octaves: 5
-        );
-        var seamRight = FieldNoise.Sample(
-            seed: 42UL,
-            position: new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: seamRaw),
-                Y: FixedQ4816.FromRawBits(value: 17_123L),
-                Z: FixedQ4816.FromRawBits(value: -9_321L)
-            ),
-            octaves: 5
-        );
-        var seamStep = Math.Abs(value: (seamRight.Value - seamLeft.Value));
-
-        if (seamStep > 16L) {
-            return $"octave-wrap seam step {seamStep} raw exceeds the 16-raw continuity bound";
-        }
-
-        // Distribution: positions drawn from a seeded generator over the full signed-raw span must average near
-        // zero with a standard deviation the noise shape implies. 500,000 positions, down from ten million; the
-        // thresholds are unchanged from what the full volume asserts and are met here with wide empirical margin.
-        var generator = Pcg32XshRr.Create(
-            state: 4242UL,
-            stream: 9UL
-        );
-        const int SampleCount = 500_000;
-        var sum = 0.0;
-        var sumOfSquares = 0.0;
-
-        for (var sample = 0; (sample < SampleCount); ++sample) {
-            var position = new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: NextSignedRaw(generator: ref generator)),
-                Y: FixedQ4816.FromRawBits(value: NextSignedRaw(generator: ref generator)),
-                Z: FixedQ4816.FromRawBits(value: NextSignedRaw(generator: ref generator))
-            );
-            var value = ((double)FieldNoise.Sample(
-                position: position,
-                seed: 42UL
-            ).Value);
-
-            sum += value;
-            sumOfSquares += (value * value);
-        }
-
-        var mean = ((sum / SampleCount) / 65536.0);
-        var standardDeviation = (Math.Sqrt(d: ((sumOfSquares / SampleCount) - Math.Pow(
-            x: (sum / SampleCount),
-            y: 2
-        ))) / 65536.0);
-
-        if (Math.Abs(value: mean) > 1e-3) { return $"noise mean {mean:E4} exceeds 1e-3"; }
-        if (
-            (standardDeviation < 0.15) ||
-            (standardDeviation > 0.45)
-        ) { return $"noise standard deviation {standardDeviation:F5} outside [0.15, 0.45]"; }
 
         return null;
     }

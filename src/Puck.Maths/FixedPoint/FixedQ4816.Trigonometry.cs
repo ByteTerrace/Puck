@@ -139,17 +139,21 @@ public readonly partial record struct FixedQ4816 {
             sin: out var sin
         );
         var value = (cosine
-            ? (BigMulShift60(
+            ? (BigMulShift(
+                shift: 60,
                 x: SinCosTableQ60[(64 - index)],
                 y: cos
-            ) - BigMulShift60(
+            ) - BigMulShift(
+                shift: 60,
                 x: SinCosTableQ60[index],
                 y: sin
             ))
-            : (BigMulShift60(
+            : (BigMulShift(
+                shift: 60,
                 x: SinCosTableQ60[index],
                 y: cos
-            ) + BigMulShift60(
+            ) + BigMulShift(
+                shift: 60,
                 x: SinCosTableQ60[(64 - index)],
                 y: sin
             ))
@@ -176,17 +180,21 @@ public readonly partial record struct FixedQ4816 {
         );
         var tableSin = SinCosTableQ60[index];
         var tableCos = SinCosTableQ60[(64 - index)];
-        var reconstructedSin = (BigMulShift60(
+        var reconstructedSin = (BigMulShift(
+            shift: 60,
             x: tableSin,
             y: cos
-        ) + BigMulShift60(
+        ) + BigMulShift(
+            shift: 60,
             x: tableCos,
             y: sin
         ));
-        var reconstructedCos = (BigMulShift60(
+        var reconstructedCos = (BigMulShift(
+            shift: 60,
             x: tableCos,
             y: cos
-        ) - BigMulShift60(
+        ) - BigMulShift(
+            shift: 60,
             x: tableSin,
             y: sin
         ));
@@ -223,24 +231,30 @@ public readonly partial record struct FixedQ4816 {
             b: SinCosTwoPiQ60,
             low: out _
         );
-        var u = BigMulShift60(
+        var u = BigMulShift(
+            shift: 60,
             x: x,
             y: x
         );
 
-        sin = (x + BigMulShift60(
-            x: BigMulShift60(
+        sin = (x + BigMulShift(
+            shift: 60,
+            x: BigMulShift(
+                shift: 60,
                 x: x,
                 y: u
             ),
-            y: (SinPolyC1Q60 + BigMulShift60(
+            y: (SinPolyC1Q60 + BigMulShift(
+                shift: 60,
                 x: u,
                 y: SinPolyC2Q60
             ))
         ));
-        cos = ((1L << SinCosFractionBitCount) + BigMulShift60(
+        cos = ((1L << SinCosFractionBitCount) + BigMulShift(
+            shift: 60,
             x: u,
-            y: (CosPolyC1Q60 + BigMulShift60(
+            y: (CosPolyC1Q60 + BigMulShift(
+                shift: 60,
                 x: u,
                 y: CosPolyC2Q60
             ))
@@ -248,17 +262,19 @@ public readonly partial record struct FixedQ4816 {
 
         return quadrant;
     }
-    // Signed (x·y) >> 60. The bounded residuals and unit-scale coefficients fit the signed product.
+    // Signed (x·y) >> shift via one 64×64→128 multiply, for a shift of 60 or 62: the bounded residuals and
+    // unit-scale coefficients keep |x·y| below 2^(64 + shift), so the high word's low bits and the low word's high
+    // bits reassemble the shifted product exactly. The explicit halves keep the inliner from leaving Int128
+    // shift/multiply helper calls in the singles.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long BigMulShift60(long x, long y) {
-        // The explicit halves keep the inliner from leaving Int128 shift/multiply helper calls in the singles.
+    private static long BigMulShift(long x, long y, int shift) {
         var high = Math.BigMul(
             a: x,
             b: y,
             low: out var low
         );
 
-        return (high << 4) | ((long)(((ulong)low) >> 60));
+        return (high << (64 - shift)) | ((long)(((ulong)low) >> shift));
     }
 
     // Add half minus one plus the retained parity: below half never carries, above half always carries, and a

@@ -594,7 +594,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "TryFromFixedQ4816 reports success/failure matching the exact BigInteger range test, leaves the out parameter at its default on failure, and FromFixedQ4816 returns the identical value on success or throws OverflowException on failure — the pairing the family's other Try/throw pairs (UnitInterval32.Create/TryCreate, FixedRigidTransform.FromDualQuaternion/TryFromDualQuaternion, FixedQ1648.FromFixedQ4816/TryFromFixedQ4816) already establish. The widen-then-narrow round trip (TryFromFixedQ4816 then ToFixedQ4816) recovers the ORIGINAL FixedQ4816 value exactly at every raw where the widen succeeded, because the appended low bits are all zero and narrowing them back is the identity rather than a rounding event",
+        "Subject": "TryFromFixedQ4816 reports success/failure matching the exact BigInteger range test, leaves the out parameter at its default on failure, and FromFixedQ4816 returns the identical value on success or throws OverflowException on failure — the pairing the family's other Try/throw pairs (UnitInterval32.Create/TryCreate, FixedRigidTransform.FromDualQuaternion/TryFromDualQuaternion) already establish. The widen-then-narrow round trip (TryFromFixedQ4816 then ToFixedQ4816) recovers the ORIGINAL FixedQ4816 value exactly at every raw where the widen succeeded, because the appended low bits are all zero and narrowing them back is the identity rather than a rounding event",
         "Against": "",
         "Shared": "",
         "Citation": "",

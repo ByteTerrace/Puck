@@ -73,8 +73,7 @@ to meet them here than to discover them later.
 | `Pcg32XshRr` | `struct` | The seeded sequential generator: each draw hands back a value and moves the generator on to its next state. Reference-exact PCG32 XSH-RR, one sequence per stream, logarithmic seek and distance, state inversion (`Preimage`/`Seeking`), uniform / bounded / fraction / standard-normal draws, and an in-place shuffle. |
 | `Pcg32Extended` | `struct` | O'Neill's extended PCG32: a `Pcg32XshRr` base XOR'd with a `k`-word extension table for k-dimensional equidistribution. Same seek/bounded/fraction shape as the base type, over its own draw. |
 | `WeightedSampler` / `AliasTable<TElement>` | `static` / `sealed class` | Weighted choice, where some outcomes are meant to come up more often than others. Exact-integer Walker/Vose construction from ordered entries; constant-time sampling at exactly two generator advances per draw. |
-| `FieldNoise` | `static` | Spatial randomness. A stateless pure-integer map from a seed and a world position to smooth value noise in `[−1, 1]`, with an exact analytic gradient (the direction and rate the noise is changing, solved in closed form rather than estimated by sampling twice) and a planet-scale hierarchical overload. `Prepare(seed)` derives the seed's three per-axis states once into a `FieldNoiseSeed`; every overload taking it returns the same bits as its `ulong` twin. |
-| `Pcg3dLatticeNoise` | `static` | PCG3D hash-lattice value noise over a cell index, in `[0, 1)`. The shared kernel behind a world's field-lattice Noise/Scatter fills and a placement distribution's own Noise/Scatter regions, so both agree bit for bit on what a seed means. |
+| `Pcg3dLatticeNoise` | `static` | PCG3D hash-lattice value noise over a cell index, in `[0, 1)`, and the jittered scatter point of a block. The shared kernel behind a world's field-lattice Noise/Scatter fills and a placement distribution's own Noise/Scatter regions, so both agree bit for bit on what a seed means; its public constants are the source the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `LowDiscrepancy` | `static` | Even coverage by additive recurrence—keep adding a fixed step and read off the fractional part. Golden-ratio (`R1`) and plastic-number (`R2`) index-to-point maps: one multiply per component, no state. |
 | `DigitalNetSampler` | `static` | Even coverage by theorem. Digital `(0, m, 2)`-nets over the two-element field—the number system whose only values are 0 and 1, where addition is exclusive-or—in which a point is the exclusive-or of the direction vectors its index's set bits select. It offers only those randomizations that provably preserve stratification (the guarantee that every equal-sized box receives its exact share of the points): a digital shift of the coordinate, and a net-safe re-indexing. |
 | `StratifiedShuffle` | `static` | The index permutation a net may be re-indexed by: it carries every aligned dyadic block—a run of indices whose length is a power of two, beginning at a multiple of that length—onto an aligned dyadic block of the same size. |
@@ -95,8 +94,8 @@ so the question is usually which shape you have.
 - **Weighted choice**—loot, spawn kinds, production rules: build an
   `AliasTable<TElement>` once at load through `WeightedSampler.Create`, then
   sample it with a `Pcg32XshRr`.
-- **Spatial randomness**—terrain, wind, per-cell decisions: `FieldNoise`, a
-  pure function of `(seed, position)`. There is nothing to persist.
+- **Spatial randomness**—terrain, wind, per-cell decisions: `Pcg3dLatticeNoise`,
+  a pure function of `(seed, cell)`. There is nothing to persist.
 - **Even coverage**—spawn scatter, placement: `LowDiscrepancy.R1`/`R2`. They
   are stateless and cost one multiply per component.
 - **Provable stratification**—Monte Carlo integration (estimating an area, an
@@ -308,6 +307,7 @@ API promises.
 | `AliasTable.Count` | The construction entry count, excluding padding. |
 | `AliasTable.SampleIndex(ref generator)` | The sampled entry's index in the construction span, always below `Count`. |
 | `AliasTable.Sample(ref generator)` | The element at that index. |
+| `SampleOnce(weights, ref generator)` | One pick over `ulong` weights with the same partition, rounding, padding and two advances as a table built from them, over stack storage (pooled above sixty-four padded columns) and discarded: the pick a search makes once per node. |
 
 Construction rejects an empty span, more than `2³⁰` entries, an all-zero weight
 set, a negative weight, and—for the `double` overload—a non-finite one.
@@ -322,68 +322,14 @@ outcome instead of letting one draw fall through to an unrelated alias.
 
 ---
 
-## `FieldNoise`
-
-Value noise over the unit integer lattice, the grid of whole-numbered points in
-space: the corner values come from an avalanche hash of the lattice coordinates
-—a mixing function in which flipping one input bit changes about half the
-output bits—and are blended by the quintic fade `6t⁵ − 15t⁴ + 10t³`, which
-keeps the value and its first derivative continuous across cell boundaries. One
-noise unit spans one world unit, so changing frequency is a matter of scaling
-the position before sampling.
-
-**Determinism tier.** Cross-machine bit-identical, pure integer throughout: the
-fade is evaluated at Q28—28 fraction bits—and corner values are drawn from
-the hash's top 32 bits into `[−65536, 65535]`.
-
-**Simulation state.** None. Every entry point is a pure function of its
-arguments, so nothing here enters a snapshot.
-
-**Allocation.** None. Where a sampler stages its eight corners, it does so in a
-`stackalloc`, which reserves the scratch space on the call stack rather than on
-the heap.
-
-| Operation | Semantics |
-|---|---|
-| `Hash(seed, x, y, z)` | The raw lattice hash as 64 well-mixed bits, for per-cell decisions that need no smoothing. |
-| `Sample(seed, position)` | Smooth noise in `[−1, 1]` at a `FixedVector3` position. |
-| `Sample(seed, position, octaves)` | Fractal noise: `octaves` layers in `[1, 16]`, each doubling frequency and halving amplitude—one octave up is one doubling, as in music—and the sum stays within `[−1, 1]`. |
-| `SampleGradient(seed, position, out gradient)` | The same value as `Sample`, plus the exact analytic gradient per world unit; each component lies in `[−3.75, 3.75]`. |
-| `Sample(seed, position)` at `FixedPosition` | The hierarchical overload, exact at planet scale. |
-
-Three invariants are established by the implementation rather than assumed.
-First, the gradient shares all eight corner hashes—the sampler's real cost—
-with the value and with all three partials, the rates of change along `x`, `y`,
-and `z`, so it is far cheaper than differencing `Sample` and carries no
-step-size choice; it is continuous across cell boundaries because the quintic
-fade's derivative vanishes at both ends. Second, octave frequency doubling is
-exact on a floor-split coordinate, and the cell term stays inside `long` for
-every layer under the sixteen-octave limit, which checked arithmetic enforces
-rather than a comment asking you to trust it. Third, the hierarchical overload
-forms a signed 128-bit lattice coordinate from the cell index and the local
-whole-unit offset, discarding no cell bits, and removes the low word's sign
-extension—the repeated sign bit a negative number picks up when it is widened,
-under the two's-complement representation integers use—before mixing, so that
-the wide and native hash trees are bit-identical throughout their shared range.
-A position that fits `long` therefore samples the same in both overloads.
-
-Seed handling is domain-separated at every coordinate stage, meaning each stage
-gets its own derived seed rather than a shared one: independent seed states are
-injected at `x`, `y`, and `z`, so no single shift of the seed state translates
-the whole field, and each octave derives its own lattice.
-
----
-
 ## `Pcg3dLatticeNoise`
 
 Value noise over a 2D cell index, built on the Jarzynski & Olano PCG3D integer
 mix—the same mix the renderer's `sdfPcg3d` HLSL kernel carries, hand-kept in
 sync across that language boundary. A corner's value is the hash's top 16 bits read directly as a
-`FixedQ4816` fraction; corners blend by the same quintic fade `FieldNoise`
-uses. Unlike `FieldNoise`, the domain is a discrete cell index rather than a
-continuous position, and the hash tree is PCG3D rather than an avalanche mix—
-the two types are not interchangeable, and neither is a special case of the
-other.
+`FixedQ4816` fraction; corners blend by the quintic fade `6t⁵ − 15t⁴ + 10t³`
+through `FixedQ4816.Lerp`, one rounding per blend. The domain is a discrete
+cell index rather than a continuous position.
 
 **Determinism tier.** Cross-machine bit-identical, pure integer and
 fixed-point throughout.
@@ -396,6 +342,8 @@ arguments.
 | Operation | Semantics |
 |---|---|
 | `Pcg3d(x, y, z)` | The raw three-lane mix. |
+| `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus the matching `Pcg3d` lane modulo the inset `max(0, spacing − 2·radius)`. |
+| `PcgMultiplier` / `PcgIncrement` / `HashStreamA` / `HashStreamB` / `HashTumble` / `NoiseSeedStreamY` / `NoiseSeedStreamZ` | The published constants the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. A caller sums octaves itself, as `FieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both do. |
 
 Both `Puck.Physics.Fields.FieldLattice` (a world's live `fields` section)
@@ -418,6 +366,7 @@ as the point. One multiply per component, no state, no rounding.
 | Operation | Semantics |
 |---|---|
 | `R1(index)` | `frac(index / φ)`, the fractional part of the index divided by the golden ratio, as a `UnitFraction32`. The increment is `⌊2⁶⁴/φ⌋`, which is odd, so the phase recurrence has its full `2⁶⁴` period. |
+| `R2AlphaXQ32` / `R2AlphaYQ32` | The two plastic increments rounded to 32 bits, `round(2³²/ρ)` and `round(2³²/ρ²)`: the alphas a 32-bit wrapping recurrence (the GPU's R2 dither) multiplies its index by. |
 | `R2(index)` | The plastic-number pair `(frac(index / ρ), frac(index / ρ²))`, ρ being the plastic number, each a `UnitFraction32`, together covering the unit square. |
 
 Offsetting the index shifts the whole point set deterministically. These
@@ -550,14 +499,14 @@ tripled, and quadrupled terms.
 
 ## `InvertibleBitMix`
 
-An invertible mixing map on 32-bit words, built only from operations whose
-bijectivity is a theorem: exclusive-or with a *right* shift of the word itself,
+An invertible mixing map on 32-bit words, and its 64-bit sibling, built only
+from operations whose bijectivity is a theorem: exclusive-or with a *right* shift of the word itself,
 and multiplication by an odd constant. Both directions are exposed in closed
 form, which makes the map a named permutation rather than a hash whose
 invertibility is merely hoped for.
 
 **Determinism tier.** Cross-machine bit-identical. `Mix` and `Unmix` are exact
-inverses at every word.
+inverses at every 32-bit word, `Mix64` and `Unmix64` at every 64-bit word.
 
 **Allocation.** None.
 
@@ -579,6 +528,12 @@ carries no proof; bijectivity is the property this type exists to name, and it
 holds for any odd multiplier. All six constants are public—both multipliers,
 both modular inverses, and both shift amounts—so that a gate can re-derive
 each inverse from its multiplier rather than take the pair on trust.
+
+`Mix64` is the published SplitMix64 output finalizer—shifts of 30, 27 and 31
+around the multipliers `0xBF58476D1CE4E5B9` and `0x94D049BB133111EB`—with
+`Unmix64` its closed-form inverse by the same argument over `2⁶⁴`; its nine
+constants are public too. It is the mix a replay fingerprint or a gear table
+keys with when it wants a vetted 64-bit finalizer rather than a hand-rolled one.
 
 ---
 
@@ -780,10 +735,8 @@ dependency in the sources rather than a resemblance.
   `UnitFraction32`. `DigitalNetSampler` deliberately returns raw `uint` UQ0.32
   bits instead, because its coordinates are exclusive-or accumulators first and
   fractions second, and a consumer wraps them in a domain type at the boundary.
-- **`FixedQ4816` is the wing's value currency.** The Gaussian pair, every
-  `FieldNoise` sample, and the noise gradient's components are `FixedQ4816`;
-  the gradient itself is a `FixedVector3`; `FieldNoise` samples a
-  `FixedVector3` or a `FixedPosition`; and `WeightedSampler` accepts
+- **`FixedQ4816` is the wing's value currency.** The Gaussian pair and every
+  `Pcg3dLatticeNoise` sample are `FixedQ4816`, and `WeightedSampler` accepts
   `FixedQ4816` and `UFixedQ4816` weights exactly. `Pcg32XshRr`'s normal draw
   additionally reaches into the fixed-point kernels—the `log2` fraction, the
   integer square root, and the sine/cosine core—so the normals are exact in
@@ -884,7 +837,7 @@ of; the ones that bear on a single type are argued at that type above.
   order diverge.
 - **Generator state rides snapshots.** Persist `State`, `Increment` and
   `Multiplier` and restore with `FromRawBits`; a replayed world must resume the
-  exact sequence. `FieldNoise`, `LowDiscrepancy` and `DigitalNetSampler` carry
+  exact sequence. `Pcg3dLatticeNoise`, `LowDiscrepancy` and `DigitalNetSampler` carry
   no state and need nothing persisted.
 - **Seek arithmetic counts advances rather than calls.** `NextUInt32`, both
   fraction draws, `NextGaussianPair` (two, `NextGaussian` included) and an
