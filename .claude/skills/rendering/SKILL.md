@@ -64,6 +64,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's
   `world.debug-view motion` stays stationary with shadows both on and off.
+- **A capture holds its residency's frame.** Under `world.debug-view motion`
+  the held frame keeps the motion it was presented with
+  (`SdfWorldTables.HoldsFrame`, the `held` argument of
+  `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
+  so a temporal view converges over the held renders. Settling motion history
+  on a held upload makes every capture of the motion view read still.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.

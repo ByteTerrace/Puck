@@ -3,7 +3,8 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 // GPU-only history: before overwriting this frame's tables, copy the rows changed in the preceding consumed frame.
-// One settle copy after motion stops is owed; later still frames copy nothing. A row with no previous pose of its own
+// One settle copy after motion stops is owed; later still frames copy nothing, and a still upload of a frame held under
+// the motion view owes it on until the hold ends (HoldsFrame). A row with no previous pose of its own
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
 // a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
 // draw whose identity at its index changed (SdfMeshDraw.Identity). Keeping mesh matrices in a compact table preserves
@@ -45,6 +46,26 @@ public sealed partial class SdfWorldTables {
     /// <see cref="PoseRevision"/> before that upload. A view whose latest render held these poses as current reads its
     /// motion from them; a seeded row reads as still.</summary>
     public long PreviousPoseRevision { get; private set; }
+    /// <summary>Gets or sets whether the frame the tables hold is held for a capture (<see cref="SdfWorldResidency.HoldsFrame"/>),
+    /// which the residency sets before each upload. While it is held and the <c>motion</c> debug view is shown, an upload
+    /// that moves no pose leaves the previous tables and both pose revisions as they stand, so every render of the held
+    /// frame reads the motion it was presented with rather than settling to still. A pose that moves still advances them.
+    /// Any other view settles as usual: a temporal view's history accumulates over the held frame's renders, whose poses
+    /// do not move between them.</summary>
+    public bool HoldsFrame { get; set; }
+
+    // Whether the latest pack owes a pose: a row it changed or seeds, or a mesh draw it moved, seeds or adds or drops.
+    private bool PosesMoved => (
+        m_seedDynamicHistory ||
+        m_seedMeshHistory ||
+        (m_changedTransforms.Count > 0) ||
+        (m_reseatedTransforms.Count > 0) ||
+        (m_changedMeshMatrices.Count > 0) ||
+        (m_seededMeshDraws.Count > 0) ||
+        (m_meshDrawCount != m_previousMeshDrawCount)
+    );
+    // Whether this upload keeps the motion history as it stands (HoldsFrame).
+    private bool KeepsMotion => (HoldsFrame && (DebugMode == DebugViewModes.Motion) && !PosesMoved);
 
     private void RecordPreviousTables(nint commandBuffer, int previousSlot) {
         if (!m_seedDynamicHistory && (m_previousTransformCopies.Count > 0)) {
@@ -56,15 +77,7 @@ public sealed partial class SdfWorldTables {
         }
     }
     private void CompletePreviousTables(nint commandBuffer) {
-        var moved = (
-            m_seedDynamicHistory ||
-            m_seedMeshHistory ||
-            (m_changedTransforms.Count > 0) ||
-            (m_reseatedTransforms.Count > 0) ||
-            (m_changedMeshMatrices.Count > 0) ||
-            (m_seededMeshDraws.Count > 0) ||
-            (m_meshDrawCount != m_previousMeshDrawCount)
-        );
+        var moved = PosesMoved;
 
         PreviousPoseRevision = PoseRevision;
         if (moved) {

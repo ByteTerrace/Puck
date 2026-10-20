@@ -40,6 +40,53 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: Current(), actual: Previous());
         Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
+    // A frame held for a capture under the motion view keeps the motion it was presented with: its still uploads copy
+    // nothing and move neither pose revision, a pose moved during the hold still advances them, and a still upload
+    // settles once the hold ends or under any other view.
+    [Fact]
+    public void AHeldFrameUnderTheMotionViewKeepsItsMotionUntilTheHoldEnds() {
+        using var rig = new Rig(slots: 4);
+
+        rig.Warm();
+        byte[] Current() => rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)).ToArray();
+        byte[] Previous() => rig.Gpu.DeviceLocal(part: "previous-dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)).ToArray();
+        (long, long) Revisions() => (rig.Engine.PreviousPoseRevision, rig.Engine.PoseRevision);
+
+        rig.Engine.DebugMode = DebugViewModes.Motion;
+        var before = Current();
+
+        rig.Move(slot: 1);
+        rig.Render(time: 0f);
+        var presented = Revisions();
+
+        Assert.Equal(expected: before, actual: Previous());
+        Assert.NotEqual(expected: Current(), actual: Previous());
+        rig.Engine.HoldsFrame = true;
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Render(time: 0f);
+            Assert.Equal(expected: before, actual: Previous());
+            Assert.Equal(expected: presented, actual: Revisions());
+            Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
+        }
+        rig.Engine.HoldsFrame = false;
+        rig.Render(time: 0f);
+        Assert.Equal(expected: Current(), actual: Previous());
+        Assert.Equal(expected: (presented.Item2, presented.Item2), actual: Revisions());
+
+        var settled = Current();
+
+        rig.Engine.HoldsFrame = true;
+        rig.Move(slot: 2);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: settled, actual: Previous());
+        Assert.Equal(expected: (presented.Item2, (presented.Item2 + 1)), actual: Revisions());
+        rig.Render(time: 0f);
+        Assert.Equal(expected: settled, actual: Previous());
+        rig.Engine.DebugMode = 0;
+        rig.Render(time: 0f);
+        Assert.Equal(expected: Current(), actual: Previous());
+        Assert.Empty(collection: rig.Gpu.StateConflicts);
+    }
     [Fact]
     public void PreviousMeshMatricesKeepTheLastConsumedDrawAndLeaveUnmovedDrawsUntouched() {
         using var rig = new Rig(slots: 1);
