@@ -57,10 +57,7 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
 
         var ray = SourceRay.Through(
             camera: view.Camera,
-            image: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: image.X),
-                Y: FixedQ4816.FromDouble(value: image.Y)
-            )
+            image: FixedVector2.FromVector2(value: image)
         );
 
         return new WorldEditorRay(
@@ -221,7 +218,7 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
             : Vector3.Zero);
 
         return new WorldEditorPointerHit(
-            Normal: (float.IsFinite(f: normal.X) ? normal : Vector3.Zero),
+            Normal: (VectorFunctions.IsFinite(vector: normal) ? normal : Vector3.Zero),
             Point: hit.Point.ToRenderRelative(origin: FixedPosition.Zero)
         );
     }

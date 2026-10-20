@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -897,20 +898,8 @@ public sealed class WorldSessionMirror : IClientSink {
             m_currentPosition[index] = position;
             m_previousOrientation[index] = orientation;
             m_currentOrientation[index] = orientation;
-            // A route carries one attitude; its yaw is the heading (facing (-sin yaw, -cos yaw), the sim's convention).
-            var facing = Vector3.Transform(
-                value: new Vector3(
-                    x: 0f,
-                    y: 0f,
-                    z: -1f
-                ),
-                rotation: orientation
-            );
-
-            m_heading[index] = MathF.Atan2(
-                x: -facing.Z,
-                y: -facing.X
-            );
+            // A route carries one attitude; its yaw is the heading.
+            m_heading[index] = VectorFunctions.YawOf(attitude: orientation);
             m_bodyColor[index] = route.BodyColor;
             m_kit[index] = route.Kit;
             m_look[index] = route.Look;

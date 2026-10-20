@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -204,7 +205,7 @@ public static class WorldKeyResolver {
     /// <returns>The eased fraction: <paramref name="t"/> for <see cref="WorldEase.Linear"/>, <c>t² (3 − 2t)</c> for
     /// <see cref="WorldEase.Smooth"/>, and zero below one for <see cref="WorldEase.Step"/>.</returns>
     public static double Ease(WorldEase ease, double t) => (ease switch {
-        WorldEase.Smooth => ((t * t) * (3d - (2d * t))),
+        WorldEase.Smooth => VectorFunctions.Smoothstep(t: t),
         WorldEase.Step => ((t >= 1d)
             ? 1d
             : 0d),
@@ -274,7 +275,7 @@ public static class WorldKeyResolver {
     }
     /// <summary>Returns a keyed direction at a phase, blended along the great circle between the two keys' unit
     /// vectors. A zero key reads <see cref="Vector3.UnitY"/>; two opposite keys turn about the axis
-    /// <see cref="Perpendicular"/> names.</summary>
+    /// <see cref="VectorFunctions.Perpendicular"/> names.</summary>
     /// <param name="track">The track.</param>
     /// <param name="span">The clock's span.</param>
     /// <param name="phase">The clock's phase.</param>
@@ -359,10 +360,7 @@ public static class WorldKeyResolver {
     /// <param name="to">The angle at one, in radians.</param>
     /// <param name="t">The fraction.</param>
     /// <returns>The blend, in radians, unwrapped from <paramref name="from"/>.</returns>
-    public static double ShortArc(double from, double to, double t) => (from + (Math.IEEERemainder(
-        x: (to - from),
-        y: Math.Tau
-    ) * t));
+    public static double ShortArc(double from, double to, double t) => (from + (VectorFunctions.WrapAngle(radians: (to - from)) * t));
     /// <summary>Returns two directions blended along the great circle between their unit vectors.</summary>
     /// <param name="from">The direction at zero, any nonzero length.</param>
     /// <param name="to">The direction at one, any nonzero length.</param>
@@ -384,7 +382,7 @@ public static class WorldKeyResolver {
 
         if ((Math.PI - angle) < 1e-6d) {
             // Opposite keys bound no one great circle; turn about a fixed perpendicular so every reader picks the same.
-            var axis = Perpendicular(direction: a);
+            var axis = VectorFunctions.Perpendicular(direction: a);
             var turn = (angle * t);
 
             return Unit(value: ((a * ((float)Math.Cos(d: turn))) + (Vector3.Cross(
@@ -401,26 +399,6 @@ public static class WorldKeyResolver {
             x: ((float)((a.X * weightFrom) + (b.X * weightTo))),
             y: ((float)((a.Y * weightFrom) + (b.Y * weightTo))),
             z: ((float)((a.Z * weightFrom) + (b.Z * weightTo)))
-        ));
-    }
-    /// <summary>Returns the axis two opposite directions turn about: the unit cross product of the direction with
-    /// whichever world axis it is least aligned with.</summary>
-    /// <param name="direction">The direction, of unit length.</param>
-    /// <returns>A unit vector perpendicular to <paramref name="direction"/>.</returns>
-    public static Vector3 Perpendicular(Vector3 direction) {
-        var x = MathF.Abs(x: direction.X);
-        var y = MathF.Abs(x: direction.Y);
-        var z = MathF.Abs(x: direction.Z);
-        var axis = (((x <= y) && (x <= z))
-            ? Vector3.UnitX
-            : ((y <= z)
-                ? Vector3.UnitY
-                : Vector3.UnitZ)
-        );
-
-        return Unit(value: Vector3.Cross(
-            vector1: direction,
-            vector2: axis
         ));
     }
     /// <summary>Returns a rate integrated from engine tick zero to a presented tick, reduced into

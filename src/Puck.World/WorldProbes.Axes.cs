@@ -95,7 +95,7 @@ internal sealed partial class WorldProbes {
                     : CommandPhase.Active),
                     Slot: axis.Slot,
                     Source: axis.Source,
-                    Value: CommandValue.Axis(value: ((float)((double)sample.Value)))
+                    Value: CommandValue.Axis(value: ((float)sample.Value))
                 ));
                 axis.Held = !sample.Expired;
                 axis.Suppressed = false;

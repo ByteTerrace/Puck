@@ -42,14 +42,9 @@ public sealed class ViewProjectionLawTests {
             }
         }
     }
-    // The ray frame/sdf-viewport.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
+    // The ray frame/sdf-viewport.hlsli's cameraRayDirection takes through a sample.
     private static Vector3 MarchDirection(CameraSnapshot camera, Vector2 offset, Vector2 ndc) =>
-        Vector3.Normalize(value: (
-            ((camera.Forward +
-            (((ndc.X * camera.AspectRatio) * camera.TanHalfFieldOfView) * camera.Right)) +
-            ((ndc.Y * camera.TanHalfFieldOfView) * camera.Up)) +
-            ((offset.X * camera.Right) + (offset.Y * camera.Up))
-        ));
+        Vector3.Normalize(value: (camera with { FrustumOffset = offset }).RayThrough(ndc: ndc));
     private static void Near3(Vector3 expected, Vector3 actual, float tolerance) =>
         Assert.True(
             condition: (Vector3.Distance(value1: expected, value2: actual) <= tolerance),
@@ -186,6 +181,30 @@ public sealed class ViewProjectionLawTests {
                     Assert.Equal(expected: 17f, actual: view.RayParameter(depth: (clip.Z / clip.W), ndc: ndc), tolerance: 1e-4f);
                     Near3(expected: world, actual: view.Unproject(depth: (clip.Z / clip.W), ndc: ndc), tolerance: 1e-4f);
                     Assert.Equal(expected: jitter, actual: view.Jitter);
+                }
+            }
+        }
+    }
+    [Fact]
+    public void TryProjectInvertsTheCameraRay() {
+        foreach (var camera in Cameras) {
+            foreach (var offset in FrustumOffsets) {
+                var shifted = (camera with { FrustumOffset = offset });
+
+                foreach (var ndc in ((Vector2[])[new(x: 0f, y: 0f), new(x: 0.37f, y: -0.64f), new(x: -1.4f, y: 1.2f)])) {
+                    var world = (shifted.Position + (shifted.RayThrough(ndc: ndc) * 9f));
+
+                    Assert.True(condition: shifted.TryProject(depth: out var depth, ndc: out var projected, world: world));
+                    Assert.Equal(expected: 9f, actual: depth, tolerance: 1e-4f);
+                    Assert.Equal(expected: ndc.X, actual: projected.X, tolerance: 1e-5f);
+                    Assert.Equal(expected: ndc.Y, actual: projected.Y, tolerance: 1e-5f);
+                }
+
+                // A point at or behind the eye has no image point.
+                foreach (var behind in ((float[])[0f, -3f])) {
+                    Assert.False(condition: shifted.TryProject(depth: out var depth, ndc: out var projected, world: (shifted.Position + (shifted.Forward * behind))));
+                    Assert.Equal(expected: behind, actual: depth, tolerance: 1e-5f);
+                    Assert.Equal(expected: Vector2.Zero, actual: projected);
                 }
             }
         }

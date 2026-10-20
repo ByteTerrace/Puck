@@ -414,9 +414,7 @@ public sealed class SeatController {
     public void SetMotionAngularVelocity(Vector3 angularVelocity) {
         if (
             MotionControlsActive &&
-            float.IsFinite(f: angularVelocity.X) &&
-            float.IsFinite(f: angularVelocity.Y) &&
-            float.IsFinite(f: angularVelocity.Z)
+            VectorFunctions.IsFinite(vector: angularVelocity)
         ) {
             m_motionAngularVelocity = angularVelocity;
         }

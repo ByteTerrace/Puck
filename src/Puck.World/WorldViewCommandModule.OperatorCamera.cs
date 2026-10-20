@@ -41,7 +41,7 @@ internal sealed partial class WorldViewCommandModule {
             refusal = $"field of view {numbers[index].ToString(provider: CultureInfo.InvariantCulture)} is outside 1..170 degrees";
         }
 
-        return (numbers[index] * (MathF.PI / 180f));
+        return float.DegreesToRadians(degrees: numbers[index]);
     }
     // The operator camera forms of `view.override camera`: an absolute pose, a look-at, an orbit about a point, and deltas
     // against the pose already set. Every one submits the resulting ABSOLUTE pose and answers with it.
@@ -130,7 +130,7 @@ internal sealed partial class WorldViewCommandModule {
                     "turn" => current.Turn(pitchDegrees: n[1], yawDegrees: n[0]),
                     "swing" => current.Swing(distance: ((extra == 3) ? n[2] : 0f), pitchDegrees: n[1], yawDegrees: n[0]),
                     "move" => current.Move(forward: n[2], right: n[0], up: n[1]),
-                    _ => current.WithFieldOfView(fieldOfViewRadians: (n[0] * (MathF.PI / 180f))),
+                    _ => current.WithFieldOfView(fieldOfViewRadians: float.DegreesToRadians(degrees: n[0])),
                 };
 
                 break;

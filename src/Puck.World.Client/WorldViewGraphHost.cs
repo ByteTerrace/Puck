@@ -283,7 +283,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // The session views of the running set, whose footprints follow what their consumers see (ResetFootprints), and the
     // power-of-two fraction each one's glass last held on each axis (WorldPortalVisibility.Octave).
     private readonly HashSet<string> m_portals = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, (double Width, double Height)> m_portalOctaves = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (double Width, double Height)> m_portalExtents = new(comparer: StringComparer.Ordinal);
 
     private WorldViewDefaults? m_lastViews;
     // The render.tonemap the running set was composed with, and whether a temporally resolved view sharpened then.
@@ -1312,9 +1312,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
-        foreach (var portal in m_portalOctaves.Keys) {
+        foreach (var portal in m_portalExtents.Keys) {
             if (!m_portals.Contains(item: portal)) {
-                _ = m_portalOctaves.Remove(key: portal);
+                _ = m_portalExtents.Remove(key: portal);
             }
         }
 
@@ -1497,9 +1497,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return footprints;
     }
     // The frame's footprints: the synthesized root's, then every screen's. A session's holds only while its consumer sees
-    // the glass it shows on, so a portal face out of view schedules no level beneath it, and spans the power-of-two
-    // fraction of its consumer's image that holds the glass (WorldPortalVisibility.Coverage and Octave), so a window
-    // renders at the extent it is seen at and reallocates only when that extent leaves its octave.
+    // the glass it shows on, so a portal face out of view schedules no level beneath it, and spans the fraction of its
+    // consumer's image that holds the glass (WorldPortalVisibility.Coverage), quantized against the extent it held by
+    // the render graph's one footprint rule (RenderGraphExtent.Quantize), so a window renders at the extent it is seen
+    // at and reallocates only when its need leaves the held step's shrink band.
     private void ResetFootprints() {
         m_footprints.Clear();
 
@@ -1524,16 +1525,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
                     break;
                 case PortalSight.Seen:
-                    var octaves = m_portalOctaves.GetValueOrDefault(key: footprint.Producer);
+                    var held = m_portalExtents.GetValueOrDefault(key: footprint.Producer);
 
-                    octaves = (
-                        Width: WorldPortalVisibility.Octave(coverage: coverage.Width, held: octaves.Width),
-                        Height: WorldPortalVisibility.Octave(coverage: coverage.Height, held: octaves.Height)
+                    held = (
+                        Width: RenderGraphExtent.Quantize(allocated: held.Width, fraction: coverage.Width),
+                        Height: RenderGraphExtent.Quantize(allocated: held.Height, fraction: coverage.Height)
                     );
-                    m_portalOctaves[footprint.Producer] = octaves;
+                    m_portalExtents[footprint.Producer] = held;
                     m_footprints.Add(item: (footprint with {
-                        Height = octaves.Height,
-                        Width = octaves.Width,
+                        Height = held.Height,
+                        Width = held.Width,
                     }));
 
                     break;

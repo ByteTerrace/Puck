@@ -11,7 +11,6 @@ namespace Puck.World;
 /// including a headless federation canary.</summary>
 internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
     private string Describe(int slot) {
-        const float RadiansToDegrees = (180f / MathF.PI);
         var definition = instances.ResolveRoutedDefinition(slot: slot);
         var seat = roster.Seat(slot: slot);
         var seatLook = (seat?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
@@ -40,11 +39,11 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         }
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $" yawReference={control.YawReference.ToString().ToLowerInvariant()} yawSensitivity={seatLook.YawSensitivity:0.#####} pitchSensitivity={seatLook.PitchSensitivity:0.#####} stickLookRate={seatLook.StickLookRate:0.#####} gyroScale={gyro.Scale:0.#####} gyroDeadZone=({gyro.DeadZone.X:0.#####},{gyro.DeadZone.Y:0.#####},{gyro.DeadZone.Z:0.#####}) gyroInvert=({gyro.InvertX.ToString().ToLowerInvariant()},{gyro.InvertY.ToString().ToLowerInvariant()},{gyro.InvertZ.ToString().ToLowerInvariant()}) gyroYaw=({gyro.Yaw.X:0.#####},{gyro.Yaw.Y:0.#####},{gyro.Yaw.Z:0.#####}) gyroPitch=({gyro.Pitch.X:0.#####},{gyro.Pitch.Y:0.#####},{gyro.Pitch.Z:0.#####}) invertYaw={seatLook.InvertYaw.ToString().ToLowerInvariant()} invertPitch={seatLook.InvertPitch.ToString().ToLowerInvariant()} minPitch={(control.MinPitch * RadiansToDegrees):0.##} maxPitch={(control.MaxPitch * RadiansToDegrees):0.##}"
+            handler: $" yawReference={control.YawReference.ToString().ToLowerInvariant()} yawSensitivity={seatLook.YawSensitivity:0.#####} pitchSensitivity={seatLook.PitchSensitivity:0.#####} stickLookRate={seatLook.StickLookRate:0.#####} gyroScale={gyro.Scale:0.#####} gyroDeadZone=({gyro.DeadZone.X:0.#####},{gyro.DeadZone.Y:0.#####},{gyro.DeadZone.Z:0.#####}) gyroInvert=({gyro.InvertX.ToString().ToLowerInvariant()},{gyro.InvertY.ToString().ToLowerInvariant()},{gyro.InvertZ.ToString().ToLowerInvariant()}) gyroYaw=({gyro.Yaw.X:0.#####},{gyro.Yaw.Y:0.#####},{gyro.Yaw.Z:0.#####}) gyroPitch=({gyro.Pitch.X:0.#####},{gyro.Pitch.Y:0.#####},{gyro.Pitch.Z:0.#####}) invertYaw={seatLook.InvertYaw.ToString().ToLowerInvariant()} invertPitch={seatLook.InvertPitch.ToString().ToLowerInvariant()} minPitch={float.RadiansToDegrees(radians: control.MinPitch):0.##} maxPitch={float.RadiansToDegrees(radians: control.MaxPitch):0.##}"
         );
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $" yaw={((state?.Yaw ?? 0f) * RadiansToDegrees):0.##} pitch={((state?.Pitch ?? 0f) * RadiansToDegrees):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} orbit={(seat?.Orbiting ?? false).ToString().ToLowerInvariant()} steer={(seat?.PointerSteering ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
+            handler: $" yaw={float.RadiansToDegrees(radians: (state?.Yaw ?? 0f)):0.##} pitch={float.RadiansToDegrees(radians: (state?.Pitch ?? 0f)):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} orbit={(seat?.Orbiting ?? false).ToString().ToLowerInvariant()} steer={(seat?.PointerSteering ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
         );
 
         if (seatBindings.IsCameraModeActive(slot: slot)) {

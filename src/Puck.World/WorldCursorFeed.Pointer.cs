@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -10,7 +11,7 @@ internal sealed partial class WorldCursorFeed {
         var width = ((m_viewports.ClientWidth > 0) ? m_viewports.ClientWidth : (uint)m_panes.DisplayWidth);
         var height = ((m_viewports.ClientHeight > 0) ? m_viewports.ClientHeight : (uint)m_panes.DisplayHeight);
 
-        if ((point is { } value) && (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) ||
+        if ((point is { } value) && (!VectorFunctions.IsFinite(vector: value) ||
             (value.X < 0) || (value.Y < 0) || (value.X >= width) || (value.Y >= height))) {
             return false;
         }

@@ -108,10 +108,7 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
         var ray = SourceRay.Through(
             camera: view.Camera,
-            image: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: local.X),
-                Y: FixedQ4816.FromDouble(value: local.Y)
-            )
+            image: FixedVector2.FromVector2(value: local)
         );
 
         _ = m_router.Sustain(

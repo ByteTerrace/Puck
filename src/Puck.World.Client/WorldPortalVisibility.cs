@@ -82,30 +82,6 @@ public static class WorldPortalVisibility {
     /// still bakes: the least that keeps it rendering, since a world bakes only in frames that render one of its
     /// views.</summary>
     public const double BakingShare = 0.0625;
-    /// <summary>The share of its held octave a glass's coverage must fall to before the octave halves: well below the half
-    /// the next octave down holds, so a glass at an octave's edge does not change its session's extent from frame to
-    /// frame.</summary>
-    public const double ShrinkShare = 0.4;
-
-    /// <summary>Returns the power-of-two fraction a session renders a glass at on one axis: the smallest that holds the
-    /// glass's coverage, kept while the coverage stays above <see cref="ShrinkShare"/> of it, so the session's extent,
-    /// whose every change reallocates its targets, moves only when the glass leaves its octave.</summary>
-    /// <param name="coverage">The fraction of the consumer's image the glass spans on the axis, in [0, 1].</param>
-    /// <param name="held">The fraction the axis held last frame, or zero for none.</param>
-    /// <returns>The fraction, a power of two no greater than one, or zero for no coverage.</returns>
-    public static double Octave(double coverage, double held) {
-        if (coverage <= 0.0) {
-            return 0.0;
-        }
-        if ((held > 0.0) && (coverage <= held) && (coverage > (held * ShrinkShare))) {
-            return held;
-        }
-
-        return Math.Min(
-            val1: 1.0,
-            val2: Math.Pow(x: 2.0, y: Math.Ceiling(a: Math.Log2(x: coverage)))
-        );
-    }
     /// <summary>Returns the fraction of a camera's image a screen's glass spans on each axis: the extent of its face's
     /// projected bounds, unclipped by the image's edges, so a session rendered at that fraction of the camera's extent
     /// draws one texel for each pixel the glass covers wherever it lies. A face reaching to or behind the camera's near

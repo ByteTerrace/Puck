@@ -219,7 +219,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 yawRadians: out var yaw
             )) {
                 var worldPosition = position.ToVector3();
-                var yawDegrees = (((float)((double)yaw)) * (180f / MathF.PI));
+                var yawDegrees = float.RadiansToDegrees(radians: (float)yaw);
 
                 _ = builder.Append(value: $" {placement.Id}[body={attach.BodyIndex} pos=({worldPosition.X:0.00}, {worldPosition.Y:0.00}, {worldPosition.Z:0.00}) yaw={yawDegrees:0}°]");
             } else {

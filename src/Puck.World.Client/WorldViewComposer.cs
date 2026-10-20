@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
@@ -405,7 +406,7 @@ public sealed class WorldViewComposer {
                 from: new ViewLayout(Bindings: m_currentBindings.ToArray()),
                 to: new ViewLayout(Bindings: m_toScratch.ToArray()),
                 durationSeconds: seconds,
-                easing: Easing.Smoothstep
+                easing: VectorFunctions.Smoothstep
             );
             m_transitionStart = elapsedSeconds;
             m_transitionSeconds = MathF.Max(
