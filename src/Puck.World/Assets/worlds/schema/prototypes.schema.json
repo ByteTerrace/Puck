@@ -483,7 +483,7 @@
                           "cornerRadius": {
                             "type": "number",
                             "default": 0.15,
-                            "description": "A fraction of the profile\u0027s smaller half-extent, in [0, 1]: RoundedRectangle\u0027s corner radius, ChamferedRectangle\u0027s chamfer radius, or Convex\u0027s uniform corner rounding."
+                            "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded."
                           },
                           "sides": {
                             "type": "integer",
@@ -1309,7 +1309,7 @@
                     "cornerRadius": {
                       "type": "number",
                       "default": 0.15,
-                      "description": "A fraction of the profile\u0027s smaller half-extent, in [0, 1]: RoundedRectangle\u0027s corner radius, ChamferedRectangle\u0027s chamfer radius, or Convex\u0027s uniform corner rounding."
+                      "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded."
                     },
                     "sides": {
                       "type": "integer",

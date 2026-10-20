@@ -52,7 +52,8 @@ internal readonly record struct WorldWheelStatus(
 );
 /// <summary>
 /// Per-seat radial presentation over the compiled binding system. It owns only radial interaction state (layout,
-/// aim, ring, hover); opening, selection, ring steps, commit and cancel are ordinary authored bindings. A committed
+/// aim, ring, hover); the authored spatial policy reads the live pointer, while axis selection, opening, ring steps,
+/// commit and cancel are ordinary authored bindings. A committed
 /// sector returns its compiler-minted <see cref="BindingActivation"/> to <see cref="InputRouter"/>, so it keeps the
 /// seat's principal, command maps, value kind, phase, and deterministic snapshot path.
 /// </summary>
@@ -105,6 +106,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public OverlayWheelSeat LastSeat;
         public bool LastSeatKnown;
         public long PointerSequence;
+        // Client pixels, so a changed frame/client scale cannot masquerade as mouse movement.
+        public Vector2 PointerNeutral;
+        public Vector2 PointerPosition;
+        public bool PointerPositionKnown;
+        public bool PointerSelected;
         public required WorldWheelRings Rings;
         public float RingScroll;
         public WorldWheelStatus Status;
@@ -226,6 +232,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.Deflection = Vector2.Zero;
         state.DeflectionKnown = false;
         state.PointerSequence = 0L;
+        state.PointerPositionKnown = false;
+        state.PointerSelected = false;
         // Converted once, here, so the authored seconds never turn into ticks inside the per-frame decision.
         state.Grace.BeginGesture(graceTicks: BindingWheelGeometry.SelectionGraceTicks(
             seconds: wheel.Style.SelectionGraceSeconds,
@@ -338,6 +346,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
         ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
             ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
+    private static bool PointerAvailable(int slot, WorldCursorStatus status) =>
+        ((slot == status.Slot) && (status.Reason is not ("no-position" or "no-view")));
     // The seat's drawn rings, read through its routed state mirror and rebuilt only when a cell they read moved.
     private OverlayWheelRing[] Rings(int slot, SeatState state, BindingWheelView wheel) {
         m_bindings.GetRoutedState(
@@ -385,12 +395,12 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             style: wheel.Style
         );
     }
-    private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 center, float unit) {
+    private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 neutral, Vector2 center, float unit) {
         var mode = wheel.Style.PointerSelection;
         var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
             mode: mode,
             position: pointer,
-            neutral: state.Gesture.SpatialNeutral,
+            neutral: neutral,
             hub: center
         );
 
@@ -408,7 +418,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             );
         }
 
-        var neutralVector = (pointer - state.Gesture.SpatialNeutral);
+        var neutralVector = (pointer - neutral);
         var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(
             excursion: excursion,
             vector: neutralVector,
@@ -623,11 +633,18 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         }
 
         if (relative) {
+            // An OS pointer reports both position and raw motion. Use position while available: switching back
+            // to accumulated raw counts would double-handle that motion and jump when the cursor hits an edge.
+            if (PointerAvailable(slot: slot, status: m_cursor.Status)) {
+                return;
+            }
+
             // A delta source accumulates from the open into a virtual pointer offset from the hub — mouse deflection
             // read exactly like a stick's, later than any stick aim by sequence so whichever moved last selects.
             state.Deflection += axis;
             state.DeflectionKnown = true;
             state.PointerSequence = ++m_selectionSequence;
+            state.PointerSelected = false;
 
             return;
         }
@@ -649,7 +666,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <summary>Composes every open seat's radial once per produced frame.</summary>
     public void Tick() {
         var pointerStatus = m_cursor.Status;
-        var pointerSlot = pointerStatus.Slot;
         var visibleCount = 0;
 
         for (var slot = 0; (slot < m_state.Length); slot++) {
@@ -705,7 +721,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 x: ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width),
                 y: ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
             );
-            var pointerAvailable = ((slot == pointerSlot) && (pointerStatus.Reason is not ("no-position" or "no-view")));
+            var pointerAvailable = PointerAvailable(slot: slot, status: pointerStatus);
             var unit = MathF.Min(
                 x: (viewport.Region.Width * viewport.Width),
                 y: (viewport.Region.Height * viewport.Height)
@@ -744,6 +760,23 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 );
             } else {
                 state.BankedNotches = 0f;
+            }
+
+            // Absolute pointer reports are a presentation input in their own right. A platform can report them
+            // without a routed relative-motion sample. Capture the gesture's neutral once, then let only actual
+            // movement claim selection, so a parked mouse never steals a controller's aim. Relative bindings keep
+            // their virtual pointer for devices that supply no absolute position. Annotation mode deliberately
+            // consumes relative motion to stop camera drags; it must not disable the wheel's spatial selector.
+            if (pointerAvailable) {
+                if (!state.PointerPositionKnown) {
+                    state.PointerNeutral = pointerStatus.Position;
+                    state.PointerPosition = pointerStatus.Position;
+                    state.PointerPositionKnown = true;
+                } else if (state.PointerPosition != pointerStatus.Position) {
+                    state.PointerPosition = pointerStatus.Position;
+                    state.PointerSelected = true;
+                    state.PointerSequence = ++m_selectionSequence;
+                }
             }
 
             // The accumulated relative aim as a virtual pointer: hub + deflection, the deflection mapped from window
@@ -797,6 +830,28 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                     hoverSector = selection.Sector;
                     hoverReason = selection.Reason;
                 }
+            } else if (state.PointerSelected) {
+                if (pointerAvailable) {
+                    _ = m_viewports.Locate(
+                        view: in viewport,
+                        position: state.PointerNeutral,
+                        framePosition: out var pointerNeutral,
+                        local: out _
+                    );
+                    var selection = SelectPointer(
+                        center: center,
+                        pointer: pointerStatus.Frame,
+                        neutral: pointerNeutral,
+                        state: state,
+                        unit: unit,
+                        wheel: wheel
+                    );
+
+                    hoverSector = selection.Sector;
+                    hoverReason = selection.Reason;
+                } else {
+                    hoverReason = "no-position";
+                }
             } else if (
                 state.DeflectionKnown &&
                 centerKnown &&
@@ -805,6 +860,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 var selection = SelectPointer(
                     center: center,
                     pointer: virtualPointer,
+                    neutral: state.Gesture.SpatialNeutral,
                     state: state,
                     unit: unit,
                     wheel: wheel
@@ -821,6 +877,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 (state.Grace.Sector >= 0) &&
                 (hoverSector != state.Grace.Sector) &&
                 state.Gesture.AxisKnown &&
+                (state.Gesture.AxisSequence > state.PointerSequence) &&
                 (state.Gesture.Axis.LengthSquared() < (wheel.Style.SwitchFraction * wheel.Style.SwitchFraction))
             ) {
                 hoverSector = state.Grace.Sector;

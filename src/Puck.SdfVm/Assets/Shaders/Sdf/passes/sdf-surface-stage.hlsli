@@ -269,7 +269,7 @@ void sdfSurfaceStage(SdfPixel p) {
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
         float3 face;
-        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face);
+        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face, value.curvature);
 
         value.normal = normal;
         if (!worldAoDisabled()) {

@@ -118,7 +118,11 @@ public static class BindingWheelGeometry {
         // sector before that. The writer draws with the identical rule, so the piece under the selector is the
         // piece that lights.
         var span = (Math.Tau / sectorCount);
-        var relative = ((clockwiseAngle - (style.SectorOffset * span)) + (span * 0.5d));
+        var relative = ((clockwiseAngle - SectorCenterAngle(
+            count: sectorCount,
+            offset: style.SectorOffset,
+            sector: 0
+        )) + (span * 0.5d));
 
         relative = (((relative % Math.Tau) + Math.Tau) % Math.Tau);
         var sector = (((int)(relative / span)) % sectorCount);
@@ -129,6 +133,24 @@ public static class BindingWheelGeometry {
         );
     }
 
+    /// <summary>Gets the clockwise angle from twelve o'clock of a sector's centre: sector <c>k</c> is centred
+    /// <c>(k + offset)</c> sectors clockwise, and the selection and the drawing of a wheel both use this rule.</summary>
+    /// <typeparam name="T">The floating-point type the caller measures angles in.</typeparam>
+    /// <param name="sector">The zero-based sector.</param>
+    /// <param name="count">The number of sectors in the ring; positive.</param>
+    /// <param name="offset">The ring's sector zero displacement, in sectors.</param>
+    /// <returns>The centre angle, in radians.</returns>
+    public static T SectorCenterAngle<T>(int sector, int count, T offset) where T : IFloatingPointIeee754<T> =>
+        ((T.CreateChecked(value: sector) + offset) * (T.Tau / T.CreateChecked(value: count)));
+    /// <summary>Gets the radii a wheel is laid out with.</summary>
+    /// <param name="style">The wheel's authored style.</param>
+    /// <param name="unit">The viewport unit the style's fractions scale, in the caller's length unit.</param>
+    /// <returns>The hub radius, also the spatial dead zone and the first ring's inner edge, and the radial width of
+    /// one ring.</returns>
+    public static (float Inner, float RingWidth) RingRadii(BindingWheelStyleDefinition style, float unit) => (
+        (unit * style.DeadZoneFraction),
+        (unit * style.RingWidthFraction)
+    );
     /// <summary>Converts pointer/touch displacement into the same neutral-relative magnitude space an Axis2D
     /// selector already occupies.</summary>
     public static Vector2 NormalizeSpatialExcursion(Vector2 vector, float viewportUnit, BindingWheelExcursionView excursion) {
@@ -271,7 +293,10 @@ public static class BindingWheelGeometry {
         }
 
         var distanceSquared = vector.LengthSquared();
-        var inner = (unit * style.DeadZoneFraction);
+        var (inner, ringWidth) = RingRadii(
+            style: style,
+            unit: unit
+        );
 
         if (distanceSquared <= (inner * inner)) {
             return new BindingWheelSelection(
@@ -281,7 +306,7 @@ public static class BindingWheelGeometry {
         }
 
         if (mode == BindingWheelSpatialSelectionMode.HitTarget) {
-            var outer = (inner + (((ringCount + style.OuterGraceRingFraction) * unit) * style.RingWidthFraction));
+            var outer = (inner + ((ringCount + style.OuterGraceRingFraction) * ringWidth));
 
             if (distanceSquared > (outer * outer)) {
                 return new BindingWheelSelection(
