@@ -60,34 +60,22 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output, overrides, parameters or tier.");
                 }
                 // A source package names a producer by id and opens it from the row's settings, as a screen's producer
-                // source does.
+                // source does: the host's graph runtime converts an uploaded producer's region, and runs any other
+                // producer (a window capture, a camera) as an external producer whose lease carries its image, so a
+                // pane draws it.
                 if (graph.Package.StartsWith(
                     comparisonType: StringComparison.Ordinal,
                     value: RenderGraphInstance.SourcePackagePrefix
                 )) {
-                    var producer = graph.Package[RenderGraphInstance.SourcePackagePrefix.Length..];
-
                     WorldImageProducerVocabulary.Validate(
                         definition: definition,
                         errors: errors,
                         path: path,
                         source: new WorldScreenSource.Producer(
-                            Id: producer,
+                            Id: graph.Package[RenderGraphInstance.SourcePackagePrefix.Length..],
                             Settings: graph.Settings
                         )
                     );
-
-                    // A row's source renders in the host's graph runtime, which converts an uploaded producer's region;
-                    // an imported producer's image reaches only a screen.
-                    if (
-                        WorldImageProducerVocabulary.TryGet(
-                            id: producer,
-                            shape: out var shape
-                        ) &&
-                        (shape.Transport != Puck.Abstractions.Sources.ImageSourceTransport.Uploaded)
-                    ) {
-                        errors.Add(item: $"{path}.package '{graph.Package}' names the {shape.Transport} producer '{producer}'; a views.graphs row renders only an uploaded producer's source.");
-                    }
                 }
             }
             if (

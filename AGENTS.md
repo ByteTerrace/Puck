@@ -148,9 +148,12 @@ settles a question, decide by that principle and say why.
    `gaming-bricks`, `rom-forge`, `dotnet-performance`, `symbol-analysis`,
    `content-search`, `boy-scout`, `verification`,
    `review-passes`, `orchestration`), then ask the code with `puck references`,
-   `puck declarations` or `puck search -M 0`. `experimental/` is one of the
-   places to look. A second implementation is a defect, and a skill wrong about
-   its own area is corrected in the same change.
+   `puck declarations` or `puck search -M 0`. `experimental/` and git history
+   are places to look too. The owner's ruling: virtually every feature the
+   debug world asks for was already built and tested in the engine, so debug
+   world work is mostly wiring its documents to what exists; new code is for a
+   gap you can name after that search. A second implementation is a defect,
+   and a skill wrong about its own area is corrected in the same change.
 8. **Line endings are LF and are never a topic.** `.gitattributes`
    (`* text=auto eol=lf`) and `.editorconfig` hold the contract, with
    `*.bat`/`*.cmd` and `*.slnx` pinned CRLF in both. Never investigate, report,
