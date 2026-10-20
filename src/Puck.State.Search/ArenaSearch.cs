@@ -156,6 +156,17 @@ public sealed partial class ArenaSearch {
         public IArenaSearchJudge Judge { get; set; } = null!;
         // Every row a position key folds: what the plan names and what the judge reads, ascending.
         public int[] KeyRows { get; set; } = [];
+        // The rows the job's input stamp folds: its key rows and the held and revision slots its outputs are taken
+        // against, less every job's outputs, ascending. A row outside them cannot change what the job lands, so a
+        // write to one never restarts it.
+        public int[] StampRows { get; set; } = [];
+        // The version each stamp row stood at, and the ledger fold, when the stamp was last folded. A version is the
+        // arena's own and never checkpointed, so it only says the fold may be reused; the stamp a job compares stays
+        // the fold of the rows' content, which a restored arena reproduces.
+        public ulong[] StampVersions { get; set; } = [];
+        public bool StampFolded { get; set; }
+        public ulong StampLedger { get; set; }
+        public ulong StampValue { get; set; }
 
         // The judge reads the live clock directly, or one of its keyed rows has value-over-time traits. This is
         // derived once when the job is installed, keeping an idle untimed step to its existing row-version walk.
@@ -248,13 +259,6 @@ public sealed partial class ArenaSearch {
     private readonly List<ArenaSearchWrite> m_outputs = [];
 
     private Job[] m_jobs = [];
-    // The stamp last folded and the version each input row stood at when it was. A version is this arena's own and
-    // never checkpointed, so it only ever says the fold may be reused; the stamp a job compares stays the fold of
-    // the rows' content, which a restored arena reproduces.
-    private bool m_stampFolded;
-    private ulong m_stampLedger;
-    private ulong m_stampValue;
-    private ulong[] m_stampVersions = [];
     private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
@@ -418,7 +422,12 @@ public sealed partial class ArenaSearch {
         }
 
         m_jobs = jobs;
-        m_stampFolded = false;
+
+        foreach (var job in jobs) {
+            job.StampRows = ResolveStampRows(job: job);
+            job.StampVersions = new ulong[job.StampRows.Length];
+        }
+
         reason = string.Empty;
 
         return true;
@@ -440,7 +449,7 @@ public sealed partial class ArenaSearch {
         }
 
         var installed = false;
-        var stamp = Stamp();
+        var ledger = LedgerFold();
 
         foreach (var job in m_jobs) {
             if ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
@@ -453,7 +462,10 @@ public sealed partial class ArenaSearch {
             // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
             var jobStamp = Stamp(
                 job: job,
-                stateStamp: stamp
+                stateStamp: InputStamp(
+                    job: job,
+                    ledger: ledger
+                )
             );
 
             if (job.Stamp != jobStamp) {
@@ -771,64 +783,70 @@ public sealed partial class ArenaSearch {
 
         return [.. rows];
     }
-    // Every input row folded in ordinal order, skipping the rows the installed jobs write: a job's own landing must
-    // not look like an input change and restart it.
-    //
-    // A row whose version has not moved holds the bytes it held, so the fold is taken again only when some input
-    // row's version has. The retained-key ledger and byte charge are also inputs because they limit a judge's
-    // future mints; their cached fold keeps an idle tick to one counter per row and constant extra work.
-    private ulong Stamp() {
-        var rows = m_arena.Layout.RowCount;
-
+    // The retained-key ledger and byte charge, which limit a judge's future mints and so are inputs to every job.
+    private ulong LedgerFold() {
         var ledger = Fnv1aHash.Create();
 
         m_arena.AddKeyLedgerTo(hash: ref ledger);
         ledger.Add(value: m_arena.Bytes);
 
-        if (m_stampVersions.Length != rows) {
-            m_stampFolded = false;
-            m_stampVersions = new ulong[rows];
-        }
+        return ledger.Value;
+    }
+    // One job's input rows folded in ordinal order with the ledger. A row whose version has not moved holds the bytes
+    // it held, so the fold is taken again only when one of the job's rows or the ledger has moved, keeping an idle
+    // tick to one counter per row.
+    private ulong InputStamp(Job job, ulong ledger) {
+        var rows = job.StampRows;
+        var moved = (!job.StampFolded || (job.StampLedger != ledger));
 
-        var moved = (!m_stampFolded || (m_stampLedger != ledger.Value));
+        for (var index = 0; (index < rows.Length); index++) {
+            var version = m_arena.RowVersion(rowOrdinal: rows[index]);
 
-        for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            var version = m_arena.RowVersion(rowOrdinal: ordinal);
-
-            if (m_stampVersions[ordinal] != version) {
-                m_stampVersions[ordinal] = version;
-                moved |= !IsOutput(rowOrdinal: ordinal);
+            if (job.StampVersions[index] != version) {
+                job.StampVersions[index] = version;
+                moved = true;
             }
         }
 
         if (!moved) {
-            return m_stampValue;
+            return job.StampValue;
         }
 
         var hash = Fnv1aHash.Create();
 
-        for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            if (IsOutput(rowOrdinal: ordinal)) {
-                continue;
-            }
-
+        foreach (var ordinal in rows) {
             m_arena.AddRowTo(
                 hash: ref hash,
                 rowOrdinal: ordinal
             );
         }
 
-        m_arena.AddKeyLedgerTo(hash: ref hash);
-        hash.Add(value: m_arena.Bytes);
+        hash.Add(value: ledger);
 
-        m_stampFolded = true;
-        m_stampLedger = ledger.Value;
-        m_stampValue = hash.Value;
+        job.StampFolded = true;
+        job.StampLedger = ledger;
+        job.StampValue = hash.Value;
 
-        return m_stampValue;
+        return job.StampValue;
     }
-    // State changes restart every job. The clock changes only restart a job that can observe it, so a world with
-    // ordinary search rules does not discard its walk on every tick.
+    // A job's key rows with the held and revision slots, less every installed job's outputs: a job's own landing
+    // must not look like an input change and restart it.
+    private int[] ResolveStampRows(Job job) {
+        var rows = new SortedSet<int>(collection: job.KeyRows);
+
+        if (job.Plan.HeldOrdinal >= 0) {
+            _ = rows.Add(item: job.Plan.HeldOrdinal);
+        }
+        if (job.Plan.RevisionOrdinal >= 0) {
+            _ = rows.Add(item: job.Plan.RevisionOrdinal);
+        }
+
+        _ = rows.RemoveWhere(match: IsOutput);
+
+        return [.. rows];
+    }
+    // A change to a job's input rows restarts it. The clock changes only restart a job that can observe it, so a
+    // world with ordinary search rules does not discard its walk on every tick.
     private ulong Stamp(Job job, ulong stateStamp) {
         if (!job.TimeSensitive) {
             return stateStamp;

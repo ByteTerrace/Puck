@@ -379,11 +379,12 @@ with the same tick.
 
 ### The chess opponent
 
-The chess world (`worlds/parlor/chess.puck`) keeps two-player play as its
-default. Its `aiSide` slot chooses a computer opponent from the console:
+The debug world's chess table ([`worlds/debug/chess.puck`](../../../worlds/debug/chess.puck),
+[notes](../../../worlds/debug/chess.md)) plays Black against a person by
+default. Its `aiSide` slot chooses the computer's side from the console:
 
 ```text
-world.state.cell.set aiSide $value 1
+world.state.cell.set aiSide $value 0
 ```
 
 Use `0` for an opponent playing White, `1` for Black, or `-1` to turn it off.

@@ -153,8 +153,9 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        // A destination naming the SAME instance as the source is refused up front for Existing/Persistent, both of
-        // which know their name before any spawn. A Fresh destination cannot self-target by construction (a freshly
+        // A destination naming the SAME instance as the source never travels: a mapped portal pair standing in one
+        // world moves its members in place (ApplyInPlaceCrossing), and anything else is refused up front, since a
+        // body cannot leave the world it stays in. A Fresh destination cannot self-target by construction (a freshly
         // minted name is never one already running), so there is nothing to pre-check for it here.
         if (
             (transfer.Destination.Name is { } destinationName) &&
@@ -164,6 +165,19 @@ public sealed partial class WorldInstanceHost {
             comparisonType: StringComparison.Ordinal
         )
         ) {
+            if (
+                (transfer.Arrival == WorldPortalArrival.Mapped) &&
+                (transfer.AdjacencyCounterpart is null)
+            ) {
+                ApplyInPlaceCrossing(
+                    members: members,
+                    source: source,
+                    transfer: in transfer
+                );
+
+                return;
+            }
+
             if (m_narration.HasNarrationSink) {
                 m_narration.Narrate(
                     channel: "world.transfer",
@@ -503,24 +517,15 @@ public sealed partial class WorldInstanceHost {
                 } else {
                     abortReason = $"mapped adjacency arrival names no counterpart '{adjacencyCounterpart}' in '{targetName}'";
                 }
-            } else if (WorldPortalCounterpart.TryResolve(
-                definition: destinationDefinition,
-                counterpart: transfer.Counterpart,
-                placement: out var counterpartPlacement,
-                face: out var counterpartFace,
-                reason: out var counterpartReason
+            } else if (!TryResolvePortalCounterpartFrame(
+                destinationDefinition: destinationDefinition,
+                frame: out counterpartFrame,
+                reason: out var counterpartReason,
+                sourceFrame: transfer.SourceFrame.Value,
+                targetName: targetName,
+                transfer: in transfer
             )) {
-                if (WorldFaceCatalog.For(definition: destinationDefinition).TryFind(
-                    placementId: counterpartPlacement!.Id,
-                    faceName: counterpartFace!.Face,
-                    out var counterpartRow
-                )) {
-                    counterpartFrame = counterpartRow.Frame;
-                } else {
-                    abortReason = $"mapped arrival's counterpart '{transfer.Counterpart}' names no DECLARED creation face in '{targetName}'";
-                }
-            } else {
-                abortReason = $"mapped arrival's {counterpartReason} in '{targetName}'";
+                abortReason = counterpartReason;
             }
         }
 

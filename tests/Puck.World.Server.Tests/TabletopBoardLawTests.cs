@@ -1225,7 +1225,7 @@ public sealed class TabletopBoardLawTests {
 
     // A 2x2 board (cell pitch 1, origin at the world origin) anchored beside a flat floor: one rigid body settling
     // over a cell derives that board's occupancy, and a second settle onto an already-occupied cell is recorded as
-    // illegal without moving lastLegal — the exact "record only, never rejects" contract the garden's chess table
+    // illegal without moving lastLegal — the exact "record only, never rejects" contract the debug world's chess table
     // rides. Cell 1 is pre-seeded occupied (value 5) with no body ever placed there, so the illegality is a property
     // of the RULE reading previousBoard, not an artifact of two bodies colliding.
     private const string Quiescent = "$physics:quiescent";

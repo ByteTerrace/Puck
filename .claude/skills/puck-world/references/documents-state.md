@@ -376,7 +376,7 @@ opposite}]`, `edges: [{from, to, direction, oneWay?}]`; one neighbour per
 (cell, direction) slot, so k neighbours need k directions; `offset` refuses
 it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
-positions against (the quarantined Parlor chess world's `chessBoard` — see
+positions against (the debug world's chess table's `chessBoard`, `worlds/debug/chess.puck` — see
 `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section). The board facet's own `enforcement` (`record`, the default, or
 `return`) is the one engine-side reaction to its `verdict` row refusing a
 move — `return` poses the mover back onto `move`'s `from` cell on the
@@ -475,7 +475,7 @@ rule writes a body's transient into a world row through (an eased
 `airPose` cell a creation's drivers then read), where `$identity:` is the
 persisted fact lane. `$bodyPosition:<bodyRef>:x|y|z` reads one axis of a
 body's live position (fixed-point metres, 0 for no live body).
-See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the quarantined `experimental/worlds/parlor/chess.puck` (`chessBoard`) is the worked example.
+See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the debug world's chess table, `worlds/debug/chess.puck` (`chessBoard`), is the worked example.
 
 ## Authored randomness — SOURCE x SITE x MOMENT
 
@@ -653,7 +653,7 @@ and judges it with the rules a scoped judge can evaluate (no interaction, no
 decision, no world-only read), accepting when the verdict reads
 `accept` and the turn changed. This root walk never prunes and never skips a
 valid candidate, so the root outputs are unaffected by `depth`/`score`. It
-restarts when any framed cell other than its outputs changes. Quota derives
+restarts when a row it reads (its plan's rows, its judge's and score's reads, its held and revision slots) changes, its outputs excepted. Quota derives
 from what the work sheet leaves divided by the judge's cost (`nodes` may only
 lower it, and a deeper search spends the same quota over more ticks); progress
 hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token

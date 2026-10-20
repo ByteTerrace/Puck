@@ -33,7 +33,8 @@ the reasoning behind every decision is in
   `VoiceBabbler` and their playback wiring, the diegetic tune instrument) with
   the `voice-babble`, `music-conditional-layer-and-embellishment` and
   `instrument-clock-source` canaries; the parlor package (physical chess with a
-  `search` opponent, Chinese checkers, Hearts and Lineup under `worlds/parlor`);
+  `search` opponent, which is the debug world's chess table, and Chinese checkers,
+  Hearts and Lineup under `experimental/worlds/parlor`);
   every tabletop primitive and the shipped `games/` fragments.
 - **Not started:** the One World re-authoring, the content and federation
   waves, namespace normalization, the frames document, the neighbour tape, the
@@ -502,7 +503,7 @@ a live tenant today; the Azure suite runs against scripted services.
 ### Composed play
 
 **Owns:** the chess source's board `enforcement` and result verdicts
-(`worlds/parlor/chess.puck`), a reusable rules fragment for it, and the
+(`worlds/debug/chess.puck`), a reusable rules fragment for it, and the
 composed-game acceptance check.
 
 **Delivers:** the shipped chess source already has an authored `search` job as

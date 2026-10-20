@@ -11,7 +11,7 @@ namespace Puck.World;
 /// row to every other cell of a board in turn, evaluates the document's own rules over a value frame holding that
 /// hypothetical position, and records which relocations the rules accepted — the verdict row at its accept value and
 /// the turn row changed. The job spends a node quota per tick and lands its answer as ordinary state writes when it
-/// finishes; it restarts whenever any framed cell other than its own outputs changes.</summary>
+/// finishes; it restarts whenever a row it reads changes, its own outputs excepted.</summary>
 /// <param name="Jobs">The declared jobs.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = null) {

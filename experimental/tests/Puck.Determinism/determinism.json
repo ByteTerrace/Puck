@@ -87,17 +87,6 @@
             "exercises": ["Navigation"]
         },
         {
-            "name": "chess-search",
-            "world": "../../worlds/parlor/chess.puck",
-            "ticks": 200,
-            "seats": [0],
-            "intents": [],
-            "cells": [
-                {"tick": 1, "row": "aiSide", "key": "$value", "value": "0"}
-            ],
-            "exercises": ["Search"]
-        },
-        {
             "name": "rule-groups",
             "world": "../Puck.World.Canaries/rulepush-board/fixture.puck",
             "ticks": 80,

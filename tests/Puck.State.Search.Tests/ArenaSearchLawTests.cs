@@ -641,19 +641,64 @@ public sealed class ArenaSearchLawTests {
             tick: 1UL
         ));
     }
+    // A job stamps only the rows its plan and judge read: a write to any other row, such as a composed world's own
+    // living state, leaves its walk where it was instead of restarting it.
     [Fact]
-    public void AStepsCandidatesAllocateNothingAfterWarmUp() {
+    public void AWriteToARowTheJobDoesNotReadLeavesItsWalkRunning() {
         var position = new Position(rows: [
             .. Board(
                 cells: 16,
                 tokens: 4
             ),
             Slot(
-                name: "nudge",
+                name: "unread",
                 value: 0L
             ),
         ]);
-        var nudge = position.Ordinal(name: "nudge");
+        var unread = position.Ordinal(name: "unread");
+        var search = Build(
+            plan: Relocate(
+                cells: 16,
+                depth: 1,
+                nodes: 4
+            ),
+            position: position,
+            score: null
+        );
+
+        for (var step = 0; (step < 3); step++) {
+            _ = search.Step(
+                apply: static _ => true,
+                engineTick: 0UL,
+                tick: 1UL
+            );
+        }
+
+        var before = search.Status(index: 0).Nodes;
+
+        Assert.True(condition: position.Arena.TryWrite(
+            key: position.SlotKey,
+            operand: 1L,
+            reason: out var reason,
+            rowOrdinal: unread,
+            write: StateWriteKind.Set
+        ), userMessage: reason);
+        _ = search.Step(
+            apply: static _ => true,
+            engineTick: 0UL,
+            tick: 1UL
+        );
+
+        Assert.True(condition: search.Status(index: 0).Running);
+        Assert.True(condition: (search.Status(index: 0).Nodes > before));
+    }
+    [Fact]
+    public void AStepsCandidatesAllocateNothingAfterWarmUp() {
+        var position = new Position(rows: Board(
+            cells: 16,
+            tokens: 4
+        ));
+        var turn = position.Ordinal(name: "turn");
         // The one delegate every step below is handed: a fresh lambda site allocates its delegate on first use,
         // which would land inside the measured window.
         var apply = static (IReadOnlyList<ArenaSearchWrite> _) => true;
@@ -667,8 +712,9 @@ public sealed class ArenaSearchLawTests {
             score: null
         );
 
-        // Two whole walks grow every buffer the third one reuses; each one is restarted by an input row the judge
-        // never reads, so the third walk starts from the same position the first two did.
+        // Two whole walks grow every buffer the third one reuses; each one is restarted by a write to the turn slot, an
+        // input the job reads, which the second write puts back, so the third walk starts from the position the first
+        // did.
         for (var pass = 1L; (pass <= 2L); pass++) {
             for (var step = 0; (step < 64); step++) {
                 _ = search.Step(
@@ -680,9 +726,9 @@ public sealed class ArenaSearchLawTests {
 
             Assert.True(condition: position.Arena.TryWrite(
                 key: position.SlotKey,
-                operand: pass,
+                operand: (pass % 2L),
                 reason: out var reason,
-                rowOrdinal: nudge,
+                rowOrdinal: turn,
                 write: StateWriteKind.Set
             ), userMessage: reason);
         }
@@ -707,17 +753,11 @@ public sealed class ArenaSearchLawTests {
     // latch without dropping the storage the latch has grown.
     [Fact]
     public void AStepsCandidatesJudgedByCompiledRulesAllocateNothingAfterWarmUp() {
-        var position = new Position(rows: [
-            .. Board(
-                cells: 16,
-                tokens: 4
-            ),
-            Slot(
-                name: "nudge",
-                value: 0L
-            ),
-        ]);
-        var nudge = position.Ordinal(name: "nudge");
+        var position = new Position(rows: Board(
+            cells: 16,
+            tokens: 4
+        ));
+        var turn = position.Ordinal(name: "turn");
         // The one delegate every step below is handed: a fresh lambda site allocates its delegate on first use,
         // which would land inside the measured window.
         var apply = static (IReadOnlyList<ArenaSearchWrite> _) => true;
@@ -734,8 +774,9 @@ public sealed class ArenaSearchLawTests {
             position: position
         );
 
-        // Two whole walks grow every buffer the third one reuses; each one is restarted by an input row the judge
-        // never reads, so the third walk starts from the same position the first two did.
+        // Two whole walks grow every buffer the third one reuses; each one is restarted by a write to the turn slot, an
+        // input the job reads, which the second write puts back, so the third walk starts from the position the first
+        // did.
         for (var pass = 1L; (pass <= 2L); pass++) {
             for (var step = 0; (step < 64); step++) {
                 _ = search.Step(
@@ -747,9 +788,9 @@ public sealed class ArenaSearchLawTests {
 
             Assert.True(condition: position.Arena.TryWrite(
                 key: position.SlotKey,
-                operand: pass,
+                operand: (pass % 2L),
                 reason: out var reason,
-                rowOrdinal: nudge,
+                rowOrdinal: turn,
                 write: StateWriteKind.Set
             ), userMessage: reason);
         }

@@ -78,6 +78,13 @@ wear: front and clear quarter above, rear quarter and full body below. Use
 `studio-shoulders-quarter` to inspect one view across the current layout.
 It uses the same platform pose and hidden-overlay commands.
 
+## Loop shaft
+
+[loop.puck](loop.puck) stands a floor portal under its ceiling counterpart at
+(-20, 0, -20), both in the debug world itself, so a body that steps onto the
+floor glass falls through the shaft forever. [loop.md](loop.md) says how to get
+in, what to watch and how to get out.
+
 ## The layout
 
 | Where | What | Portal |

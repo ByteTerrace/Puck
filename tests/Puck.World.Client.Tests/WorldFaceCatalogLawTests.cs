@@ -365,8 +365,6 @@ public sealed class WorldFaceCatalogLawTests {
     }
     [Fact]
     public void APitchedFaceIsNotYawOnly_AndALevelOneIs() {
-        // The instrument the refusal below leans on: if this could not tell the two apart, the refusal would be
-        // either unreachable or unconditional.
         Assert.True(condition: DoorRow(definition: BuildDoorDocument(
             yawDegrees: 25f,
             carriesPortal: false
@@ -385,28 +383,13 @@ public sealed class WorldFaceCatalogLawTests {
         )));
     }
     [Fact]
-    public void APortalOnAPitchedFace_RefusesByName() {
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: BuildDoorDocument(pitched: true),
-            reason: out var reason,
-            neighbours: null
-        ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "pitch or roll"
-        );
-    }
-    [Fact]
-    public void APortalOnAPitchedFace_RefusesByName_YawOnlyControlValidates() {
-        Laws.RefusalWithControl(
-            lawId: "face-frame.portal-on-pitched-face",
-            deniedOutcome: static () => Validates(definition: BuildDoorDocument(
-                yawDegrees: 25f,
-                pitched: true
-            )),
-            controlOutcome: static () => Validates(definition: BuildDoorDocument(yawDegrees: 25f))
-        );
+    public void APortalOnAPitchedFaceValidates() {
+        // A door's orientation is judged against its counterpart's when a crossing resolves the pair
+        // (WorldFrameIsometry.PreservesWorldUp), so a floor or ceiling door validates on its own.
+        Assert.True(condition: Validates(definition: BuildDoorDocument(
+            yawDegrees: 25f,
+            pitched: true
+        )));
     }
     [InlineData(SdfSolidPrimitive.Sphere)]
     [InlineData(SdfSolidPrimitive.Cylinder)]

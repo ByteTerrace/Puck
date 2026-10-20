@@ -2136,8 +2136,8 @@ scenario's state cells and submitting its held intents before the ticks they
 name. The shipped manifest is
 [tests/Puck.Determinism/determinism.json](../../experimental/tests/Puck.Determinism/determinism.json).
 It covers body dynamics and action state, flocks, rule latches and state
-writes, flow conservation, a kart lap, a billiards host, navigation, the chess
-AI's search, rule groups, decisions, board enforcement and interactions. Two
+writes, flow conservation, a kart lap, a billiards host, navigation,
+rule groups, decisions, board enforcement and interactions. Two
 small worlds beside it, `decisions.puck` and `board-enforcement.puck`, exist
 for the scenarios no shipped world reaches.
 
@@ -2655,7 +2655,7 @@ select another corpus:
 
 ```sh
 puck bench startup --samples 3
-puck bench startup worlds/parlor/chess.puck --samples 3 --width 640 --height 360
+puck bench startup worlds/debug --samples 3 --width 640 --height 360
 puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net11.0/Puck.World.dll
 ```
 

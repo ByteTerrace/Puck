@@ -4,8 +4,9 @@ This is the authoring home for official Puck asset packages, beside the engine's
 `src/` tree. A package is a self-contained folder of Puck DSL sources, assets and
 a manifest. It can be copied and compiled independently of this checkout.
 
-[Puck Parlor](parlor/README.md) is the first package: physical chess, Chinese
-checkers and Hearts sharing one DSL basis. Build instructions and entry points
+[Puck Parlor](parlor/README.md) is the first package: Chinese checkers, Hearts
+and Lineup sharing one DSL basis. Physical chess is the debug world's chess
+table ([`worlds/debug/chess.puck`](../../worlds/debug/chess.puck)). Build instructions and entry points
 are in its README; its manifest lists the files to distribute.
 
 [Puck Beacons](beacons/README.md) is the worked example of a module: one

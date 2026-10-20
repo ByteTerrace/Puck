@@ -158,7 +158,9 @@ public sealed partial class WorldBody {
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose plus the fact mask:
     /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable
-    /// home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)]</c>. One format always. A grounded entity keeps a
+    /// home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)]</c>. One format always.
+    /// <c>vel=</c> is the body's authoritative velocity in metres per second: its planar velocity's x and z around
+    /// its vertical velocity. A grounded entity keeps a
     /// canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point
     /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
     /// <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same
@@ -178,6 +180,8 @@ public sealed partial class WorldBody {
         var (yaw, pitch, roll) = EulerRadians();
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
+        var planarVelocity = m_planarVelocity.ToVector3();
+        var verticalVelocity = ((double)m_verticalVelocity);
         var scale = ((double)m_scale);
         var com = (IsRigid
             ? RigidCenterOfMass.ToVector3()
@@ -212,7 +216,7 @@ public sealed partial class WorldBody {
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}{DescribeSweepRefusal()}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00} vel=({planarVelocity.X:0.00}, {verticalVelocity:0.00}, {planarVelocity.Z:0.00}){comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}{DescribeSweepRefusal()}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with

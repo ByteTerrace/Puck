@@ -370,7 +370,7 @@ an answer only when it still fits the position.
   completed answer. Increase the revision whenever you accept a new position,
   and apply an answer only while `best.revision` equals the current revision.
 
-The chess world applies its answer this way: `chess-ai-request` fires only when
+The debug world's chess table (`worlds/debug/chess.puck`) applies its answer this way: `chess-ai-request` fires only when
 `aiEnabled` is 1, `aiBest[revision] == aiRevision`, and the physics has settled.
 
 ### Finish compound moves with `$search:ply`
@@ -425,13 +425,18 @@ the tick budget uses, over the job's scoped judge rules. `nodes` defaults to
 
 ### Restarts and time
 
-At the start of each step, the runtime folds the content of every row except
-the installed jobs' outputs into a **stamp**, together with the arena's key
-ledger and byte total. Row versions let it skip the fold when nothing moved,
-but the stamp itself is a hash of content. When the stamp differs from the one a
-job was computed against, the job restarts. So a write that stores the value a
-cell already held, or a scope that was written and rewound, doesn't restart
-anything. A job's own landing doesn't restart it, because outputs are excluded.
+At the start of each step, the runtime folds each job's input rows into that
+job's **stamp**, together with the arena's key ledger and byte total. A job's
+input rows are the rows its position key covers (the rows the plan names and
+every row its judge rules and score read or write) plus its `held` and
+`revision` slots, less every installed job's outputs. Row versions let it skip
+the fold when none of them moved, but the stamp itself is a hash of content.
+When the stamp differs from the one the job was computed against, the job
+restarts. So a write that stores the value a cell already held, a scope that
+was written and rewound, or a write to a row the job doesn't read doesn't
+restart it: a search keeps its walk while the rest of a composed world's state
+changes around it. A job's own landing doesn't restart it, because outputs are
+excluded.
 
 A job is **time-sensitive** when its judge rules or score read `$tick`
 (`IArenaSearchJudge.ReadsTick`), or when any row its position key covers has a
@@ -608,7 +613,7 @@ whether it reads the clock, and `TryAdmit` decides admission.
   smaller ones make it mostly exploratory.
 - A one-ply job, like the chess opponent, doesn't anticipate the reply. Deeper
   searches spend the same allowance over more ticks.
-- Any input change restarts a job. A board that keeps settling (a physical piece
+- A change to any row a job reads restarts it. A board that keeps settling (a physical piece
   still rolling) restarts the job every tick until it rests.
 - Puck.World passes the master seed 0. Each MonteCarlo job draws on the stream
   its ordinal among the installed jobs selects, so no two jobs share a draw

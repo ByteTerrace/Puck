@@ -51,6 +51,7 @@ does not render overlapping camera transitions.
 | F3 | | Toggle the annotation outlines (`view.annotate`) |
 | F4 | | Show the jetpack alone (`view.isolate`) |
 | F2 | Back | Switch between playing and building (`player.build`) |
+| Backspace | L3 | Respawn at the stage spawn, standing still, from anywhere (a fall or the portal loop included) |
 | Tab (hold) | LB (hold) | Open the play wheel |
 | Backtick | | Show or hide the console |
 
