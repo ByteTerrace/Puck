@@ -430,7 +430,7 @@ while the World runs shows in the next listing, and the cartridge mounted from
 it keeps running from memory. No verb lists a hard-coded set or scans outside
 the authored folders. The shipped cartridges sit one folder per forge target
 (`worlds/debug/cartridges/cgb/`, `worlds/debug/cartridges/dmg/`, `worlds/debug/cartridges/agb/`),
-and the debug world's device row (`worlds/devices.puck`, `devices.md`) lists
+and the debug world's device row (`worlds/debug/devices.puck`, `devices.md`) lists
 each device's shipped folder, then its `roms/` folder. Provider operations, a
 swap among them, are refused while `replay.record` runs (`WhileRecording`).
 
@@ -453,7 +453,7 @@ Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
-world's device row declares engageable machine screens 0 to 4 (kit
+world's device row declares engageable machine screens 0 to 2 (kit
 `devicePad`, engage radius 3; `devices.md` has the stand-there `body.pose`
 lines), so the screen path runs in the live world. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
