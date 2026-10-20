@@ -645,6 +645,12 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[player.signal: <source> must be non-empty]");
         }
 
+        // No binding can name an unknown source (the document validator refuses one), so a signal on it would echo as
+        // delivered and reach nothing.
+        if (!InputSourceVocabulary.IsKnownSourceId(sourceId: source)) {
+            return CommandResult.Error(output: $"[player.signal: unknown source '{source}' — name a control such as gamepad.buttonSouth, gamepad.leftStick or keyboard.space]");
+        }
+
         CommandPhase phase;
         CommandValue value;
         // A relative source's sample is a DELTA in device units (pixels, notches) rather than a deflection, so it

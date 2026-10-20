@@ -413,7 +413,7 @@ what its content provider recognizes, or every file for a raw-content engine,
 `WorldMachineContentFolder`); `machine.swap <instance> <name>` mounts one
 through `content.insert`. No verb lists a hard-coded set or scans outside the
 authored folder. The shipped cartridges sit one folder per forge target
-(`Assets/cartridges/cgb/`, `Assets/cartridges/agb/`), and the debug world's
+(`Assets/cartridges/cgb/`, `Assets/cartridges/dmg/`, `Assets/cartridges/agb/`), and the debug world's
 device row (`worlds/devices.puck`, `devices.md`) points each device at its
 folder. Provider operations, a swap among them, are refused while
 `replay.record` runs (`WhileRecording`).

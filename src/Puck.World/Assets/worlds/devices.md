@@ -9,7 +9,7 @@ it running, and each names the folder its swappable content comes from in
 
 | x | Device | Instance | Engine and model | Screen | Boots | `contentFolder` |
 |---|---|---|---|---|---|---|
-| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.cgb` (its screen holds on the firmware logo) | `../cartridges/cgb` |
+| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.dmg` | `../cartridges/dmg` |
 | -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `../cartridges/cgb` |
 | -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb` |
 | -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb` |
@@ -18,11 +18,10 @@ it running, and each names the folder its swappable content comes from in
 
 The `gaming-brick` engine's three hardware families are the three brick devices;
 its other revisions (`mgb`, `sgb`, `cgb0` and the rest) are steppings of those
-families that `device.model` selects on a running brick. The forge has no DMG
-target, so the DMG mounts the CGB cartridges and shows what its firmware draws:
-its cold boot holds on the Puck logo for them (a `fast` boot shows a blank
-white screen instead), and a swap there changes what is mounted but not the
-picture. The AGB
+families that `device.model` selects on a running brick. The DMG mounts the
+forge's `dmg` cartridges: a CGB cartridge is Color-only, and its speed switch
+parks a monochrome processor, so on the DMG it holds on the firmware logo (a
+`fast` boot shows a white screen). The AGB
 mode device is the AGB console running brick cartridges; the Advanced Gaming
 Brick is the same console running its own. The jukebox's content is a
 `puck.tune.v1` document, and its screen is the jukebox's transport display. The
@@ -30,13 +29,15 @@ Humble Gaming Deck is the NTSC NES console, a set above it showing the
 cartridge in its slot; its screen route names the controller port an engaged
 seat plays (`controls`, port one), since the console has two.
 
-The shipped cartridges sit one folder per forge target, `cartridges/cgb/` and
-`cartridges/agb/`, each source beside its compiled document. A device lists the
-files in its folder its engine can mount: the `.cartridge.json` documents for a
-brick, every file for the jukebox and the deck, whose engines read their content
-raw. `test-card.agb` is the Advanced Gaming Brick's second cartridge: eight colour
-bars drifting one pixel a frame, so a picture that stops drifting is a machine
-that stopped. The deck's two cartridges in `cartridges/deck/` are built by
+The shipped cartridges sit one folder per forge target, `cartridges/cgb/`,
+`cartridges/dmg/` and `cartridges/agb/`, each source beside its compiled
+document. A device lists the files in its folder its engine can mount: the
+`.cartridge.json` documents for a brick, every file for the jukebox and the
+deck, whose engines read their content raw. `test-card.agb` is the Advanced
+Gaming Brick's second cartridge: eight colour bars drifting one pixel a frame,
+so a picture that stops drifting is a machine that stopped. The DMG's two are
+`tetromino.dmg`, the CGB game in four shades, and `test-card.dmg`, four shade
+bars drifting the same way (`machine.swap brick-dmg test-card`). The deck's two cartridges in `cartridges/deck/` are built by
 `puck cartridges deck` rather than compiled from a source:
 `colour-bars.nes` shows eight bars that A, B and select tint and start turns
 grey, and `moving-sprite.nes` bounces a ball the d-pad steers
@@ -69,7 +70,9 @@ prints the generation an operation names; a swap, reset or eject replaces the
 machine under a new generation.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
-jump is A, flight is B and rise is start. Engaging captures the seat, so the
+jump is A, flight is B and rise is start. The Moth binds a gamepad's South
+button to both jump and rise, so South presses A and start together, and North
+presses B; `player.signal gamepad.buttonSouth press` is the scripted A. Engaging captures the seat, so the
 Moth stands still until `body.disengage`. The screens name no engage channel,
 so a jump beside a device stays a jump; engaging is the console line.
 
