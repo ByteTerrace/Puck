@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps, WorldSeatViewInput viewInput) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -86,6 +86,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
     // exists nowhere else, so this is the one door onto it.
     private readonly WorldStampPool m_stamps = stamps;
+    // The seat camera's pointer adapter, told when a press starts a drag so the motion that came with it counts.
+    private readonly WorldSeatViewInput m_viewInput = viewInput;
     // The boot instance's live channel table — name→ordinal resolution for a typed press, fly or tether on a body
     // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets
     // it at the same tick boundary the kit ordinals move. Never the source a bound channel verb dispatches against —

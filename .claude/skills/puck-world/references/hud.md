@@ -9,6 +9,12 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
 [mutations.md](mutations.md) (ordinals 39–43).
 
+**Owner's rulings for the debug world.** The controller bar is the only
+on-screen UI the debug world wants: add no other panel, chip or hint row (a
+mouse chord stays off the bar; the bar's `modifiers` row stays off). Every
+control the bar shows has a sensible keyboard equivalent bound beside it, for
+example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
+
 ## Contents
 
 - Schema and caps
@@ -306,8 +312,9 @@ banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (32 — the declared ceiling 
 one bar's authored slot set of input source ids) slots, plus
 the one label, `WorldBindingBarCapacity.MaxModifiers` (16) modifier
 indicators (`OverlayCapacity.BindingBarMaxModifiers`), and
-`BindingBarWriter.MaxHintLines` (8) hint lines every bar draws once regardless
-of bank count — `OverlayCapacity.BindingBarMaxBanks`/
+`BindingBarWriter.MaxHintLines` (8) chord hints of up to
+`BindingBarWriter.MaxHintMembers` (4) member chips and one action chip or label
+each, which every bar draws once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
 `BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.
 `OverlayFrameBuilder.MaxElements` (2048) is sized to fit this reservation
 beside the others.
