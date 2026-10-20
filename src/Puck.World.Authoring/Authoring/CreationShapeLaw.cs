@@ -98,6 +98,9 @@ public sealed record CreationShapeLaw(
         if (shape.Flare is not null) { facets.Add(item: "flare"); }
         if (shape.Shear is not null) { facets.Add(item: "shear"); }
         if (shape.Bumps is { Count: > 0 }) { facets.Add(item: "bumps"); }
+        if (shape.Warp is not null) { facets.Add(item: "warp"); }
+        if (shape.Displace is not null) { facets.Add(item: "displace"); }
+        if (shape.Elongate is not null) { facets.Add(item: "elongate"); }
         if (shape.Erode is not null) { facets.Add(item: "erode"); }
         if (shape.Cells is not null) { facets.Add(item: "cells"); }
         if (shape.Panel is not null) { facets.Add(item: "panel"); }

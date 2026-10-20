@@ -427,7 +427,7 @@ public static class WorldPlacementStamper {
             }
             // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document
             // reads it as authored.
-            if ((shape.Flare is not null) || (shape.Shear is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f) || (shape.Bumps is { Count: > 0 })) {
+            if ((shape.Flare is not null) || (shape.Shear is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f) || (shape.Bumps is { Count: > 0 }) || (shape.Warp is not null) || (shape.Displace is not null)) {
                 var lift = (shape.Lift ?? SdfLift.Extrude);
                 var x = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitX);
                 var y = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitY);
@@ -528,7 +528,7 @@ public static class WorldPlacementStamper {
                     // alone, and so does the shape after it: its scope divides its field by its warp's bound, so beside an
                     // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
                     // closes into slabs across the neighbour.
-                    var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null));
+                    var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
 
                     _ = builder.BeginInstance(
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
