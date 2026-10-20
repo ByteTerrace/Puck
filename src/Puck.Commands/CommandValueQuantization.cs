@@ -21,10 +21,7 @@ public static class CommandValueQuantization {
     /// <param name="value">The physical axis sample, each component conventionally in <c>[-1, 1]</c>.</param>
     /// <returns>The componentwise nearest, ties-to-even <see cref="FixedVector2"/>.</returns>
     public static FixedVector2 QuantizeAxis(Vector2 value) {
-        return new FixedVector2(
-            X: FixedQ4816.FromDouble(value: value.X),
-            Y: FixedQ4816.FromDouble(value: value.Y)
-        );
+        return FixedVector2.FromVector2(value: value);
     }
     /// <summary>Quantizes a three-dimensional axis sample to fixed point, componentwise, once — the door a source
     /// pointer's ray takes into the simulation (<see cref="SourcePointerCommands"/>).</summary>

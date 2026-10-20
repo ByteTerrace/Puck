@@ -511,8 +511,8 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             ppClassInstances: null
         );
         m_context->Dispatch(
-            ThreadGroupCountX: checked((uint)((m_dispatchWidth + 7) / 8)),
-            ThreadGroupCountY: checked((uint)((m_dispatchHeight + 7) / 8)),
+            ThreadGroupCountX: checked((uint)m_dispatchWidth.CeilingDivide(divisor: 8)),
+            ThreadGroupCountY: checked((uint)m_dispatchHeight.CeilingDivide(divisor: 8)),
             ThreadGroupCountZ: 1
         );
         m_context->CSSetShader(

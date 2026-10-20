@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Forge;
 
@@ -151,7 +152,7 @@ public static class BootRomBuilder {
     // A line error is read modulo the frame's line count, so an enable that overshot into the next frame walks back
     // the short way instead of chasing the wrap.
     private static int Normalize(int lineError) {
-        var wrapped = (((lineError % ScanlinesPerFrame) + ScanlinesPerFrame) % ScanlinesPerFrame);
+        var wrapped = lineError.FloorModulo(modulus: ScanlinesPerFrame);
 
         return ((wrapped > (ScanlinesPerFrame / 2))
             ? (wrapped - ScanlinesPerFrame)

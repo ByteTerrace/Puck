@@ -127,8 +127,8 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             return;
         }
 
-        m_highFrequency = NormalizeIntensity(intensity: effect.HighFrequency);
-        m_lowFrequency = NormalizeIntensity(intensity: effect.LowFrequency);
+        m_highFrequency = GamepadNormalization.NormalizeIntensity(intensity: effect.HighFrequency);
+        m_lowFrequency = GamepadNormalization.NormalizeIntensity(intensity: effect.LowFrequency);
         m_bodyExpiry = ScheduleExpiry(
             active: ((m_lowFrequency > 0f) || (m_highFrequency > 0f)),
             durationMilliseconds: effect.DurationMilliseconds
@@ -141,8 +141,8 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             return;
         }
 
-        m_leftTrigger = NormalizeIntensity(intensity: effect.Left);
-        m_rightTrigger = NormalizeIntensity(intensity: effect.Right);
+        m_leftTrigger = GamepadNormalization.NormalizeIntensity(intensity: effect.Left);
+        m_rightTrigger = GamepadNormalization.NormalizeIntensity(intensity: effect.Right);
         m_triggerExpiry = ScheduleExpiry(
             active: ((m_leftTrigger > 0f) || (m_rightTrigger > 0f)),
             durationMilliseconds: effect.DurationMilliseconds
@@ -195,15 +195,6 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             )
         );
     }
-    private static float NormalizeIntensity(float intensity) =>
-        (float.IsFinite(f: intensity)
-            ? Math.Clamp(
-                max: 1f,
-                min: 0f,
-                value: intensity
-            )
-            : 0f
-        );
     private static Vector2 NormalizeStick(short rawX, short rawY, short deadzone) {
         var stick = Vector2.Clamp(
             max: Vector2.One,

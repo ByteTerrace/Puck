@@ -84,10 +84,7 @@ public sealed class SourcePanePicker : ISourcePicker {
             displayWidth: m_displayWidth,
             hit: out var hit,
             panes: m_panes,
-            point: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: point.X),
-                Y: FixedQ4816.FromDouble(value: point.Y)
-            )
+            point: FixedVector2.FromVector2(value: point)
         );
 
         if (

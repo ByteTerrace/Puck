@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
@@ -798,10 +799,7 @@ public static partial class WorldDecompiler {
             return true;
         }
 
-        var gcd = GreatestCommonDivisor(
-            a: Math.Abs(value: numerator),
-            b: denominator
-        );
+        var gcd = Math.Abs(value: numerator).GreatestCommonDivisor(other: denominator);
         var reduced = (denominator / Math.Max(
             val1: gcd,
             val2: 1L
@@ -815,13 +813,6 @@ public static partial class WorldDecompiler {
         }
 
         return (reduced == 1L);
-    }
-    private static long GreatestCommonDivisor(long a, long b) {
-        while (b != 0L) {
-            (a, b) = (b, (a % b));
-        }
-
-        return Math.Abs(value: a);
     }
     private static bool CanSugarAdvance(JsonObject advance) {
         if (advance.Count != 2) {
