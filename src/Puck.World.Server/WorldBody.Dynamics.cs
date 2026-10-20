@@ -62,13 +62,7 @@ public sealed partial class WorldBody {
         );
         m_planarPreviousTarget = target;
 
-        var followed = m_planarFollower.Position;
-        var speed = followed.Length;
-
-        m_planarVelocity = ((speed > ceiling)
-            ? ((followed / speed) * ceiling)
-            : followed
-        );
+        m_planarVelocity = m_planarFollower.Position.ClampLength(maximum: ceiling);
 
         return m_planarVelocity;
     }

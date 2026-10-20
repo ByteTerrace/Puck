@@ -237,14 +237,10 @@ public sealed partial class WorldBody {
                 // object itself (a carried body posed — or otherwise placed — already embedded in geometry, so the
                 // very first sweep reports a one-shot depenetration spanning most of the gap) would otherwise hand
                 // the carrier a shove sized by that embedding depth rather than by contact, launching it.
-                var correctionLength = blockCorrection.Length;
                 var correctionCeiling = RigidBoundingRadius;
 
-                if (
-                    (correctionCeiling > FixedQ4816.Zero) &&
-                    (correctionLength > correctionCeiling)
-                ) {
-                    blockCorrection = ((blockCorrection / correctionLength) * correctionCeiling);
+                if (correctionCeiling > FixedQ4816.Zero) {
+                    blockCorrection = blockCorrection.ClampLength(maximum: correctionCeiling);
                 }
 
                 if (carrier.IsRigid) {

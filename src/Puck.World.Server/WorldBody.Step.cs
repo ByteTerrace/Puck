@@ -483,19 +483,15 @@ public sealed partial class WorldBody {
             speed = FixedQ4816.One;
         }
 
-        var tangent = (commanded - (scratch.Up * FixedVector3.Dot(
-            left: commanded,
-            right: scratch.Up
-        )));
-        var tangentLength = tangent.Length;
+        var tangent = commanded.RejectFrom(unitAxis: scratch.Up);
 
-        if (tangentLength <= FixedQ4816.Zero) {
+        if (tangent == FixedVector3.Zero) {
             // Straight into (or out of) the surface: nothing to walk along. The body holds still rather than being
             // handed an arbitrary direction.
             return true;
         }
 
-        direction = ((tangent / tangentLength) * speed);
+        direction = tangent.WithLength(length: speed);
 
         return true;
     }
