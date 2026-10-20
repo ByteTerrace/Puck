@@ -146,6 +146,64 @@ public sealed class BindingRowMemberLawTests {
             tick: 1UL
         ));
     }
+    // A held row takes the press that completes it from that button's own binding, unless it passes presses through:
+    // then both buttons held fire the row beside what each button does alone, in either order, and releasing either
+    // ends the row while the other keeps its own hold.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APassThroughChordLeavesTheCompletingPressToItsOwnBinding(bool passThrough) {
+        var profile = BindingProfile.Compile(
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [],
+                Chords: [
+                    new BindingChordDefinition(
+                        Group: "g",
+                        Chord: [],
+                        Page: new BindingPageDefinition(
+                            Id: "base",
+                            Entries: [
+                                new BindingPageEntryDefinition(Command: ActionCommand, Sources: ["mouse.button1"]),
+                                new BindingPageEntryDefinition(Command: ActionCommand, Sources: ["mouse.button2"]),
+                            ]
+                        )
+                    ),
+                    new BindingChordDefinition(
+                        Group: "g",
+                        Held: ["mouse.button1", "mouse.button2"],
+                        Command: new BindingCommandDefinition(Channel: new ChannelRef.Name(Value: "forward"), PassThrough: passThrough)
+                    ),
+                ]
+            ),
+            channelCommandName: static _ => ChannelCommand
+        );
+
+        foreach (var (first, second) in new[] { ("mouse.button1", "mouse.button2"), ("mouse.button2", "mouse.button1") }) {
+            var router = Router(profile: profile);
+
+            router.Capture(signal: InputSignal.Press(source: first));
+            router.Capture(signal: InputSignal.Press(source: second));
+
+            var started = router.SnapshotForTick(
+                tick: 1UL,
+                windowEndTick: ulong.MaxValue
+            ).Lanes.SelectMany(selector: static lane => lane.Entries).Where(predicate: static entry => (entry.Phase == CommandPhase.Started)).Select(selector: static entry => entry.Source).ToList();
+
+            Assert.Contains(
+                collection: started,
+                filter: static source => (source?.StartsWith(value: "mouse.", comparisonType: StringComparison.Ordinal) == false)
+            );
+            Assert.Contains(
+                collection: started,
+                expected: first
+            );
+            Assert.Equal(
+                expected: passThrough,
+                actual: started.Contains(item: second)
+            );
+        }
+    }
     [Fact]
     public void RawSourceMembersResolveToDeclaredModifiersOwningThemOrBecomeImplicitOnes() {
         var profile = Compile(

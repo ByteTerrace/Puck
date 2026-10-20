@@ -902,6 +902,22 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
                             break;
                         }
+                    case EntityContinuityKind.Carry: {
+                            // An in-place crossing: the previous pose and any in-flight correction ride the crossing,
+                            // so the frame interpolates on from where the body was, carried, and every consumer that
+                            // latched the body's pose carries it the same way (Carries).
+                            var carried = entry.Continuity.Carried!.Value;
+
+                            m_previousPosition[index] = carried.Point(point: m_currentPosition[index]);
+                            m_previousOrientation[index] = carried.Attitude(attitude: m_currentOrientation[index]);
+                            m_easers[index].Carry(rotation: carried.Rotation);
+                            Carries.Record(
+                                carry: carried,
+                                index: index
+                            );
+
+                            break;
+                        }
                     default:
                         m_previousPosition[index] = m_currentPosition[index];
                         m_previousOrientation[index] = m_currentOrientation[index];
@@ -1029,6 +1045,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// follower reseeds whenever this changes, so it never chases across a jump.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public int PoseEpoch(int index) => m_poseEpoch[index];
+    /// <inheritdoc/>
+    public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
@@ -1343,6 +1361,18 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                     m_remaining = 0f;
                 }
             }
+        }
+        // Turn any in-flight offset with an in-place crossing, so it eases on in the carried frame.
+        public void Carry(Quaternion rotation) {
+            if (m_remaining <= 0f) {
+                return;
+            }
+
+            m_position = Vector3.Transform(
+                rotation: rotation,
+                value: m_position
+            );
+            m_orientation = Quaternion.Normalize(value: ((rotation * m_orientation) * Quaternion.Conjugate(value: rotation)));
         }
         // Drop any in-flight offset (a hard teleport) so it never drags the avatar off an authoritative jump.
         public void Reset() {

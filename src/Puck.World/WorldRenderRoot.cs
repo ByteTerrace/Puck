@@ -258,6 +258,13 @@ public static class WorldRenderRoot {
         compareCapture.Attach(target: () => runtime.CaptureTarget(instance: host.ComparisonLiveRoot!),
             completedFrames: () => runtime.NodeOf(instance: host.ComparisonLiveRoot!)?.FrameCounter);
 
+        RenderGraphRuntimeNode? node = null;
+        var display = new WorldDisplayExtent(
+            binder: binder,
+            height: height,
+            presenter: frameSource,
+            width: width
+        );
         var root = new RenderGraphRuntimeNode(
             footprints: host.Footprints,
             height: height,
@@ -279,12 +286,17 @@ public static class WorldRenderRoot {
             // These services can predate the device context, so their later container disposal is too late for GPU owners.
             Holdings = [compareCapture, host, binder, residency],
             Prepare = (in FrameContext context) => {
+                display.Follow(
+                    context: in context,
+                    root: node!
+                );
                 compareCapture.Poll();
                 frameSource.PrepareGraph(context: in context);
                 timing.Tick();
             },
             Roots = host.Roots,
         };
+        node = root;
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;

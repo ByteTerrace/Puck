@@ -43,6 +43,25 @@ public sealed class WorldGaitKinematics {
         ForwardAcceleration = 0f;
         Array.Clear(array: m_seeded);
     }
+    /// <summary>Turns the eased world-frame velocity with a rotation of the world about up — an in-place crossing
+    /// that turns its traveller — so the acceleration signals read no turn the body did not make. The body-frame
+    /// velocity and every driver follower are unchanged by it.</summary>
+    /// <param name="rotation">The unit rotation.</param>
+    public void Carry(Quaternion rotation) {
+        var turned = Vector3.Transform(
+            rotation: rotation,
+            value: new Vector3(
+                x: m_worldVelocity.X,
+                y: 0f,
+                z: m_worldVelocity.Y
+            )
+        );
+
+        m_worldVelocity = new Vector2(
+            x: turned.X,
+            y: turned.Z
+        );
+    }
     /// <summary>Resolves each driver's <see cref="CreationDriverDocument.Dynamics"/> row into its follower response.
     /// Re-resolves only when the driver list or the row list is a different instance from the last call; a driver
     /// naming no row, or a row the list does not hold, tracks its signal exactly.</summary>

@@ -742,6 +742,27 @@ unverified when no device run exists.
   every 100 ms and the GPU held P8 at 210 MHz under Vulkan, P5 at 400 to 540 MHz
   under Direct3D 12, which made Vulkan's passes read twice as slow live while
   their replays ran faster than Direct3D 12's.
+- Under Remote Desktop the client draws the cursor shape the session sets, so
+  where the World hides the system cursor (`NativeWindowOptions.HideMouseCursor`)
+  the client shows none at all: the World's drawn cursor is then the only
+  pointer, and it shows only while the game sees pointer motion. Over a
+  passthrough pane, which withholds that motion from the game, the World shows
+  the system arrow instead (`INativeWindowCursor`). The session's mouse arrives
+  as absolute raw input, which the window turns into relative motion; the
+  pointer position, the pane hit and the passthrough client point come from
+  `WM_MOUSEMOVE` either way. An absolute position stops at the edge of the
+  session's screen, so a camera drag that read the difference ended there; the
+  window's pointer lock (`INativeWindowCursor.LocksPointer`) moves the cursor
+  back to the window's centre each pump. A Remote Desktop client that follows
+  the session's pointer-position updates moves its own cursor there too; one
+  that does not keeps reporting from its own cursor, which the window detects
+  after a few reports and reads as before, so the drag still ends at the screen
+  edge. Only the foreground window locks, and a test World an agent drives with
+  `player.signal` locks the session's real mouse while it is foreground:
+  minimize it first (a minimized window has no client area to lock to). The
+  Remote Display Adapter reports its own signal
+  rate (32 Hz in one session, `Display pacing: signal 32 Hz` on the boot log),
+  which the pacer presents at whatever `host.targetHertz` says.
 - In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
   Store alias, which waits on standard input until the command times out. Use
   the repository's own tools, or `sed`, `awk` or `perl`, instead.

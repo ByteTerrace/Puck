@@ -305,6 +305,35 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(actual: (cameras, sessions), expected: (4, 4));
     }
 
+    // Shows every instance as a source of one extent, as a window capture shows its window, and answers nothing else.
+    private sealed record ExtentScenes(int Width, int Height) : IWorldViewScenes {
+        public bool TryCamera(string view, out CameraSnapshot camera) {
+            camera = default;
+
+            return false;
+        }
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+            point = default;
+
+            return false;
+        }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return false;
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            glass = null;
+
+            return WorldPortalGlass.None;
+        }
+        public bool Bakes(string view) => false;
+        public bool TrySourceExtent(string instance, out int width, out int height) {
+            (width, height) = (Width, Height);
+
+            return true;
+        }
+    }
     private sealed record FixedViewScenes(CameraSnapshot Camera) : IWorldViewScenes {
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera;

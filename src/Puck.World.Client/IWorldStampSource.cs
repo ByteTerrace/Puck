@@ -49,6 +49,10 @@ public interface IWorldStampSource {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The epoch.</returns>
     int PoseEpoch(int index);
+    /// <summary>Gets the in-place portal crossings each entity has made
+    /// (<see cref="EntityContinuityKind.Carry"/>): a consumer that latched a world-space pose for an entity at one
+    /// crossing count carries it to the current count rather than seeing a jump.</summary>
+    WorldPoseCarries Carries { get; }
     /// <summary>Gets an entity's presented position.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The position.</returns>

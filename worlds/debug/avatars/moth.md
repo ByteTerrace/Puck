@@ -31,6 +31,11 @@ does not render overlapping camera transitions.
 
 ## Controls
 
+While a mouse drag orbits or steers the camera the cursor hides and stays in
+the window, so the drag keeps turning however far the mouse travels, Remote
+Desktop included; releasing the button shows the cursor again where the drag
+began.
+
 | Keyboard and mouse | Gamepad | Action |
 |---|---|---|
 | W / S, up / down arrows | Left stick | Move forward / backward |
@@ -38,6 +43,7 @@ does not render overlapping camera transitions.
 | Left / right arrows | | Turn |
 | Left mouse drag | | Orbit the gameplay camera |
 | Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
+| Left and right mouse buttons held | | Walk forward while the right button steers |
 | | Right stick press (hold) | Recenter the camera behind the body |
 | F | North | Switch flight mode on or off |
 | Space | South | Jump, twice before landing; in flight mode, rise |

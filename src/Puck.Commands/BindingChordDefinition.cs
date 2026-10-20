@@ -79,6 +79,10 @@ public sealed record BindingChordDefinition(
 /// under the pressing seat's principal — any wire-args verb bindable with authored arguments. See
 /// <see cref="BindingPageEntryDefinition.Text"/> for the single-line, nonblank, bounded payload contract. Refused on
 /// a <paramref name="Channel"/> destination.</param>
+/// <param name="PassThrough">Whether the press that completes the chord also reaches the binding its own source has on
+/// the active page. By default the chord takes that press, and its release, from the source's own binding, so the most
+/// specific match wins; a pass-through chord adds its destination beside what each member does alone, as both mouse
+/// buttons held walk forward while each button keeps its own drag.</param>
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingCommandDefinition(
     string? Command = null,
@@ -89,5 +93,6 @@ public sealed record BindingCommandDefinition(
     string? Icon = null,
     CommandValue? Value = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold,
-    string? Text = null
+    string? Text = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool PassThrough = false
 );

@@ -280,6 +280,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // An optional HELD root capability offered every raw event before the observer: an event it consumes
                 // (a key a focused passthrough source takes, for one) reaches neither the observer nor the router.
                 _ = m_rootHostContext.HoldsCapability<IWindowInputFilter>(capability: out var windowInputFilter);
+                // An optional HELD root capability read after each batch of events: whether a drag locks the pointer, and
+                // whether the system cursor shows where the game's would (NativeWindowOptions.HideMouseCursor hides it).
+                _ = m_rootHostContext.HoldsCapability<IWindowCursorPolicy>(capability: out var cursorPolicy);
+                var windowCursor = (window as INativeWindowCursor);
                 // Physical truth for edge-reported window controls. Each frame reasserts held keys and mouse buttons
                 // in original press order, allowing a freshly-installed profile or modality to recover continuous
                 // channels without synthesizing a Started edge.
@@ -503,6 +507,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             // destination's declared input scope and resolves only the host-owned always-active plane.
                             m_inputRouter?.CaptureFocusExempt(signal: in signal);
                         }
+                    }
+
+                    if (
+                        (windowCursor is not null) &&
+                        (cursorPolicy is not null)
+                    ) {
+                        windowCursor.ShowsSystemCursor = cursorPolicy.ShowsSystemCursor;
+                        windowCursor.LocksPointer = cursorPolicy.LocksPointer;
                     }
 
                     // Reassert after the whole raw batch: a release in this frame has already removed its control,

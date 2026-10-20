@@ -1725,6 +1725,7 @@ public static class BindingProfile {
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
                         Reassertable: (isChannel && (command.Mode == BindingEntryMode.Hold)),
                         Mode: command.Mode,
+                        PassThrough: command.PassThrough,
                         Source: BindingSourceIdentity.ForCommand(command: effectiveCommand),
                         Text: command.Text
                     ),

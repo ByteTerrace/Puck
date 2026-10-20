@@ -21,8 +21,9 @@ public sealed class NativeWindowOptions {
     /// <summary>The initial window width, in pixels. Defaults to 800.</summary>
     public uint Width { get; set; } = 800;
 
-    /// <summary>Whether to hide the mouse cursor while it is over the window. Best-effort: only the Win32 backend
-    /// honors it today. Defaults to <see langword="false"/>.</summary>
+    /// <summary>Whether to hide the mouse cursor while it is over the window, except where the host asks for the system
+    /// arrow (<see cref="INativeWindowCursor.ShowsSystemCursor"/>). Best-effort: only the Win32 backend honors it today.
+    /// Defaults to <see langword="false"/>.</summary>
     public bool HideMouseCursor { get; set; }
     /// <summary>The icon file the window and its taskbar button wear — absolute, or relative to the application base
     /// directory. A host authoring its own branding roots the path itself before it reaches here. When

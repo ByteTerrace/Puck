@@ -120,19 +120,20 @@ public static class WorldFrameIsometry {
         source: source,
         value: FixedVector3.UnitY
     ) == FixedVector3.UnitY);
-    /// <summary>Returns the unit rotation represented by <see cref="MapVector"/>.</summary>
-    public static FixedQuaternion Rotation(in WorldFaceFrame source, in WorldFaceFrame destination) {
-        var first = FixedQuaternion.FromTo(
-            from: source.Right,
-            to: -destination.Right
-        );
-        var second = FixedQuaternion.FromTo(
-            from: first.Rotate(vector: source.Up),
-            to: destination.Up
-        );
-
-        return (second * first).Normalize();
-    }
+    /// <summary>Returns the unit rotation represented by <see cref="MapVector"/> for a pair that maps world up onto
+    /// itself (<see cref="PreservesWorldUp"/>, which every crossing and adjacency pair is held to): its turn about up,
+    /// <see cref="YawDelta"/>. Built from that one angle rather than by chaining shortest arcs, whose axis is
+    /// arbitrary for the half turns a floor and ceiling pair or a turned wall pair makes.</summary>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <returns>The rotation.</returns>
+    public static FixedQuaternion Rotation(in WorldFaceFrame source, in WorldFaceFrame destination) => FixedQuaternion.FromAxisAngle(
+        angle: YawDelta(
+            destination: in destination,
+            source: in source
+        ),
+        axis: FixedVector3.UnitY
+    );
     /// <summary>Returns the boundary rotation's yaw about world up, in radians — the one heading delta every mapped
     /// arrival adds to the traveler's own yaw. The representative is reduced to <c>(-pi, pi]</c>; the traveler's own
     /// yaw is an unbounded accumulator, so adding it keeps the arrival heading continuous across a crossing.</summary>
