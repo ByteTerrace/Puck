@@ -146,7 +146,7 @@ public sealed class WorldMachineOperationServerLawTests {
         var generation = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
         var before = DefinitionBytes(server: fixture.Server);
 
-        fixture.Server.ScreenOpTap = (_, _, _) => { };
+        fixture.Server.ScreenOpTap = (_, _) => { };
 
         var completion = Submit(
             fixture.Server,

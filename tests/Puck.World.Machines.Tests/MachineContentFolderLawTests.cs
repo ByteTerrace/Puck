@@ -323,11 +323,13 @@ public sealed class MachineContentFolderLawTests {
             }
             Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
 
-            // A rooted spelling of a file in a folder is the same file, and is admitted.
-            var inside = Path.Combine(path1: root.PathOf(name: "carts"), path2: "gun.cgb.cartridge.json");
-
-            Assert.Contains(expectedSubstring: "status=Applied", actualString: Insert(path: inside));
-            Assert.Equal(expected: inside, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            // A rooted spelling, or one that leaves a folder and comes back, of a file in a folder is the same file: it
+            // is admitted, mounted under the folder's own spelling, and listed as mounted.
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: Insert(path: Path.Combine(path1: root.PathOf(name: "carts"), path2: "gun.cgb.cartridge.json")));
+            Assert.Equal(expected: "../carts/gun.cgb.cartridge.json", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Assert.Contains(expectedSubstring: "| gun.cgb.cartridge.json folder=../carts mounted=true", actualString: registry.Submit(line: "machine.content cabinet").Output);
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: Insert(path: "../local/../carts/mirror.cgb.cartridge.json"));
+            Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
 
             var link = Path.Combine(path1: root.PathOf(name: "carts"), path2: "link.cgb.cartridge.json");
 
@@ -337,27 +339,6 @@ public sealed class MachineContentFolderLawTests {
                 Assert.Skip(reason: $"this machine cannot create a symbolic link: {exception.Message}");
             }
             Assert.Contains(expectedSubstring: "is not a file in machine 'cabinet' contentFolders", actualString: Insert(path: "../carts/link.cgb.cartridge.json"));
-        }
-    }
-    // A screen showing no declared machine has no folders, so a screen-owned insert mounts nothing.
-    [Fact]
-    public void AScreenOwnedInsertIsRefusedByName() {
-        using var root = Layout();
-        var (fixture, _) = Boot(contentFolders: ["../carts"], root: root);
-
-        using (fixture) {
-            var echoes = new List<WorldEditEcho>();
-
-            fixture.Server.EchoTap = echoes.Add;
-            new LoopbackTransport(server: fixture.Server).SubmitScreenOp(
-                op: new WorldScreenOp.Insert(ContentPath: "../carts/gun.cgb.cartridge.json", EngineId: "gaming-brick", Index: 8, Options: null),
-                principal: Principal.Console
-            );
-
-            var echo = Assert.Single(collection: echoes);
-
-            Assert.True(condition: echo.Rejected);
-            Assert.Contains(expectedSubstring: "content mounts only into a declared machine", actualString: echo.Message);
         }
     }
     [Fact]

@@ -153,11 +153,10 @@ public sealed class MachineHostSeamLawTests {
             userMessage: "the fixture world declares no machine screens"
         );
 
-        var (ok, message, contentHash) = fixture.Server.Machines.TryInsert(
+        var (ok, message) = fixture.Server.Machines.TryPeekMessage(
+            address: 0,
             index: 999,
-            contentPath: "no-such-file.rom",
-            engineId: null,
-            options: null
+            value: out _
         );
 
         Assert.False(
@@ -168,6 +167,5 @@ public sealed class MachineHostSeamLawTests {
             actual: message,
             expected: "no screen 999 declared"
         );
-        Assert.Null(@object: contentHash);
     }
 }

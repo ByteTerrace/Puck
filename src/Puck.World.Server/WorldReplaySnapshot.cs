@@ -92,21 +92,12 @@ public abstract record WorldReplayEntry {
     /// <param name="ContentHash">The CAS pin a re-drive refuses by name against, on mismatch.</param>
     /// <param name="Actor">The principal that submitted the rebuild.</param>
     internal sealed record Rebuild(WorldRebuildKind Kind, WorldRebuildOrigin? Origin, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
-    /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
-    /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join the ordered domain and the tape as their own
-    /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
-    /// <see cref="Server.WorldServer.ApplyScreenOp"/>).</summary>
+    /// <summary>A live screen runtime change (<c>screen.select</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join
+    /// the ordered domain and the tape as their own authority entry kind, applying synchronously on re-drive exactly
+    /// as they do live (see <see cref="Server.WorldServer.ApplyScreenOp"/>).</summary>
     /// <param name="Value">The screen op.</param>
-    /// <param name="ContentHash">The CAS pin (a real <c>sha256-64</c> hash, or the concrete host's
-    /// content-absent sentinel) a recorded <see cref="WorldScreenOp.Insert"/> or
-    /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (Select shares Insert's own CAS pin — a
-    /// magazine entry's document-declared path is not immune to on-disk drift either) — <see langword="null"/> for
-    /// every other op kind, and this rides the tape regardless of whether the op succeeded (a failed insert/select
-    /// still pins whatever it read, or the absence sentinel when it could not read anything at all, including an
-    /// engine-resolution failure, since content is signed before engine resolution is even attempted and is never
-    /// left null on that path).</param>
     /// <param name="Actor">The principal that submitted the op.</param>
-    internal sealed record ScreenOp(WorldScreenOp Value, string? ContentHash, Principal Actor) : WorldReplayEntry;
+    internal sealed record ScreenOp(WorldScreenOp Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A pause or resume of the boot instance's own live schedule lever (<c>world.rate pause</c>/
     /// <c>resume</c>) — recorded so a saved tape carries a legible history of when a pause/resume happened, alongside
     /// the header's own <see cref="WorldReplaySnapshot.SimulationRate"/> (the initial authored rate). Purely
@@ -300,7 +291,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 5u;
+    private const uint Version = 6u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -468,17 +459,10 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.ScreenOp screenOp:
-                    // Synchronous, like Command/Grant/Revoke above — never buffered — mirroring the live apply
-                    // exactly. expectedContentHash is null for every kind but a recorded Insert or a
-                    // machine-booting Select (Select shares Insert's own CAS pin); WorldMachineHost.TryBootMachine
-                    // refuses BY NAME, before booting anything, when a fresh re-read of the content path disagrees
-                    // with it (including an engine-resolution failure, since content is signed before engine
-                    // resolution and is never left unpinned on that path) — the negative control an edited/moved
-                    // ROM exercises.
+                    // Synchronous, like Command/Grant/Revoke above — never buffered — mirroring the live apply.
                     server.ApplyScreenOp(
                         op: screenOp.Value,
-                        principal: screenOp.Actor,
-                        expectedContentHash: screenOp.ContentHash
+                        principal: screenOp.Actor
                     );
 
                     break;
@@ -1001,12 +985,10 @@ public sealed partial class WorldReplaySnapshot {
             tryDecode: WorldSubmissionCodec.TryDecodeScreenOp,
             what: "screen-op"
         );
-        var contentHash = reader.ReadNullableString(field: "screen-op content hash");
         var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
         return new WorldReplayEntry.ScreenOp(
             Actor: actor,
-            ContentHash: contentHash,
             Value: screenOp
         );
     }
@@ -1422,7 +1404,6 @@ public sealed partial class WorldReplaySnapshot {
                     what: "screen-op",
                     writer: writer
                 );
-                writer.WriteNullableString(value: screenOp.ContentHash);
                 WritePrincipal(
                     writer: writer,
                     principal: screenOp.Actor

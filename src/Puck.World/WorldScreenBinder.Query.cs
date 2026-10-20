@@ -152,26 +152,4 @@ public sealed partial class WorldScreenBinder {
         members: out members,
         name: name
     );
-    /// <summary>Reads back the live machine insert on a screen index — a facade over
-    /// <see cref="Server.WorldMachineHost.TryReadMachineInsert"/>, so <c>world.save</c> can fold a runtime
-    /// <c>screen.insert</c> into that screen row's <see cref="WorldScreenSource.Machine"/> source.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="engine">The engine id that booted the live machine.</param>
-    /// <param name="contentPath">The content file (a cartridge ROM) the live machine booted.</param>
-    /// <param name="options">The options string the live machine booted with, or <see langword="null"/>.</param>
-    public bool TryReadMachineInsert(int index, out string engine, out string contentPath, out string? options) =>
-        m_machines.TryReadMachineInsert(
-            contentPath: out contentPath,
-            engine: out engine,
-            index: index,
-            options: out options
-        );
-    /// <summary>Reads a screen's machine's current options string — a facade over
-    /// <see cref="Server.WorldMachineHost.TryReadOptions"/>.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The current options string.</param>
-    public bool TryReadOptions(int index, out string options) => m_machines.TryReadOptions(
-        index: index,
-        options: out options
-    );
 }

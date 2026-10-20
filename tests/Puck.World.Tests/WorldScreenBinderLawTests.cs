@@ -100,8 +100,6 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.TryMagazine(index: BinderScene.Pattern, magazine: out _, selected: out _));
         Assert.False(condition: binder.TryPeek(address: 0, index: BinderScene.Pattern, value: out _).Ok);
         Assert.False(condition: binder.TryReadLinkMembers(members: out _, name: "cable"));
-        Assert.False(condition: binder.TryReadMachineInsert(contentPath: out _, engine: out _, index: BinderScene.Pattern, options: out _));
-        Assert.False(condition: binder.TryReadOptions(index: BinderScene.Pattern, options: out _));
         _ = binder.DescribeLinks();
 
         // No camera device is seated, then one is seated that no scan has seen.

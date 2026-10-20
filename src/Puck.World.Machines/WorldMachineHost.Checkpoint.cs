@@ -78,8 +78,5 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
         if (m_links.Values.Any(predicate: link => (link.Link is not null))) {
             throw new InvalidOperationException(message: "world checkpoint cannot yet preserve a live coupled machine link");
         }
-        if (m_slots.Values.Any(predicate: slot => (slot.Machine is not null))) {
-            throw new InvalidOperationException(message: "world checkpoint cannot yet preserve a screen-owned machine operation");
-        }
     }
 }

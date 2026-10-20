@@ -158,10 +158,10 @@ public sealed partial class WorldMachineHost {
                 request: request
             );
 
-            if (RefuseUnlistedContent(
+            if (AdmitContent(
                 current: current,
                 engine: engine,
-                next: ((prepared as MachineOperationPreparation.Replacement)?.Configuration ?? (prepared as MachineOperationPreparation.Runtime)?.Configuration)
+                prepared: ref prepared
             ) is { } unlisted) {
                 refusal = unlisted;
                 return false;
@@ -687,34 +687,45 @@ public sealed partial class WorldMachineHost {
     // configuration names that the machine's current declaration does not already name must be a file directly in one
     // of those folders (WorldMachineContentFolder.TryAdmit), whichever verb or wire submission asked for it. Content the
     // declaration already names (its authored boot content, or a file an earlier operation admitted) stays mountable,
-    // so a reset recreates what runs.
-    private MachineOperationResult? RefuseUnlistedContent(WorldMachine current, IMachineEngine engine, JsonElement? next) {
-        var kept = ContentPaths(configuration: current.Configuration, engine: engine);
+    // so a reset recreates what runs. An admitted path is respelled as its folder listing spells it, so machine.content
+    // marks the file mounted however the operation spelled it.
+    private MachineOperationResult? AdmitContent(WorldMachine current, IMachineEngine engine, ref MachineOperationPreparation prepared) {
+        var next = ((prepared as MachineOperationPreparation.Replacement)?.Configuration ?? (prepared as MachineOperationPreparation.Runtime)?.Configuration);
 
-        foreach (var (field, path) in ((next is { } configuration) ? ContentPaths(configuration: configuration, engine: engine) : [])) {
-            if (
-                !(kept.TryGetValue(key: field, value: out var authored) && string.Equals(a: authored, b: path, comparisonType: StringComparison.Ordinal)) &&
-                !WorldMachineContentFolder.TryAdmit(contentPath: path, documentDirectory: m_documentDirectory, machine: current, reason: out var reason)
-            ) {
-                return new MachineOperationResult(MachineOperationStatus.Refused, reason: $"Machine '{current.Name}' configuration.{field}: {reason}.");
-            }
+        if (next is not { } configuration) {
+            return null;
         }
-        return null;
-    }
-    // The content-role fields a configuration names, by field path.
-    private static Dictionary<string, string> ContentPaths(JsonElement configuration, IMachineEngine engine) {
-        var paths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        MachineConfigurationFields.Visit(
-            configuration: JsonNode.Parse(configuration.GetRawText())!.AsObject(),
-            descriptor: engine.Descriptor.Configuration,
-            visitor: site => {
-                if ((site.Field.Role == MachineFieldRole.ContentPath) && (site.Value?.GetValue<string>() is { } path)) {
-                    paths[site.Path] = path;
-                }
+        var kept = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var tree = JsonNode.Parse(configuration.GetRawText())!.AsObject();
+        string? refusal = null;
+
+        MachineConfigurationFields.Visit(configuration: JsonNode.Parse(current.Configuration.GetRawText())!.AsObject(), descriptor: engine.Descriptor.Configuration, visitor: site => {
+            if ((site.Field.Role == MachineFieldRole.ContentPath) && (site.Value?.GetValue<string>() is { } path)) {
+                kept[site.Path] = path;
             }
-        );
-        return paths;
+        });
+        MachineConfigurationFields.Visit(configuration: tree, descriptor: engine.Descriptor.Configuration, visitor: site => {
+            if (
+                (refusal is null) &&
+                (site.Field.Role == MachineFieldRole.ContentPath) &&
+                (site.Value?.GetValue<string>() is { } path) &&
+                !(kept.TryGetValue(key: site.Path, value: out var authored) && string.Equals(a: authored, b: path, comparisonType: StringComparison.Ordinal))
+            ) {
+                refusal = (WorldMachineContentFolder.TryAdmit(admitted: out var admitted, contentPath: path, documentDirectory: m_documentDirectory, machine: current, reason: out var reason)
+                    ? null
+                    : $"Machine '{current.Name}' configuration.{site.Path}: {reason}.");
+                site.Value = JsonValue.Create(value: ((refusal is null) ? admitted : path));
+            }
+        });
+        if (refusal is not null) {
+            return new MachineOperationResult(MachineOperationStatus.Refused, reason: refusal);
+        }
+
+        var admittedConfiguration = MachineOperationValidation.CloneJson(value: tree);
+
+        prepared = ((prepared is MachineOperationPreparation.Runtime runtime) ? new MachineOperationPreparation.Runtime(configuration: admittedConfiguration, operation: runtime.Operation) : new MachineOperationPreparation.Replacement(configuration: admittedConfiguration));
+        return null;
     }
     private static bool MachineDeclarationsMatch(WorldMachine first, WorldMachine second) =>
         (string.Equals(
@@ -767,7 +778,6 @@ public sealed partial class WorldMachineHost {
                 if (!TryReadContent(
                     path,
                     documentDirectory,
-                    documentRelative: true,
                     out var source,
                     out var fault
                 )) {

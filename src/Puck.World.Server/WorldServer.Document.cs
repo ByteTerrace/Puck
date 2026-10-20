@@ -60,9 +60,8 @@ public sealed partial class WorldServer {
             principal: principal
         );
     /// <inheritdoc cref="WorldDocument.ApplyScreenOp"/>
-    public void ApplyScreenOp(WorldScreenOp op, Principal principal, string? expectedContentHash = null) =>
+    public void ApplyScreenOp(WorldScreenOp op, Principal principal) =>
         m_document.ApplyScreenOp(
-            expectedContentHash: expectedContentHash,
             op: op,
             principal: principal
         );

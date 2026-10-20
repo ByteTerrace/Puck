@@ -34,8 +34,7 @@ public enum WorldEditEchoKind {
     /// and admitted peer connections re-mint their admission grant.</summary>
     Rebuild,
 
-    /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
-    /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — runtime machine-host state, not a document edit.</summary>
+    /// <summary>A live screen runtime change (<c>screen.select</c>/<c>.link</c>/<c>.unlink</c>) — runtime machine-host state, not a document edit.</summary>
     ScreenOp,
 
     /// <summary>A target-register designation outcome.</summary>
@@ -398,17 +397,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
     /// all.</summary>
     public Action<ulong>? SaveEffectTap { get; set; }
-    /// <summary>Observes every screen op (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/
-    /// <c>.link</c>/<c>.unlink</c>) after <see cref="WorldDocument.ApplyScreenOp"/> finishes — success or refusal alike, so a
+    /// <summary>Observes every screen op (<c>screen.select</c>/<c>.link</c>/<c>.unlink</c>) after
+    /// <see cref="WorldDocument.ApplyScreenOp"/> finishes — success or refusal alike, so a
     /// screen op the Control-authority gate refuses is still taped and reproduces as the identical refusal on
     /// replay (the same property <see cref="RebuildTap"/> establishes, reached here by a simpler route: unlike a
     /// rebuild, a screen op applies synchronously with no drain-time gap for its content to move between submission
-    /// and apply, so the authority gate runs first, before any content is read). The carried content hash is
-    /// non-null only for a successful <see cref="WorldScreenOp.Insert"/> — every other op kind and every refusal
-    /// carries <see langword="null"/>, since nothing else on the tape needs a CAS pin (see
-    /// <see cref="WorldScreenOp.Insert"/>'s own remarks on why <see cref="WorldScreenOp.Select"/> needs none). The
-    /// replay tape attaches only while armed; clients never receive this submission-only seam.</summary>
-    public Action<WorldScreenOp, string?, Principal>? ScreenOpTap { get; set; }
+    /// and apply, so the authority gate runs first). The replay tape attaches only while armed; clients never receive this submission-only seam.</summary>
+    public Action<WorldScreenOp, Principal>? ScreenOpTap { get; set; }
     /// <summary>Observes server-authored ordered events after they take effect. The replay tape attaches only while
     /// armed; clients never receive this submission-only seam.</summary>
     public Action<WorldServerEvent>? ServerEventTap { get; set; }

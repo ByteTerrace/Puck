@@ -103,11 +103,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <c>WorldAddonRuntime.AnyEverPumped</c>'s identical shape): offline replay reconstructs a machine's boot
     /// image, never its accumulated core state once real ticks have run it.</summary>
     bool AnyEverPumped { get; }
-    /// <summary>Gets or sets the machine-lifecycle tap: invoked with <c>(index, faulted)</c> on every runtime machine boot outcome
-    /// — <see langword="false"/> when a machine boots onto a slot, <see langword="true"/> when a boot attempt faults
-    /// (missing content, unresolved engine, rejected options). Constructor-time declared boots precede any wiring and
-    /// do not fire.</summary>
-    Action<int, bool>? MachineLifecycleTap { get; set; }
     /// <summary>Gets every screen index currently carrying a booted machine — presentation's publish-loop enumeration.</summary>
     IEnumerable<int> MachineScreenIndices { get; }
 
@@ -121,7 +116,7 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
     /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
-    /// <summary>Returns the live machine resolved from a screen's named producer or legacy slot as its audio drain seam,
+    /// <summary>Returns the live named machine a screen shows as its audio drain seam,
     /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     IAudioMachine? AudioMachine(int index);
@@ -130,14 +125,9 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Determines whether a screen-machine engine is registered under <paramref name="engineId"/>.</summary>
     /// <param name="engineId">The candidate engine id.</param>
     bool HasEngine(string engineId);
-    /// <summary>Determines whether the screen index resolves to a live named producer or legacy screen-owned machine.</summary>
+    /// <summary>Determines whether the screen index shows a live named machine.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     bool HasMachine(int index);
-    /// <summary>Returns the live machine's authored tempo, in engine ticks per beat, when the screen slot carries a
-    /// booted machine with the <see cref="IInstrumentClockSource"/> capability — <see langword="null"/> for an empty
-    /// slot, a machine without the capability, or a capability reporting zero (no content loaded).</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    long? InstrumentTicksPerBeat(int index);
     /// <summary>Returns the live named machine's authored tempo, in engine ticks per beat, when it exposes the
     /// <see cref="IInstrumentClockSource"/> capability. The lookup is independent of display consumers.</summary>
     /// <param name="instance">The authored machine instance name.</param>
@@ -193,22 +183,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// the index is not a declared screen.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     WorldMachineState? State(int index);
-    /// <summary>Ejects a screen's live machine. Fails for an undeclared screen or a slot with no machine to eject.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <returns>Whether the eject succeeded, and a message describing the outcome.</returns>
-    (bool Ok, string Message) TryEject(int index);
-    /// <summary>Boots (or live-swaps) a machine onto a declared screen from a content file path. Any existing machine
-    /// on the slot is cleared and replaced. Fails loudly (a message, no crash) for an undeclared screen, an
-    /// unresolved engine, an unreadable content file, or an options string the engine rejects.</summary>
-    /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
-    /// <param name="contentPath">The content file (a cartridge ROM) to boot.</param>
-    /// <param name="engineId">The screen-machine engine id, or <see langword="null"/> for the sole-registered default.</param>
-    /// <param name="options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded tape entry carries. <see langword="null"/>
-    /// (the default) is the live path.</param>
-    /// <returns>Whether the insert succeeded, a message describing the outcome, and the content signature actually
-    /// observed.</returns>
-    (bool Ok, string Message, string? ContentHash) TryInsert(int index, string contentPath, string? engineId, string? options, string? expectedContentHash = null);
     /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens.</summary>
     /// <param name="name">The link's stable name.</param>
     /// <param name="members">The engine screen indices in cable order.</param>
@@ -232,33 +206,11 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="members">The member screen indices in cable order, on success.</param>
     /// <returns>Whether a link of that name is live.</returns>
     bool TryReadLinkMembers(string name, out IReadOnlyList<int> members);
-    /// <summary>Reads back the live machine insert on a screen index — its engine id, content path, and options — so
-    /// <c>world.save</c> can fold a runtime <c>screen.insert</c> into that screen row's machine source.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="engine">The engine id that booted the live machine.</param>
-    /// <param name="contentPath">The content file (a cartridge ROM) the live machine booted.</param>
-    /// <param name="options">The options string the live machine booted with, or <see langword="null"/>.</param>
-    bool TryReadMachineInsert(int index, out string engine, out string contentPath, out string? options);
-    /// <summary>Reads a screen's machine's current options string, or <see langword="false"/> when the screen has no
-    /// reconfigurable machine.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The current options string.</param>
-    bool TryReadOptions(int index, out string options);
-    /// <summary>Reconfigures a screen's live machine across the engine's options vocabulary (dmg↔cgb↔agb with no
-    /// reboot).</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The engine-specific options string to retarget to.</param>
-    /// <returns>Whether the reconfigure succeeded, and a message describing the outcome.</returns>
-    (bool Ok, string Message) TryReconfigure(int index, string? options);
-    /// <summary>Points the screen's magazine selector at <paramref name="entry"/>, booting it when it names a machine
-    /// row.</summary>
+    /// <summary>Points the screen's magazine selector at <paramref name="entry"/>; selection boots nothing.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="entry">The 0-based magazine entry to select.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded tape entry carries. <see langword="null"/>
-    /// for the live path.</param>
-    /// <returns>Whether the selection (and, for a machine entry, the boot) succeeded, a message, and — for a machine
-    /// entry — the observed content signature.</returns>
-    (bool Ok, string Message, string? ContentHash) TrySelect(int index, int entry, string? expectedContentHash = null);
+    /// <returns>Whether the selection succeeded, and a message.</returns>
+    (bool Ok, string Message) TrySelect(int index, int entry);
     /// <summary>Severs a runtime cable link by name. Fails when no link of that name is live.</summary>
     /// <param name="name">The link name.</param>
     /// <returns>Whether the link existed, and a message.</returns>

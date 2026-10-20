@@ -48,8 +48,7 @@ public abstract record WorldSubmissionPayload {
     /// <summary>A read-back query (<c>body.where</c>, <c>body.channels</c>, …).</summary>
     /// <param name="Value">The query.</param>
     public sealed record Query(WorldQuery Value) : WorldSubmissionPayload;
-    /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
-    /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — see <see cref="Protocol.WorldScreenOp"/>.</summary>
+    /// <summary>A live screen runtime change (<c>screen.select</c>/<c>.link</c>/<c>.unlink</c>) — see <see cref="Protocol.WorldScreenOp"/>.</summary>
     /// <param name="Value">The screen op.</param>
     public sealed record ScreenOp(WorldScreenOp Value) : WorldSubmissionPayload;
     /// <summary>A generic ordered operation on one named machine instance.</summary>

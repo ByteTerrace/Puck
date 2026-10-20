@@ -367,25 +367,16 @@ pads directly from `WorldEngagement.BuildPadSnapshot()` (in-process, no
 client/wire round-trip). For machine output, `WorldScreenBinder` is a read-only
 facade over the host. Screen index IS machine identity for screen-hosted machines.
 
-`screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink` submit a
-`WorldScreenOp` through the ordered submission domain
-(`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
-`Revoke` (never buffered — a `body.engage` auto-insert precheck submits a
-`Select` immediately ahead of the `ComposeControl` that follows it in the same
-batch, and the second submission must observe the first's effect). Both `Insert`
-AND `Select` (when the entry resolves to a Machine row) are CAS-pinned identically
-through the shared `WorldMachineHost.TryBootMachine` sequence: the SIGNATURE
-actually observed (a real `sha256-64` hash, or
-`WorldMachineHost.ContentAbsentSignature` when the file could not be read at all)
-rides the tape REGARDLESS of whether the op succeeded, so a FAILED insert/select
-reproduces the identical failure on replay rather than silently retrying
-unpinned, and refuses BY NAME (`ScreenOpContentMismatch`) the moment the file's
-on-disk state has since changed in EITHER direction. Tape-covered:
-`WorldReplayEntry.ScreenOp`, discriminant 6. Camera/capture/window-capture/
-jumbotron-view/test-pattern/QR screen sources remain presentation-only;
-`ScreenCommandModule`'s camera/capture/desktop/view/qr handlers eject a present
-machine through a `WorldScreenOp.Eject` submission first, then call
-`WorldScreenBinder` directly.
+A screen owns no machine: every machine is a `machines` row, and a screen shows
+one by name. `screen.select`/`.link`/`.unlink` submit a `WorldScreenOp`
+through the ordered submission domain (`IServerLink.SubmitScreenOp`), applied
+SYNCHRONOUSLY like `Command`/`Grant`/`Revoke` (never buffered — a
+`body.engage` auto-insert precheck submits a `Select` immediately ahead of
+the `ComposeControl` that follows it in the same batch, and the second
+submission must observe the first's effect). Selection boots nothing.
+Tape-covered: `WorldReplayEntry.ScreenOp`, discriminant 6.
+Camera/capture/window-capture/jumbotron-view/test-pattern/QR screen sources
+remain presentation-only and bind through `WorldScreenBinder` directly.
 
 Console grammars: `screen.insert <index> <contentPath>` (a screen whose source
 names a declared machine instance takes a file from its `contentFolders`,
@@ -396,8 +387,8 @@ machine display clears only the screen source through a
 `WorldMutation.UpsertScreen`); `screen.source <index> <kind> …` (a presentation
 source); and the Immediate read-backs `screen.state`, `screen.peek`,
 `screen.links`, `world.machines`, `world.screens`. Only `body.engage`'s
-auto-insert submits `WorldScreenOp.Select` from a verb; `SetOptions`, `Link` and
-`Unlink` have codec arms but no console verb.
+auto-insert submits `WorldScreenOp.Select` from a verb; `Link` and `Unlink`
+have codec arms but no console verb.
 
 **Swappable content comes from authored folders (the owner's ruling).** The
 cartridges a device can swap to are the files in the folders its world author
@@ -430,8 +421,8 @@ folders (resolved beside the document, `..` collapsed, the folder or its own
 link target as the directory, a linked file leading into it), so
 `machine.operation … content.insert`, `screen.insert` and `forge.play` onto a
 device refuse any other path by name, and a machine with no folders keeps its
-authored content. A screen-owned (legacy slot) `WorldScreenOp.Insert` is refused
-by the server: no machines row lists its folders. A
+authored content. An admitted path is mounted in its folder's own spelling, so
+`machine.content` marks it mounted however the operation spelled it. A
 machine whose authored content file is absent boots with no cartridge (named
 once on stderr, `screen.state … no cartridge`), never refusing the world; an
 operation naming absent content is refused. A folder that empties or vanishes

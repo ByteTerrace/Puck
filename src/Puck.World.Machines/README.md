@@ -76,8 +76,8 @@ reaches the input port its route names (`route.port`); a route that names none
 reaches the machine's sole port, so an engageable display of a machine with
 several ports (the Humble Gaming Deck's `controls` and `controls-2`) is refused
 by name until its route names one. A port no engaged display routes to holds
-neutral input, a passive display routes none, and a screen-owned machine
-follows the same rule at insertion.
+neutral input, and a passive display routes none. A screen owns no machine:
+every machine is a declared row, and content mounts only into one.
 Named screen inspection, output selection, symbol lookup, and memory access
 resolve directly against the named runtime instance. An aliased screen or speaker
 source rewrites its producer name under import aliasing, and provider asset paths
@@ -126,8 +126,8 @@ a restricted host supplies its own immutable policy at construction.
 Provider operations are currently refused while recording. Reaching their runtime
 commit barrier also closes boot-only replay/checkpoint capture, since existing
 formats cannot reconstruct prior hardware execution. Full machine receipts,
-snapshots, authored screen names, explicit control/link routes, and removal of the
-remaining screen-owned compatibility paths are still tracked in
+snapshots, authored screen names and explicit control/link routes are still
+tracked in
 [the machines and cartridges programme](../../docs/plans/machines-and-cartridges.md).
 
 ## Documentation

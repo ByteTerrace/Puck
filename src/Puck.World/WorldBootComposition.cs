@@ -600,8 +600,8 @@ public static class WorldBootComposition {
         // world.counters — every IWorkCounterSource registered here, plus the render nodes' GPU work when a
         // presentation composed an IGpuWorkRegistry (a headless boot has none, so its readout has no gpu section).
         services.AddWorldCounters();
-        // The diegetic screens' verb surface — screen.insert/.eject/.select/.options/.link/.unlink submit a
-        // WorldScreenOp through the ordered domain to the CORE Server.WorldMachineHost (machines boot and step in
+        // The diegetic screens' verb surface — screen.select/.link/.unlink submit a WorldScreenOp
+        // through the ordered domain, screen.insert a provider operation, to the CORE Server.WorldMachineHost (machines boot and step in
         // every shape, so scripting a cabinet — and reading screen.state/.peek back — must work headless too);
         // screen.source (camera|capture|desktop|qr|view — the five former per-kind verbs folded into one) and
         // screen.links stay
@@ -1666,7 +1666,7 @@ public static class WorldBootComposition {
         // graph's root stashed on the WorldRenderProbe so world.counters can read their per-pass GPU work. The frame
         // source emits active avatars only (declared-but-parked instances widen the per-pixel shadow mask walk), so the
         // hybrid 4,096-body worst case is held by the capacity floors a construction-time probe measured, plus the
-        // viewport floor for the join-later split screen. The affordance install, EchoTap, MachineLifecycleTap, and
+        // viewport floor for the join-later split screen. The affordance install, EchoTap and
         // lever-sink attachment live in the shared post-build wiring step (WorldPostBuildWiring) — this factory only
         // builds the render root.
         services.AddSingleton<IRenderRoot>(implementationFactory: sp => {

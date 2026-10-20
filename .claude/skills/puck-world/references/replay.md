@@ -227,12 +227,8 @@ its own `outcomeObserved` completion against `Outcome`, right after that
 tick's `server.Step` returns — see "Verify semantics" below.
 
 `WorldServer.ScreenOpTap` records screen operations at synchronous apply
-time. `Insert` and a machine-booting `Select` carry the content signature
-actually observed when content resolution is attempted, either `sha256-64/<16 hex>` or
-`WorldMachineHost.ContentAbsentSignature`, even when host application
-fails. Re-drive re-reads and refuses as `ScreenOpContentMismatch` if present,
-absent, or hashed content differs in either direction. Other screen ops carry
-no content signature. An authority denial is also taped, with no signature,
+time. No screen op reads content (a screen boots no machine), so none carries
+a content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
 **Capture scope: every one of the 13 envelope payload kinds except `Lever` and

@@ -65,10 +65,7 @@ Screen machines always boot with audio configured at
 row can bind a machine source at any time without a machine reboot; the
 director re-resolves the binder's live machines by reference each produced
 frame, so a cartridge booting late into an already-referenced slot self-heals
-with no verb. One asymmetry to fix, not a design decision: a cartridge
-DECLARED in the world document boots before the binder lifecycle tap is
-wired, so it fires no `screen.boot` cue; runtime inserts and reconcile-driven
-source changes fire it correctly.
+with no verb.
 
 ## The music-transition cue lane
 
@@ -77,7 +74,7 @@ cue token, listener-placed. The wiring lives outside this folder—
 `WorldServer.MusicTransitionTap` (`Puck.World.Server`, invoked from
 `WorldServer.Step`'s music-step call site) reaches `WorldAudioDirector.SubmitCue`
 through the same tap-and-wiring shape `WorldPostBuildWiring` uses for the
-edit-echo and machine-lifecycle cue lanes. A world authors a stinger off it by
+edit-echo cue lane. A world authors a stinger off it by
 declaring a `patches` row and an `audio.cues` row naming
 `"event": "music.transition"` and that patch's id.
 

@@ -257,9 +257,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     // payload's own leaf type recovers the per-kind tap dispatch SubmitTapped's generic signature needs (the payload
     // arriving here is already the leaf IServerLink's own default methods constructed, so the type test always
     // matches its case). Rebuild and Lever carry no capture point at all (not replay-relevant simulation input).
-    // ScreenOp's replay-relevant content hash (Insert only) is not knowable until the server reads the named path,
-    // which may only happen at apply time, so WorldServer.ScreenOpTap (fired from inside its own apply method) is
-    // the tape's capture point instead. Mutation is likewise tapped at the server's own envelope dispatch
+    // A ScreenOp is taped with its authority outcome, which is known only at apply time, so WorldServer.ScreenOpTap
+    // (fired from inside its own apply method) is the tape's capture point instead. Mutation is likewise tapped at the server's own envelope dispatch
     // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
     // submission all share.
     /// <inheritdoc/>

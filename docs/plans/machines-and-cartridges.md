@@ -21,7 +21,10 @@ machine family, the NES and Famicom core, has its own page:
   replace atomically under a new generation; `machine.state` reports them and
   `machine.operation <instance> <generation> <operationId> <json>` submits a
   descriptor-validated provider operation through the ordered authority domain
-  (`screen.insert` and `forge.play` use that path). Named memory bindings
+  (`screen.insert`, `forge.play` and `machine.swap` use that path, and every
+  mount names a file in the machine's `contentFolders`). A screen owns no
+  machine: the screen-owned lifecycle (`WorldScreenOp` insert, eject and
+  options, and `WorldMachineHost.TryInsert`) is deleted. Named memory bindings
   declare space, format, access (inspect, patch or bus), update (on change or
   every tick) and conversion (checked by default); addresses are unsigned, a
   failed read keeps the last accepted value and exposes availability, and
@@ -193,8 +196,8 @@ the real app, including multi-seat control and live save and reload.
 ### Optional distribution
 
 **Owns:** `src/Puck.World/Puck.World.csproj`'s brick and forge references, the
-machine extension entry contract, provider registration, the retired
-screen-owned lifecycle protocol arms, `ForgeCommandModule`'s index branches.
+machine extension entry contract, provider registration, `ForgeCommandModule`'s
+index branches.
 
 **Delivers:** the extension entry contract leaves the cartridge-forge package
 for a host-scoped registration set shared by the executable, CLI, validators,

@@ -177,13 +177,16 @@ public static class WorldMachineContentFolder {
     /// <param name="documentDirectory">The directory of the document the folders and the path are relative to, or
     /// <see langword="null"/> for a document with none.</param>
     /// <param name="contentPath">The content path the operation names.</param>
+    /// <param name="admitted">The admitted file spelled as <see cref="Entry.ContentPath"/> spells it, the folder as
+    /// authored and then the file name, so <c>machine.content</c> names it mounted; empty on refusal.</param>
     /// <param name="reason">The named refusal, or empty when the path is admitted.</param>
     /// <returns><see langword="true"/> when the path names a file directly in one of the machine's folders.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="machine"/> or <paramref name="contentPath"/> is
     /// <see langword="null"/>.</exception>
-    public static bool TryAdmit(WorldMachine machine, string? documentDirectory, string contentPath, out string reason) {
+    public static bool TryAdmit(WorldMachine machine, string? documentDirectory, string contentPath, out string admitted, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: machine);
         ArgumentNullException.ThrowIfNull(argument: contentPath);
+        admitted = string.Empty;
 
         if (machine.ContentFolders is not { Count: > 0 } authored) {
             reason = $"machine '{machine.Name}' names no contentFolders, so '{contentPath}' is not content it can mount";
@@ -208,6 +211,7 @@ public static class WorldMachineContentFolder {
                 (SamePath(left: directory, right: resolved) || SamePath(left: directory, right: linked)) &&
                 ((target is null) || SamePath(left: Path.GetDirectoryName(path: target), right: linked))
             ) {
+                admitted = $"{folder}/{Path.GetFileName(path: file)}";
                 reason = string.Empty;
                 return true;
             }

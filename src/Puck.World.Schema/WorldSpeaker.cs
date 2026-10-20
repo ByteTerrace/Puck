@@ -220,11 +220,6 @@ public sealed record WorldAudioCue(
     public const string RegionEnter = "region.enter";
     /// <summary>A body left a named region. See <see cref="RegionEnter"/>.</summary>
     public const string RegionExit = "region.exit";
-    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
-    /// reconcile-driven declared-source boot).</summary>
-    public const string ScreenBoot = "screen.boot";
-    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
-    public const string ScreenFault = "screen.fault";
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
     /// <summary>One syllable of an identity's synthesized voice babble firing — see
@@ -246,8 +241,6 @@ public sealed record WorldAudioCue(
         PlayerJump,
         PlayerLand,
         PlayerFootstep,
-        ScreenBoot,
-        ScreenFault,
         SeatJoin,
         MusicTransition,
         MusicEmbellishment,

@@ -116,10 +116,9 @@ public sealed partial class WorldReplayTape {
             Actor: actor
         ));
         // Apply-time, mirroring RebuildTap exactly — a screen op the Control gate refuses is still taped (fires
-        // after the outcome is known, carrying a null hash for a refusal or for any non-Insert kind).
-        m_liveServer.ScreenOpTap = (op, contentHash, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.ScreenOp(
+        // after the outcome is known).
+        m_liveServer.ScreenOpTap = (op, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.ScreenOp(
             Actor: actor,
-            ContentHash: contentHash,
             Value: op
         ));
         m_liveServer.DepartureTap = (transferId, slot, restored) => m_currentAuthority.Add(item: new WorldReplayEntry.Departure(

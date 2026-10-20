@@ -53,11 +53,11 @@ compiling the source and commit both halves.
 `CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`
 byte-compares them. Never hand-edit the JSON.
 
-`forge.play` inserts through the screen's named machine
-(`WorldMachineCommandModule.InsertContent`) when the screen has one, otherwise
-by submitting a `WorldScreenOp.Insert` with the acting principal through
-`IServerLink`; never bypass the server's screen authority. Both need Control
-over the screen. Failed draft edits leave the draft intact; check, save, build,
+`forge.play <screen> <path>` saves the source and inserts it through the
+screen's named machine (`WorldMachineCommandModule.InsertContent`); a screen
+with no declared machine refuses. The path must be a file in one of that
+machine's `contentFolders`, as every mount must, and the play needs Control
+over the screen and the machine. Failed draft edits leave the draft intact; check, save, build,
 export and play always validate.
 
 ## Contracts that bite

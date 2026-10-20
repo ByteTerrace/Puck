@@ -26,14 +26,13 @@ namespace Puck.World;
 /// screen is only where the answer is drawn — and carving by subject is how this project keeps each class under its
 /// analyzer ceilings.</para>
 /// </remarks>
-internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, WorldServer server) : ICommandModule {
     // The payload's URI scheme. Compact (a QR pays for every byte), self-describing (the scheme names the engine, the
     // path segment names the document family), and scanner-friendly: a phone shows it as plain text rather than
     // mangling it, and every character used is URI-unreserved so no encoder mode question arises.
     private const string PayloadScheme = "puck:world/";
 
     private readonly WorldScreenBinder m_binder = binder;
-    private readonly IServerLink m_link = link;
     private readonly WorldServer m_server = server;
 
     // The world's identity as one URI-shaped token: who it is (documentId), what shape it is (schema), and exactly
@@ -79,15 +78,6 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
         }
 
         var payload = BuildPayload(definition: definition);
-
-        // A machine on the slot is ejected FIRST, through the ordered domain, exactly as screen.source <index> qr does it — this
-        // project never disposes a machine lifetime Server.WorldMachineHost owns.
-        if (m_server.Machines.HasMachine(index: index)) {
-            m_link.SubmitScreenOp(
-                op: new WorldScreenOp.Eject(Index: index),
-                principal: principal
-            );
-        }
 
         var (ok, message) = m_binder.TryQr(
             index: index,

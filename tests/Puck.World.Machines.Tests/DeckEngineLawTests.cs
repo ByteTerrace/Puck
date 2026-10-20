@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingDeck;
 using Puck.World.Server;
@@ -11,7 +10,7 @@ namespace Puck.World.Machines.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the <c>humble-gaming-deck</c> engine hosts a shipped NES cartridge in a world, behind two
 /// controller ports an engaged screen reaches only through the port its route names, and refuses what it cannot run by
-/// name; a screen-owned machine follows the same port rule.
+/// name.
 /// </summary>
 public sealed class DeckEngineLawTests {
     private static readonly WorldScreenRoute Engageable = new(
@@ -143,133 +142,5 @@ public sealed class DeckEngineLawTests {
             expected: "moving-sprite.nes",
             actual: inserted.Configuration.GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString()
         );
-    }
-    [Fact]
-    public void AScreenOwnedMultiPortMachineDrivesOnlyItsRoutedPort() {
-        var engine = new TwoPortEngine();
-        var catalog = WorldMachineCatalog.From(extensions: PuckExtensionSet.Compose(extensions: [new TestExtension(
-            name: "two-port",
-            register: registry => registry.AddMachineEngine(engine: engine)
-        )]));
-        var content = Cartridge(file: "colour-bars.nes");
-        var unrouted = Screen(
-            route: Engageable,
-            source: new WorldScreenSource.None()
-        );
-
-        using (var host = new WorldMachineHost(
-            catalog: catalog,
-            screens: [unrouted]
-        )) {
-            var refused = host.TryInsert(
-                contentPath: content,
-                engineId: engine.Id,
-                index: 0,
-                options: null
-            );
-
-            Assert.False(condition: refused.Ok);
-            Assert.Contains(
-                actualString: refused.Message,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "must name the one it drives"
-            );
-            Assert.True(condition: Assert.Single(collection: engine.Created).Disposed);
-        }
-
-        using var routed = new WorldMachineHost(
-            catalog: catalog,
-            screens: [unrouted with { Route = Engageable with { Port = "second" } }]
-        );
-        var inserted = routed.TryInsert(
-            contentPath: content,
-            engineId: engine.Id,
-            index: 0,
-            options: null
-        );
-
-        Assert.True(
-            condition: inserted.Ok,
-            userMessage: inserted.Message
-        );
-        routed.Advance(
-            840,
-            new ScreenPadSnapshot[] { new(
-                Pad: MachinePadState.Neutral with { Buttons = MachineButtons.South },
-                ScreenIndex: 0
-            ) }
-        );
-
-        var runtime = engine.Created[1];
-
-        Assert.Equal(
-            expected: MachineButtons.None,
-            actual: runtime.Ports["first"].State.Buttons
-        );
-        Assert.Equal(
-            expected: MachineButtons.South,
-            actual: runtime.Ports["second"].State.Buttons
-        );
-    }
-
-    private sealed class TwoPortEngine : IMachineEngine {
-        public List<TwoPortRuntime> Created { get; } = [];
-        public MachineEngineDescriptor Descriptor { get; } = new(
-            "two-port",
-            "Two controller ports",
-            new(
-                Fields: [],
-                Id: "puck.two-port.v1"
-            ),
-            [],
-            [],
-            [
-                new(
-                    Contract: "puck.machine.pad.v1",
-                    Description: "Controller one",
-                    Name: "first"
-                ),
-                new(
-                    Contract: "puck.machine.pad.v1",
-                    Description: "Controller two",
-                    Name: "second"
-                ),
-            ],
-            [],
-            []
-        );
-
-        public string Id => "two-port";
-
-        public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
-            var runtime = new TwoPortRuntime();
-
-            Created.Add(item: runtime);
-            return runtime;
-        }
-        public IMachineRuntime CreateMachine(MachineCreationRequest request) =>
-            Create(options: null);
-    }
-    private sealed class TwoPortRuntime : IMachineRuntime, IMachineInputPorts {
-        public bool Disposed { get; private set; }
-        public Dictionary<string, Port> Ports { get; } = new(comparer: StringComparer.Ordinal) {
-            ["first"] = new(),
-            ["second"] = new(),
-        };
-        public MachineRuntimeStatus Status => MachineRuntimeStatus.Running;
-
-        IReadOnlyDictionary<string, IMachineInputPort> IMachineInputPorts.InputPorts => Ports.ToDictionary(
-            comparer: StringComparer.Ordinal,
-            elementSelector: static pair => ((IMachineInputPort)pair.Value),
-            keySelector: static pair => pair.Key
-        );
-
-        public bool Advance(ulong deltaTicks) => true;
-        public void Dispose() => Disposed = true;
-    }
-    private sealed class Port : IMachineInputPort {
-        public MachinePadState State { get; private set; }
-
-        public void SetState(in MachinePadState state) => State = state;
     }
 }

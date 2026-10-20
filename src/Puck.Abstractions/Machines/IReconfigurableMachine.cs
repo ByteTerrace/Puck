@@ -17,7 +17,7 @@ namespace Puck.Abstractions.Machines;
 public interface IReconfigurableMachine {
     /// <summary>Gets the machine's current options string — the engine-vocabulary spelling of what it is running now
     /// (e.g. <c>dmg</c> after a live swap from <c>cgb</c>), the value <c>world.save</c> folds back into the screen row's
-    /// options and the <c>screen.options</c> query echoes.</summary>
+    /// options and a host echoes.</summary>
     string Options { get; }
 
     /// <summary>Retargets the running machine across the engine's options vocabulary, live. A <see langword="null"/> or

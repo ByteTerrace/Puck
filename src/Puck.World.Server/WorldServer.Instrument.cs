@@ -85,7 +85,7 @@ public sealed partial class WorldServer {
 
         return ((screen?.Source is WorldScreenSource.Machine machine)
             ? m_machines.InstrumentTicksPerBeat(instance: machine.Instance)
-            : m_machines.InstrumentTicksPerBeat(index: screenIndex)
+            : null
         );
     }
 }

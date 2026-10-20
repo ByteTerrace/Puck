@@ -185,7 +185,7 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineImageRec
         return (Model: model, Boot: boot);
     }
     /// <summary>Formats a revision and its startup options back into the canonical options string — the inverse of
-    /// <see cref="ParseOptions"/>, so a host's <c>screen.options</c> echo and <c>world.save</c> readback speak the same
+    /// <see cref="ParseOptions"/>, so a host's options echo and <c>device.model</c> readback speak the same
     /// vocabulary an author wrote. A family's default revision formats as the bare family token.</summary>
     /// <param name="model">The current revision.</param>
     /// <param name="boot">The construction-fixed firmware startup options.</param>

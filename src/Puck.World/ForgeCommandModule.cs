@@ -164,17 +164,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                             );
                         }
                         if (name == "play") {
-                            link.SubmitScreenOp(
-                                op: new WorldScreenOp.Insert(
-                                    Index: index,
-                                    ContentPath: path!,
-                                    EngineId: compiler.EngineId,
-                                    Options: ((result.Target == "agb")
-                                ? null
-                                : result.Target)
-                                ),
-                                principal: principal
-                            );
+                            return CommandResult.Error(output: $"[forge.play: screen {index} shows no declared machine; source saved to {path}]");
                         }
                         var symbols = string.Join(
                             separator: ", ",
@@ -183,9 +173,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
 
                         return new CommandResult(Output: $"[forge.{name}: {result.Target} {result.Rom.Length} bytes; source={result.SourceHash}; variables={symbols}{((path is null)
                             ? ""
-                            : $"; file={path}")}{((name == "play")
-                            ? "; insert submitted (server reports acceptance)"
-                            : "")}]");
+                            : $"; file={path}")}]");
                     }
             }
             return new CommandResult(Output: $"[forge.{name}: draft updated; forge.check validates it]");
@@ -268,7 +256,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
             name: "export"
         );
         yield return Command(
-            detail: "Saves canonical source and inserts it into the screen's named machine through its versioned provider operation. Requires matching engines and Control over the screen and machine; retains the authored machine configuration.",
+            detail: "Saves canonical source and inserts it into the screen's named machine through its versioned provider operation. Requires matching engines, Control over the screen and machine, and a source path inside one of the machine's contentFolders; retains the authored machine configuration.",
             grammar: "<screen-index> <source.cartridge.json>",
             name: "play"
         );

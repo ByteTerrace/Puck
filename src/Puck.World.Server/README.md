@@ -1948,26 +1948,18 @@ capability" shape `IWorldAddonHost`'s `addonHostFactory` uses.
 Stepping runs inside `WorldServer.Step`, immediately after
 `WorldEngagement.FoldTick`, fed that tick's per-screen pads directly
 (`WorldEngagement.BuildPadSnapshot()`, in-process—no client/wire
-round-trip). `screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`
-(`Puck.World.ScreenCommandModule`) submit a `WorldScreenOp`
+round-trip). A screen owns no machine: content mounts only into a declared
+machine through its provider operations, from a file in its `contentFolders`.
+`screen.select`/`.link`/`.unlink` submit a `WorldScreenOp`
 (`Puck.World.Protocol`) through the ordered submission domain
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
-`screen:<n>`) before the host is touched; `Insert` and a Machine-magazine
-`Select` share one boot path (`TryBootMachine`) and are BOTH CAS-pinned
-(`sha256-64` of the exact bytes read, or an `"absent"` sentinel when the file
-could not be read at all)—a failed boot is reported as a failure, never a
-disguised success, and the pinned signature rides the tape REGARDLESS of
-whether the op succeeded (INCLUDING an unresolved engine—content is
-read/signed before engine resolution is even attempted, never left unpinned
-on that path), so a replay re-drive refuses by name if the file's on-disk
-state no longer matches what was recorded. A content path ending in
-the .cartridge.json suffix names an authored `puck.cartridge.v1` document: the host
-compiles it through the engine's own forge once the engine resolves (the
-signature still covers the bytes read off disk), boots the compiled image,
-and records a `WorldMachineCartridge` (the source's canonical hash and the
-image's hash) on `WorldMachineState.Cartridge` for `screen.state`; a forge
-refusal is the bind's fault, verbatim. Declared cable links
+`screen:<n>`) before the host is touched; selection boots nothing. A content
+path ending in the .cartridge.json suffix names an authored `puck.cartridge.v1`
+document: the host compiles it through the engine's own forge, boots the
+compiled image, and records a `WorldMachineCartridge` (the source's canonical
+hash and the image's hash) on `WorldMachineState.Cartridge` for
+`screen.state`; a forge refusal is the operation's fault, verbatim. Declared cable links
 (`IWorldMachineHost.ReconcileLinks`) are established/torn down at
 construction (for a link declared in the boot document itself) AND on every
 `WorldServer.Install` (every live mutation and every whole-document

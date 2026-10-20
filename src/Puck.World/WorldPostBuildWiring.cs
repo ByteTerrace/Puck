@@ -19,8 +19,8 @@ namespace Puck.World;
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
 /// attachment, the schedule drain, and the server's
 /// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
-/// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>/
-/// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
+/// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>
+/// closures — moved out of the old presentation-only render-root
 /// factory so <c>wire.errors</c> stays honest headless (a deferred Simulation-routed refusal is counted regardless of
 /// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for both boot shapes. The
 /// toast/HUD-structure/audio-cue-listener-placement-lookup halves that only make sense with a renderer resolve their
@@ -432,34 +432,8 @@ public static class WorldPostBuildWiring {
         // identical lines a direct Console.Error write would have produced.
         services.GetRequiredService<WorldInstanceHost>().AttachNarrationSink(sink: new WorldConsoleNarrationSink());
 
-        // THE MACHINE LIFECYCLE CUE LANE: machine boot/fault outcomes fire screen.boot / screen.fault at the screen
-        // row's authored face origin. CORE: Server.WorldMachineHost and WorldClient are both core-registered, so
-        // this runs unconditionally in EVERY boot shape — a headless boot's screens boot (and step) real machines,
-        // so this cue lane is presentation-only only in WHO fires it (the audio director's cue queue accumulates
-        // harmlessly with no device pump draining it headless, same as every other cue here).
-        var audioCueClient = services.GetRequiredService<WorldClient>();
-
-        services.GetRequiredService<WorldMachineHost>().MachineLifecycleTap = (index, faulted) => {
-            Vector3? site = null;
-
-            foreach (var screen in audioCueClient.Definition.Screens) {
-                if (screen.Index == index) {
-                    site = screen.Origin;
-
-                    break;
-                }
-            }
-
-            audioDirector.SubmitCue(
-                eventToken: (faulted
-                ? WorldAudioCue.ScreenFault
-                : WorldAudioCue.ScreenBoot),
-                site: site
-            );
-        };
-
         // THE MUSIC-TRANSITION CUE LANE: a committed segment transition fires music.transition, listener-placed (a
-        // transition carries no world site) — the SAME tap-and-wiring shape the machine lifecycle lane above uses.
+        // transition carries no world site) — the server calls out and the composition root supplies the cue.
         // CORE: WorldServer and the audio director are both core-registered, so this runs unconditionally in EVERY
         // boot shape; a headless boot's cue accumulates harmlessly like every other cue here.
         worldServer.MusicTransitionTap = _ => {

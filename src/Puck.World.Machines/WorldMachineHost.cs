@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
-using Puck.Audio.Mixing;
 using Puck.World.Machines;
 
 namespace Puck.World.Server;
@@ -10,26 +9,20 @@ namespace Puck.World.Server;
 /// server-side, so machine state is simulation state and a headless boot runs exactly like a windowed one. Physical
 /// screens are consumers only: producer, jumbotron-view, probe and session sources remain genuinely
 /// presentation, composed by <c>Puck.World.WorldScreenBinder</c>, which reads this type's named machine outputs
-/// (framebuffer handle, light, audio) as a pure reader. Screen-indexed operation slots remain only as a temporary
-/// forwarding seam for the subsequent operations migration. Engines and content providers come from this host's
+/// (framebuffer handle, light, audio) as a pure reader. A screen owns no machine: its slot keeps the declared source,
+/// its magazine selector and its cable link, and resolves to the named machine it shows. Engines and content providers come from this host's
 /// <see cref="WorldMachineCatalog"/>; the host carries no dependency on their implementations.
 /// <see cref="WorldServer"/> and every other <c>Puck.World.Server</c> type reach a booted machine only through
 /// <see cref="IWorldMachineHost"/>.
 /// </summary>
 /// <remarks>Single-threaded, like every other simulation type here: constructed once at boot (or replay
 /// rehydration), then only ever touched from <see cref="WorldServer.Step"/>'s tick thread (<see cref="Advance"/>) or
-/// a synchronously-applied <see cref="WorldServer"/> screen-op apply (<see cref="TryInsert"/> and friends), so no
-/// lock guards this state. Holds native machine resources (an <see cref="IMachineRuntime"/> may own emulator-core
+/// a synchronously-applied <see cref="WorldServer"/> screen-op or provider-operation apply, so no lock guards this
+/// state. Holds native machine resources (an <see cref="IMachineRuntime"/> may own emulator-core
 /// memory) — <see cref="Dispose"/> tears every booted machine and live link down; the composition root registers
 /// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
 public sealed partial class WorldMachineHost : IWorldMachineHost {
-    /// <summary>The CAS signature <see cref="TryBootMachine"/> records when it could not read the content file at
-    /// all (missing, unreadable) — distinct from any real <c>sha256-64/…</c> hash so it can never collide with one.
-    /// A recorded op pinning this sentinel demands the same absence on replay; a file that has since appeared (or
-    /// become readable) refuses by name, exactly like a changed hash does.</summary>
-    public const string ContentAbsentSignature = "absent";
-
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 
     /// <summary>Gets this host's immutable registration catalog.</summary>
@@ -209,15 +202,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 ) {
                     instance.Lease.CompletedSteps++;
                 }
-                if (
-                    m_slots.TryGetValue(
-                    key: member,
-                    value: out var slot
-                ) &&
-                    (slot.Machine is IQueuedMachineRuntime queued)
-                ) {
-                    slot.FramesStepped = queued.CompletedSteps;
-                }
             }
         }
     }
@@ -246,150 +230,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 slot.LinkName = null;
             }
         }
-    }
-    // The shared boot sequence TryInsert and TrySelect's machine branch both funnel through. Order: read content
-    // FIRST, producing a signature EVEN ON FAILURE (a real hash, or ContentAbsentSignature) -> compare against
-    // expectedContentHash when replaying, refusing BY NAME on ANY disagreement (present-vs-absent in either
-    // direction, or a changed hash) -> resolve engine (content is signed BEFORE this step, so an unresolved engine
-    // still pins whatever it would have read — engine resolution failing is not a file-state exemption) ->
-    // construct the machine, still reporting the signature even if construction itself throws (bad options) so a
-    // content change between record and replay is caught even when the failure reason is downstream of the read.
-    private (bool Ok, string Message, string? ContentHash) TryBootMachine(int index, MachineSlot slot, string contentPath, string? engineId, string? options, string? expectedContentHash) {
-        if (!TryReadContent(
-            content: out var content,
-            contentPath: contentPath,
-            documentDirectory: null,
-            documentRelative: false,
-            fault: out var fault
-        )) {
-            const string Signature = ContentAbsentSignature;
-
-            if (
-                (expectedContentHash is { } expectedAbsence) &&
-                !string.Equals(
-                a: expectedAbsence,
-                b: Signature,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return (Ok: false, Message: $"ScreenOpContentMismatch: '{contentPath}' {fault} now, but the recording pinned {expectedAbsence} — the file changed since it was captured", ContentHash: Signature);
-            }
-
-            MachineLifecycleTap?.Invoke(
-                arg1: index,
-                arg2: true
-            );
-
-            return (Ok: false, Message: fault!, ContentHash: Signature);
-        }
-
-        var contentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
-
-        if (
-            (expectedContentHash is { } expected) &&
-            !string.Equals(
-            a: expected,
-            b: contentHash,
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            return (Ok: false, Message: $"ScreenOpContentMismatch: '{contentPath}' hashes to {contentHash}, the recording pinned {expected} — the file moved or changed since it was captured", ContentHash: contentHash);
-        }
-
-        if (!TryResolveEngine(
-            engine: out var engine,
-            engineId: engineId,
-            error: out var engineError
-        )) {
-            MachineLifecycleTap?.Invoke(
-                arg1: index,
-                arg2: true
-            );
-
-            // Content was read and hashed before engine resolution, so this failure still pins the signature —
-            // a replay whose file now hashes differently is caught here too, same as the construction-rejects
-            // path below.
-            return (Ok: false, Message: engineError, ContentHash: contentHash);
-        }
-
-        // The content is signed above as read off disk; a cartridge document compiles here, after the engine is
-        // known (the forge is the engine's own), so a forge refusal still pins the source file's signature.
-        if (!TryResolveContent(
-            bytes: out var bytes,
-            cartridge: out var cartridge,
-            compilation: out var compilation,
-            content: content,
-            contentPath: contentPath,
-            engine: engine,
-            fault: out var resolveFault
-        )) {
-            MachineLifecycleTap?.Invoke(
-                arg1: index,
-                arg2: true
-            );
-
-            return (Ok: false, Message: resolveFault!, ContentHash: contentHash);
-        }
-
-        IMachineRuntime created;
-
-        try {
-            created = engine.Create(
-                audioSampleRate: MachineAudioRate.SampleRate,
-                contentBytes: bytes,
-                options: options,
-                savePath: null
-            );
-        } catch (ArgumentException exception) {
-            MachineLifecycleTap?.Invoke(
-                arg1: index,
-                arg2: true
-            );
-
-            // Still pin the hash: content WAS read and hashed even though construction rejected it (bad options),
-            // so a replay whose file now hashes differently is still caught, never silently retried unpinned.
-            return (Ok: false, Message: exception.Message, ContentHash: contentHash);
-        }
-        if (InputRouteRefusal(
-            index: index,
-            machine: $"{engine.Id} machine",
-            route: slot.Route,
-            runtime: created
-        ) is { } routeRefusal) {
-            created.Dispose();
-            MachineLifecycleTap?.Invoke(
-                arg1: index,
-                arg2: true
-            );
-
-            return (Ok: false, Message: routeRefusal, ContentHash: contentHash);
-        }
-
-        LeaveLink(index: index);
-        slot.ClearMachine();
-        slot.Machine = created;
-        slot.MachineEngine = engine.Id;
-        slot.MachineContentPath = contentPath;
-        slot.MachineSourceEngine = ((engineId is { Length: > 0 })
-            ? engineId
-            : engine.Id
-        );
-        slot.MachineOptions = options;
-        slot.MachineContentHash = contentHash;
-        slot.Cartridge = cartridge;
-        slot.Compilation = compilation;
-        slot.DeclaredFault = null;
-        slot.FramesStepped = 0;
-        MachineLifecycleTap?.Invoke(
-            arg1: index,
-            arg2: false
-        );
-
-        return (Ok: true, Message: $"screen {index} booted {engine.Id} '{Path.GetFileName(path: contentPath)}'{(string.IsNullOrWhiteSpace(value: options)
-            ? ""
-            : $" ({options})")}{((cartridge is { } compiled)
-            ? $" cartridge hash {compiled.SourceHash} rom {compiled.RomHash}"
-            : "")}", ContentHash: contentHash);
     }
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
@@ -496,16 +336,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         )) {
             return (null, null);
         }
-        if (slot.DeclaredSource is WorldScreenSource.Machine source) {
-            return (m_instances.TryGetValue(
-                key: source.Instance,
-                value: out var instance
-            )
-                ? (instance.Lease.Runtime, instance.Declaration.Engine)
-                : (null, null)
-            );
-        }
-        return (slot.Machine, slot.MachineEngine);
+        return (((slot.DeclaredSource is WorldScreenSource.Machine source) && m_instances.TryGetValue(
+            key: source.Instance,
+            value: out var instance
+        ))
+            ? (instance.Lease.Runtime, instance.Declaration.Engine)
+            : (null, null)
+        );
     }
     private HashSet<string> LinkedInstances() {
         var result = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -602,37 +439,23 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         return (true, string.Empty);
     }
     // A document-relative path resolves beside documentDirectory: the directory of the document that declares it.
-    private static bool TryReadContent(string contentPath, string? documentDirectory, bool documentRelative, out byte[] content, out string? fault) {
+    private static bool TryReadContent(string contentPath, string? documentDirectory, out byte[] content, out string? fault) {
         if (string.IsNullOrEmpty(value: contentPath)) {
             content = [];
             fault = "no content configured";
 
             return false;
         }
+        if (!WorldDocumentPaths.TryResolve(
+            documentDirectory: documentDirectory,
+            path: contentPath,
+            reason: out var unresolved,
+            resolved: out var resolvedPath
+        )) {
+            content = [];
+            fault = $"content {unresolved}";
 
-        string resolvedPath;
-
-        if (documentRelative) {
-            if (!WorldDocumentPaths.TryResolve(
-                documentDirectory: documentDirectory,
-                path: contentPath,
-                reason: out var unresolved,
-                resolved: out resolvedPath
-            )) {
-                content = [];
-                fault = $"content {unresolved}";
-
-                return false;
-            }
-        } else {
-            try {
-                resolvedPath = Path.GetFullPath(path: contentPath);
-            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-                content = [];
-                fault = $"content '{contentPath}' cannot be resolved ({exception.Message})";
-
-                return false;
-            }
+            return false;
         }
 
         if (!File.Exists(path: resolvedPath)) {
@@ -654,42 +477,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return false;
         }
     }
-    private bool TryResolveEngine(string? engineId, out IMachineEngine engine, out string error) {
-        if (engineId is { } id) {
-            if (Catalog.Engines.TryGetValue(
-                key: id,
-                value: out var named
-            )) {
-                engine = named;
-                error = "";
-
-                return true;
-            }
-
-            engine = null!;
-            error = $"no screen-machine engine '{id}'";
-
-            return false;
-        }
-
-        if (Catalog.Engines.Count == 1) {
-            engine = Catalog.Engines.Values[0];
-            error = "";
-
-            return true;
-        }
-
-        engine = null!;
-        error = ((Catalog.Engines.Count == 0)
-            ? "no screen-machine engine registered"
-            : $"which engine? {Catalog.Engines.Count} registered — name one of: {string.Join(
-                separator: ", ",
-                values: Catalog.Engines.Keys.Order(comparer: StringComparer.Ordinal)
-            )}"
-        );
-
-        return false;
-    }
 
     /// <inheritdoc/>
     public void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads) {
@@ -706,62 +493,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             pads.Span,
             LinkedInstances()
         );
-
-        foreach (var slot in m_slots.Values) {
-            if (slot.Machine is not { } machine) {
-                continue;
-            }
-
-            if (
-                (slot.LinkName is { } linkName) &&
-                m_links.TryGetValue(
-                key: linkName,
-                value: out var entry
-            ) &&
-                (entry.Link is not null)
-            ) {
-                continue;
-            }
-
-            var input = EngagedPad(
-                pads: pads.Span,
-                screenIndex: slot.Index
-            );
-
-            AnyEverPumped = true;
-
-            // Insertion refused a multi-port machine on an engageable route naming none of its ports, so a route without
-            // a port here drives the machine's sole port, and a named one drives that port alone.
-            if (machine is IMachineInputPorts ports) {
-                foreach (var (name, port) in ports.InputPorts) {
-                    port.SetState(state: (((slot.Route.Port is not { } routedPort) || string.Equals(
-                        a: routedPort,
-                        b: name,
-                        comparisonType: StringComparison.Ordinal
-                    ))
-                        ? input
-                        : MachinePadState.Neutral));
-                }
-            }
-
-            if (machine is IQueuedMachineRuntime queued) {
-                var submission = queued.Submit(deltaTicks: stepTicks);
-
-                if (
-                    (submission == QueuedMachineSubmission.Rejected) &&
-                    (machine.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted)
-                ) {
-                    throw new InvalidOperationException(message: ($"Screen {slot.Index}'s queued machine rejected an authoritative tick/input segment" +
-                                 ((queued.QueueFault is { } fault)
-                        ? $" ({fault})."
-                        : ".")));
-                }
-
-                slot.FramesStepped = queued.CompletedSteps;
-            } else if (machine.Advance(deltaTicks: stepTicks)) {
-                ++slot.FramesStepped;
-            }
-        }
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
@@ -770,15 +501,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             value: out var audio
         ))
             ? audio
-            : null
-        );
-    /// <inheritdoc/>
-    public long? InstrumentTicksPerBeat(int index) =>
-        ((m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) && (slot.Machine is IInstrumentClockSource instrument) && (instrument.TicksPerBeat > 0))
-            ? instrument.TicksPerBeat
             : null
         );
     /// <inheritdoc/>
@@ -816,10 +538,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         m_links.Clear();
 
         DisposeInstances();
-
-        foreach (var slot in m_slots.Values) {
-            slot.Machine?.Dispose();
-        }
     }
     /// <inheritdoc/>
     public bool HasEngine(string engineId) => Catalog.Engines.ContainsKey(key: engineId);
@@ -835,17 +553,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         )) {
             return null;
         }
-        if (slot.DeclaredSource is WorldScreenSource.Machine source) {
-            return VideoOutput(
+        return ((slot.DeclaredSource is WorldScreenSource.Machine source)
+            ? VideoOutput(
                 instance: source.Instance,
                 output: source.Output
-            );
-        }
-        return (((slot.Machine is IMachineVideoOutputs outputs) && outputs.VideoOutputs.TryGetValue(
-            key: "video",
-            value: out var output
-        ))
-            ? output
+            )
             : null
         );
     }
@@ -999,12 +711,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         foreach (var index in m_reconcileRemovals) {
             LeaveLink(index: index);
 
-            if (m_slots.Remove(
-                key: index,
-                value: out var slot
-            )) {
-                slot.Machine?.Dispose();
-            }
+            _ = m_slots.Remove(key: index);
         }
 
         foreach (var screen in screens) {
@@ -1060,31 +767,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 LeaveLink(index: screen.Index);
             }
 
+            // A named machine source is a presentation consumer: the named instance plan owns boot, replacement,
+            // generation and retirement, and changing a display reference never touches it.
             slot.DeclaredSource = screen.Source;
-
-            switch (screen.Source) {
-                case WorldScreenSource.Machine:
-                    // Named machine sources are presentation consumers. The named instance plan above owns boot,
-                    // replacement, generation, and retirement; changing a display reference never touches it.
-                    break;
-                default:
-                    // A non-machine declared source: if this slot carried a machine, eject it (the declared source no
-                    // longer names one); presentation applies its own source through the ordinary reconcile path.
-                    if (slot.Machine is not null) {
-                        var (ejectOk, ejectMessage) = TryEject(index: screen.Index);
-
-                        if (m_narrationHub is { HasNarrationSink: true }) {
-                            m_narrationHub?.Narrate(
-                                channel: "world.screen",
-                                text: $"[world.screen: {(ejectOk
-                                ? ejectMessage
-                                : $"{screen.Index} {ejectMessage}")}]"
-                            );
-                        }
-                    }
-
-                    break;
-            }
         }
 
         m_documentDirectoryChanged = false;
@@ -1134,61 +819,19 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             );
         }
 
-        var queued = (slot.Machine as IQueuedMachineRuntime);
-
         return new WorldMachineState(
-            Assigned: (slot.Machine is not null),
-            Engine: slot.MachineEngine,
-            FramesStepped: (queued?.CompletedSteps ?? slot.FramesStepped),
-            PendingSteps: (queued?.PendingSteps ?? 0L),
-            MaximumPendingSteps: (queued?.MaximumPendingSteps ?? 0),
-            BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
-            Fault: (queued?.QueueFault ?? slot.DeclaredFault),
-            Cartridge: slot.Cartridge,
-            Content: ((slot.Machine is null) ? null : slot.MachineContentPath)
+            Assigned: false,
+            Engine: null,
+            FramesStepped: 0L,
+            PendingSteps: 0L,
+            MaximumPendingSteps: 0,
+            BackpressureEvents: 0L,
+            Fault: null,
+            Cartridge: null,
+            Content: null
         );
     }
-    /// <inheritdoc/>
-    public (bool Ok, string Message) TryEject(int index) {
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
-            return (Ok: false, Message: $"no screen {index} declared");
-        }
 
-        if (slot.Machine is null) {
-            return (Ok: false, Message: $"screen {index} has no machine to eject");
-        }
-
-        LeaveLink(index: index);
-        slot.ClearMachine();
-        slot.FramesStepped = 0;
-
-        return (Ok: true, Message: $"screen {index} ejected");
-    }
-    /// <inheritdoc/>
-    public (bool Ok, string Message, string? ContentHash) TryInsert(int index, string contentPath, string? engineId, string? options, string? expectedContentHash = null) {
-        if (m_disposed) {
-            return (Ok: false, Message: "machine host disposed", ContentHash: null);
-        }
-
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
-            return (Ok: false, Message: $"no screen {index} declared", ContentHash: null);
-        }
-
-        return TryBootMachine(
-            contentPath: contentPath,
-            engineId: engineId,
-            expectedContentHash: expectedContentHash,
-            index: index,
-            options: options,
-            slot: slot
-        );
-    }
     /// <inheritdoc/>
     public (bool Ok, string Message) TryLink(string name, IReadOnlyList<int> members) {
         if (m_disposed) {
@@ -1320,50 +963,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return false;
     }
+    /// <summary>Points the screen's magazine selector at <paramref name="entry"/>. Selection boots nothing: a
+    /// <see cref="WorldScreenSource.Machine"/> entry selects a named machine that already runs, and any other entry is
+    /// presentation's own concern (<c>Puck.World.WorldScreenBinder</c> observes the moved selector and applies its
+    /// source itself). Fails for an undeclared screen, a screen with no magazine, or an out-of-range entry.</summary>
     /// <inheritdoc/>
-    public bool TryReadMachineInsert(int index, out string engine, out string contentPath, out string? options) {
-        if (
-            m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) &&
-            (slot.Machine is not null) &&
-            (slot.MachineContentPath is { } path) &&
-            (slot.MachineSourceEngine is { } engineId)
-        ) {
-            engine = engineId;
-            contentPath = path;
-            options = slot.MachineOptions;
-
-            return true;
+    public (bool Ok, string Message) TrySelect(int index, int entry) {
+        if (m_disposed) {
+            return (Ok: false, Message: "machine host disposed");
         }
 
-        engine = string.Empty;
-        contentPath = string.Empty;
-        options = null;
-
-        return false;
-    }
-    /// <inheritdoc/>
-    public bool TryReadOptions(int index, out string options) {
-        if (
-            m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) &&
-            (slot.Machine is IReconfigurableMachine reconfigurable)
-        ) {
-            options = reconfigurable.Options;
-
-            return true;
-        }
-
-        options = string.Empty;
-
-        return false;
-    }
-    /// <inheritdoc/>
-    public (bool Ok, string Message) TryReconfigure(int index, string? options) {
         if (m_slots.TryGetValue(
             key: index,
             value: out var slot
@@ -1371,60 +980,15 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (slot.Machine is not { } machine) {
-            return (Ok: false, Message: $"screen {index} has no machine to reconfigure");
-        }
-
-        if (machine is not IReconfigurableMachine reconfigurable) {
-            return (Ok: false, Message: $"screen {index}'s machine does not support live reconfiguration");
-        }
-
-        var previous = reconfigurable.Options;
-
-        if (!reconfigurable.TryReconfigure(
-            options: options,
-            out var reason
-        )) {
-            return (Ok: false, Message: $"{index} '{previous}' -> '{options}' rejected: {reason}");
-        }
-
-        slot.MachineOptions = reconfigurable.Options;
-
-        return (Ok: true, Message: $"{index} '{previous}' -> '{reconfigurable.Options}' reconfigured{((reason.Length > 0)
-            ? $" — {reason}"
-            : string.Empty)}");
-    }
-    /// <summary>Points the screen's magazine selector at <paramref name="entry"/>. When that entry is a
-    /// <see cref="WorldScreenSource.Machine"/> row, boots it through the same <see cref="TryBootMachine"/> sequence
-    /// <see cref="TryInsert"/> uses — CAS-pinned identically, since a magazine entry's document-declared path is not
-    /// immune to on-disk drift either; for any other entry kind the selector still moves (so the pointer always
-    /// tracks) but nothing boots here — a non-machine entry is presentation's own concern
-    /// (<c>Puck.World.WorldScreenBinder</c> observes the moved selector and applies its camera/capture/view source
-    /// itself). Fails for an undeclared screen, a screen with no magazine, an
-    /// out-of-range entry, or — for a machine entry — whatever <see cref="TryBootMachine"/> refuses for; a failed
-    /// boot always reports <c>Ok: false</c>, never a disguised success.</summary>
-    /// <inheritdoc/>
-    public (bool Ok, string Message, string? ContentHash) TrySelect(int index, int entry, string? expectedContentHash = null) {
-        if (m_disposed) {
-            return (Ok: false, Message: "machine host disposed", ContentHash: null);
-        }
-
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
-            return (Ok: false, Message: $"no screen {index} declared", ContentHash: null);
-        }
-
         if (slot.Magazine is not { } magazine) {
-            return (Ok: false, Message: $"screen {index} has no magazine", ContentHash: null);
+            return (Ok: false, Message: $"screen {index} has no magazine");
         }
 
         if (
             (entry < 0) ||
             (entry >= magazine.Entries.Count)
         ) {
-            return (Ok: false, Message: $"entry {entry} is outside 0..{(magazine.Entries.Count - 1)}", ContentHash: null);
+            return (Ok: false, Message: $"entry {entry} is outside 0..{(magazine.Entries.Count - 1)}");
         }
 
         var source = magazine.Entries[entry];
@@ -1434,18 +998,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         if (source is WorldScreenSource.Machine machine) {
             // A named source selects an existing producer. Selection never boots, replaces, or ejects the named
             // instance; the subsequent source migration updates the presentation consumer through its normal path.
-            return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected machine {machine.Instance}:{machine.Output}", ContentHash: null);
+            return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected machine {machine.Instance}:{machine.Output}");
         }
 
-        // Non-machine entry (or an unconfigured machine row): the selector moved; any existing machine on the slot
-        // is cleared so the non-machine entry can take over presentation-side (mirroring TryEject's own clear).
-        // Nothing here reads a file, so no CAS pin applies regardless of expectedContentHash.
-        if (slot.Machine is not null) {
-            LeaveLink(index: index);
-            slot.ClearMachine();
-        }
-
-        return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected (no machine — presentation applies its own source)", ContentHash: null);
+        // Non-machine entry: the selector moved, and presentation applies its own source.
+        return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected (no machine — presentation applies its own source)");
     }
     /// <inheritdoc/>
     public (bool Ok, string Message) TryUnlink(string name) {
@@ -1464,35 +1021,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             key: index,
             value: out var slot
         ) &&
-            (slot.DeclaredSource is WorldScreenSource.Machine source) &&
-            TryResolveSymbol(
-            source.Instance,
-            symbol,
-            out address
-        )
+            (slot.DeclaredSource is WorldScreenSource.Machine source)
         ) {
-            return true;
-        }
-        if (
-            m_slots.TryGetValue(
-            key: index,
-            value: out slot
-        ) &&
-            (slot.Compilation is { } comp) &&
-            comp.Symbols.TryGetValue(
-            key: symbol,
-            value: out var exported
-        ) &&
-            string.Equals(
-            a: exported.Space,
-            b: "bus",
-            comparisonType: StringComparison.Ordinal
-        ) &&
-            (exported.Address <= int.MaxValue)
-        ) {
-            address = ((int)exported.Address);
-
-            return true;
+            return TryResolveSymbol(
+                source.Instance,
+                symbol,
+                out address
+            );
         }
 
         address = 0;
@@ -1576,8 +1111,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <inheritdoc/>
     public bool AnyEverPumped { get; private set; }
     /// <inheritdoc/>
-    public Action<int, bool>? MachineLifecycleTap { get; set; }
-    /// <inheritdoc/>
     public IEnumerable<int> MachineScreenIndices {
         get {
             foreach (var (index, slot) in m_slots) {
@@ -1597,37 +1130,14 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         public required int[] Members { get; init; }
         public required string Name { get; init; }
     }
-    // One declared screen's machine slot: the persistent declared source (so ReconcileScreens can diff it), the
-    // magazine + live selector, and at most one booted machine plus the bookkeeping world.save/screen.state need.
+    // One declared screen's slot: the persistent declared source (so ReconcileScreens can diff it), the magazine and
+    // its live selector, and the cable link the screen belongs to.
     private sealed class MachineSlot {
-        public WorldMachineCartridge? Cartridge { get; set; }
-        public PreparedMachineContent? Compilation { get; set; }
-        public string? DeclaredFault { get; set; }
         public WorldScreenSource? DeclaredSource { get; set; }
-        public long FramesStepped { get; set; }
         public required int Index { get; init; }
         public string? LinkName { get; set; }
-        public IMachineRuntime? Machine { get; set; }
-        public string? MachineContentHash { get; set; }
-        public string? MachineContentPath { get; set; }
-        public string? MachineEngine { get; set; }
-        public string? MachineOptions { get; set; }
-        public string? MachineSourceEngine { get; set; }
         public WorldScreenMagazine? Magazine { get; set; }
         public WorldScreenRoute Route { get; set; }
         public int SelectedEntry { get; set; }
-
-        public void ClearMachine() {
-            Machine?.Dispose();
-            Machine = null;
-            MachineEngine = null;
-            MachineContentPath = null;
-            MachineSourceEngine = null;
-            MachineOptions = null;
-            MachineContentHash = null;
-            Cartridge = null;
-            Compilation = null;
-            DeclaredFault = null;
-        }
     }
 }

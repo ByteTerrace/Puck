@@ -96,14 +96,7 @@ public static class WorldReplayEntryDescriber {
         : "")} by {rebuild.Actor.Describe()}";
     private static string DescribeScreenOp(WorldReplayEntry.ScreenOp screenOp) {
         var body = screenOp.Value switch {
-            WorldScreenOp.Insert insert => $"screen.insert {insert.Index} '{insert.ContentPath}'{((insert.EngineId is { } engine)
-            ? $" engine={engine}"
-            : "")}{((insert.Options is { } options)
-            ? $" options='{options}'"
-            : "")}",
-            WorldScreenOp.Eject eject => $"screen.eject {eject.Index}",
             WorldScreenOp.Select select => $"screen.select {select.Index} entry={select.Entry}",
-            WorldScreenOp.SetOptions setOptions => $"screen.options {setOptions.Index} '{(setOptions.Options ?? "")}'",
             WorldScreenOp.Link link => $"screen.link '{link.Name}' [{string.Join(
             separator: ",",
             values: link.Members
@@ -112,9 +105,7 @@ public static class WorldReplayEntryDescriber {
             _ => $"screen.{screenOp.Value.GetType().Name.ToLowerInvariant()}",
         };
 
-        return $"{body}{((screenOp.ContentHash is { } hash)
-            ? $" content={hash}"
-            : "")} by {screenOp.Actor.Describe()}";
+        return $"{body} by {screenOp.Actor.Describe()}";
     }
     private static string DescribeSession(SessionRequest request) => request switch {
         SessionRequest.Join join => $"session join slot={join.Slot} identity={(join.IdentityName ?? "pending")}",

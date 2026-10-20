@@ -50,20 +50,20 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing: the server refuses the insert by name.",
+            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing and refuses the insert by name.",
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.eject",
-            description: "Ejects a screen's live source, live: screen.eject <index>. A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive; a legacy screen-owned machine uses the same source removal, while a presentation source ejects directly through the binder.",
+            description: "Ejects a screen's live source, live: screen.eject <index>. A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive, while a presentation source ejects directly through the binder.",
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -156,16 +156,12 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
 
         if (
             (DeclaredScreen(index: index) is { } existing) &&
-            (m_server.Machines.HasMachine(index: index) || (existing.Source is WorldScreenSource.Machine))
+            (existing.Source is WorldScreenSource.Machine)
         ) {
-            if (existing.Source is WorldScreenSource.Machine) {
-                var updated = existing with { Source = new WorldScreenSource.None() };
-
-                return m_link.Submit(mutation: new WorldMutation.UpsertScreen(
-                    Principal: principal,
-                    Screen: updated
-                ));
-            }
+            return m_link.Submit(mutation: new WorldMutation.UpsertScreen(
+                Principal: principal,
+                Screen: existing with { Source = new WorldScreenSource.None() }
+            ));
         }
 
         var (ok, message) = m_binder.TryEject(index: index);
@@ -175,24 +171,9 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.eject: {message}]")
         );
     }
-    private void EjectMachineFirst(int index, Principal principal) {
-        if (
-            m_server.Machines.HasMachine(index: index) &&
-            (DeclaredScreen(index: index)?.Source is not WorldScreenSource.Machine)
-        ) {
-            if (DeclaredScreen(index: index) is { } existing) {
-                var updated = existing with { Source = new WorldScreenSource.None() };
-
-                _ = m_link.Submit(mutation: new WorldMutation.UpsertScreen(
-                    Principal: principal,
-                    Screen: updated
-                ));
-            }
-        }
-    }
     private CommandResult InsertHandler(CommandContext context, WireArgs args) {
-        if (args.Count < 2) {
-            return CommandResult.Error(output: "[screen.insert: expected <index> <contentPath> — plus an optional engine id and options]");
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[screen.insert: expected <index> <contentPath>]");
         }
 
         if (!args.TryInt(
@@ -215,91 +196,18 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             );
         }
 
-        var contentPath = args[1].ToString();
-        var token = 2;
-        string? engineId = null;
-
-        if (
-            (token < args.Count) &&
-            machines.IsRegistered(engineId: args[token].ToString())
-        ) {
-            engineId = args[token].ToString();
-            token++;
-        }
-
-        string? options = null;
-
-        if (token < args.Count) {
-            var optionsBuilder = new StringBuilder();
-
-            for (; (token < args.Count); token++) {
-                if (optionsBuilder.Length > 0) {
-                    _ = optionsBuilder.Append(value: ' ');
-                }
-
-                _ = optionsBuilder.Append(value: args[token].ToString());
-            }
-
-            options = optionsBuilder.ToString();
-        }
-
-        var existing = DeclaredScreen(index: index);
-
-        if (existing?.Source is WorldScreenSource.Machine named) {
-            if (m_server.Machines.InstanceState(name: named.Instance) is not { } state) {
-                return CommandResult.Error(output: $"[screen.insert: named machine '{named.Instance}' is unavailable]");
-            }
-            if (
-                ((engineId is not null) && (engineId != state.Engine)) ||
-                !string.IsNullOrWhiteSpace(value: options)
-            ) {
-                return CommandResult.Error(output: $"[screen.insert: '{named.Instance}' keeps its authored engine and configuration; use machine.operation for provider changes]");
-            }
-            return WorldMachineCommandModule.InsertContent(
+        // A screen owns no machine: content mounts only into the declared machine a screen shows, from a file in its
+        // contentFolders.
+        return ((DeclaredScreen(index: index)?.Source is WorldScreenSource.Machine named)
+            ? WorldMachineCommandModule.InsertContent(
                 m_link,
                 m_server.Machines,
                 principal,
                 named.Instance,
-                contentPath,
+                args[1].ToString(),
                 verb: "screen.insert"
-            );
-        }
-
-        if (engineId is null) {
-            if (
-                (existing?.Source is WorldScreenSource.Machine m) &&
-                (m_server.Machines.InstanceState(name: m.Instance) is { } state)
-            ) {
-                engineId = state.Engine;
-            } else {
-                var allEngines = machines.Engines.Values.ToArray();
-
-                if (allEngines.Length == 1) {
-                    engineId = allEngines[0].Id;
-                } else if (allEngines.Length > 1) {
-                    engineId = "gaming-brick";
-                }
-            }
-        }
-
-        if (
-            (engineId is null) ||
-            !machines.IsRegistered(engineId: engineId)
-        ) {
-            return CommandResult.Error(output: $"[screen.insert: no screen-machine engine '{(engineId ?? "unspecified")}' registered]");
-        }
-
-        m_link.SubmitScreenOp(
-            op: new WorldScreenOp.Insert(
-                ContentPath: contentPath,
-                EngineId: engineId,
-                Index: index,
-                Options: options
-            ),
-            principal: principal
-        );
-
-        return CommandResult.None;
+            )
+            : CommandResult.Error(output: $"[screen.insert: screen {index} shows no declared machine; content mounts only into a machines row's device, from a file in its contentFolders]"));
     }
     private CommandResult LinksHandler(CommandContext context, WireArgs args) {
         if (CommandResult.RequireNoArguments(
@@ -391,7 +299,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             handler: $"[screen.peek: {index} 0x{address:X4}=0x{value:X2}]"
         ));
     }
-    private CommandResult SourceCamera(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceCamera(int index, in WireArgs args) {
         if (args.Count > 5) {
             return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
         }
@@ -455,11 +363,6 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
         }
 
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
-
         var (ok, message) = m_binder.TryCamera(
             index: index,
             seat: seat,
@@ -474,7 +377,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceCapture(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceCapture(int index, in WireArgs args) {
         if (args.Count < 3) {
             return CommandResult.Error(output: "[screen.source: capture expects <windowTitle...>]");
         }
@@ -490,11 +393,6 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             _ = titleBuilder.Append(value: args[token].ToString());
         }
 
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
-
         var (ok, message) = m_binder.TryCapture(
             index: index,
             windowTitle: titleBuilder.ToString()
@@ -508,7 +406,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceDesktop(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceDesktop(int index, in WireArgs args) {
         if (args.Count is < 2 or > 3) {
             return CommandResult.Error(output: "[screen.source: desktop expects [monitorIndex]]");
         }
@@ -524,11 +422,6 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         ) {
             return CommandResult.Error(output: $"[screen.source: monitorIndex '{args[2].ToString()}' must be an integer]");
         }
-
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
 
         var (ok, message) = m_binder.TryDesktop(
             index: index,
@@ -579,8 +472,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceCamera(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
         if (args.Is(
@@ -589,8 +481,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceCapture(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
         if (args.Is(
@@ -599,8 +490,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceProbe(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
         if (args.Is(
@@ -609,8 +499,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceDesktop(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
         if (args.Is(
@@ -619,8 +508,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceQr(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
         if (args.Is(
@@ -629,8 +517,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         )) {
             return SourceView(
                 args: in args,
-                index: index,
-                principal: principal
+                index: index
             );
         }
 
@@ -661,15 +548,10 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceProbe(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceProbe(int index, in WireArgs args) {
         if (args.Count != 3) {
             return CommandResult.Error(output: "[screen.source: probe expects <probeId>]");
         }
-
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
 
         var (ok, message) = m_binder.TryProbe(
             index: index,
@@ -684,12 +566,12 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceQr(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceQr(int index, in WireArgs args) {
         if (args.Count is < 2 or > 5) {
             return CommandResult.Error(output: "[screen.source: qr expects [payload] [ecLevel] [quietZoneModules]]");
         }
 
-        // No payload: echo the current authoring without changing it (the screen.options / screen.select read-back
+        // No payload: echo the current authoring without changing it (the screen.select read-back
         // pattern — the decision surface this verb creates is readable through the same verb that set it).
         if (args.Count == 2) {
             return (m_binder.TryReadQr(
@@ -714,11 +596,6 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             quietZoneModules = quietZone;
         }
 
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
-
         var (ok, message) = m_binder.TryQr(
             index: index,
             payload: args[2].ToString(),
@@ -736,15 +613,10 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceView(int index, Principal principal, in WireArgs args) {
+    private CommandResult SourceView(int index, in WireArgs args) {
         if (args.Count != 3) {
             return CommandResult.Error(output: "[screen.source: view expects <cameraName>]");
         }
-
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
 
         var (ok, message) = m_binder.TryView(
             index: index,

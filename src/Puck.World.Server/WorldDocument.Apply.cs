@@ -338,8 +338,7 @@ public sealed partial class WorldDocument {
                     op: screenOp.Value,
                     principal: envelope.Principal,
                     connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId,
-                    expectedContentHash: null
+                    correlationId: envelope.CorrelationId
                 );
 
                 return WorldSubmissionResult.Ack.Instance;
@@ -1288,10 +1287,7 @@ public sealed partial class WorldDocument {
     // Unlink's multi-member shape.
     private IReadOnlyList<int> ScreenOpTargets(WorldScreenOp op) {
         switch (op) {
-            case WorldScreenOp.Insert insert: return new[] { insert.Index };
-            case WorldScreenOp.Eject eject: return new[] { eject.Index };
             case WorldScreenOp.Select select: return new[] { select.Index };
-            case WorldScreenOp.SetOptions options: return new[] { options.Index };
             case WorldScreenOp.Link link: return link.Members;
             case WorldScreenOp.Unlink unlink:
                 return (Host.Machines.TryReadLinkMembers(
@@ -1327,12 +1323,9 @@ public sealed partial class WorldDocument {
     // the SAME grant subject ScreenCommandModule's pre-inversion client-side precheck used, now checked
     // AUTHORITATIVELY server-side — then the mechanical apply through Host.Machines. ScreenOpTap fires exactly once,
     // after the outcome (success or refusal) is known, so a refused op still reproduces on replay.
-    private bool TryApplyScreenOp(WorldScreenOp op, Principal principal, int connectionId, long correlationId, string? expectedContentHash) {
+    private bool TryApplyScreenOp(WorldScreenOp op, Principal principal, int connectionId, long correlationId) {
         var verb = op switch {
-            WorldScreenOp.Insert => "screen.insert",
-            WorldScreenOp.Eject => "screen.eject",
             WorldScreenOp.Select => "screen.select",
-            WorldScreenOp.SetOptions => "screen.options",
             WorldScreenOp.Link => "screen.link",
             WorldScreenOp.Unlink => "screen.unlink",
             _ => throw new ArgumentOutOfRangeException(
@@ -1362,43 +1355,22 @@ public sealed partial class WorldDocument {
             ));
             Host.ScreenOpTap?.Invoke(
                 arg1: op,
-                arg2: null,
-                arg3: principal
+                arg2: principal
             );
 
             return false;
         }
 
-        // A screen-owned machine belongs to no machines row, so no author lists the folders its content may come from:
-        // content mounts only into a declared machine, from its contentFolders (machine.swap, or content.insert).
-        var (ok, message, contentHash) = op switch {
-            WorldScreenOp.Insert insert => (false, $"screen {insert.Index} mounts no '{insert.ContentPath}': content mounts only into a declared machine, from a file in its contentFolders (machine.swap <instance> <name>)", ((string?)null)),
-            WorldScreenOp.Eject eject => ((Host.Machines.TryEject(index: eject.Index) is (var ejectOk, var ejectMessage))
-            ? (ejectOk, ejectMessage, ((string?)null))
-            : default),
-            // Select threads the SAME CAS pin Insert does when the entry it resolves to is a Machine row — a
-            // magazine entry's document-declared path is not immune to on-disk drift either. See
-            // WorldMachineHost.TrySelect's own remarks.
+        var (ok, message) = op switch {
             WorldScreenOp.Select select => Host.Machines.TrySelect(
             index: select.Index,
-            entry: select.Entry,
-            expectedContentHash: expectedContentHash
+            entry: select.Entry
         ),
-            WorldScreenOp.SetOptions options => ((Host.Machines.TryReconfigure(
-            index: options.Index,
-            options: options.Options
-        ) is (var optionsOk, var optionsMessage))
-            ? (optionsOk, optionsMessage, ((string?)null))
-            : default),
-            WorldScreenOp.Link link => ((Host.Machines.TryLink(
+            WorldScreenOp.Link link => Host.Machines.TryLink(
             name: link.Name,
             members: link.Members
-        ) is (var linkOk, var linkMessage))
-            ? (linkOk, linkMessage, ((string?)null))
-            : default),
-            WorldScreenOp.Unlink unlink => ((Host.Machines.TryUnlink(name: unlink.Name) is (var unlinkOk, var unlinkMessage))
-            ? (unlinkOk, unlinkMessage, ((string?)null))
-            : default),
+        ),
+            WorldScreenOp.Unlink unlink => Host.Machines.TryUnlink(name: unlink.Name),
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(op),
             actualValue: op,
@@ -1416,15 +1388,10 @@ public sealed partial class WorldDocument {
             ConnectionId: connectionId,
             CorrelationId: correlationId
         ));
-        // The content signature (a real hash, or WorldMachineHost's "content absent" sentinel) rides the tape
-        // REGARDLESS of whether the op succeeded — a FAILED insert/select must refuse the identical way on
-        // replay, or refuse BY NAME the moment the file's on-disk state has since changed (present when it was
-        // absent, or vice versa). Gating this on `ok` would tape a failed insert with a null hash, which replays
-        // as an UNPINNED live insert — silently diverging if the file later became readable.
+        // Taped whether or not the op succeeded, so a refused op refuses the identical way on replay.
         Host.ScreenOpTap?.Invoke(
             arg1: op,
-            arg2: contentHash,
-            arg3: principal
+            arg2: principal
         );
 
         // Latch AnyScreenOpEverApplied for EVERY op that reaches dispatch — not just `ok` ones. A host-level
@@ -1885,16 +1852,10 @@ public sealed partial class WorldDocument {
     /// a live screen op never buffers, so a replayed one does not either).</summary>
     /// <param name="op">The screen op.</param>
     /// <param name="principal">The acting identity the op is checked against.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded <see cref="WorldScreenOp.Insert"/> or
-    /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (a real <c>sha256-64</c> hash, or
-    /// the concrete host's "content absent" sentinel when the recording itself never read the file) —
-    /// see <see cref="IWorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
-    /// and for the live path.</param>
-    internal void ApplyScreenOp(WorldScreenOp op, Principal principal, string? expectedContentHash = null) =>
+    internal void ApplyScreenOp(WorldScreenOp op, Principal principal) =>
         TryApplyScreenOp(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
-            expectedContentHash: expectedContentHash,
             op: op,
             principal: principal
         );

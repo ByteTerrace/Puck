@@ -31,7 +31,7 @@ public enum WorldSubmissionKind : byte {
     Lever = 9,
     /// <summary>A read-back query.</summary>
     Query = 10,
-    /// <summary>A live screen-machine lifecycle change (insert/eject/select/options/link/unlink).</summary>
+    /// <summary>A live screen runtime change (select/link/unlink).</summary>
     ScreenOp = 11,
     /// <summary>A subject-bearing target-register write.</summary>
     Designation = 12,
@@ -548,21 +548,6 @@ public static partial class WorldSubmissionCodec {
         var discriminant = reader.ReadByte();
 
         switch (discriminant) {
-            case 0: {
-                    var index = reader.ReadInt32();
-                    var contentPath = reader.ReadRequiredString(field: "Insert.ContentPath");
-                    var engineId = reader.ReadNullableString(field: "Insert.EngineId");
-                    var options = reader.ReadNullableString(field: "Insert.Options");
-
-                    return new WorldScreenOp.Insert(
-                        ContentPath: contentPath,
-                        EngineId: engineId,
-                        Index: index,
-                        Options: options
-                    );
-                }
-            case 1:
-                return new WorldScreenOp.Eject(Index: reader.ReadInt32());
             case 2: {
                     var index = reader.ReadInt32();
                     var entry = reader.ReadInt32();
@@ -570,15 +555,6 @@ public static partial class WorldSubmissionCodec {
                     return new WorldScreenOp.Select(
                         Entry: entry,
                         Index: index
-                    );
-                }
-            case 3: {
-                    var index = reader.ReadInt32();
-                    var options = reader.ReadNullableString(field: "SetOptions.Options");
-
-                    return new WorldScreenOp.SetOptions(
-                        Index: index,
-                        Options: options
                     );
                 }
             case 4: {
@@ -1308,30 +1284,10 @@ public static partial class WorldSubmissionCodec {
             ));
         }
         switch (op) {
-            case WorldScreenOp.Insert value:
-                writer.WriteByte(value: 0);
-                writer.WriteInt32(value: value.Index);
-                WriteRequiredString(
-                    writer,
-                    value.ContentPath,
-                    "Insert.ContentPath"
-                );
-                writer.WriteNullableString(value: value.EngineId);
-                writer.WriteNullableString(value: value.Options);
-                break;
-            case WorldScreenOp.Eject value:
-                writer.WriteByte(value: 1);
-                writer.WriteInt32(value: value.Index);
-                break;
             case WorldScreenOp.Select value:
                 writer.WriteByte(value: 2);
                 writer.WriteInt32(value: value.Index);
                 writer.WriteInt32(value: value.Entry);
-                break;
-            case WorldScreenOp.SetOptions value:
-                writer.WriteByte(value: 3);
-                writer.WriteInt32(value: value.Index);
-                writer.WriteNullableString(value: value.Options);
                 break;
             case WorldScreenOp.Link value:
                 writer.WriteByte(value: 4);

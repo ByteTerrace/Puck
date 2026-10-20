@@ -29,11 +29,11 @@ namespace Puck.World;
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
 /// (<see cref="MachineSource"/>) writes an output's frames into its region, and the residency reduces the acquired GPU
 /// image for lighting. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
-/// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
+/// <c>HasEngine</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
 /// <c>LinkOf</c>, <c>DescribeLinks</c>, <c>TryReadLinkMembers</c>) so presentation-side
 /// callers (<c>PlayerCommandModule</c>, <c>WorldAudioDirector</c>,
 /// <c>ScreenCommandModule</c>'s read-only verbs) reach the host's state through the same reference they
-/// already hold. Machine lifecycle mutation (insert/eject/select/options/link/unlink) routes through
+/// already hold. Machine lifecycle mutation (select/link/unlink) routes through
 /// <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
 /// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
 /// own remarks). Producer, jumbotron-view and probe feeds belong to presentation. Session feeds render the
