@@ -16,4 +16,8 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The engine console verbs puck verbs writes; WorldConsoleVerbCatalog reads it when no registry exists. -->
+        <EmbeddedResource Include="Assets/puck.console.verbs.json" LogicalName="Puck.World.Vocabulary.ConsoleVerbs" />
+    </ItemGroup>
 </Project>

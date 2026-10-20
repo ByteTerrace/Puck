@@ -31,6 +31,11 @@ namespace Puck.World;
 public static class WorldAffordances {
     private static volatile CommandRegistry? Registry;
 
+    /// <summary>Gets or sets whether a catalog check before any registry is installed leaves a line calling a verb the
+    /// catalog lacks to the registry: true in a host that re-validates its documents once its registry exists (the
+    /// World), false where the catalog is the last word (<c>puck compile --validate</c>, the silo).</summary>
+    public static bool DeferUnknownVerbsToRegistry { get; set; }
+
     /// <summary>Whether the command vocabulary has been installed — validators skip the command half (never the
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
     public static bool Installed => (Registry is not null);
@@ -153,12 +158,37 @@ public static class WorldAffordances {
             : null);
     }
 
-    /// <summary>Runs the registry half of <c>commands</c> validation (<see cref="CommandRegistry.CheckAuthored"/>)
-    /// over a document's authored set, appending each refusal. A no-op while no registry is installed.</summary>
+    /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set against the
+    /// installed registry, appending each refusal (<see cref="ValidateCommandsAgainst"/>).</summary>
     /// <param name="commands">The document's compiled authored commands.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
-    public static void ValidateCommands(AuthoredCommandSet commands, List<string> errors) {
-        Registry?.CheckAuthored(errors: errors, set: commands);
+    public static void ValidateCommands(AuthoredCommandSet commands, List<string> errors) => ValidateCommandsAgainst(
+        commands: commands,
+        errors: errors,
+        registry: Registry
+    );
+    /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set, appending each
+    /// refusal: against <paramref name="registry"/> when there is one (<see cref="CommandRegistry.CheckAuthored"/>),
+    /// otherwise against the generated <see cref="WorldConsoleVerbCatalog"/>, every verb any boot shape registers, which
+    /// refuses a clash, an operator or unbindable line and a line calling a verb no shape registers.</summary>
+    /// <param name="commands">The document's compiled authored commands.</param>
+    /// <param name="registry">The live registry, or <see langword="null"/> where none exists.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commands"/> is <see langword="null"/>.</exception>
+    public static void ValidateCommandsAgainst(AuthoredCommandSet commands, CommandRegistry? registry, List<string> errors) {
+        ArgumentNullException.ThrowIfNull(argument: commands);
+
+        if (registry is not null) {
+            registry.CheckAuthored(errors: errors, set: commands);
+
+            return;
+        }
+
+        commands.CheckAgainst(
+            errors: errors,
+            refuseUnknown: !DeferUnknownVerbsToRegistry,
+            registered: WorldConsoleVerbCatalog.Lookup
+        );
     }
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
     /// after the container is built.</summary>
@@ -203,7 +233,25 @@ public static class WorldAffordances {
     /// live world's; <see langword="null"/> resolves an authored name against the live world's set.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
-    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors) {
+    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors) => ValidateAgainst(
+        channels: channels,
+        commands: commands,
+        document: document,
+        errors: errors,
+        registry: Registry,
+        seatModes: seatModes
+    );
+    /// <summary>Runs the vocabulary check over <paramref name="document"/> against <paramref name="registry"/> rather
+    /// than the installed one (<see cref="Validate"/>).</summary>
+    /// <param name="document">The binding document to check.</param>
+    /// <param name="channels">The channel table THIS document is authored against.</param>
+    /// <param name="seatModes">The authored per-seat mode families THIS document's world declares.</param>
+    /// <param name="commands">The authored commands THIS document declares, or <see langword="null"/> for the
+    /// registry's live set.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    /// <param name="registry">The registry the command half reads, or <see langword="null"/> to skip that half.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
+    public static void ValidateAgainst(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors, CommandRegistry? registry) {
         ArgumentNullException.ThrowIfNull(argument: channels);
         ValidateContexts(
             document: document,
@@ -215,8 +263,6 @@ public static class WorldAffordances {
         // channel half — a pure function of the document's own table, needing no registry at all — conditional on
         // whether a container happened to exist yet, so one document was refused as world.instance.start and admitted
         // as --world. Whether a document is valid must not depend on which door it walked through.
-        var registry = Registry;
-
         errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
             lookups: new BindingVocabularyLookups(

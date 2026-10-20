@@ -129,6 +129,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
+| [`puck verbs`](#puck-verbsconsole-verb-catalog) | the console verb catalog `src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, every verb any boot shape registers, read from a headless and a windowed World's `world.affordances` and checked against them; authored commands are validated against it. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | builds every committed WASM guest and writes each to its committed paths. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
@@ -2728,6 +2729,34 @@ neither registers nor excludes with a reason—a `CellName`, `ExpressionProgram`
 member whose C# name reads like a name position—so a field added to the model
 without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
+
+## `puck verbs`—console verb catalog
+
+Builds this checkout's `Puck.World` (Release), boots it over `worlds/debug`
+headless and then windowed (a GPU leg), reads each boot's `world.affordances`
+manifest and writes the union of the engine verbs (never the world's own
+authored commands) with their bindability and audience to
+`src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, which
+`WorldConsoleVerbCatalog` embeds: every verb any boot shape registers. A
+document's [authored commands](commands.md#document-authored-commands) are
+checked against it where no World runs (`puck compile --validate`, the silo's
+admission), and a live registry reads it so a line naming a verb only a
+rendered World registers passes a headless boot. Regenerate after adding,
+renaming or changing the bindability or audience of a console verb.
+`--headless-only` boots headless alone, for a host without a free GPU, and
+keeps every catalogued verb the headless World does not register; only a full
+run drops a verb no shape registers any more.
+
+```text
+puck verbs                   boot headless and windowed, then write the catalog
+puck verbs --headless-only   boot headless alone and keep the catalog's other verbs
+puck verbs --check           boot, regenerate in memory and compare against the file on disk;
+                             write nothing, exit 1 naming the first differing line
+puck verbs -h / --help       this text
+```
+
+Exit codes: **0** wrote or matched, **1** drift or the boot failed, **2** usage
+error or missing repository root.
 
 ## `puck vocabulary`—world authoring vocabulary
 

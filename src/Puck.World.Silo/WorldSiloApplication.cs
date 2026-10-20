@@ -33,6 +33,23 @@ public static class WorldSiloApplication {
         echoes: services.GetRequiredService<Puck.World.Protocol.WorldDeferredVerbEchoes>(),
         registry: services.GetRequiredService<CommandRegistry>()
     );
+    /// <summary>Returns the source the silo's console registry reads authored commands through: a line's slot names
+    /// the row whose session submitted it (<see cref="SiloConsoleRouting.TryResolveWorldId"/>), and the row's live
+    /// document's <c>commands</c> answer it, so each row hears its own world's commands and the administrative
+    /// session (slot 0) hears none.</summary>
+    /// <param name="routing">The silo's slot-to-row table.</param>
+    /// <param name="definitionOf">Returns an admitted row's live document, or <see langword="null"/> once the row is
+    /// gone.</param>
+    /// <returns>The slot-keyed source <see cref="CommandRegistry.UseAuthoredCommands"/> takes.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static Func<int, AuthoredCommandSet> RowCommands(SiloConsoleRouting routing, Func<string, WorldDefinition?> definitionOf) {
+        ArgumentNullException.ThrowIfNull(argument: routing);
+        ArgumentNullException.ThrowIfNull(argument: definitionOf);
+
+        return slot => ((routing.TryResolveWorldId(slot: slot, worldId: out var worldId) && (definitionOf(arg: worldId) is { } definition))
+            ? WorldConsoleCommands.For(definition: definition)
+            : AuthoredCommandSet.Empty);
+    }
     /// <summary>Runs the ordinary silo with the extensions installed in --extensions-dir, or in the default
     /// directories when it is absent.</summary>
     /// <param name="args">The silo's ordinary command-line arguments.</param>
@@ -224,6 +241,13 @@ public static class WorldSiloApplication {
         var silo = host.Services.GetRequiredService<WorldSiloHost>();
 
         silo.AnswerDeferredVerbs(answers: AnswerDeferredVerbs(services: host.Services));
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+
+        registry.UseAuthoredCommands(source: RowCommands(
+            definitionOf: worldId => (silo.Instances.TryGet(instance: out var instance, name: worldId) ? instance!.Server.Definition : null),
+            routing: host.Services.GetRequiredService<SiloConsoleRouting>()
+        ));
+        registry.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
         HostResourceUnavailableException? unavailable = null;
 
         try {

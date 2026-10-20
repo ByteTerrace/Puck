@@ -10,8 +10,9 @@ emulated second survives, in whole frames. Transfer laws call the bundled
 firmware's CpuSet and CpuFastSet from ARM and Thumb cartridges and compare the
 destination with the GBATEK contract: copy and fill, 16- and 32-bit units,
 counts, alignment and CpuFastSet's rounding to eight words. Fault laws drive a
-hosted core into Undefined mode, Abort mode and an unmapped fetch and require
-the named `AgbExecutionFaultException`. Hardware accuracy and co-simulation
+hosted core into Undefined mode, Abort mode and an unmapped fetch, and a linked
+console into Undefined mode through `AgbLinkSession`, and require the named
+`AgbExecutionFaultException`. Hardware accuracy and co-simulation
 evidence belong to the Advanced Post battery.
 
 ## Verification

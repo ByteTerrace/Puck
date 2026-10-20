@@ -13,6 +13,9 @@ internal static class WorldDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
         WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
+        // The World validates every document again against its own registry once it is built, so before then a verb
+        // the catalog lacks is the registry's to judge rather than a refusal.
+        WorldAffordances.DeferUnknownVerbsToRegistry = true;
         WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
     }
 }

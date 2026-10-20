@@ -640,10 +640,11 @@ runs, `CommandRegistry.Definitions` and `TryGetMetadata` describe it (a
 bindable, Simulation-routed verb taking wire arguments), and a binding row or
 wheel sector names it like any verb, with or without `text` arguments. The
 registry's own verb `run` dispatches every authored command: `run debug.go
-chess` is the same as `debug.go chess`, and every authored command interns as
-`run`'s id, so a bound press carries the command's name in its line. Because
-they share that id, two keys bound to authored commands act as one logical
-button: hold one and the other's press does not fire until it is released.
+chess` is the same as `debug.go chess`. Each authored command interns an id of
+its own past the registered ones the first time it is resolved, and keeps it
+for the registry's lifetime, so a bound press carries that id and the command's
+name in its line, and two keys bound to two authored commands are two buttons.
+An authored id belongs to the `Global` map.
 
 Safety is data, enforced twice. When a document validates against a live
 registry (boot's post-build admission, `world.reload`, `world.load`), a
@@ -652,8 +653,24 @@ name (an `Operator`-audience verb, or one declared `Unbindable` such as
 `quit`, `world.save` and `storage.*`), a line calling nothing registered, and
 a loop through the set are refused by name. When a line runs, its verb is
 checked against the same rule and against the calling session's `authorize`
-policy before it is submitted. `puck compile --validate` has no registry, so
-offline it checks everything else (names, parameters, defaults, templates).
+policy before it is submitted.
+
+The generated console verb catalog (`WorldConsoleVerbCatalog`, written by
+[`puck verbs`](cli.md#puck-verbsconsole-verb-catalog)) holds every verb any
+boot shape registers, headless and rendered. A live registry reads it
+(`CommandRegistry.UseVerbCatalog`): a line naming a verb this boot shape
+lacks but another registers (`world.debug-view` and `world.slice` exist only
+in a rendered World) passes validation, judged by the catalog's facts, and is
+refused by name when it runs in a host without it (`[world.slice: not
+available in this host — another boot shape (a rendered World) registers
+it]`), so a headless boot (`puck test`, CI) admits a document whose commands
+reach a rendered World's verbs. A verb no shape registers stays refused at
+validation. Where no World runs (`puck compile --validate`, the silo's
+admission), the catalog stands in for the registry and refuses the same
+things. Names, parameters, defaults and templates are checked everywhere. The
+catalog is generated: after adding, renaming or changing the bindability or
+audience of a verb, run `puck verbs` (it boots a headless and a windowed World,
+a GPU leg; `--headless-only` refreshes the headless verbs and keeps the rest).
 
 An authored command runs with exactly its caller's authority. `run` is
 Simulation-routed, so a typed line folds into the tick lane like any
@@ -672,7 +689,12 @@ server is whatever the expanded lines submitted, so `replay.record` and
 
 The World compiles the live document's rows (`WorldConsoleCommands.For`) and
 the registry reads them on every lookup (`CommandRegistry.UseAuthoredCommands`),
-so a reload, load or undo that swaps the document changes the set with it.
+so a reload, load or undo that swaps the document changes the set with it. The
+source is keyed by the slot of the line being resolved: the World answers the
+boot document's set on every slot, and the silo answers each row's own live
+document on the slot its session is bound to (`WorldSiloApplication.RowCommands`),
+so two rows never hear each other's commands and the administrative session
+hears none.
 
 ## Pointing at a displayed source
 

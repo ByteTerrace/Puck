@@ -204,6 +204,9 @@ public sealed class AgbLinkSession : IDisposable {
     /// <see cref="AdvancedGamingBrickMachine.RunCycles"/> while they are linked.</summary>
     /// <param name="cycles">The number of master-clock cycles to advance each machine this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    /// <exception cref="AgbExecutionFaultException">A console's program can no longer run at the end of the budget,
+    /// the same check <see cref="AdvancedGamingBrickCore.RunCycles"/> makes; the first such console in session order
+    /// is reported.</exception>
     public void Run(long cycles) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -218,6 +221,10 @@ public sealed class AgbLinkSession : IDisposable {
             machines: m_machines,
             targets: m_targets
         ));
+
+        foreach (var machine in m_machines) {
+            AgbExecutionFaultException.ThrowIfFaulted(cpu: machine.Cpu);
+        }
     }
     /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each
     /// console's credit is its instruction overshoot at this instant — the master-clock cycles it has already run

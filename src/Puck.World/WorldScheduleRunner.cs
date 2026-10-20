@@ -325,7 +325,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         // before control returns here.
         var registry = m_registry();
 
-        landed.Pending = registry.RoutesToSimulation(line: landed.Command);
+        landed.Pending = registry.RoutesToSimulation(line: landed.Command, slot: session.Slot);
         landed.Outcome = WorldScheduleSection.OutcomePending;
 
         var result = registry.SubmitSession(
