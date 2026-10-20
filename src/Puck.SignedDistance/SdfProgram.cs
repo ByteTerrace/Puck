@@ -866,34 +866,41 @@ public sealed partial class SdfProgram {
 
         return product;
     }
-    // One chain's Lipschitz factor: the product of its warps' exact operator norms over the chain reach rho, times
-    // AxialProfile's conservative operator-norm bounds over the same reach. Every shape body is itself 1-Lipschitz, so
-    // no shape contributes a factor, and a warp-free, flare-free chain returns 1.0f exactly (empty products). reach arrives in the chain's outermost frame; each warp reads it in its own frame by dividing
-    // by the min-axis scale accumulated before it, and a displacement's growth is written back through the max axis.
-    private static float FoldChainLipschitz(List<(float Rate, bool KeyInRotatedPlane, float MinScale)> warpRates, List<(SdfInstruction Warp, float MinScale, float MaxScale)> reachWarps, float reach) {
+    // One chain's Lipschitz factor: the product of its warps' exact operator norms over the reach each warp reads,
+    // times AxialProfile's conservative operator-norm bounds over the same reach. Every shape body is itself
+    // 1-Lipschitz, so no shape contributes a factor, and a warp-free, flare-free chain returns 1.0f exactly (empty
+    // products). A warp's reach is the chain's shape reach plus the translates applied after the warp (a translate
+    // before it moves the warp's whole frame, so a shape stamped far from the world origin reads no wider than one at
+    // it), grown by the displacements of the warps between it and the primitive; every reach arrives in the chain's
+    // outermost frame, each warp reads it in its own frame by dividing by the min-axis scale accumulated before it, and
+    // a displacement's growth is written back through the max axis.
+    private static float FoldChainLipschitz(List<(float Rate, bool KeyInRotatedPlane, float MinScale, float TranslateReachAtOp)> warpRates, List<(SdfInstruction Warp, float MinScale, float MaxScale, float TranslateReachAtOp)> reachWarps, float shapeReach, float translateReach) {
         var domainProduct = 1.0f;
+        // The reach the warps between a warp and the primitive add, outer frame.
+        var grown = 0f;
         // Walk from the primitive toward the world. A later displacement widens the coordinates at
         // which an earlier polynomial/profile derivative is evaluated.
         for (var index = (reachWarps.Count - 1); (index >= 0); index--) {
-            var (warp, minScale, maxScale) = reachWarps[index];
+            var (warp, minScale, maxScale, translateReachAtOp) = reachWarps[index];
+            var reach = (((translateReach - translateReachAtOp) + shapeReach) + grown);
             var ownReach = (reach / minScale);
 
             switch (warp.Op) {
                 case SdfOp.GaussianPush:
-                    reach += (new Vector3(x: warp.Data0.W, y: warp.Data1.W, z: BitConverter.UInt32BitsToSingle(value: warp.Shape)).Length() * maxScale);
+                    grown += (new Vector3(x: warp.Data0.W, y: warp.Data1.W, z: BitConverter.UInt32BitsToSingle(value: warp.Shape)).Length() * maxScale);
                     break;
                 case SdfOp.Shear:
                     domainProduct *= ShearOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.Z, ownReach);
-                    reach += ((ownReach * (MathF.Abs(x: warp.Data0.X) + (ownReach * (MathF.Abs(x: warp.Data0.Y) + (ownReach * MathF.Abs(x: warp.Data0.Z)))))) * maxScale);
+                    grown += ((ownReach * (MathF.Abs(x: warp.Data0.X) + (ownReach * (MathF.Abs(x: warp.Data0.Y) + (ownReach * MathF.Abs(x: warp.Data0.Z)))))) * maxScale);
                     break;
                 case SdfOp.AxialProfile:
                     domainProduct *= FlareOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.W, warp.Data1.X, ownReach, warp.Data1.Y);
-                    reach *= MathF.Max(x: 1f, y: FlareExtrema(amount: warp.Data0.X, bulge: warp.Data0.Y, startScale: warp.Data1.Y).MaxS);
+                    grown += (reach * (MathF.Max(x: 1f, y: FlareExtrema(amount: warp.Data0.X, bulge: warp.Data0.Y, startScale: warp.Data1.Y).MaxS) - 1f));
                     break;
             }
         }
         foreach (var warp in warpRates) {
-            var a = (warp.Rate * (reach / warp.MinScale));
+            var a = (warp.Rate * ((((translateReach - warp.TranslateReachAtOp) + shapeReach) + grown) / warp.MinScale));
 
             domainProduct *= (warp.KeyInRotatedPlane ? BendOperatorNorm(a: a) : TwistOperatorNorm(a: a));
         }
