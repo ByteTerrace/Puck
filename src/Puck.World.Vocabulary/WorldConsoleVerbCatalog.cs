@@ -4,12 +4,12 @@ using Puck.Commands;
 
 namespace Puck.World;
 
-/// <summary>The engine's console verbs as a headless World registers them, read from the generated catalog this
-/// assembly embeds (<c>Assets/puck.console.verbs.json</c>, written by <c>puck verbs</c>). It answers for the registry
-/// where none exists, so <c>puck compile --validate</c> refuses an authored command that takes an engine verb's name
-/// or calls an operator or unbindable verb before any World boots.</summary>
-/// <remarks>A verb only a windowed World registers is absent from the catalog, so a check against it never refuses a
-/// line for calling a name it does not know; the live registry's check at boot and reload does.</remarks>
+/// <summary>The engine's console verbs as every boot shape registers them (headless and rendered), read from the
+/// generated catalog this assembly embeds (<c>Assets/puck.console.verbs.json</c>, written by <c>puck verbs</c>). It
+/// answers for the registry where none exists, so <c>puck compile --validate</c> refuses an authored command that
+/// takes an engine verb's name, calls an operator or unbindable verb, or calls a verb no shape registers, before any
+/// World boots; and a live registry reads it (<see cref="CommandRegistry.UseVerbCatalog"/>) so an authored line
+/// naming a verb only another shape registers is admitted and refused at dispatch instead.</summary>
 public static class WorldConsoleVerbCatalog {
     /// <summary>The catalog's schema id.</summary>
     public const string SchemaId = "puck.console.verbs.v1";

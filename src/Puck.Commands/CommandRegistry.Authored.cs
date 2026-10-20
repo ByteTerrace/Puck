@@ -14,6 +14,7 @@ public sealed partial class CommandRegistry {
     private readonly List<string> m_authoredNameById = [];
     private readonly CommandDefinition m_runner;
     private Func<int, AuthoredCommandSet>? m_authoredSource;
+    private Func<string, CommandMetadata?>? m_verbCatalog;
 
     /// <summary>Gets the authored commands the registry answers outside any one line: the set its source supplies for
     /// slot <c>0</c>, which help, bindings and the affordance manifest read.</summary>
@@ -47,6 +48,9 @@ public sealed partial class CommandRegistry {
     /// <param name="errors">The list each refusal is appended to, naming the command and line.</param>
     /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="errors"/> is
     /// <see langword="null"/>.</exception>
+    /// <remarks>A verb this registry lacks but the wired verb catalog holds (<see cref="UseVerbCatalog"/>) is one
+    /// another boot shape registers: it is judged by the catalog's facts and admitted, and refused at dispatch as not
+    /// available in this host instead.</remarks>
     public void CheckAuthored(AuthoredCommandSet set, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: set);
 
@@ -55,8 +59,16 @@ public sealed partial class CommandRegistry {
             refuseUnknown: true,
             registered: name => (m_byName.TryGetValue(key: name, value: out var definition)
                 ? definition.Metadata
-                : null)
+                : m_verbCatalog?.Invoke(arg: name))
         );
+    }
+    /// <summary>Wires the engine's full verb catalog: every verb any boot shape registers, so an authored line may
+    /// name a verb only another shape (a rendered World) registers. Such a line passes validation here and is refused
+    /// by name when it runs in a host that lacks the verb.</summary>
+    /// <param name="catalog">Returns a catalogued verb's facts by name, or <see langword="null"/>; <see langword="null"/>
+    /// unwires it, so a verb this registry lacks is refused at validation.</param>
+    public void UseVerbCatalog(Func<string, CommandMetadata?>? catalog) {
+        m_verbCatalog = catalog;
     }
     /// <summary>Whether <paramref name="name"/> names an authored command this registry currently answers.</summary>
     /// <param name="name">The command name.</param>
@@ -199,7 +211,11 @@ public sealed partial class CommandRegistry {
     // the verb must be one a binding may name, and one the caller's session may submit.
     private CommandResult? RefuseNestedLine(in CommandContext context, string line) {
         if (!TryResolveVerb(definition: out _, metadata: out var metadata, slot: context.Slot, verb: LeadingVerb(line: line))) {
-            return null;
+            var verb = LeadingVerb(line: line).ToString();
+
+            return ((m_verbCatalog?.Invoke(arg: verb) is { } absent)
+                ? CommandResult.Error(output: $"[{absent.Name}: not available in this host — another boot shape (a rendered World) registers it]")
+                : null);
         }
 
         if (AuthoredCommandSet.RefusesCall(metadata: metadata) is { } refusal) {

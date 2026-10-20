@@ -241,10 +241,13 @@ public static class WorldSiloApplication {
         var silo = host.Services.GetRequiredService<WorldSiloHost>();
 
         silo.AnswerDeferredVerbs(answers: AnswerDeferredVerbs(services: host.Services));
-        host.Services.GetRequiredService<CommandRegistry>().UseAuthoredCommands(source: RowCommands(
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+
+        registry.UseAuthoredCommands(source: RowCommands(
             definitionOf: worldId => (silo.Instances.TryGet(instance: out var instance, name: worldId) ? instance!.Server.Definition : null),
             routing: host.Services.GetRequiredService<SiloConsoleRouting>()
         ));
+        registry.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
         HostResourceUnavailableException? unavailable = null;
 
         try {

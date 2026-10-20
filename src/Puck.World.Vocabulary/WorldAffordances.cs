@@ -31,6 +31,11 @@ namespace Puck.World;
 public static class WorldAffordances {
     private static volatile CommandRegistry? Registry;
 
+    /// <summary>Gets or sets whether a catalog check before any registry is installed leaves a line calling a verb the
+    /// catalog lacks to the registry: true in a host that re-validates its documents once its registry exists (the
+    /// World), false where the catalog is the last word (<c>puck compile --validate</c>, the silo).</summary>
+    public static bool DeferUnknownVerbsToRegistry { get; set; }
+
     /// <summary>Whether the command vocabulary has been installed — validators skip the command half (never the
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
     public static bool Installed => (Registry is not null);
@@ -164,8 +169,8 @@ public static class WorldAffordances {
     );
     /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set, appending each
     /// refusal: against <paramref name="registry"/> when there is one (<see cref="CommandRegistry.CheckAuthored"/>),
-    /// otherwise against the generated <see cref="WorldConsoleVerbCatalog"/>, which refuses a clash and an operator or
-    /// unbindable line but never a verb it does not hold.</summary>
+    /// otherwise against the generated <see cref="WorldConsoleVerbCatalog"/>, every verb any boot shape registers, which
+    /// refuses a clash, an operator or unbindable line and a line calling a verb no shape registers.</summary>
     /// <param name="commands">The document's compiled authored commands.</param>
     /// <param name="registry">The live registry, or <see langword="null"/> where none exists.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
@@ -181,7 +186,7 @@ public static class WorldAffordances {
 
         commands.CheckAgainst(
             errors: errors,
-            refuseUnknown: false,
+            refuseUnknown: !DeferUnknownVerbsToRegistry,
             registered: WorldConsoleVerbCatalog.Lookup
         );
     }

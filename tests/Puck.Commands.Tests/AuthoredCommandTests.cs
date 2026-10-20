@@ -243,6 +243,42 @@ public sealed class AuthoredCommandTests {
         Assert.Contains(collection: probe.Activations, filter: activation => ((activation.Name == "run") && (activation.Text == "gx.sim typed") && activation.Result.Output.Contains(value: "said typed", comparisonType: StringComparison.Ordinal)));
     }
     [Fact]
+    public void AVerbAnotherBootShapeRegistersPassesValidationAndIsRefusedWhereItIsAbsent() {
+        var (registry, probe) = Registry(Command("gx.view", [], "probe.say before", "probe.rendered", "probe.say after"));
+        var rendered = new CommandMetadata(Name: "probe.rendered", Bindability: CommandBindability.Bindable, Routing: CommandRouting.Immediate, ValueKind: CommandValueKind.Digital);
+        var hidden = rendered with { Bindability = CommandBindability.Unbindable, Name = "probe.rendered-hidden" };
+        var set = new AuthoredCommandSet(commands: [
+            Command("gx.view", [], "probe.rendered"),
+            Command("gx.hiddenview", [], "probe.rendered-hidden"),
+            Command("gx.typo", [], "probe.nowhere"),
+        ]);
+        var errors = new List<string>();
+
+        registry.UseVerbCatalog(catalog: name => name switch {
+            "probe.rendered" => rendered,
+            "probe.rendered-hidden" => hidden,
+            _ => null,
+        });
+        registry.CheckAuthored(errors: errors, set: set);
+
+        Assert.Equal(actual: errors.Count, expected: 2);
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "'probe.rendered-hidden', which is not bindable", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "'probe.nowhere', which no registered verb", comparisonType: StringComparison.Ordinal));
+
+        var result = registry.Submit(line: "gx.view");
+
+        Assert.True(condition: result.IsError);
+        Assert.Contains(actualString: result.Output, expectedSubstring: "[probe.rendered: not available in this host");
+        Assert.Equal(actual: probe.Said, expected: ["before"]);
+        Assert.Contains(actualString: registry.Submit(line: "run gx.view").Output, expectedSubstring: "line 2 'probe.rendered' refused");
+
+        registry.UseVerbCatalog(catalog: null);
+        errors.Clear();
+        registry.CheckAuthored(errors: errors, set: set);
+
+        Assert.Equal(actual: errors.Count, expected: 3);
+    }
+    [Fact]
     public void ALineHearsTheAuthoredCommandsOfItsOwnSlot() {
         var (registry, probe) = Registry();
         var set = new AuthoredCommandSet(commands: [Command("gx.say", [], "probe.say one")]);

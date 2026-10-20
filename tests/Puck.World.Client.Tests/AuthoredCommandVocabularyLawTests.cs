@@ -6,8 +6,8 @@ namespace Puck.World.Client.Tests;
 
 /// <summary>Pins the two vocabularies a document's authored commands are judged against: a live registry, where a
 /// binding row names the candidate document's own commands rather than the live world's, and the generated console
-/// verb catalog, which refuses an engine-verb name or an operator or unbindable line offline but never a verb it does
-/// not hold.</summary>
+/// verb catalog, which refuses an engine-verb name, an operator or unbindable line and a verb no boot shape registers,
+/// offline.</summary>
 public sealed class AuthoredCommandVocabularyLawTests {
     private static AuthoredCommandSet Set(params (string Name, string Line)[] commands) => new(commands: commands.Select(selector: static command => {
         var errors = new List<string>();
@@ -67,7 +67,7 @@ public sealed class AuthoredCommandVocabularyLawTests {
         Assert.Contains(collection: errors, filter: error => error.Contains(value: "answers the operator alone", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
-    public void TheCatalogRefusesOfflineWhatItKnowsAndNothingItDoesNot() {
+    public void TheCatalogRefusesOfflineAClashAReachAndAVerbNoShapeRegisters() {
         var errors = new List<string>();
 
         WorldAffordances.ValidateCommandsAgainst(
@@ -76,7 +76,8 @@ public sealed class AuthoredCommandVocabularyLawTests {
             registry: null
         );
 
-        Assert.Equal(actual: errors.Count, expected: 2);
+        Assert.Equal(actual: errors.Count, expected: 3);
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "calls 'presentation.only.verb', which no registered verb", comparisonType: StringComparison.Ordinal));
         Assert.Contains(collection: errors, filter: error => error.Contains(value: "'body.pose' takes the name of the engine verb 'body.pose'", comparisonType: StringComparison.Ordinal));
         Assert.Contains(collection: errors, filter: error => error.Contains(value: "calls 'quit', which is not bindable", comparisonType: StringComparison.Ordinal));
         Assert.True(condition: (WorldConsoleVerbCatalog.Count > 0));

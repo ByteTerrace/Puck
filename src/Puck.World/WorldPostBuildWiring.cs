@@ -88,6 +88,7 @@ public static class WorldPostBuildWiring {
         var commandServer = services.GetRequiredService<WorldServer>();
 
         consoleRegistry.UseAuthoredCommands(source: _ => WorldConsoleCommands.For(definition: commandServer.Definition));
+        consoleRegistry.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
 
         var seatBindings = services.GetRequiredService<WorldSeatBindings>();
 

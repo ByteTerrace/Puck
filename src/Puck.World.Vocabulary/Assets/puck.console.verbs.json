@@ -75,6 +75,7 @@
     { "name": "identity.state", "bindable": false, "audience": "anyone" },
     { "name": "identity.writebacks", "bindable": false, "audience": "anyone" },
     { "name": "machine.content", "bindable": false, "audience": "anyone" },
+    { "name": "machine.default", "bindable": false, "audience": "anyone" },
     { "name": "machine.operation", "bindable": false, "audience": "anyone" },
     { "name": "machine.state", "bindable": false, "audience": "anyone" },
     { "name": "machine.swap", "bindable": false, "audience": "anyone" },

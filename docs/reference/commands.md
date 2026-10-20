@@ -653,14 +653,24 @@ name (an `Operator`-audience verb, or one declared `Unbindable` such as
 `quit`, `world.save` and `storage.*`), a line calling nothing registered, and
 a loop through the set are refused by name. When a line runs, its verb is
 checked against the same rule and against the calling session's `authorize`
-policy before it is submitted. Where no World runs (`puck compile
---validate`, a silo before its registry exists), the generated console verb
-catalog (`WorldConsoleVerbCatalog`, written by
-[`puck verbs`](cli.md#puck-verbsconsole-verb-catalog)) stands in for the
-registry: it refuses an engine-verb name and an operator or unbindable line,
-but not a line calling a verb it does not hold, since a verb only a windowed
-World registers is absent from it. Names, parameters, defaults and templates
-are checked everywhere.
+policy before it is submitted.
+
+The generated console verb catalog (`WorldConsoleVerbCatalog`, written by
+[`puck verbs`](cli.md#puck-verbsconsole-verb-catalog)) holds every verb any
+boot shape registers, headless and rendered. A live registry reads it
+(`CommandRegistry.UseVerbCatalog`): a line naming a verb this boot shape
+lacks but another registers (`world.debug-view` and `world.slice` exist only
+in a rendered World) passes validation, judged by the catalog's facts, and is
+refused by name when it runs in a host without it (`[world.slice: not
+available in this host — another boot shape (a rendered World) registers
+it]`), so a headless boot (`puck test`, CI) admits a document whose commands
+reach a rendered World's verbs. A verb no shape registers stays refused at
+validation. Where no World runs (`puck compile --validate`, the silo's
+admission), the catalog stands in for the registry and refuses the same
+things. Names, parameters, defaults and templates are checked everywhere. The
+catalog is generated: after adding, renaming or changing the bindability or
+audience of a verb, run `puck verbs` (it boots a headless and a windowed World,
+a GPU leg; `--headless-only` refreshes the headless verbs and keeps the rest).
 
 An authored command runs with exactly its caller's authority. `run` is
 Simulation-routed, so a typed line folds into the tick lane like any
