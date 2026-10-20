@@ -15,9 +15,6 @@ public sealed class CurvatureChunk : ICompiledWorldChunk {
     /// <inheritdoc />
     public IReadOnlyList<ChunkCode> DependsOn => [DefinitionChunk.Instance.Code];
     /// <inheritdoc />
-    public uint Version => 1;
-
-    /// <inheritdoc />
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;
     /// <inheritdoc />
     public bool TryDerive(CompiledWorldContext context, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out CompiledWorldProduct? product, out string reason) {

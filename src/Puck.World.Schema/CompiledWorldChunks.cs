@@ -5,18 +5,15 @@ using Puck.Assets;
 
 namespace Puck.World;
 
-/// <summary>One derivation a compiled world stores the product of: a chunk code, the version of the code that derives
-/// it, and how to derive, load, and re-check it. A deliberate change to what a derivation produces moves its
-/// <see cref="Version"/>, so a compiled world written before the change re-derives the chunk instead of serving
-/// it.</summary>
+/// <summary>One derivation a compiled world stores the product of: a chunk code, and how to derive, load, and
+/// re-check it. A derivation carries no version of its own: the compiled world's header keys the engine build, which
+/// moves with any change to code a derivation can run, so a world written before the change is ignored whole.</summary>
 public interface ICompiledWorldChunk {
     /// <summary>Gets the chunk's code.</summary>
     ChunkCode Code { get; }
     /// <summary>Gets the codes of the earlier chunks whose products this derivation reads; when a boot derives one of
     /// them afresh, it derives this chunk afresh too rather than keeping it.</summary>
     IReadOnlyList<ChunkCode> DependsOn { get; }
-    /// <summary>Gets the version of the derivation.</summary>
-    uint Version { get; }
 
     /// <summary>Returns the current content hash of one input the derivation recorded.</summary>
     /// <param name="context">The world the input is read for; its authored definition's
@@ -108,7 +105,7 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     IEnumerator IEnumerable.GetEnumerator() =>
         GetEnumerator();
 
-    /// <summary>Checks a stored chunk against its derivation: its version, and every input it recorded.</summary>
+    /// <summary>Checks a stored chunk against its derivation: every input it recorded still reads as recorded.</summary>
     /// <param name="chunk">The derivation.</param>
     /// <param name="stored">The stored chunk carrying the derivation's code.</param>
     /// <param name="context">The world the stored chunk would load into.</param>
@@ -116,10 +113,6 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     public static bool Holds(ICompiledWorldChunk chunk, ContainerChunk stored, CompiledWorldContext context) {
         ArgumentNullException.ThrowIfNull(argument: chunk);
         ArgumentNullException.ThrowIfNull(argument: stored);
-
-        if (stored.Version != chunk.Version) {
-            return false;
-        }
 
         foreach (var input in stored.Inputs) {
             if (chunk.ReadInput(context: context, name: input.Name) != input.Hash) {
@@ -153,7 +146,7 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
             code: chunk.Code,
             inputs: product.Inputs,
             payload: product.Payload,
-            version: chunk.Version
+            version: 0
         );
         return true;
     }
@@ -197,9 +190,6 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "DEFN");
     /// <inheritdoc/>
     public IReadOnlyList<ChunkCode> DependsOn => [];
-    /// <inheritdoc/>
-    public uint Version => 2;
-
     /// <inheritdoc/>
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;
     /// <inheritdoc/>
@@ -278,9 +268,6 @@ public sealed class AssetChunk : ICompiledWorldChunk {
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "ASST");
     /// <inheritdoc/>
     public IReadOnlyList<ChunkCode> DependsOn => [];
-    /// <inheritdoc/>
-    public uint Version => 1;
-
     /// <inheritdoc/>
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) {
         ArgumentNullException.ThrowIfNull(argument: context);
