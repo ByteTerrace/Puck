@@ -132,7 +132,7 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   other slot as a member (`SdfMesh.Members`: its offset from the group's slot
   and the pose it was baked at) and each vertex's member
   (`SdfMesh.VertexMembers`). The draw record's skin word names the members when
-  its flags carry `SdfMeshRegion.SkinFlag`, and every mesh read
+  its flags carry `SdfMeshRecord.SkinFlag`, and every mesh read
   (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
   carries a member's vertex out through that slot's live (or previous)
   transform, so the mesh interface binds the dynamic transforms. A cut or
