@@ -141,7 +141,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | Timeline `frames` | `motion-frames` |
 | State-bound geometry (a write re-emits and rebakes) | `motion-state-blend` |
 | A `state.<row>` driver signal and `state.<row>.<key>` gate tokens | every motion exhibit |
-| A scale pulse | approximated by `motion-pulse`; a true one is not authorable, because a dynamic slot carries a rigid pose with no scale and a frame's `scale` is never read by the stamp pool |
+| A scale pulse | approximated by `motion-pulse`; a true one is not authorable, because a dynamic slot carries a rigid pose with no scale, and a timeline frame carries a position and a rotation only |
 | A blend or op parameter animated over time (smooth radius, twist rate, fold spacing) | not authorable: every one is a program constant baked into the mesh. Change one through a write that rebakes (see below) |
 | `curve:<row>` waves, `cadenceBy`, `weightBy`, driver `dynamics`, `driver.<name>` signals, body signals | not exhibited: they need world `curves` or `dynamics` rows or a body; the Moth exercises them |
 | `surface` and `body` effector targets, plants and replants | not exhibited here; the Moth's feet exercise them |
@@ -242,12 +242,17 @@ Each recipe frames a row's first three exhibits; move the x of both points by 3
 to step along it.
 
 - **Motion vectors.** `view.override camera look 17 2.3 54.6 17 1 59`, then
-  `world.debug-view motion`. The spin, rock and slide exhibits read their own
-  motion; their plinths read stationary. Pause the clock and every vector goes
-  still within a frame.
+  `world.debug-view motion`. The spin, rock and slide exhibits must read their
+  own motion and their plinths stationary, and pausing the clock must still
+  every vector within a frame. Today every pixel reads zero (see Known
+  defects).
 - **Paused against running.** Capture the motion row running, pause the clock,
-  `world.wait 30`, capture again: the paused frame must match itself across
-  further captures, and the poses must hold where the pause found them.
+  wait for the confirmation toast to fade (`world.wait 240`), capture twice:
+  the paused pair must match up to temporal noise, and the poses must hold
+  where the pause found them. Under Direct3D 12, two paused captures of
+  the motion row 60 ticks apart differ in 436 of 1,152,000 pixels, mostly the
+  flow volume (which animates on the render clock); two running ones 30 ticks
+  apart differ in 17,394.
 - **Moving blend seam.** `view.override camera look 26 1.9 56.2 26 1.2 59`,
   `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
   box and sphere stretches as the sphere slides away from the pose it baked in.
@@ -264,9 +269,35 @@ to step along it.
   61.2 14 1.2 64` for `motion-paint`, then x = 17 for `motion-inset`: a stripe,
   ring or eye that swims across its surface instead of riding it is a paint
   frame bug. `world.temporal off` shows whether the swim is the resolve's.
+  Pause the clock and scrub it (`galleryClock $value 0`, then `1.7`) to compare
+  two poses. The parented paints ride the panel. The inset eye and
+  `motion-spin`'s line weathering do not: an ungrouped pooled shape's hit
+  shades in the creation root's frame, so the iris holds still while the eye
+  turns and the scratches stay put while the box spins (see Known defects).
 - **Twist, bend and cells in motion.** x = 20, 23 and 29 on the z 64 row, with
   `world.debug-view normals`: the dynamic path bakes the warped shape once and
   turns it rigidly, so its normals must hold steady on the surface.
 - **IK.** `view.override camera look 35 1.9 61.2 35 1.4 64`, then write
   `galleryInputs reach` around `[35.35, 1.45, 63.75]`: the hand follows, and the
   arm folds rather than stretches.
+
+## Known defects the gallery shows
+
+Each of these was seen in a Direct3D 12 capture of the gallery.
+`docs/plans/open-items.md` tracks them.
+
+- **Layer frames on pooled shapes.** An inset and weathering on an ungrouped
+  shape of an animated creation shade in the creation root's frame, not the
+  moving shape's slot. `motion-inset` authors its inset origin as the eye's
+  centre in that root frame, and its iris holds still while the eye turns.
+  `motion-spin`'s scratches hold still while the box spins.
+- **Motion vectors.** `world.debug-view motion` reads zero for every moving
+  exhibit, even with the clock at eight times its rate and `world.cadence off`,
+  so the motion-vector recipe below shows the defect rather than the motion.
+- **Pooled labels.** The motion rows' plinth labels bake frayed, letters
+  broken into slivers. The same labels on the still rows bake crisp, because
+  the static stamper refines a text group toward its glyphs.
+- **Moving blends keep their baked pose.** `motion-smooth-blend` and
+  `motion-pulse` bake their blend group once and skin it. The seam stretches,
+  and the pulse's petals stay fused into the core's baked silhouette as they
+  slide.
