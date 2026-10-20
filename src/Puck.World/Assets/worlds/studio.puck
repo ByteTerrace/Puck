@@ -1,0 +1,141 @@
+// A neutral room and turntable at the hero spawn for avatar studies.
+// body.pose 48 0.33 -48 0 0 0 0; view.override layout studio-boots.
+// The debug world owns the placement and cameras; this module only authors them.
+let studioShots = [
+  { name: "studio-boots-front", eye [48, 0.75, -49.9], aim [48, 0.63, -48], fov: 0.44 }
+  { name: "studio-boots-side", eye [49.9, 0.72, -48.4], aim [48.2, 0.63, -48], fov: 0.46 }
+  { name: "studio-boots-rear", eye [48, 0.47, -46.05], aim [48, 0.63, -48], fov: 0.44 }
+  { name: "studio-boots-quarter", eye [48.9, 0.75, -49.7], aim [48, 0.63, -48], fov: 0.44 }
+  { name: "studio-jets-quarter", eye [48.9, 0.55, -46.4], aim [48, 0.53, -48], fov: 0.4 }
+  { name: "studio-torso-front", eye [48, 1.84, -50.15], aim [48, 1.65, -48], fov: 0.43 }
+  { name: "studio-torso-quarter", eye [46.5, 1.84, -49.65], aim [48, 1.65, -48], fov: 0.43 }
+  { name: "studio-torso-profile", eye [46.0, 1.8, -48.9], aim [48, 1.65, -48], fov: 0.43 }
+  { name: "studio-torso-braid-quarter", eye [49.5, 1.84, -49.65], aim [48, 1.65, -48], fov: 0.43 }
+  { name: "studio-shoulders-front", eye [48, 1.97, -50.05], aim [48, 1.77, -48], fov: 0.52 }
+  { name: "studio-shoulders-quarter", eye [46.7, 1.99, -49.5], aim [48, 1.75, -48], fov: 0.54 }
+  { name: "studio-shoulders-rear", eye [46.6, 2.1, -46.5], aim [48, 1.72, -48], fov: 0.57 }
+  { name: "studio-armor", eye [46.3, 1.9, -51], aim [48, 1.4, -48], fov: 0.68 }
+]
+
+let studioCameras = map(studioShots, shot => {
+  name: shot.name
+  rig {
+    name: shot.name
+    version: "puck.camera.program.v1"
+    operations [
+      { $type: "anchor", subject { $type: "worldPoint", point: shot.eye } }
+      { $type: "lookAt", subject { $type: "worldPoint", point: shot.aim } }
+      { $type: "fieldOfView", fieldOfViewRadians: shot.fov }
+    ]
+  }
+  renderWidth: 1280
+  renderHeight: 900
+}
+)
+
+template studioLayouts() {
+  layout "studio-armor" {
+    seatCount: 0
+    transitionSeconds: 0
+    transitionRenderScale: 1
+    slots [
+      { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-shoulders-front" }
+      { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-shoulders-quarter" }
+      { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "studio-shoulders-rear" }
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "studio-armor" }
+    ]
+  }
+  layout "studio-torso" {
+    seatCount: 0
+    transitionSeconds: 0
+    transitionRenderScale: 1
+    slots [
+      { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-torso-front" }
+      { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-torso-quarter" }
+      { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "studio-torso-profile" }
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "studio-torso-braid-quarter" }
+    ]
+  }
+  layout "studio-jets" {
+    seatCount: 0
+    transitionSeconds: 0
+    transitionRenderScale: 1
+    slots [
+      { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-jets-quarter" }
+      { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-side" }
+      { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "studio-boots-rear" }
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "studio-boots-quarter" }
+    ]
+  }
+  layout "studio-boots" {
+    seatCount: 0
+    transitionSeconds: 0
+    transitionRenderScale: 1
+    slots [
+      { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-front" }
+      { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-side" }
+      { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "studio-boots-rear" }
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "studio-boots-quarter" }
+    ]
+  }
+}
+
+template studioPlacements() {
+  placement "avatar-studio" {
+    prototype: "avatar-studio"
+    position [48, 0, -48]
+    solid {
+      margin: 0
+    }
+  }
+}
+
+template studioPrototypes() {
+  prototype "avatar-studio" {
+    document {
+      schema: "puck.creation.v1"
+      name: "avatar-studio"
+      palette [
+        { color: "#85898C", specular: 0.02, roughness: 0.95 }
+        { color: "#646B70", specular: 0.03, roughness: 0.9 }
+      ]
+      // The floor sits above the debug ground; the platform's top is at 0.3 m.
+      shape Box "floor" {
+        id: 0
+        position [0, -0.09, 0]
+        scale [24, 0.1, 24]
+        material: 0
+      }
+      shape Box "back" {
+        id: 1
+        position [0, 6, 24]
+        scale [24.2, 6, 0.2]
+        material: 0
+      }
+      shape Box "front" {
+        id: 2
+        position [0, 6, -24]
+        scale [24.2, 6, 0.2]
+        material: 0
+      }
+      shape Box "left" {
+        id: 3
+        position [24, 6, 0]
+        scale [0.2, 6, 24]
+        material: 0
+      }
+      shape Box "right" {
+        id: 4
+        position [-24, 6, 0]
+        scale [0.2, 6, 24]
+        material: 0
+      }
+      shape Cylinder "platform" {
+        id: 5
+        position [0, 0.15, 0]
+        scale [3, 0.15, 3]
+        material: 1
+      }
+    }
+  }
+}

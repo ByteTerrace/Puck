@@ -28,6 +28,55 @@ adapter with `--attach <file>`, naming the file the World prints on stderr
 (`[world.control: operator attachment <file>]`); without it, the adapter keeps
 whichever World it attached to first.
 
+## Avatar studio
+
+[studio.puck](studio.puck) authors a neutral grey room and a raised circular
+platform at the hero spawn. Its `studio-boots` layout tiles front, side, low rear
+and front-quarter cameras for ankle and foot studies. To enter with overlays
+hidden, issue each line through the console or the named World's MCP attachment:
+
+```text
+body.stop 0
+body.pose 48 0.33 -48 0 0 0 0
+view.override camera auto
+view.override layout studio-boots
+view.isolate moth shin-left shin-right
+world.row.set hud.defaults enabled false
+world.row.set hud.defaults cursor null
+world.binding-bar off 1
+world.inspect off
+console off 1
+view.annotate off
+view.annotate clear
+player.wheel.cancel
+```
+
+Allow mutation toasts to expire before capturing. The room, platform and cameras
+survive restarts; the active layout, body pose and overlay switches are session
+settings. `view.override camera studio-boots-rear` fills the current slots with
+the low rear view; `view.override camera auto` restores the four distinct shots.
+`view.isolate off` restores the whole avatar.
+
+`view.override layout studio-jets` replaces the front pane with a closer rear
+quarter view of the nozzle and its clearance. The boot guards splay and the centre
+tread folds forward whenever the body is airborne; landing closes them. The
+nozzle's 55-degree downward angle is measured in the boot's rest frame, so the
+flight pose's bent knees also rotate the exhaust direction.
+
+`view.isolate off`, `view.override camera auto` and
+`view.override layout studio-torso` show the torso in four simultaneous views:
+front, the clear quarter, an oblique profile and the braid-side quarter. These
+shots frame the collar through the hips. They use the same neutral platform,
+body pose and overlay switches as the boot study. The torso follows the cream
+cuirass, lavender rib armor and compact waist of the
+[original concept sheets](../../../../docs/game/art/moth-concept-pack/README.md).
+
+`view.override layout studio-armor` frames the rebuilt pauldrons and surface
+wear: front and clear quarter above, rear quarter and full body below. Use
+`view.override camera auto` for the four distinct cameras, or select
+`studio-shoulders-quarter` to inspect one view across the current layout.
+It uses the same platform pose and hidden-overlay commands.
+
 ## The layout
 
 | Where | What | Portal |

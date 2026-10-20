@@ -734,7 +734,7 @@
       "title": "WorldRenderLight"
     },
     "WorldRenderCurvature": {
-      "description": "The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually \u2014 absent resolves to the engine\u0027s pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.",
+      "description": "The stylized curvature enrichment, keyed on mean curvature estimated from the baked triangle\u0027s interpolated vertex normals in world units. Every field is optional individually \u2014 absent resolves to the engine\u0027s default. The three gains share one shading gate: while all are zero their enrichment is skipped. The surface pass supplies the same curvature for edge weathering without querying the field.",
       "type": [
         "object",
         "null"

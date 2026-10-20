@@ -12,6 +12,7 @@ documentId: "debug"
 
 import "skies.puck"
 import "shapes.puck"
+import "studio.puck"
 import "theme"
 import "controls"
 
@@ -77,7 +78,16 @@ text {
 // How many levels of windows inside windows the presentation draws; a face past it shows its session's fallback colour.
 views {
   nestingDepth: 3
+  studioLayouts()
 }
+
+cameras: studioCameras
+
+// Recovery at the hero spawn lands above the studio platform.
+spawnPoints [
+  { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
+  { id: "stage", position [0, 0, 0], yawDegrees: 0 }
+]
 
 placements {
   // One derived face screen: the portal frame's glass.
@@ -164,10 +174,12 @@ placements {
 
   // The shape gallery (shapes.puck): every primitive, profile, lift and facet on the open ground at +X/+Z.
   galleryPlacements()
+  studioPlacements()
 }
 
 prototypes {
   galleryPrototypes()
+  studioPrototypes()
 
   prototype "floor" {
     document {

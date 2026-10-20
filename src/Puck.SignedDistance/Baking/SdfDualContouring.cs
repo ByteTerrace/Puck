@@ -39,6 +39,7 @@ internal interface ISdfContourLattice {
     int Corner(int x, int y, int z);
     bool Inside(int corner);
     double Value(int corner, int x, int y, int z);
+    double Crossing(int x, int y, int z, int axis, int length);
     (double X, double Y, double Z) World(double x, double y, double z);
     bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz);
     // The unit normal at the crossing (wx, wy, wz) of the lattice edge `length` cells long along `axis` from corner
@@ -84,8 +85,8 @@ internal interface ISdfRefinedContourLattice : ISdfContourLattice {
 /// patch is found from the cell's eight corner signs alone: the sign-changing cube edges are joined by the segments
 /// that marching squares draws across each cube face, and an ambiguous face, whose diagonal corners agree, is cut so
 /// that it separates its inside corners. The rule reads nothing but the face's four signs, so the two cells that share a
-/// face agree on it and the mesh has no crack. Each sign-changing edge of a patch contributes the point where the linear
-/// interpolation of its corner values crosses zero and the field's gradient there; the patch's vertex is the point
+/// face agree on it and the mesh has no crack. Each sign-changing edge of a patch contributes its lattice's refined
+/// zero crossing and the field's gradient there; the patch's vertex is the point
 /// nearest, in the least-squares sense, to every such tangent plane, drawn weakly toward the crossings' mean so a flat
 /// or single-edge patch stays determined, and clamped into the cell. The vertex's normal is the field's gradient at the
 /// vertex. Placing a vertex costs six evaluations per crossing, which keeps sharp edges and thin features that a mean
@@ -1026,20 +1027,13 @@ internal static class SdfDualContouring {
 
         return (patchOfEdge, patches);
     }
-    // The crossing on a sign-changing edge, as a fraction of the edge from its first corner. A cell `stride` lattice cells
-    // wide reads its corners `stride` samples apart.
+    // The lattice's crossing on a sign-changing edge, as a fraction from its first corner. A sampled lattice refines
+    // this root along the edge before measuring its normal; moving a linear estimate along its normal can find another
+    // face of the solid instead. A cell `stride` lattice cells wide reads its corners `stride` samples apart.
     private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b, int stride = 1) where TLattice : ISdfContourLattice {
         var (ax, ay, az) = Offset(corner: a);
-        var (bx, by, bz) = Offset(corner: b);
-        (ax, ay, az) = ((ax * stride), (ay * stride), (az * stride));
-        (bx, by, bz) = ((bx * stride), (by * stride), (bz * stride));
-        var va = ((double)grid.Value(corner: grid.Corner(x: (x + ax), y: (y + ay), z: (z + az)), x: (x + ax), y: (y + ay), z: (z + az)));
-        var vb = ((double)grid.Value(corner: grid.Corner(x: (x + bx), y: (y + by), z: (z + bz)), x: (x + bx), y: (y + by), z: (z + bz)));
-        var denominator = (va - vb);
 
-        return ((denominator == 0.0)
-            ? 0.5
-            : Math.Clamp(max: 1.0, min: 0.0, value: (va / denominator)));
+        return grid.Crossing(axis: BitOperations.TrailingZeroCount(value: (a ^ b)), length: stride, x: (x + (ax * stride)), y: (y + (ay * stride)), z: (z + (az * stride)));
     }
     private static (double X, double Y, double Z) Mean<TLattice>(TLattice grid, int edges, int x, int y, int z, int stride = 1) where TLattice : ISdfContourLattice {
         double sx = 0.0, sy = 0.0, sz = 0.0;

@@ -275,7 +275,20 @@ from captured device neutral while sector eligibility/direction remains
 relative to the displayed hub; this deliberately permits direct mouse/touch
 targeting and gamepad excursion on the same authored radial.
 
-Selection, ring navigation, commit, and cancel sources are ordinary entries
+The spatial policy reads the live cursor position independently of the routed
+`mouse.motion` binding: absolute-only pointer reports still aim the wheel.
+This keeps the wheel usable in annotation mode, whose input filter consumes
+relative motion to prevent camera drags while drawing.
+Only a position change takes selection from a controller; a parked cursor
+does not. Angle selection measures from the opening pointer position, while
+`HitTarget` tests the drawn annulus. Relative selection bindings retain a
+virtual pointer for devices without an absolute position; when a position is
+available, raw motion cannot also select or jump at the window edge. Use
+`world.view.pointer x y` to exercise the spatial selector through MCP.
+The newest mouse or axis selection wins; axis switch hysteresis never locks
+out a later mouse selection. Losing the pointer ends its hover.
+
+Axis selection, ring navigation, commit, and cancel sources are ordinary entries
 on each hold page. `Assets/worlds/controls.puck`'s `play-primary` is the live
 example: two hold pages (Tab, LB) that inherit the resting page, and one ring
 whose labels and icons read `state.wheelLabels`/`state.wheelIcons`.
