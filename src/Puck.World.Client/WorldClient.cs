@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -1316,7 +1315,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 // Smoothstep ease: weight is 1 at receipt (craft sits at its old pose) and eases to 0 as the window drains
                 // (craft arrives at authority), with a soft start and a soft settle. fraction = remaining/window runs 1→0.
                 var fraction = (m_remaining / m_window);
-                var weight = Easing.Smoothstep(t: fraction);
+                var weight = VectorFunctions.Smoothstep(t: fraction);
 
                 position += (m_position * weight);
                 // At weight 1 the render attitude is E · interpolated = the old attitude; at weight 0 it is the

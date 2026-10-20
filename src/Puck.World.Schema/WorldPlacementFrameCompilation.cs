@@ -9,7 +9,14 @@ namespace Puck.World;
 /// composed over the parent's own resolved frame otherwise. See <see cref="WorldPlacementFrameCompilation"/>.</summary>
 /// <param name="Position">The resolved world position.</param>
 /// <param name="YawDegrees">The resolved world yaw about +Y, degrees, wrapped to [0, 360).</param>
-public readonly record struct CompiledPlacementFrame(Vector3 Position, float YawDegrees);
+public readonly record struct CompiledPlacementFrame(Vector3 Position, float YawDegrees) {
+    /// <summary>Gets the frame's presentation rotation: <see cref="YawDegrees"/> about +Y, in single precision. The
+    /// deterministic composition rotates through <see cref="WorldPlacementFrameCompilation.RotateY"/> instead.</summary>
+    public Quaternion Rotation => Quaternion.CreateFromAxisAngle(
+        angle: float.DegreesToRadians(degrees: YawDegrees),
+        axis: Vector3.UnitY
+    );
+}
 /// <summary>Compiles every placement's <see cref="WorldPlacement.Parent"/> chain into one <see cref="CompiledPlacementFrame"/>
 /// per placement, resolved ONCE, statically, from the document's own placement rows — never per tick.
 /// <see cref="WorldDefinition.PlacementFrames"/> is the cached, document-wide result every consumer of a placement's

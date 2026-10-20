@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
@@ -61,7 +62,6 @@ public sealed class WorldSeatViewState {
         min: (control.MinPitch - authoredPitch),
         max: (control.MaxPitch - authoredPitch)
     );
-    private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
 
     /// <summary>The rotation carrying world up to the seat's own up, CARRIED across updates rather than rebuilt.
     /// Both the seat camera's boom and the movement composition ride this, so what the seat pushes and what it looks
@@ -94,7 +94,7 @@ public sealed class WorldSeatViewState {
         lock (m_gate) {
             // TRANSPORT only when the axis actually moved. An unchanged up carries the held rotation nowhere.
             if (up != m_alignedUp) {
-                m_upAlignment = Quaternion.Normalize(value: (WorldSeatCameraResolver.ShortestArc(
+                m_upAlignment = Quaternion.Normalize(value: (VectorFunctions.ShortestArc(
                     from: m_alignedUp,
                     to: up
                 ) * m_upAlignment));
@@ -113,7 +113,10 @@ public sealed class WorldSeatViewState {
                 m_upAlignment = Quaternion.Normalize(value: Quaternion.Slerp(
                     amount: ReanchorFraction,
                     quaternion1: m_upAlignment,
-                    quaternion2: WorldSeatCameraResolver.AlignUp(up: up)
+                    quaternion2: VectorFunctions.ShortestArc(
+                        from: Vector3.UnitY,
+                        to: up
+                    )
                 ));
             }
 
@@ -134,10 +137,10 @@ public sealed class WorldSeatViewState {
         );
 
         lock (m_gate) {
-            var current = Wrap(radians: m_yaw);
-            var delta = Wrap(radians: (targetYaw - current));
+            var current = VectorFunctions.WrapAngle(radians: m_yaw);
+            var delta = VectorFunctions.WrapAngle(radians: (targetYaw - current));
 
-            m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
+            m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + (delta * fraction)));
         }
     }
     /// <summary>Opens a fixed tick's view advance: the look as it stands now is where this tick's step starts.</summary>
@@ -151,7 +154,7 @@ public sealed class WorldSeatViewState {
     /// follow, a held recenter) is the step a frame between this tick and the next interpolates across.</summary>
     public void CompleteTick() {
         lock (m_gate) {
-            m_tickYawStep = Wrap(radians: (m_yaw - m_tickStartYaw));
+            m_tickYawStep = VectorFunctions.WrapAngle(radians: (m_yaw - m_tickStartYaw));
             m_tickPitchStep = (m_pitch - m_tickStartPitch);
         }
     }
@@ -175,7 +178,7 @@ public sealed class WorldSeatViewState {
         ));
 
         lock (m_gate) {
-            return (Wrap(radians: (m_yaw - (m_tickYawStep * lag))), (m_pitch - (m_tickPitchStep * lag)));
+            return (VectorFunctions.WrapAngle(radians: (m_yaw - (m_tickYawStep * lag))), (m_pitch - (m_tickPitchStep * lag)));
         }
     }
     // A cut has no tick step to interpolate across: the look lands where it was put.
@@ -219,12 +222,12 @@ public sealed class WorldSeatViewState {
         // is where the EYE sits relative to the facing; folding it in here is what once made "look behind" turn the
         // body round with the camera.
         var bodyYaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
-            ? WorldSeatCameraResolver.BodyYaw(orientation: bodyOrientation)
+            ? VectorFunctions.YawOf(attitude: bodyOrientation)
             : 0f
         );
 
         lock (m_gate) {
-            return Wrap(radians: (m_yaw + bodyYaw));
+            return VectorFunctions.WrapAngle(radians: (m_yaw + bodyYaw));
         }
     }
     public void Nudge(Vector2 input, float yawScale, float pitchScale, WorldSeatCameraFeel preference, WorldViewDefaults views) {
@@ -237,7 +240,7 @@ public sealed class WorldSeatViewState {
         // Input is semantic look direction (+X right, +Y up). OrbitRig stores the eye's offset around the target,
         // so the corresponding orbit angles move in the opposite direction.
         lock (m_gate) {
-            m_yaw = Wrap(radians: (m_yaw - ((input.X * yawScale) * (preference.InvertYaw
+            m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw - ((input.X * yawScale) * (preference.InvertYaw
                 ? -1f
                 : 1f))));
             m_pitch = ClampLivePitch(
@@ -254,7 +257,7 @@ public sealed class WorldSeatViewState {
     /// <param name="yawDelta">The arrival's yaw delta, fixed-point radians.</param>
     /// <returns>The turn.</returns>
     public static Quaternion ArrivalTurn(Puck.Maths.FixedQ4816 yawDelta) => Quaternion.CreateFromAxisAngle(
-        angle: ((float)((double)yawDelta)),
+        angle: ((float)yawDelta),
         axis: Vector3.UnitY
     );
     /// <summary>Carries the seat's view through a mapped arrival that turns its traveler by
@@ -266,7 +269,7 @@ public sealed class WorldSeatViewState {
     public void Cross(Quaternion turn, WorldSeatYawReference yawReference) {
         lock (m_gate) {
             if (yawReference == WorldSeatYawReference.World) {
-                m_yaw = Wrap(radians: (m_yaw + (WorldSeatCameraResolver.BodyYaw(orientation: turn) - WorldSeatCameraResolver.BodyYaw(orientation: Quaternion.Identity))));
+                m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + VectorFunctions.YawOf(attitude: turn)));
             }
 
             m_boom.Rotate(rotation: turn);
@@ -292,7 +295,7 @@ public sealed class WorldSeatViewState {
         lock (m_gate) {
             m_yaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
                 ? 0f
-                : Wrap(radians: targetYaw)
+                : VectorFunctions.WrapAngle(radians: targetYaw)
             );
         }
     }

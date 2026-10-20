@@ -931,7 +931,7 @@ public sealed partial class WorldStampPool {
             )),
                 Quaternion.Normalize(value: (bodyOrientation * Quaternion.CreateFromAxisAngle(
                 axis: Vector3.UnitY,
-                angle: (attach.LocalYawDegrees * (MathF.PI / 180f))
+                angle: float.DegreesToRadians(degrees: attach.LocalYawDegrees)
             ))),
                 row.Scale
             );
@@ -943,7 +943,7 @@ public sealed partial class WorldStampPool {
         // (WorldPlacementStamper.EmitStatic) is the one every Parent-carrying placement in the shipped games rides.
         var rotation = Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,
-            angle: (row.YawDegrees * (MathF.PI / 180f))
+            angle: float.DegreesToRadians(degrees: row.YawDegrees)
         );
 
         return (row.Position, rotation, row.Scale);

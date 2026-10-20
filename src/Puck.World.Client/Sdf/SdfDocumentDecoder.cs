@@ -152,7 +152,7 @@ public static class SdfDocumentDecoder {
 
                         _ = builder.Rotate(rotation: Quaternion.CreateFromAxisAngle(
                             axis: axis,
-                            angle: (op.Scalar0 * (MathF.PI / 180f))
+                            angle: float.DegreesToRadians(degrees: op.Scalar0)
                         ));
 
                         break;

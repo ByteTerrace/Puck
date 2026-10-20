@@ -81,7 +81,7 @@ public sealed partial class WorldInspectorText {
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"camera={camera.Position.X:0.###},{camera.Position.Y:0.###},{camera.Position.Z:0.###} forward={camera.Forward.X:0.###},{camera.Forward.Y:0.###},{camera.Forward.Z:0.###}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
-            handler: $"up={camera.Up.X:0.###},{camera.Up.Y:0.###},{camera.Up.Z:0.###} fov={((2 * MathF.Atan(x: camera.TanHalfFieldOfView)) * (180 / MathF.PI)):0.###}") && Line(text: scratch[..written]));
+            handler: $"up={camera.Up.X:0.###},{camera.Up.Y:0.###},{camera.Up.Z:0.###} fov={float.RadiansToDegrees(radians: (2 * MathF.Atan(x: camera.TanHalfFieldOfView))):0.###}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"simulation-tick={snapshot.SimulationTick} presentation-tick={snapshot.PresentationTick}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,

@@ -58,52 +58,15 @@ public static class WorldEffectorSolver {
     /// <summary>Returns the shortest rotation carrying one direction onto another.</summary>
     /// <param name="from">The direction to rotate; need not be normalized.</param>
     /// <param name="to">The direction to rotate onto; need not be normalized.</param>
-    /// <returns>The rotation, or the identity when either direction is degenerate.</returns>
-    public static Quaternion FromTo(Vector3 from, Vector3 to) {
-        var fromLength = from.Length();
-        var toLength = to.Length();
-
-        if (
-            (fromLength < MinLength) ||
-            (toLength < MinLength)
-        ) {
-            return Quaternion.Identity;
-        }
-
-        var a = (from / fromLength);
-        var b = (to / toLength);
-        var cosine = Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: Vector3.Dot(
-                vector1: a,
-                vector2: b
-            )
-        );
-
-        if (cosine < (-1f + MinLength)) {
-            // Antiparallel: every axis perpendicular to the pair is a half turn, and no cross product names one.
-            return Quaternion.CreateFromAxisAngle(
-                angle: MathF.PI,
-                axis: Perpendicular(direction: a)
-            );
-        }
-
-        // The half-way form: (cross(a, b), 1 + dot(a, b)) normalized. It stays exact through the near-parallel case an
-        // acos/normalized-axis pair loses to rounding, which is what lets a sweep close the last millimetre instead
-        // of stalling once every bone is merely nearly aligned.
-        var axis = Vector3.Cross(
-            vector1: a,
-            vector2: b
-        );
-
-        return Quaternion.Normalize(value: new Quaternion(
-            w: (1f + cosine),
-            x: axis.X,
-            y: axis.Y,
-            z: axis.Z
-        ));
-    }
+    /// <returns><see cref="VectorFunctions.ShortestArc"/> of the pair, or the identity when either direction is
+    /// shorter than <see cref="MinLength"/>, whose direction is rounding noise.</returns>
+    public static Quaternion FromTo(Vector3 from, Vector3 to) => (((from.Length() < MinLength) || (to.Length() < MinLength))
+        ? Quaternion.Identity
+        : VectorFunctions.ShortestArc(
+            from: from,
+            to: to
+        )
+    );
     /// <summary>Returns whether a driver phase falls inside a plant window.</summary>
     /// <param name="phase">The driver's wrapped phase, radians in [0, 2π).</param>
     /// <param name="from">The window's opening phase, radians.</param>
@@ -114,21 +77,6 @@ public static class WorldEffectorSolver {
         ? ((phase >= from) && (phase <= to))
         : ((phase >= from) || (phase <= to))
     );
-    /// <summary>Returns a unit direction perpendicular to another.</summary>
-    /// <param name="direction">The direction to be perpendicular to; assumed non-degenerate.</param>
-    /// <returns>The perpendicular direction.</returns>
-    public static Vector3 Perpendicular(Vector3 direction) {
-        // Cross with whichever axis the direction is least aligned to, so the cross product never collapses.
-        var axis = ((MathF.Abs(x: direction.X) < 0.7f)
-            ? Vector3.UnitX
-            : Vector3.UnitY
-        );
-
-        return Vector3.Normalize(value: Vector3.Cross(
-            vector1: direction,
-            vector2: axis
-        ));
-    }
     /// <summary>Solves a chain in place and accumulates each bone's correction.</summary>
     /// <param name="posedJoints">Each bone's joint, root→tip, in posed creation space; advanced to the solved
     /// configuration.</param>
@@ -266,7 +214,7 @@ public static class WorldEffectorSolver {
         )));
 
         if (bend.LengthSquared() < (MinLength * MinLength)) {
-            bend = Perpendicular(direction: direction);
+            bend = VectorFunctions.Perpendicular(direction: direction);
         }
 
         var normal = Vector3.Normalize(value: bend);

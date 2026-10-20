@@ -14,41 +14,13 @@ internal sealed partial class PlayerCommandModule {
     private const float MaxReconcileSeconds = 2f;
     private const float MinReconcileSeconds = 0.05f;
 
-    // A resolved pose's current heading decomposed to degrees — the exact inverse of the Euler construction
-    // WorldBody.Pose applies (Ry(yaw)·Rx(pitch)·Rz(roll)), read from an orientation quaternion so body.pose's
-    // "-" hold never re-derives a fact its source (a local WorldBody or a routed endpoint's mirrored pose) does
-    // not already expose; mirrors WorldBody's own private EulerRadians (see its remarks on the codebase-wide
-    // yaw-about-+Y / pitch-about-+X / roll-about-+Z convention).
+    // A resolved pose's current heading decomposed to degrees — the inverse of the Euler construction WorldBody.Pose
+    // applies (Ry(yaw)·Rx(pitch)·Rz(roll)), read from an orientation quaternion so body.pose's "-" hold never
+    // re-derives a fact its source (a local WorldBody or a routed endpoint's mirrored pose) does not already expose.
     private static (float YawDegrees, float PitchDegrees, float RollDegrees) CurrentEulerDegrees(Quaternion orientation) {
-        var forward = Vector3.Transform(
-            value: -Vector3.UnitZ,
-            rotation: orientation
-        );
-        var up = Vector3.Transform(
-            value: Vector3.UnitY,
-            rotation: orientation
-        );
-        var right = Vector3.Transform(
-            value: Vector3.UnitX,
-            rotation: orientation
-        );
-        var yaw = MathF.Atan2(
-            x: -forward.Z,
-            y: -forward.X
-        );
-        var pitch = MathF.Asin(x: Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: forward.Y
-        ));
-        var roll = MathF.Atan2(
-            x: up.Y,
-            y: right.Y
-        );
+        var (yaw, pitch, roll) = VectorFunctions.EulerOf(attitude: orientation);
 
-        const float ToDegrees = (180f / MathF.PI);
-
-        return (YawDegrees: (yaw * ToDegrees), PitchDegrees: (pitch * ToDegrees), RollDegrees: (roll * ToDegrees));
+        return (YawDegrees: float.RadiansToDegrees(radians: yaw), PitchDegrees: float.RadiansToDegrees(radians: pitch), RollDegrees: float.RadiansToDegrees(radians: roll));
     }
     private CommandResult FlyHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(
@@ -336,9 +308,9 @@ internal sealed partial class PlayerCommandModule {
                     y: iy,
                     z: iz
                 ),
-                YawRadians: (iyaw * (MathF.PI / 180f)),
-                PitchRadians: (ipitch * (MathF.PI / 180f)),
-                RollRadians: (iroll * (MathF.PI / 180f)),
+                YawRadians: float.DegreesToRadians(degrees: iyaw),
+                PitchRadians: float.DegreesToRadians(degrees: ipitch),
+                RollRadians: float.DegreesToRadians(degrees: iroll),
                 Mode: SnapPoseMode.Pose
             ));
 
@@ -391,7 +363,7 @@ internal sealed partial class PlayerCommandModule {
                         Principal: context.Principal,
                         EntityIndex: location.EntityIndex,
                         Position: routedSpawnPosition,
-                        YawRadians: (routedPoint.YawDegrees * (MathF.PI / 180f)),
+                        YawRadians: float.DegreesToRadians(degrees: routedPoint.YawDegrees),
                         PitchRadians: 0f,
                         RollRadians: 0f,
                         Mode: SnapPoseMode.Pose
@@ -431,7 +403,7 @@ internal sealed partial class PlayerCommandModule {
                 Principal: context.Principal,
                 EntityIndex: spawnIndex,
                 Position: spawnPosition,
-                YawRadians: (point.YawDegrees * (MathF.PI / 180f)),
+                YawRadians: float.DegreesToRadians(degrees: point.YawDegrees),
                 PitchRadians: 0f,
                 RollRadians: 0f,
                 Mode: SnapPoseMode.Pose
@@ -497,8 +469,6 @@ internal sealed partial class PlayerCommandModule {
                     return routedParseError!.Value;
                 }
 
-                const float RoutedToRadians = (MathF.PI / 180f);
-
                 location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
                     Principal: context.Principal,
                     EntityIndex: location.EntityIndex,
@@ -507,9 +477,9 @@ internal sealed partial class PlayerCommandModule {
                         y: ry,
                         z: rz
                     ),
-                    YawRadians: (ryaw * RoutedToRadians),
-                    PitchRadians: (rpitch * RoutedToRadians),
-                    RollRadians: (rroll * RoutedToRadians),
+                    YawRadians: float.DegreesToRadians(degrees: ryaw),
+                    PitchRadians: float.DegreesToRadians(degrees: rpitch),
+                    RollRadians: float.DegreesToRadians(degrees: rroll),
                     Mode: SnapPoseMode.Pose
                 ));
 
@@ -546,8 +516,6 @@ internal sealed partial class PlayerCommandModule {
             return bootParseError!.Value;
         }
 
-        const float ToRadians = (MathF.PI / 180f);
-
         if (ReplayDriveError(verb: "body.pose") is { } driveError) {
             return driveError;
         }
@@ -560,9 +528,9 @@ internal sealed partial class PlayerCommandModule {
                 y: y,
                 z: z
             ),
-            YawRadians: (yawDegrees * ToRadians),
-            PitchRadians: (pitchDegrees * ToRadians),
-            RollRadians: (rollDegrees * ToRadians),
+            YawRadians: float.DegreesToRadians(degrees: yawDegrees),
+            PitchRadians: float.DegreesToRadians(degrees: pitchDegrees),
+            RollRadians: float.DegreesToRadians(degrees: rollDegrees),
             Mode: SnapPoseMode.Pose
         ));
 
@@ -637,7 +605,7 @@ internal sealed partial class PlayerCommandModule {
             EntityIndex: index,
             X: x,
             Z: z,
-            YawRadians: (degrees * (MathF.PI / 180f)),
+            YawRadians: float.DegreesToRadians(degrees: degrees),
             Seconds: seconds
         ));
 

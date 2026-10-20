@@ -42,10 +42,7 @@ public static class WorldLightAnchorResolver {
             definition: client.Definition,
             placement: placement
         );
-        var rotation = Quaternion.CreateFromAxisAngle(
-            Vector3.UnitY,
-            (frame.YawDegrees * (MathF.PI / 180f))
-        );
+        var rotation = frame.Rotation;
 
         if (anchor.ShapeId is not { } shapeId) {
             return new(
