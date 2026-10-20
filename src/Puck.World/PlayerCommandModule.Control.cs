@@ -227,7 +227,7 @@ internal sealed partial class PlayerCommandModule {
         );
 
         if (context.Phase == CommandPhase.Started) {
-            m_viewInput.BeginDrag(slot: context.Slot);
+            m_viewInput?.BeginDrag(slot: context.Slot);
         }
 
         return result;
