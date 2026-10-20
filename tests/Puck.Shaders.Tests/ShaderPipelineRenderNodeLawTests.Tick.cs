@@ -53,13 +53,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         foreach (var displayRate in ((double[])[30d, 60d, 144d])) {
             // Each clock presents the tick at a fraction of its own frame interval past the tick's time.
             node.Frame = new ShaderFrameValues(
-                CameraFov: 0f,
-                CameraPosition: Vector3.Zero,
-                CameraTarget: Vector3.Zero,
-                CameraUp: Vector3.Zero,
                 Pointer: Vector2.Zero,
                 PointerDown: false,
-                PointerPresses: 0,
                 Tick: engineTick,
                 Time: (FixedTickConversion.ToSeconds(ticks: engineTick) + (0.5d / displayRate)),
                 TimeDelta: (1d / displayRate)
@@ -98,7 +93,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         foreach (var (presented, expected) in ((ReadOnlySpan<(ulong, ulong)>)[((period * 7UL), 7UL), (((period * 8UL) - 1UL), 7UL), ((period * 8UL), 8UL)])) {
             layout.WriteFrame(
                 block: written,
-                extent: node.Extent,
                 frame: 0UL,
                 tickRate: RequestedTickRate,
                 values: (node.Frame with { Tick = presented })

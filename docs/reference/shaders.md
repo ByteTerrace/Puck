@@ -308,10 +308,6 @@ descriptor set every frame:
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
 | `tickRate` | `uint` | The rate `tick` counts in, ticks a second: the graph's requested `tickRate`, or the engine's 50,400. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
-| `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
-| `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
-| `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. A pass that renders through its paired camera projects exactly as the camera does, with no factor of its own on this field of view, since a hit through the pane continues along the camera's ray for the same pixel; a model in another frame maps the camera's ray into it by a similarity, which leaves the projection unchanged. |
-| `placedExtent` | `float2` | The extent, in display pixels, of the rect the root places the instance's output in this frame, or the node's own extent when nothing places it. A pane renders at its layout's allocation envelope, which holds one extent while its rect eases, and the placement stretches the whole output into the rect, so a pass maps its output onto that rect and projects at `placedExtent.x / placedExtent.y`, the paired camera's aspect, never at `extent`'s. |
 
 A World has one presentation clock, its state mirror
 (`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
@@ -582,7 +578,7 @@ has a `name` and exactly one of two things to render. A `source` is a
 `puck.render.graph.v1` graph document, a one-off `.hlsl` shader read as a
 one-pass graph, or a [package](#packaging-a-pipeline) directory, resolved
 relative to the world document. A `package` names an engine package's
-producer, such as `sdf.world`. A row also takes an optional `camera`, a
+producer, such as `sdf.world`. A row also takes an optional
 `refresh` of either a frame `divisor` or a rate in `hertz`, `inputs` that bind
 one of the graph's external versions to another row's output, and the
 per-instance `timeScale`, `output` and [`overrides`](#per-instance-overrides).
@@ -593,7 +589,7 @@ a `graph "name" { … }` block inside `views`, and a slot says
 ```json
 "views": {
   "graphs": [
-    { "name": "lobby", "source": "graphs/camera.graph.json", "camera": "lobbyCam", "refresh": { "hertz": 15 } },
+    { "name": "lobby", "source": "graphs/camera.graph.json", "refresh": { "hertz": 15 } },
     { "name": "monitor", "source": "graphs/monitor.graph.json", "inputs": [ { "resource": "screen", "instance": "lobby" } ] }
   ],
   "graphBudget": { "passPixelsPerFrame": 4147200 }
@@ -1042,7 +1038,7 @@ transition in flight, or its start's extent when the transition grows it on
 one axis and shrinks it on the other, retained through interruptions until the chain settles,
 then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
 resizes a node, advances the pane's clock, and feeds its
-camera, pointer and time. A pane the active layout does not show is not shown:
+pointer and time. A pane the active layout does not show is not shown:
 its place pass draws nothing and its instance is not scheduled. Once every
 slot is placed, the host publishes the mapping of each view and pane the
 `place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
@@ -2496,10 +2492,9 @@ instead of adding a case to World or to the SDF engine.
 ### One-off shaders
 
 A one-off shader is one HLSL compute pass writing the image `output`, with entry
-point `main`. It includes its generated interface and reads its extent, time,
-pointer and paired camera through it
-([frame values, extent and ports](#frame-values-extent-and-ports));
-a zero `cameraFov` means no camera is paired.
+point `main`. It includes its generated interface and reads its extent, time
+and pointer through it
+([frame values, extent and ports](#frame-values-extent-and-ports)).
 [The genesis card](../../experimental/worlds/genesis/card.hlsl) is a worked example.
 
 Compile a single source stage from the repository root:

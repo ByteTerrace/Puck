@@ -248,7 +248,7 @@ data changes.**
 
 | Group | Changes | Holds |
 |---|---|---|
-| Frame | every frame | resolution, presentation time, the deterministic tick, the paired camera |
+| Frame | every frame | resolution, presentation time, the deterministic tick, the pointer |
 | World | every tick at most | the state mirror's regions, the field lattices |
 | Pipeline instance | on install or resize | pass parameter blocks, persistent and history resources |
 | Pass | every pass | transient inputs and outputs |

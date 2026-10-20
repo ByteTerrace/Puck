@@ -391,8 +391,7 @@ compiler revision, the stages and their DXC steps, and the closure.
 A pass reads its frame data only through a pass interface the engine derives
 from the pass (`ShaderFrameInterface`). The frame group, set 0, holds what every
 pass of a node shares each frame: the pointer, the engine tick and tick rate,
-presentation time and its delta, the frame count, the pointer's pressed state
-and press count, and the paired camera. The pass block, `b0` of set 3, holds the
+presentation time and its delta, the frame count, the pointer's pressed state. The pass block, `b0` of set 3, holds the
 pass's own extent and then its config fields in ordinal name order, followed by
 its ports; a pass that binds arrays reads them from the World group, set 1. Each
 pass binds its groups as descriptor sets (P7b step 15), and nothing it records is
@@ -1258,7 +1257,7 @@ runtime's latest schedule renders it at. It hands them to the host's
 before without allocating. The pipeline pane's pointer maps through its
 instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
 `RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
-each view's seat camera and each pane's paired camera, starting beneath every
+each view's seat camera, starting beneath every
 pane from a lone whole-display view (`WorldViewGraphHost.DisplayView`), which is
 no pane and gets no hover outline. `world.view.panes`
 echoes the published mappings, a pick and a walk; the laws are
@@ -3967,7 +3966,7 @@ Each commit is marked with what it waits on.
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
 6. Hits continue through live instances. Landed. `WorldViewGraphHost.Walk`
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
-   panes, with each view's seat camera and each pane's paired camera, and the pane
+   panes, with each view's seat camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
    producer reports the screens of the world it renders as the surface
    placements inside that world, so a walk continues from a view through a

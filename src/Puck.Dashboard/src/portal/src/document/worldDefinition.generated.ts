@@ -12264,10 +12264,6 @@ export type WorldViewGraph = {
    */
   package?: string | null;
   /**
-   * The authored camera the instance renders from, feeding the frame block's cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a graph keeps its own pointer orbit.
-   */
-  camera?: string | null;
-  /**
    * How often it refreshes, or null for every frame something visible reads it.
    */
   refresh?: WorldViewGraphRefresh | null;

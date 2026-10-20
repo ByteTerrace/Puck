@@ -565,8 +565,7 @@ It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same
 path on every run. A World host walks its runtime's live instance set from the
-pane mappings it publishes each frame, with each view's seat camera and each
-pane's paired camera; each view's world producer and each camera view reports
+pane mappings it publishes each frame, with each view's seat camera; each view's world producer and each camera view reports
 the screens standing in the boot world, so the walk continues from a pane through
 a screen into its source, or into the view the screen films; any other instance
 reports none, so a ray cast into it ends on its world.

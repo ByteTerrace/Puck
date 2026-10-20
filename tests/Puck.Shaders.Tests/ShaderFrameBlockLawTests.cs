@@ -12,32 +12,11 @@ namespace Puck.Shaders.Tests;
 /// the shipped film grain set to the generator.</summary>
 public sealed class ShaderFrameBlockLawTests {
     private static readonly ShaderFrameValues Values = new(
-        CameraFov: 0.75f,
-        CameraPosition: new Vector3(
-            x: 1.5f,
-            y: 2.5f,
-            z: 3.5f
-        ),
-        CameraTarget: new Vector3(
-            x: 4.5f,
-            y: 5.5f,
-            z: 6.5f
-        ),
-        CameraUp: new Vector3(
-            x: 7.5f,
-            y: 8.5f,
-            z: 9.5f
-        ),
         Pointer: new Vector2(
             x: 10.5f,
             y: 11.5f
         ),
-        PlacedExtent: new Vector2(
-            x: 250.5f,
-            y: 500.25f
-        ),
         PointerDown: true,
-        PointerPresses: 12,
         Tick: 0x0123456789ABCDEFUL,
         Time: 13.5,
         TimeDelta: 0.25
@@ -52,12 +31,6 @@ public sealed class ShaderFrameBlockLawTests {
         [ShaderFrameInterface.Frame] = [77],
         [ShaderFrameInterface.TickRate] = [((uint)Puck.Maths.FixedTickConversion.TicksPerSecond)],
         [ShaderFrameInterface.PointerDown] = [1],
-        [ShaderFrameInterface.PointerPresses] = [12],
-        [ShaderFrameInterface.CameraPosition] = [Bits(value: 1.5f), Bits(value: 2.5f), Bits(value: 3.5f)],
-        [ShaderFrameInterface.CameraFov] = [Bits(value: 0.75f)],
-        [ShaderFrameInterface.CameraTarget] = [Bits(value: 4.5f), Bits(value: 5.5f), Bits(value: 6.5f)],
-        [ShaderFrameInterface.CameraUp] = [Bits(value: 7.5f), Bits(value: 8.5f), Bits(value: 9.5f)],
-        [ShaderFrameInterface.PlacedExtent] = [Bits(value: 250.5f), Bits(value: 500.25f)],
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
@@ -77,7 +50,6 @@ public sealed class ShaderFrameBlockLawTests {
         );
         layout.WriteFrame(
             block: frame,
-            extent: (640, 360),
             frame: 77,
             values: Values
         );
