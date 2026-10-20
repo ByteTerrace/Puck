@@ -214,7 +214,8 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] A complete NTSC machine.
 - [ ] NTSC accuracy (in progress: AccuracyCoin reports each test's own result; 35 of 144 tests fail).
 - [ ] Common boards; regional hardware; long-tail boards; expansion audio.
-- [ ] The Famicom Disk System; peripherals; World cabinets.
+- [ ] World cabinets (in progress: the engine, its extension, port-naming routes and two shipped test cartridges are in; ordered operations while recording, replay receipts and the canary remain).
+- [ ] The Famicom Disk System; peripherals.
 
 ## [Play](play.md)
 

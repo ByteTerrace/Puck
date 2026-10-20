@@ -1,9 +1,9 @@
-namespace Puck.HumbleGamingDeck.Post;
+namespace Puck.HumbleGamingDeck.Forge;
 
-/// <summary>A small 6502 assembler for the battery's original fixture cartridges: it emits instructions at $8000 onward,
-/// resolves labels for branches and jumps, and packs the program with CHR data into an NROM-256 image whose reset vector
-/// is $8000.</summary>
-internal sealed class DeckProgram {
+/// <summary>A small 6502 assembler for original Deck cartridges, the Post battery's fixtures and the shipped test
+/// cartridges alike: it emits instructions at $8000 onward, resolves labels for branches and jumps, and packs the
+/// program with CHR data into an NROM-256 image whose reset vector is $8000.</summary>
+public sealed class DeckProgram {
     private readonly List<byte> m_code = [];
     private readonly Dictionary<string, int> m_labels = new(comparer: StringComparer.Ordinal);
     private readonly List<(int Offset, string Label, bool Relative)> m_fixups = [];

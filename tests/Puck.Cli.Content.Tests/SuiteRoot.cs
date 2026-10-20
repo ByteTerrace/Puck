@@ -1,14 +1,16 @@
 using System.CommandLine;
 
+using Puck.Cli.Cartridges;
 using Puck.Cli.Firmware;
 
 namespace Puck.Cli.Content.Tests;
 
-/// <summary>The verbs this suite's laws invoke, composed the way the <c>puck</c> root composes them: firmware.</summary>
+/// <summary>The verbs this suite's laws invoke, composed the way the <c>puck</c> root composes them: cartridges and
+/// firmware.</summary>
 internal static class SuiteRoot {
     public static RootCommand Create() => CliRoot.Compose(
         description: "The verbs Puck.Cli.Content.Tests invokes.",
-        verbs: [FirmwareCommand.Create()]
+        verbs: [CartridgesCommand.Create(), FirmwareCommand.Create()]
     );
     public static int Invoke(string[] args) => CliRoot.Invoke(
         args: args,

@@ -71,9 +71,13 @@ ports must agree with the provider descriptor. `machine.state` reports this stat
 mutation and undo authority.
 
 Screens and speakers reference an instance and a provider output name. Removing a
-consumer does not remove or restart its machine. Engaged display inputs fold into
-the instance's single normalized input port; machines with multiple input ports
-can run headlessly, while display routing requires the later explicit port model.
+consumer does not remove or restart its machine. An engaged display's input
+reaches the input port its route names (`route.port`); a route that names none
+reaches the machine's sole port, so an engageable display of a machine with
+several ports (the Humble Gaming Deck's `controls` and `controls-2`) is refused
+by name until its route names one. A port no engaged display routes to holds
+neutral input, a passive display routes none, and a screen-owned machine
+follows the same rule at insertion.
 Named screen inspection, output selection, symbol lookup, and memory access
 resolve directly against the named runtime instance. An aliased screen or speaker
 source rewrites its producer name under import aliasing, and provider asset paths

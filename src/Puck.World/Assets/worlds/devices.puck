@@ -8,7 +8,7 @@
 //   x -16  the Humble Gaming Brick as the AGB, running brick cartridges in its compatibility mode
 //   x -19  the Advanced Gaming Brick, the AGB's own machine
 //   x -22  the tune jukebox, whose content is a tune document
-//   x -25  the Humble Gaming Deck, which no World engine runs yet: its screen shows the test pattern
+//   x -25  the Humble Gaming Deck, running its test cartridges on the set above it
 //
 // devices.md beside this file gives the console lines that list, swap, engage, reset and eject each one.
 
@@ -341,6 +341,17 @@ machines [
     }
     contentFolder: "tunes"
   }
+  {
+    name: "gaming-deck"
+    engine: "humble-gaming-deck"
+    configuration {
+      schema: "puck.humble-gaming-deck.configuration.v1"
+      content {
+        path: "../cartridges/deck/colour-bars.nes"
+      }
+    }
+    contentFolder: "../cartridges/deck"
+  }
 ]
 
 // The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and rise
@@ -462,10 +473,13 @@ screens [
     halfHeight: 0.24
     halfDepth: 0.005
     round: 0
-    source: producer(id: "testPattern", settings: { width: 256, height: 240 })
+    source: machine(instance: `gaming-deck`, output: "video")
+    // The deck has two controller ports; an engaged seat plays the first.
     route {
-      engageable: false
-      engageRadius: 0
+      engageable: true
+      engageRadius: 3
+      kit: "devicePad"
+      port: "controls"
     }
   }
 ]

@@ -9,6 +9,8 @@
     <ItemGroup>
         <ProjectReference Include="../Puck.Machines.Post/Puck.Machines.Post.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
+        <Using Include="Puck.HumbleGamingDeck.Forge" />
         <Using Include="Puck.Machines.Post" />
     </ItemGroup>
 </Project>

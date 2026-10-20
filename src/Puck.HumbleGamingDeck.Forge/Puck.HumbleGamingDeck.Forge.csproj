@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>Humble Gaming Deck cartridge tooling and extension: a small 6502 assembler that packs NROM images, the original test cartridges built with it, and the extension that registers the humble-gaming-deck machine engine.</Description>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.HumbleGamingDeck.Forge</PackageId>
+        <PackageTags>authoring;determinism;homebrew;nes;rom;6502</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.HumbleGamingDeck.Forge</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
+    </ItemGroup>
+</Project>

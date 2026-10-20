@@ -22,6 +22,7 @@
              both cores. -->
         <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
         <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../../src/Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
