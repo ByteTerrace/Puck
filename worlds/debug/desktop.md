@@ -4,7 +4,7 @@
 first visible top-level window whose title contains `Claude`, compared without
 regard to case. It shows the window in two places: the `views.graphs` row
 `claude`, which the `desktop` layout places as a pane over the bottom two
-fifths of the display below the play view, and screen 16, a 4 m by 1 m glass slab beside the
+fifths of the display below the play view, and screen 16, a 4 m wide wall screen at the window's own 2560 by 1392 shape and size, beside the
 portal frame, eight metres ahead of the spawn and eight to the right. Every
 line below is typed at the World's console, or sent through the local operator
 attachment (`world.control`, the `puck` MCP server), which is the same console.
