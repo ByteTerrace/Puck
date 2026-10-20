@@ -168,6 +168,13 @@ public abstract record WorldReplayEntry {
     /// <param name="Slot">The source body index.</param>
     /// <param name="Restored">Whether the body came back in a rollback rather than left.</param>
     internal sealed record Departure(ulong TransferId, int Slot, bool Restored) : WorldReplayEntry;
+    /// <summary>One body an in-place crossing moved through a portal pair standing in this world
+    /// (<see cref="WorldServer.CrossingTap"/>), at the position among the tick's authority entries where the authority
+    /// applied it. A re-drive applies the recorded crossing through the same
+    /// <see cref="WorldServer.ApplyInPlaceCrossing"/>; one the shadow cannot apply leaves its body in place, and the
+    /// tick's hash reports the divergence.</summary>
+    /// <param name="Value">The crossing.</param>
+    internal sealed record Crossing(WorldInPlaceCrossing Value) : WorldReplayEntry;
     /// <summary>The federated device images a recorded step held — the input forwarded and federated travelers drive
     /// this authority's bodies with, which crosses no loopback. Taped at every step that holds any and once as the
     /// set empties; a re-drive replaces the shadow's held images with exactly this set at the same position, and the
@@ -543,6 +550,12 @@ public sealed partial class WorldReplaySnapshot {
                     }
 
                     break;
+                case WorldReplayEntry.Crossing crossing:
+                    // A crossing the shadow cannot apply leaves its body where it stood, which the tick's own hash
+                    // then reports as the divergence it is.
+                    _ = server.ExecuteAuthorityOperation(operation: () => server.ApplyInPlaceCrossing(crossing: crossing.Value));
+
+                    break;
                 default:
                     // A new entry kind that reaches here unhandled would be silently DROPPED from the re-drive,
                     // which is a determinism hole wearing a robustness costume.
@@ -872,6 +885,8 @@ public sealed partial class WorldReplaySnapshot {
                 return ReadDepartureEntry(reader: ref reader);
             case 22:
                 return ReadSeatIdentityEntry(reader: ref reader);
+            case 23:
+                return ReadCrossingEntry(reader: ref reader);
             case 20:
                 return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
                     field: "federated intents",
@@ -1100,6 +1115,23 @@ public sealed partial class WorldReplaySnapshot {
             Profile: profile,
             Slot: slot
         );
+    }
+    private static WorldReplayEntry ReadCrossingEntry(ref WireReader reader) {
+        var slot = reader.ReadInt32();
+        var position = reader.ReadFixedVector();
+        var yaw = reader.ReadFixed();
+        var planarVelocity = reader.ReadFixedVector();
+        var verticalVelocity = reader.ReadFixed();
+        var travelTurn = reader.ReadFixed();
+
+        return new WorldReplayEntry.Crossing(Value: new WorldInPlaceCrossing(
+            PlanarVelocity: planarVelocity,
+            Position: position,
+            Slot: slot,
+            TravelTurn: travelTurn,
+            VerticalVelocity: verticalVelocity,
+            YawRadians: yaw
+        ));
     }
     private static WorldReplayEntry ReadDepartureEntry(ref WireReader reader) {
         var transferId = reader.ReadUInt64();
@@ -1533,6 +1565,16 @@ public sealed partial class WorldReplaySnapshot {
                 writer.WriteUInt64(value: departure.TransferId);
                 writer.WriteInt32(value: departure.Slot);
                 writer.WriteBoolean(value: departure.Restored);
+
+                break;
+            case WorldReplayEntry.Crossing crossing:
+                writer.WriteByte(value: 23);
+                writer.WriteInt32(value: crossing.Value.Slot);
+                writer.WriteFixedVector(value: crossing.Value.Position);
+                writer.WriteFixed(value: crossing.Value.YawRadians);
+                writer.WriteFixedVector(value: crossing.Value.PlanarVelocity);
+                writer.WriteFixed(value: crossing.Value.VerticalVelocity);
+                writer.WriteFixed(value: crossing.Value.TravelTurn);
 
                 break;
             case WorldReplayEntry.FederatedIntents federated:

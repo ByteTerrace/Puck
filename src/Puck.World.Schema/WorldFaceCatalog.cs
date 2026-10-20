@@ -76,6 +76,9 @@ public sealed class WorldFaceCatalog {
         y: 1f,
         z: 0f
     );
+    // How far, per component, a rotated unit axis may sit from a signed world axis and still be that axis: 2^-10, far
+    // above the float-quaternion rounding a quarter-turn shape rotation carries and far below any authored tilt.
+    private static readonly FixedQ4816 CardinalSnapTolerance = FixedQ4816.FromRawBits(value: 64L);
     private static readonly FixedQ4816 FallbackHalfDepthFixed = FixedQ4816.FromDouble(value: FallbackHalfDepth);
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
     private static readonly FixedQ4816 FallbackHalfWidthFixed = FixedQ4816.FromDouble(value: FallbackHalfWidth);
@@ -284,15 +287,53 @@ public sealed class WorldFaceCatalog {
 
         var surfaceRotation = (placementRotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize();
         var half = (FixedVector3.FromVector3(value: shape.Scale) * scale);
+        var right = surfaceRotation.Rotate(vector: FixedVector3.UnitX).Normalize();
+        var up = surfaceRotation.Rotate(vector: FixedVector3.UnitY).Normalize();
+        var normal = surfaceRotation.Rotate(vector: FixedVector3.UnitZ).Normalize();
+
+        // A shape turned by whole quarter turns (a face laid flat as a floor or a ceiling) lies on the world axes, but
+        // its float quaternion leaves each rotated axis a few raw units off them. Snapping that triad keeps it exact,
+        // as the cardinal path above keeps a yaw-only face exact, so a floor face and a ceiling face map world up onto
+        // itself bit for bit (WorldFrameIsometry.PreservesWorldUp).
+        if (
+            TrySnapCardinal(
+            axis: right,
+            snapped: out var cardinalRightAxis
+        ) &&
+            TrySnapCardinal(
+            axis: up,
+            snapped: out var cardinalUpAxis
+        ) &&
+            TrySnapCardinal(
+            axis: normal,
+            snapped: out var cardinalNormalAxis
+        )
+        ) {
+            right = cardinalRightAxis;
+            up = cardinalUpAxis;
+            normal = cardinalNormalAxis;
+        }
 
         return new WorldFaceFrame(
             Origin: (origin + placementRotation.Rotate(vector: (FixedVector3.FromVector3(value: shape.Position) * scale))),
-            Right: surfaceRotation.Rotate(vector: FixedVector3.UnitX).Normalize(),
-            Up: surfaceRotation.Rotate(vector: FixedVector3.UnitY).Normalize(),
-            Normal: surfaceRotation.Rotate(vector: FixedVector3.UnitZ).Normalize(),
+            Right: right,
+            Up: up,
+            Normal: normal,
             HalfWidth: FixedQ4816.Abs(value: half.X),
             HalfHeight: FixedQ4816.Abs(value: half.Y),
             HalfDepth: FixedQ4816.Abs(value: half.Z)
+        );
+    }
+    // A unit axis within CardinalSnapTolerance of a signed world axis on every component snaps to it exactly.
+    private static bool TrySnapCardinal(FixedVector3 axis, out FixedVector3 snapped) {
+        snapped = FixedVector3.Round(value: axis);
+
+        return (
+            (FixedVector3.MaxComponent(value: FixedVector3.Abs(value: (axis - snapped))) <= CardinalSnapTolerance) &&
+            (FixedVector3.Dot(
+                left: snapped,
+                right: snapped
+            ) == FixedQ4816.One)
         );
     }
     private static HashSet<string> DerivedCameraNames(WorldDefinition definition) {

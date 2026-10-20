@@ -13,8 +13,9 @@ namespace Puck.World;
 /// <para><see cref="Normal"/> is the outward direction (<c>Right x Up</c> convention, local <c>+Z</c> forward). The
 /// triad is orthonormal from the placement yaw and the shape's own rotation composed together
 /// (<c>WorldFaceCatalog.DeriveFrame</c>) — it can carry pitch or roll; <see cref="IsYawOnly"/> is the exact test for
-/// whether <see cref="Up"/> came out as world <c>+Y</c>, and a portal facet is refused by name on a face that
-/// fails it, because the mapped-arrival isometry only knows how to rotate about world up.</para>
+/// whether <see cref="Up"/> came out as world <c>+Y</c>. A portal face may lie at any orientation whose pairing with
+/// its counterpart maps world up onto itself (<see cref="WorldFrameIsometry.PreservesWorldUp"/>), such as a floor
+/// face paired with a ceiling face.</para>
 /// </remarks>
 /// <param name="Origin">The face surface's center in world space.</param>
 /// <param name="Right">The unit in-plane axis along the face's width.</param>
@@ -37,7 +38,7 @@ public readonly record struct WorldFaceFrame(
     /// <remarks>The test is exact, and can be: a rotation about <c>+Y</c> leaves <c>(0,1,0)</c> bit-unchanged under
     /// <see cref="FixedQuaternion.Rotate"/> (both cross products vanish), and an authored quaternion's off-axis
     /// components below one Q48.16 unit quantize to zero at the conversion door. A frame that fails this carries
-    /// pitch or roll, which <see cref="WorldFrameIsometry.MapArrival"/>'s yaw-only isometry cannot map.</remarks>
+    /// pitch or roll.</remarks>
     public bool IsYawOnly =>
         ((Up.X == FixedQ4816.Zero) && (Up.Y == FixedQ4816.One) && (Up.Z == FixedQ4816.Zero));
     /// <summary>Gets the frame's heading about world up, in radians — the yaw a rotation of world <c>+Z</c> onto

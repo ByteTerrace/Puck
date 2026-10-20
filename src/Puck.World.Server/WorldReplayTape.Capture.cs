@@ -126,6 +126,7 @@ public sealed partial class WorldReplayTape {
             Slot: slot,
             TransferId: transferId
         ));
+        m_liveServer.CrossingTap = crossing => m_currentAuthority.Add(item: new WorldReplayEntry.Crossing(Value: crossing));
         m_liveServer.ArrivalTap = (arrival, outcome) => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
             Encoded: WorldAuthorityCheckpointCodec.EncodeCrossingArrival(arrival: arrival),
             Outcome: outcome,
@@ -165,6 +166,7 @@ public sealed partial class WorldReplayTape {
         m_liveServer.ServerEventTap = null;
         m_liveServer.ArrivalTap = null;
         m_liveServer.DepartureTap = null;
+        m_liveServer.CrossingTap = null;
         m_liveServer.FederatedIntentTap = null;
     }
     // The one place the taps attach or detach: the capture runs while a recording is armed or a history is on, never

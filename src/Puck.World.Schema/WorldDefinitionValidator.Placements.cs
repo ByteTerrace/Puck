@@ -855,8 +855,9 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.PrototypeId}' carries timeline frames or drivers) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
                 }
 
-                // The derived face itself: its shape kind must open an aperture (WorldFaceApertures), and its frame
-                // must be yaw-only. A face may be DRAWN on any primitive at any orientation; a DOOR is narrower.
+                // The derived face itself: its shape kind must open an aperture (WorldFaceApertures). A face may be
+                // drawn on any primitive; a door is narrower. Its orientation is checked against its counterpart's at
+                // transfer time (WorldFrameIsometry.PreservesWorldUp), where the counterpart's document resolves.
                 if (faces.TryFind(
                     placementId: placement.Id,
                     faceName: source.Face,
@@ -866,10 +867,6 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{facePath}.portal names face '{source.Face}', which declares no concrete shape (shapeId {(portalRow.ShapeId?.ToString(provider: CultureInfo.InvariantCulture) ?? "null")}) — a door needs a surface to open, so it has no aperture mapping.");
                     } else if (portalRow.Aperture is null) {
                         errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose shape is a {shapeType} — only Box maps onto a walkable aperture today; a curved or unbounded face has no aperture mapping.");
-                    }
-
-                    if (!portalRow.Frame.IsYawOnly) {
-                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose derived frame carries pitch or roll (its up axis is not world +Y once the placement yaw and the shape rotation compose) — the mapped-arrival isometry is a rotation about world up only and cannot map such a frame; level the shape's rotation or drop the portal facet.");
                     }
                 }
 

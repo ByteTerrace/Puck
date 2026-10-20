@@ -107,6 +107,19 @@ public static class WorldFrameIsometry {
 
         return (((destination.Right * -u) + (destination.Up * v)) + (destination.Normal * -n));
     }
+    /// <summary>Returns whether a boundary pair maps world up exactly onto itself, the condition every crossing needs:
+    /// a traveler's yaw, planar velocity and vertical velocity cross it without loss only when it does. A wall pair
+    /// does, and so does a floor face whose counterpart is a ceiling face (outward normals world up and world down),
+    /// which maps a fall into the floor to a fall out of the ceiling.</summary>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <returns><see langword="true"/> when <see cref="MapVector"/> carries world <c>+Y</c> to exactly world
+    /// <c>+Y</c>.</returns>
+    public static bool PreservesWorldUp(in WorldFaceFrame source, in WorldFaceFrame destination) => (MapVector(
+        destination: destination,
+        source: source,
+        value: FixedVector3.UnitY
+    ) == FixedVector3.UnitY);
     /// <summary>Returns the unit rotation represented by <see cref="MapVector"/>.</summary>
     public static FixedQuaternion Rotation(in WorldFaceFrame source, in WorldFaceFrame destination) {
         var first = FixedQuaternion.FromTo(

@@ -43,8 +43,8 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 /// <para><b>Why the Right component must flip too — this is forced, not a choice.</b> A mapped border pair's two
 /// apertures have opposite outward Normals by construction (each one's Normal points toward its own room's approach
 /// side, and the two rooms sit on opposite sides of the seam). Under this type's Right×Up=Normal convention with a
-/// shared Up (=world +Y, the yaw-only contract every mapped facet is validated against), an opposite Normal forces
-/// an opposite (anti-parallel) world Right — there is no authored yaw pair for which the two apertures' Rights end
+/// shared Up (world +Y for a wall pair, one horizontal axis for a floor and ceiling pair), an opposite Normal forces
+/// an opposite (anti-parallel) world Right — there is no authored pair for which the two apertures' Rights end
 /// up parallel. A non-degenerate proof: source yaw -90° gives (Right=+Z, Normal=-X); a deltaYaw≡0 counterpart at yaw
 /// +90° gives (Right=-Z, Normal=+X) — both flipped. Mapping eye (u,v,n)=(5,·,3) through the identity-border case
 /// (destYaw-srcYaw+180°≡0°, so the true mapped eye is the same world point the traveler stood at) only reproduces

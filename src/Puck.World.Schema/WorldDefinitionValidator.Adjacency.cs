@@ -171,17 +171,10 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.boundary is {(((double)localFrame.HalfWidth) * 2):0.#####}x{(((double)localFrame.HalfHeight) * 2):0.#####}, but neighbour '{reference.NeighbourKey}'/'{counterpart.Name}' is {(((double)neighbourFrame.HalfWidth) * 2):0.#####}x{(((double)neighbourFrame.HalfHeight) * 2):0.#####}.");
             }
-            var worldUp = new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: FixedQ4816.One,
-                Z: FixedQ4816.Zero
-            );
-
-            if (WorldFrameIsometry.MapVector(
+            if (!WorldFrameIsometry.PreservesWorldUp(
                 destination: neighbourFrame,
-                source: localFrame,
-                value: worldUp
-            ) != worldUp) {
+                source: localFrame
+            )) {
                 errors.Add(item: $"{path}.boundary and neighbour '{reference.NeighbourKey}'/'{counterpart.Name}' do not preserve world up — body yaw/vertical state cannot cross this frame pair without loss.");
             }
             if (!WorldAdjacencyPolicy.TryDeriveOverlap(
@@ -539,17 +532,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.boundary is {(((double)localFrame.HalfWidth) * 2):0.#####}x{(((double)localFrame.HalfHeight) * 2):0.#####}, but neighbour '{document}'/'{counterpart.Name}' is {(((double)neighbourFrame.HalfWidth) * 2):0.#####}x{(((double)neighbourFrame.HalfHeight) * 2):0.#####}.");
         }
 
-        var worldUp = new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.One,
-            Z: FixedQ4816.Zero
-        );
-
-        if (WorldFrameIsometry.MapVector(
+        if (!WorldFrameIsometry.PreservesWorldUp(
             destination: neighbourFrame,
-            source: localFrame,
-            value: worldUp
-        ) != worldUp) {
+            source: localFrame
+        )) {
             errors.Add(item: $"{path}.boundary and neighbour '{document}'/'{counterpart.Name}' do not preserve world up — body yaw/vertical state cannot cross this frame pair without loss.");
         }
 
