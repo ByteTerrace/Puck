@@ -102,6 +102,11 @@ public sealed partial class SdfFieldEvaluator {
         var segmentBounds = m_segmentBounds;
         var localPosition = worldPosition;
         var distanceScale = FixedQ4816.One;
+        // The render reading's chain state beside the point: a fold's material stride (mapCore's parityMaterialDelta)
+        // and a LaneErode's effect on the next shape (laneErodeSkipShape, laneErodeAmount), each cleared by ResetPoint.
+        var materialDelta = 0;
+        var laneErodeSkip = false;
+        var laneErodeAmount = FixedQ4816.Zero;
         Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
@@ -166,6 +171,9 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfOp.ResetPoint: {
                         localPosition = worldPosition;
                         distanceScale = FixedQ4816.One;
+                        materialDelta = 0;
+                        laneErodeSkip = false;
+                        laneErodeAmount = FixedQ4816.Zero;
 
                         var segment = segmentSlots[index];
 
@@ -221,10 +229,32 @@ public sealed partial class SdfFieldEvaluator {
                         localPosition = WarpPoint(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition);
                         break;
                     }
+                case SdfOp.Shear:
+                case SdfOp.GaussianPush:
+                case SdfOp.DomainWarp:
+                case SdfOp.RepeatPolar:
+                case SdfOp.WallpaperFold:
+                case SdfOp.LogSphere:
+                case SdfOp.CellJitter: {
+                        localPosition = RenderWarpPoint(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition, materialDelta: ref materialDelta);
+                        break;
+                    }
+                case SdfOp.LaneErode: {
+                        var amount = LaneErodeAmount(instruction: in instruction, localPosition: localPosition);
+
+                        laneErodeSkip = (amount is null);
+                        laneErodeAmount = (amount ?? FixedQ4816.Zero);
+                        break;
+                    }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
                 case SdfOp.Dilate: {
                         resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
+                        break;
+                    }
+                case SdfOp.Displace:
+                case SdfOp.NoiseDisplace: {
+                        resultDistance = RenderEditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
                 case SdfOp.PushField: {
@@ -246,22 +276,34 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.ShapeBlend: {
+                        // A pending LaneErode is consumed first, so it never reaches a later shape: a skipped shape is
+                        // absent, and an eroded one's candidate grows by the erosion after its distance scale.
+                        var erosion = laneErodeAmount;
+                        var skipped = laneErodeSkip;
+
+                        laneErodeSkip = false;
+                        laneErodeAmount = FixedQ4816.Zero;
+
                         // A detail shape (SdfInstruction.Detail) never reaches contact/gravity/collision — this
                         // evaluator has no shade-mode counterpart, so it is simply absent from every field it walks.
-                        if (instruction.Detail) {
+                        if (instruction.Detail || skipped) {
                             break;
                         }
 
-                        var candidateDistance = (EvaluateShape(
+                        var candidateDistance = ((EvaluateShape(
                             instruction: instruction,
                             p: localPosition
-                        ) * distanceScale);
+                        ) * distanceScale) + erosion);
+                        // A fold's stride recolours the shape below the screen sentinels, as mapCore applies it.
+                        var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
+                            ? (instruction.Material + materialDelta)
+                            : instruction.Material);
 
                         // A union is Compose's strict less-than and its minimum, taken here without the blend switch.
                         if (instruction.Blend == ((uint)SdfBlendOp.Union)) {
                             if (candidateDistance < resultDistance) {
                                 resultDistance = candidateDistance;
-                                resultMaterial = instruction.Material;
+                                resultMaterial = candidateMaterial;
                             }
 
                             break;
@@ -271,7 +313,7 @@ public sealed partial class SdfFieldEvaluator {
                             current: resultDistance,
                             currentMaterial: resultMaterial,
                             candidate: candidateDistance,
-                            candidateMaterial: instruction.Material,
+                            candidateMaterial: candidateMaterial,
                             blend: instruction.Blend,
                             smooth: instruction.Data1X
                         );

@@ -22,15 +22,8 @@ internal sealed partial class Diagnostics {
                 machine.Step();
 
                 var pc = cpu.GetRegister(index: 15);
-                var region = (pc >> 24);
-                var valid = ((pc < 0x4000u)
-                    || (region == 0x02u)   // EWRAM
-                    || (region == 0x03u)   // IWRAM
-                    || (region == 0x05u)   // palette
-                    || (region == 0x06u)   // VRAM
-                    || ((region >= 0x08u) && (region <= 0x0Du))); // ROM + mirrors
 
-                if (valid) {
+                if (AgbExecutionFaultException.IsExecutable(address: pc)) {
                     continue;
                 }
 

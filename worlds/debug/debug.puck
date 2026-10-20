@@ -90,11 +90,15 @@ views {
 
 cameras: studioCameras
 
-// Recovery at the hero spawn lands above the studio platform.
-spawnPoints [
+// Recovery at the hero spawn lands above the studio platform. The gallery adds a spawn point per exhibit
+// (shapes.puck's gallerySpawns) and the gallery.* commands (galleryCommands) that walk, inspect and flag them.
+spawnPoints: concat([
   { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
   { id: "stage", position [0, 0, 0], yawDegrees: 0 }
-]
+], gallerySpawns
+)
+
+commands: galleryCommands
 
 placements {
   // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck).

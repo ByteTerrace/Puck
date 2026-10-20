@@ -22,8 +22,15 @@ public sealed class SdfFieldBoundsLawTests {
     private const int BoxesPerCase = 48;
     private const int InteriorPointsPerBox = 12;
 
-    // The cases whose rule encloses a search instead of mirroring a step, so a point box is not a few raws wide.
-    private static readonly HashSet<string> EnclosingCases = ["shape Sweep", "shape Sweep bulged and twisted"];
+    // The cases whose rule encloses a search, a hashed choice or a bounded move instead of mirroring a step, so a point
+    // box is not a few raws wide: the sweeps and every render op but the shear.
+    private static readonly HashSet<string> EnclosingCases = [
+        "shape Sweep", "shape Sweep bulged and twisted", "shape Sweep three strands",
+        "op AxialProfile", "op RotatePlane", "op GaussianPush", "op DomainWarp", "op RepeatPolar", "op RepeatPolar mirrored",
+        "op WallpaperFold Pmm", "op WallpaperFold P4M", "op WallpaperFold P3M1", "op WallpaperFold P6M", "op LogSphere",
+        "op CellJitter White", "op CellJitter Blue", "op CellJitter Gaussian", "op CellJitter tumbled", "op LaneErode", "op LaneErode skipped",
+        "op Displace", "op NoiseDisplace",
+    ];
 
     public static TheoryData<string> Cases() {
         var data = new TheoryData<string>();
@@ -37,7 +44,8 @@ public sealed class SdfFieldBoundsLawTests {
     [MemberData(memberName: nameof(Cases))]
     [Theory]
     public void EveryPointAnswerInsideABoxLiesInsideItsBounds(string name) {
-        var evaluator = new SdfFieldEvaluator(program: Programs[name]());
+        // The render reading reads every case, and answers a contact case as the contact reading does.
+        var evaluator = new SdfFieldEvaluator(program: Programs[name](), reading: SdfFieldReading.Render);
         var random = new Random(Seed: StableSeed(name: name));
 
         for (var box = 0; (box < BoxesPerCase); box++) {
@@ -88,12 +96,14 @@ public sealed class SdfFieldBoundsLawTests {
         var exercised = Programs.Values.SelectMany(selector: build => build().Instructions).Select(selector: instruction => instruction.Op).ToHashSet();
 
         foreach (var op in Enum.GetValues<SdfOp>()) {
+            var supported = SdfFieldEvaluator.IsSupportedOp(op: op, reading: SdfFieldReading.Render);
+
             Assert.True(
-                condition: (SdfFieldEvaluator.IsSupportedOp(op: op) == SdfFieldEvaluator.BoundedOps.Contains(value: op)),
-                userMessage: $"op {op}: the point interpreter {(SdfFieldEvaluator.IsSupportedOp(op: op) ? "accepts" : "refuses")} it but the bounds interpreter {(SdfFieldEvaluator.BoundedOps.Contains(value: op) ? "has" : "has no")} inclusion rule for it"
+                condition: (supported == SdfFieldEvaluator.BoundedOps.Contains(value: op)),
+                userMessage: $"op {op}: the point interpreter {(supported ? "accepts" : "refuses")} it but the bounds interpreter {(SdfFieldEvaluator.BoundedOps.Contains(value: op) ? "has" : "has no")} inclusion rule for it"
             );
 
-            if (SdfFieldEvaluator.IsSupportedOp(op: op)) {
+            if (supported) {
                 Assert.Contains(collection: exercised, expected: op);
             }
         }
@@ -252,6 +262,34 @@ public sealed class SdfFieldBoundsLawTests {
         }
 
         Shape(name: "op PushField PopField", emit: (b, m) => b.Sphere(material: m, radius: 0.7f).PushField(compose: SdfBlendOp.SmoothUnion, smooth: 0.3f).ResetPoint().Translate(offset: Vector3.UnitX).Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), material: m, round: 0f).PopField());
+
+        // The render reading's ops, each over a box the op moves, folds or reliefs.
+        Shape(name: "shape Sweep three strands", emit: (b, m) => b.Sweep(a: new Vector3(x: -1f, y: 0f, z: 0.2f), b: new Vector3(x: 0.4f, y: 1.6f, z: -0.5f), bulge: 0.1f, c: new Vector3(x: 1.2f, y: 0.3f, z: 0.6f), material: m, radiusEnd: 0.12f, radiusStart: 0.25f, strandOffset: 0.2f, strands: 3, twist: 1.5f));
+        Shape(name: "op AxialProfile", emit: (b, m) => b.AxialProfile(amount: 0.4f, bulge: 0.2f, span: 1.2f, startScale: 0.9f, top: 0.5f).Box(halfExtents: new Vector3(x: 0.4f, y: 0.6f, z: 0.3f), material: m, round: 0f));
+        Shape(name: "op RotatePlane", emit: (b, m) => b.TwistY(rate: 1.3f).Box(halfExtents: new Vector3(x: 0.4f, y: 0.8f, z: 0.3f), material: m, round: 0f));
+        Shape(name: "op Shear", emit: (b, m) => b.Shear(cubic: -0.2f, driver: SdfAxis.Y, linear: 0.3f, quadratic: 0.5f, target: SdfAxis.X).Box(halfExtents: new Vector3(x: 0.4f, y: 0.8f, z: 0.3f), material: m, round: 0f));
+        Shape(name: "op GaussianPush", emit: (b, m) => b.GaussianPush(center: new Vector3(x: 0.2f, y: 0.3f, z: -0.1f), push: new Vector3(x: 0.2f, y: -0.1f, z: 0.15f), radii: new Vector3(x: 0.4f, y: 0.5f, z: 0.3f)).Sphere(material: m, radius: 0.8f));
+        Shape(name: "op DomainWarp", emit: (b, m) => b.DomainWarp(amplitude: 0.1f, frequency: new Vector3(x: 2f, y: 3f, z: 4f)).Sphere(material: m, radius: 0.8f));
+        Shape(name: "op RepeatPolar", emit: (b, m) => b.RepeatPolar(axis: SdfAxis.Y, count: 6).Translate(offset: new Vector3(x: 0.8f, y: 0f, z: 0f)).Sphere(material: m, radius: 0.3f));
+        Shape(name: "op RepeatPolar mirrored", emit: (b, m) => b.RepeatPolar(axis: SdfAxis.Z, count: 5, mirror: true).Translate(offset: new Vector3(x: 0.8f, y: 0.2f, z: 0f)).Sphere(material: m, radius: 0.3f));
+
+        foreach (var group in ((SdfWallpaperGroup[])[SdfWallpaperGroup.Pmm, SdfWallpaperGroup.P4M, SdfWallpaperGroup.P3M1, SdfWallpaperGroup.P6M])) {
+            var limit = ((group >= SdfWallpaperGroup.P3) ? new Vector2(value: SdfWallpaperFold.UnboundedLimit) : new Vector2(x: 2f, y: 2f));
+
+            Shape(name: $"op WallpaperFold {group}", emit: (b, m) => b.WallpaperFold(cell: new Vector2(x: 1.2f, y: 1.2f), group: group, limit: limit).Translate(offset: new Vector3(x: 0.2f, y: 0f, z: 0.15f)).Sphere(material: m, radius: 0.25f));
+        }
+
+        Shape(name: "op LogSphere", emit: (b, m) => b.LogSphere(shellRatio: 2.5f, twist: 0.3f).Translate(offset: new Vector3(x: 1.2f, y: 0f, z: 0f)).Sphere(material: m, radius: 0.3f));
+
+        foreach (var flavor in Enum.GetValues<SdfNoiseFlavor>()) {
+            Shape(name: $"op CellJitter {flavor}", emit: (b, m) => b.CellJitter(flavor: flavor, jitter: 0.3f, seed: 5u, spacing: new Vector3(x: 1.5f, y: 1.5f, z: 1.5f)).Sphere(material: m, radius: 0.4f));
+        }
+
+        Shape(name: "op CellJitter tumbled", emit: (b, m) => b.CellJitter(jitter: 0.3f, seed: 9u, spacing: new Vector3(x: 1.5f, y: 1.5f, z: 1.5f), tumble: 0.7f).Box(halfExtents: new Vector3(x: 0.4f, y: 0.3f, z: 0.2f), material: m, round: 0f));
+        Shape(name: "op LaneErode", emit: (b, m) => b.LaneErode(from: -1f, lane: 0, noiseScale: 3f, reach: 0.4f, to: 1f).Sphere(material: m, radius: 0.8f));
+        Shape(name: "op LaneErode skipped", emit: (b, m) => b.LaneErode(from: -2f, lane: 1, noiseScale: 3f, reach: 0.4f, to: -1f).Sphere(material: m, radius: 0.8f).ResetPoint().Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), material: m, round: 0f));
+        Shape(name: "op Displace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).Displace(amplitude: 0.1f, frequency: new Vector3(x: 5f, y: 6f, z: 7f)));
+        Shape(name: "op NoiseDisplace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).NoiseDisplace(amplitude: 0.1f, frequency: 2f, octaves: 3, seed: 4u));
 
         foreach (var blend in ((SdfBlendOp[])[
             SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,

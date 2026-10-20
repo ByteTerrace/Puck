@@ -138,8 +138,9 @@ Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
 ### Warps
 
 Applied in this order on the local point: twist, bend, flare, shear, bumps,
-erode, then the primitive — but **only the pooled/body path emits twist and
-bend**. The static stamper's chain runs flare, shear, bumps and never emits
+warp, elongate, erode, then the primitive, then the relief field ops
+(`displace`, `cells`) on the shape's rigid frame — but **only the pooled/body
+path emits twist and bend**. The static stamper's chain runs flare, shear, bumps and never emits
 either, so on a static placement both fields are inert: no refusal, and
 `creation stats` still prints a nonzero `twist:`/`bend:` count. Get a static
 curve from a `Sweep`, a profiled `Prism`, or `shear` instead.
@@ -151,6 +152,9 @@ curve from a `Sweep`, a profiled `Prism`, or `shear` instead.
 | `flare` | `{ amount, bulge, span, top, axis, startScale }` | amount [−0.9, 4], bulge ±1, span > 0, axis 0..2 default 1 (Y), startScale (0, 5] |
 | `shear` | `{ linear, quadratic, cubic, target, driver }` | coefficients ±4; target and driver must be **distinct** axes in 0..2 |
 | `bumps` | up to 4 × `{ center, radii, push }` | push magnitude ≤ 2; radii floored at 0.001 |
+| `warp` | `{ frequency, amplitude }` | `SdfOp.DomainWarp`: the point moves by amplitude × (sin(fx·y), sin(fy·z), sin(fz·x)); frequency ±64 per axis, amplitude ±0.2 |
+| `displace` | `{ frequency, amplitude }` | `SdfOp.Displace`: amplitude × sin(fx·x) sin(fy·y) sin(fz·z) added to the field on the shape's rigid frame, like `cells`; frequency ±64 per axis, amplitude ±0.2; refused on a Sweep |
+| `elongate` | `[x, y, z]` half-extents | `SdfOp.Elongate`: the cross-section swept over the box, exact and 1-Lipschitz, so no scope; each in [0, 2] |
 | `erode` | `{ lane, from, to, noise }` | lane 0..3; from and to must differ; noise defaults to 1 cell per unit |
 | `cells` | `{ frequency, amplitude, seed, mode, randomness }` | frequency (0, 8]; amplitude [0, 4]; mode `F1` or `F2MinusF1`; randomness ≤ 0.46 (F1) or ≤ 0.2 (F2MinusF1); the relief slope amplitude × frequency (× 2 for F2MinusF1) must stay under 1, past which the surface pinches, folds over itself and sheds islands |
 
@@ -173,7 +177,8 @@ about 4 cm thick to survive the mesh bake: the Moth's pod plates at 2.2 cm baked
 with their backs missing, the core showing through, while the same shapes at
 4.4 cm baked whole. The validator accepts the thin version, so look at a capture.
 
-Creation contact emission omits `flare`, `shear`, `bumps`, and `erode`.
+Creation contact emission omits `flare`, `shear`, `bumps`, `warp`, `displace`,
+`elongate` and `erode`.
 This is an authoring-path omission, not a statement that their low-level VM
 operations all lack fixed-point interpreters. `cells` also leaves contact at
 the base primitive. These fields are not generally refused by a solid row.
