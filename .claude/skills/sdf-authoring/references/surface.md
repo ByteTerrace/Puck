@@ -180,7 +180,10 @@ paint without a parent, an inset and weathering are in the frame of the slot
 that won the hit: on an animated or body placement, the slot of the shape the
 surface belongs to, centred on that shape's position with its axes (a shape
 with a domain fold: its parent's delta frame), grouped or not (each baked vertex
-rides its own shape's slot), or world space for static geometry. A static placement shares one palette across its
+rides its own shape's slot), or world space for static geometry. On an
+animated or body placement, the lengths of each (a paint's placement and size,
+an inset's origin, depth and stop radii, weathering's `reach` and the inverse
+of its `scale`) follow the placement scale. A static placement shares one palette across its
 placements and draws no parented paint. To find a frame, paint a test stripe and
 look before trusting the numbers.
 

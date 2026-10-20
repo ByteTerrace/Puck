@@ -95,14 +95,14 @@ public static class WorldPlacementStamper {
                 Specular: (entry?.Specular ?? 0f),
                 Metal: (entry?.Metal ?? 0f),
                 Coat: (entry?.Coat ?? 0f),
-                Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor),
+                Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
                 Wrap: (entry?.Wrap ?? 0f),
                 Soften: (entry?.Soften ?? 0f),
                 Fill: colors.Resolve(
                     fallback: Vector3.Zero,
                     value: entry?.Fill
                 ),
-                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
+                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
                 Paints: Paints(colors: colors, document: document, entry: entry, pool: pool, hidden: hidden),
