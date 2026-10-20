@@ -66,8 +66,8 @@ public sealed class WorldTextAuthoringLawTests {
         var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
-        Assert.Equal(expected: transforms[box.Slot - 1], actual: transforms[text.Slot]);
-        Assert.NotEqual(expected: transforms[text.Slot + 1].Position, actual: transforms[text.Slot].Position);
+        Assert.Equal(expected: transforms[(box.Slot - 1)], actual: transforms[text.Slot]);
+        Assert.NotEqual(expected: transforms[(text.Slot + 1)].Position, actual: transforms[text.Slot].Position);
         Assert.Equal(expected: 0f, actual: box.Detail);
         // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, at the body's scale of 2.
         Assert.Equal(expected: 0.04f, actual: text.Detail, tolerance: 1e-6f);
@@ -77,6 +77,21 @@ public sealed class WorldTextAuthoringLawTests {
 
         Assert.True(condition: (textReach > 0f));
         Assert.InRange(actual: text.Radius, high: (textReach + 0.5f), low: textReach);
+    }
+    // A run anchored to a shape is emitted at the shape's frame, so the creation's bound measures it there: a run at
+    // its shape's origin on a shape 6 m out reaches past 6 m, where its own unit-local position alone reads near zero.
+    [Fact]
+    public void ACreationsBoundMeasuresAShapeAnchoredRunWhereItIsEmitted() {
+        var document = TextCreationWithFrames().EngineDocument;
+        var far = document with {
+            Shapes = [document.Shapes![0] with { Position = new Vector3(x: 6f, y: 0f, z: 0f), Scale = new Vector3(value: 0.1f) }],
+            TextRuns = [document.TextRuns![0] with { ShapeId = document.Shapes[0].Id }],
+        };
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
+        var textReach = CreationStampEmitter.TextReach(document: far, fontFor: fonts.Resolve, scale: 1f);
+
+        Assert.True(condition: (textReach > 6f));
+        Assert.True(condition: (CreationStampEmitter.RenderReach(document: far, fontFor: fonts.Resolve, scale: 1f) >= textReach));
     }
 
     private static FontAtlas AtlasForText(string text) => new(

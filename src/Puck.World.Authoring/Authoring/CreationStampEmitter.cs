@@ -91,6 +91,7 @@ public static class CreationStampEmitter {
                 rotation: transform.Rotation,
                 scale: transform.Scale
             );
+
         private static StampFrame Of(FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale, float facetScale, FixedVector3? normal) {
             var unitNormal = normal?.Normalize();
 
@@ -1165,7 +1166,8 @@ public static class CreationStampEmitter {
     /// <summary>Measures the render-time bounding-sphere radius of a creation after resolving its authored fonts and
     /// layout options. Shape geometry uses <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3, SdfLift)"/>; text geometry
     /// is measured from the exact laid-out glyph cells the SDF builder emits, including whitespace advance, wrapping,
-    /// alignment, tracking, line spacing, atlas padding, and extrusion.</summary>
+    /// alignment, tracking, line spacing, atlas padding, and extrusion, each run at the frame it is emitted in (on its
+    /// shape, for a run anchored to one), as <see cref="TextReach"/> measures it.</summary>
     /// <param name="document">The creation document.</param>
     /// <param name="scale">The uniform stamp scale.</param>
     /// <param name="fontFor">Resolves a run's optional font name through the owning catalog, or
@@ -1235,7 +1237,7 @@ public static class CreationStampEmitter {
             if (RunGlyphReach(fontFor: fontFor, index: index, run: run, scale: scale, textLayouts: textLayouts) is { } runReach) {
                 reach = MathF.Max(
                     x: reach,
-                    y: ((run.Position * scale).Length() + runReach)
+                    y: ((RunFrame(document: document, run: run).Position * scale).Length() + runReach)
                 );
                 any = true;
             }
@@ -1278,6 +1280,7 @@ public static class CreationStampEmitter {
 
         return reach;
     }
+
     // How far a run's glyphs, extruded by its relief, reach from the run's origin in world units at the stamp's scale, or
     // null when the run lays out no glyph.
     private static float? RunGlyphReach(TextRunDocument run, int index, float scale, Func<string?, FontAtlas> fontFor, IReadOnlyList<TextLayoutResult>? textLayouts) {
@@ -1318,6 +1321,7 @@ public static class CreationStampEmitter {
 
         return ((layout.Placements.Count > 0) ? runReach : null);
     }
+
     /// <summary>Returns whether a creation's stamp needs its own field scope: a blend outside the union family
     /// (whose accumulator compose is order-local — see the accumulator rule), an engraving text run, or a noise
     /// facet. A scope-free creation's shapes may each ride their own tight instance
