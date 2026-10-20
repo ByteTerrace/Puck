@@ -492,7 +492,7 @@ public sealed partial class WorldPopulation {
         var origin = source.FixedPosition;
         var forward = source.FixedOrientation.Rotate(vector: LocalForward);
         var range = FixedQ4816.FromDouble(value: rangeValue);
-        var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngleDegrees * (Math.PI / 180.0))));
+        var minimumDot = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: halfAngleDegrees));
 
         if (!BodyTargetConeSense.Contains(
             candidate: in candidate,

@@ -136,7 +136,7 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
-        MinimumDot: FixedQ4816.FromDouble(value: Math.Cos(d: (sensed.HalfAngleDegrees * (Math.PI / 180.0)))),
+        MinimumDot: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: sensed.HalfAngleDegrees)),
         RegisterIndex: -1
     ),
         BodyTargetSource.Designated designated => new FixedBodyTargetSource(

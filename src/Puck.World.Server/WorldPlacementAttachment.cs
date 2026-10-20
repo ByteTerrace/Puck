@@ -51,7 +51,7 @@ public static class WorldPlacementAttachment {
         }
 
         var localOffset = FixedVector3.FromVector3(value: attach.LocalOffset);
-        var localYaw = FixedQ4816.FromDouble(value: (attach.LocalYawDegrees * (Math.PI / 180.0)));
+        var localYaw = FixedQ4816.FromDegrees(degrees: attach.LocalYawDegrees);
 
         position = (body.FixedPosition + body.FixedOrientation.Rotate(vector: localOffset));
         yawRadians = (body.FixedYaw + localYaw);

@@ -521,7 +521,7 @@ public static class WorldSpatialQueryCompilation {
             vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.Scale)),
             yaw: frame.YawRadians
         )));
-        var yaw = checked((frame.YawRadians + FixedQ4816.FromDouble(value: (authored.YawDegrees * (Math.PI / 180d)))));
+        var yaw = checked((frame.YawRadians + FixedQ4816.FromDegrees(degrees: authored.YawDegrees)));
         var rotation = Yaw(radians: yaw);
 
         if (authored.Kind == WorldSpatialShapeKind.Sphere) {
@@ -608,7 +608,7 @@ public static class WorldSpatialQueryCompilation {
         try {
             var position = FixedVector3.FromVector3(value: placement.Position);
             var scale = FixedQ4816.FromDouble(value: placement.Scale);
-            var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180d)));
+            var yaw = FixedQ4816.FromDegrees(degrees: placement.YawDegrees);
 
             if (placement.Parent is { Length: > 0 } parentId) {
                 byId.TryGetValue(
