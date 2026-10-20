@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Maths;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -76,31 +77,53 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        var crossings = source.Server.ExecuteAuthorityOperation(operation: () => {
-            var applied = new List<WorldInPlaceCrossing>(capacity: members.Length);
+        var crossed = source.Server.ExecuteAuthorityOperation(operation: () => {
+            var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position)>(capacity: members.Length);
 
             foreach (var slot in members) {
-                if (source.Server.CrossInPlace(
-                    destination: in counterpartFrame,
-                    slot: slot,
-                    source: in sourceFrame
-                ) is { } crossing) {
-                    applied.Add(item: crossing);
+                if (
+                    source.Server.ApplyInPlaceCrossing(crossing: new WorldInPlaceCrossing(
+                        Destination: counterpartFrame,
+                        Slot: slot,
+                        Source: sourceFrame
+                    )) &&
+                    (source.Server.Population.EntryBody(index: slot) is { } body)
+                ) {
+                    moved.Add(item: (slot, body.CaptureTransferState(), body.FixedPosition));
                 }
             }
 
-            return applied;
+            return moved;
         });
         var localSeats = source.Server.Population.LocalSeatCount;
+        var turn = WorldFrameIsometry.YawDelta(
+            destination: in counterpartFrame,
+            source: in sourceFrame
+        );
 
-        foreach (var crossing in crossings) {
+        foreach (var (slot, state, position) in crossed) {
+            // A turning pair turns the seat's view with its body, as a mapped arrival does; a pair that keeps the
+            // heading leaves the chase boom as it was, and the camera rides the carried body.
+            if (
+                (turn != FixedQ4816.Zero) &&
+                (FollowedRosterSlot(
+                    instance: source,
+                    slot: slot
+                ) is { } rosterSlot)
+            ) {
+                m_seats.CrossView(
+                    slot: rosterSlot,
+                    yawDelta: turn,
+                    yawReference: source.Server.Definition.Views.SeatControl.YawReference
+                );
+            }
+
             if (m_narration.HasNarrationSink) {
-                var position = crossing.Position;
-                var planar = crossing.PlanarVelocity;
+                var planar = state.PlanarVelocity;
 
                 m_narration.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: crossing.Slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)crossing.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s]"
+                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)state.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s]"
                 );
             }
         }
@@ -108,6 +131,22 @@ public sealed partial class WorldInstanceHost {
         static string Format(double value) => value.ToString(
             format: "0.00",
             provider: CultureInfo.InvariantCulture
+        );
+    }
+    // The local roster seat whose view follows an instance's body: the seat routed to it, or, in the boot world, the
+    // local seat at its own index.
+    private int? FollowedRosterSlot(WorldInstance instance, int slot) {
+        if (TryFindFollowedRosterSlot(
+            instanceName: instance.Name,
+            instanceSlot: slot,
+            rosterSlot: out var routed
+        )) {
+            return routed;
+        }
+
+        return ((ReferenceEquals(objA: instance, objB: Boot) && (slot < instance.Server.Population.LocalSeatCount))
+            ? slot
+            : null
         );
     }
 }

@@ -54,8 +54,12 @@ public sealed class WorldProjectionSampler {
             if (!m_hasPendingContinuity[entry.Index]) {
                 m_pendingContinuityCount++;
             }
+            // Two in-place crossings of one occupant between deliveries reach the projection as their composition.
+            m_pendingContinuity[entry.Index] = ((m_hasPendingContinuity[entry.Index] && (m_pendingContinuityGeneration[entry.Index] == entry.Generation))
+                ? m_pendingContinuity[entry.Index].Then(later: entry.Continuity)
+                : entry.Continuity
+            );
             m_hasPendingContinuity[entry.Index] = true;
-            m_pendingContinuity[entry.Index] = entry.Continuity;
             m_pendingContinuityGeneration[entry.Index] = entry.Generation;
         }
     }
