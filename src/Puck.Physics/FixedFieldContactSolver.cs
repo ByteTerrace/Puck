@@ -861,7 +861,7 @@ public sealed class FixedFieldContactSolver(
     // One core sphere of the walk: proves its start representable without a sweep, or sweeps it with one.
     private ContactRefusal Core(ICertifiedSweepQuery? certified, in FixedVector3 previousPosition, in FixedVector3 delta, FixedVector3 offset, FixedQ4816 radius, ref UnitInterval32 least, ref FixedVector3 reached, ref bool unproved) {
         if (certified is null) {
-            return (TrySum(left: previousPosition, right: offset, sum: out _)
+            return (FixedVector3.TryAdd(left: previousPosition, right: offset, sum: out _)
                 ? ContactRefusal.None
                 : ContactRefusal.UnrepresentableSweep);
         }
@@ -869,27 +869,6 @@ public sealed class FixedFieldContactSolver(
         SweepCore(certified: certified, delta: in delta, least: ref least, offset: offset, previousPosition: in previousPosition, radius: radius, reached: ref reached, unproved: ref unproved);
 
         return ContactRefusal.None;
-    }
-    // The exact componentwise sum or difference of two vectors, when the carrier holds it: Int128 holds any of them.
-    private static bool TrySum(FixedVector3 left, FixedVector3 right, out FixedVector3 sum, bool subtract = false) {
-        static bool TryAxis(long x, long y, bool subtract, out FixedQ4816 axis) {
-            var exact = (subtract
-                ? (((Int128)x) - y)
-                : (((Int128)x) + y));
-            var fits = ((exact >= long.MinValue) && (exact <= long.MaxValue));
-
-            axis = FixedQ4816.FromRawBits(value: (fits ? ((long)exact) : 0L));
-
-            return fits;
-        }
-
-        var fitsX = TryAxis(subtract: subtract, axis: out var x, x: left.X.Value, y: right.X.Value);
-        var fitsY = TryAxis(subtract: subtract, axis: out var y, x: left.Y.Value, y: right.Y.Value);
-        var fitsZ = TryAxis(subtract: subtract, axis: out var z, x: left.Z.Value, y: right.Z.Value);
-
-        sum = new FixedVector3(X: x, Y: y, Z: z);
-
-        return (fitsX && fitsY && fitsZ);
     }
     // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
     // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
@@ -1082,7 +1061,7 @@ public sealed class FixedFieldContactSolver(
         // came, no sweep runs and no endpoint push is applied. A capsule core past its piece ceiling is refused the
         // same way.
         if (m_sweep is { } certified) {
-            if (!TrySum(left: position, right: previousPosition, subtract: true, sum: out var delta)) {
+            if (!FixedVector3.TrySubtract(difference: out var delta, left: position, right: previousPosition)) {
                 return Refuse(position: ref position, previousPosition: in previousPosition, refusal: ContactRefusal.UnrepresentableSweep);
             }
 
