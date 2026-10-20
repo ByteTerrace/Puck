@@ -1,0 +1,58 @@
+// The desktop pane: a live capture of the Claude desktop app's window, shown as a pane beside the play view and on a
+// screen standing in the world. The debug world imports this file whole. desktop.md beside it gives the console lines
+// that show the pane, hand the window the keyboard and mouse, take them back, and reload this file while it runs.
+//
+// The capture finds its window by title: the first visible top-level window whose title contains `claudeTitle`,
+// compared without regard to case. Nothing here sends the window input: only the local user's own console opens a
+// passthrough source (`source.passthrough open claude Claude`), and the engine refuses a document that tries.
+
+let claudeTitle = "Claude"
+
+// The capture's output extent and cadence. The window is scaled into this extent and the extent into the pane, so a
+// window shaped like the pane (tall, about 5 by 9 on a 16 by 9 display) reads undistorted.
+let claudeCapture = {
+  windowTitle: claudeTitle
+  profile { width: 1280, height: 1440, refreshRateHz: 30 }
+}
+
+// The pane's share of the display, from the right edge. A third leaves the play view the left two thirds.
+let paneWidth = 0.3333
+
+views {
+  graph "claude" {
+    package: "source.capture"
+    settings: claudeCapture
+  }
+
+  // `view.override layout desktop` shows it; `view.override layout play` (or `auto`) hides it.
+  layout "desktop" {
+    seatCount: 0
+    slots [
+      { x: 0, y: 0, width: (1 - paneWidth), height: 1 }
+      { x: (1 - paneWidth), y: 0, width: paneWidth, height: 1, instance: "claude" }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+}
+
+// The same window on a 2 m by 2.25 m glass slab eight metres ahead of the spawn and eight to the right, facing +Z,
+// beside the portal frame. It is its own capture of the window, at the same settings.
+screens [
+  {
+    index: 16
+    origin [8, 1.4, -8]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1.125
+    halfDepth: 0.02
+    round: 0
+    source: producer(id: "capture", settings: claudeCapture)
+    filter: Linear
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]

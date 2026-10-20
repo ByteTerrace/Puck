@@ -137,34 +137,34 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 |---|---:|---:|---|
 | `AddCellStatementNode` | 0 | 1 |  |
 | `AndPredicateNode` | 5 | 1 | `debug/avatars/moth` |
-| `ArgumentNode` | 1241 | 53 | `debug/avatars/moth`, `debug/debug`, `debug/devices`, `debug/garden`, `debug/shapes` and 2 more |
-| `ArrayExpressionNode` | 3611 | 16 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 3 more |
-| `BinaryExpressionNode` | 25 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/devices`, `debug/shapes` |
-| `BlockNode` | 1540 | 35 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
-| `CallExpressionNode` | 715 | 9 | `debug/avatars/moth`, `debug/debug`, `debug/devices`, `debug/garden`, `debug/shapes` and 2 more |
+| `ArgumentNode` | 1243 | 53 | `debug/avatars/moth`, `debug/debug`, `debug/desktop`, `debug/devices`, `debug/garden` and 3 more |
+| `ArrayExpressionNode` | 3616 | 16 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 4 more |
+| `BinaryExpressionNode` | 27 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/desktop`, `debug/devices`, `debug/shapes` |
+| `BlockNode` | 1543 | 35 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
+| `CallExpressionNode` | 716 | 9 | `debug/avatars/moth`, `debug/debug`, `debug/desktop`, `debug/devices`, `debug/garden` and 3 more |
 | `ColorExpressionNode` | 0 | 2 |  |
 | `ComparisonPredicateNode` | 14 | 9 | `debug/avatars/moth`, `debug/debug` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 10 | 6 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
+| `DocumentNode` | 11 | 6 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
 | `EmbeddedBlockNode` | 0 | 1 |  |
 | `ExpressionStatementNode` | 331 | 2 | `debug/avatars/moth`, `debug/debug`, `debug/devices`, `debug/shapes` |
 | `FlagStatementNode` | 6 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/garden` |
 | `ForStatementNode` | 9 | 0 | `debug/avatars/moth`, `debug/debug`, `debug/shapes` |
-| `IdentifierExpressionNode` | 1234 | 32 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 4 more |
+| `IdentifierExpressionNode` | 1241 | 32 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 5 more |
 | `IfStatementNode` | 0 | 1 |  |
-| `ImportNode` | 6 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/garden` |
+| `ImportNode` | 7 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/garden` |
 | `IndexExpressionNode` | 8 | 2 | `debug/avatars/moth` |
 | `InterpolatedStringNode` | 13 | 0 | `debug/avatars/moth`, `debug/debug`, `debug/shapes` |
 | `LambdaExpressionNode` | 4 | 0 | `debug/debug`, `debug/shapes`, `debug/studio` |
-| `LetNode` | 122 | 8 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 2 more |
-| `LiteralExpressionNode` | 15663 | 172 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
+| `LetNode` | 125 | 8 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 3 more |
+| `LiteralExpressionNode` | 15697 | 172 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
 | `LocalStatementNode` | 0 | 1 |  |
 | `NotPredicateNode` | 0 | 1 |  |
-| `ObjectExpressionNode` | 1332 | 15 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 3 more |
+| `ObjectExpressionNode` | 1338 | 15 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 4 more |
 | `OperandExpressionNode` | 67 | 43 | `debug/avatars/moth`, `debug/debug`, `debug/devices` |
 | `OptionBlockNode` | 0 | 1 |  |
 | `OrPredicateNode` | 1 | 0 | `debug/avatars/moth` |
-| `PropertyNode` | 9848 | 115 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
+| `PropertyNode` | 9882 | 115 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
 | `RangeExpressionNode` | 0 | 3 |  |
 | `RhsOperandNode` | 9 | 10 | `debug/avatars/moth` |
 | `RhsTextNode` | 0 | 1 |  |

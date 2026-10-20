@@ -3508,9 +3508,10 @@ Each commit is marked with what it waits on.
       spec's `ScreenSources`): a screen reading an instance bound the read, its
       lease taken once however many screens showed it and held to the sampling
       slot's fence, before the offscreen views rendered; any other bound
-      `Rendered`. The binder publishes before the runtime schedules, and a graph
-      input bound to an imported source draws a stand-in, since it hands out an
-      image view alone. Laws:
+      `Rendered`. The binder publishes before the runtime schedules. A graph
+      input or pane bound to an imported source draws the complete image its
+      lease carries (`GpuImageLease.Image`), and a stand-in only for a feed
+      that hands out an image view alone. Laws:
       `SdfEngineNodeLeaseLawTests.AScreensSourceLeaseRetiresOnlyAfterTheSamplingSlotsFence`,
       which P14-6 deleted with the node,
       and `ImageProducerLawTests.AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`.
