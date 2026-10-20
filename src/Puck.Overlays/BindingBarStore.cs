@@ -63,6 +63,19 @@ public readonly record struct OverlayBindingModifier(
     ushort BadgeGlyph1,
     bool Held
 );
+/// <summary>One command-chord hint as the renderer consumes it: the chord's members as small badge chips, then its
+/// action — an icon chip, else its authored label as text.</summary>
+/// <param name="Members">The members' badges, held members first and then the ordered chord, each a resolved
+/// glyph.</param>
+/// <param name="Action">The action's resolved icon; <see cref="OverlayResolvedGlyph.None"/> draws
+/// <paramref name="Label"/> instead.</param>
+/// <param name="Label">The row's authored label, drawn when <paramref name="Action"/> is absent; empty draws
+/// nothing.</param>
+public readonly record struct OverlayBindingHint(
+    ReadOnlyMemory<OverlayResolvedGlyph> Members,
+    OverlayResolvedGlyph Action,
+    string Label
+);
 /// <summary>One seat's binding-bar snapshot: every authored bank's resolved slots (one stacked cluster per bank,
 /// each bank's own physical buttons resolved against ITS OWN named page — see <see cref="OverlayBindingSlot"/>) plus
 /// the normalized frame region its bar is confined to (per-viewport scoping happens here, at the writer layer — the
@@ -75,8 +88,9 @@ public readonly record struct OverlayBindingModifier(
 /// <param name="Slots">Every rendered slot, one entry per (bank, physical button) pair in the authored slot set —
 /// bank-major, slot-set order within a bank.</param>
 /// <param name="Modifiers">The declared modifiers, in profile order.</param>
-/// <param name="Hints">The active group's command-chord hint lines (e.g. <c>"LT+RT Snapshot"</c>), pre-formatted
-/// ASCII — rendered as small text above the modifier indicators so a chord-fired act is discoverable.</param>
+/// <param name="Hints">The active group's command-chord hints the bar places
+/// (<see cref="BindingBarSeatComposer.ComposeHints"/>), drawn as small chip rows above the modifier indicators so a
+/// chord-fired act is discoverable.</param>
 /// <param name="Layout">The authored layout resolved for this seat.</param>
 /// <param name="Frames">The seat's compiled anchor groups; every slot's <see cref="OverlayBindingSlot.Frame"/> indexes
 /// here.</param>
@@ -88,7 +102,7 @@ public readonly record struct OverlayBindingSeat(
     string Label,
     ReadOnlyMemory<OverlayBindingSlot> Slots,
     ReadOnlyMemory<OverlayBindingModifier> Modifiers,
-    ReadOnlyMemory<string> Hints,
+    ReadOnlyMemory<OverlayBindingHint> Hints,
     BindingBarLayoutOptions Layout,
     ReadOnlyMemory<BindingBarFrame> Frames,
     bool Visible

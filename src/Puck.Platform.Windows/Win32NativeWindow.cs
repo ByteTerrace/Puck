@@ -90,9 +90,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
-    // How many absolute reports after a pointer-lock warp may still precede it before the window stops waiting for the
-    // report that follows it (a remote desktop client that does not move its cursor to the warp never sends one).
-    private const int WarpReportLimit = 16;
     // WM_SETICON wParam.
     private const nint IconBig = 1;
     private const nint IconSmall = 0;
@@ -137,8 +134,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
     private bool m_isVisible;
     private bool m_locksPointer;
-    // Where a pointer lock began and where it returns the cursor to, in screen pixels.
+    // Where a pointer lock holds the cursor about and where it returns the cursor to, in screen pixels, and the client
+    // area it holds the cursor in.
     private Point m_lockCentre;
+    private Rectangle m_lockClient;
     private Point m_lockRestore;
     private bool m_showsSystemCursor;
     private Vector2 m_frameMouseDelta;
@@ -161,16 +160,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
     // One physical mouse's accumulated pointer state — see m_rawMouseStates.
     private sealed class RawMouseState {
         public required InputDeviceId DeviceId;
-        public int? LastAbsoluteX;
-        public int? LastAbsoluteY;
+        public readonly Win32AbsolutePointer Absolute = new();
         public Vector2 PendingDelta;
         // Whether the device's absolute reports span the virtual desktop rather than the primary monitor.
         public bool VirtualDesktop;
-        // A pointer-lock warp's target in the device's absolute coordinates, until a report shows the device followed it,
-        // and how many reports have arrived since the warp.
-        public int? WarpX;
-        public int? WarpY;
-        public int WarpReports;
     }
 
     public Win32NativeWindow(IClipboardService clipboardService, IOptions<NativeWindowOptions> options) {
@@ -260,6 +253,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
 
         m_locksPointer = true;
+        m_lockClient = client;
         m_lockRestore = restore;
         m_lockCentre = new Point {
             X = (origin.X + (client.Right / 2)),
@@ -299,12 +293,24 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             _ = User32.SetCursor(cursorHandle: ClientCursor);
         }
     }
-    // Returns a locked pointer to the client area's centre once it has moved off it, after the pump has taken the
-    // motion that moved it.
+    // Returns a locked pointer to the client area's centre once it has wandered far enough from it
+    // (Win32AbsolutePointer.ShouldRecentre), after the pump has taken the motion that moved it, and never while an
+    // absolute-mode device has yet to report from the last warp.
     private void RecentrePointer() {
+        foreach (var state in m_rawMouseStates.Values) {
+            if (state.Absolute.WarpPending) {
+                return;
+            }
+        }
+
         if (
             User32.GetCursorPos(point: out var at) &&
-            ((at.X != m_lockCentre.X) || (at.Y != m_lockCentre.Y))
+            Win32AbsolutePointer.ShouldRecentre(
+                clientHeight: m_lockClient.Bottom,
+                clientWidth: m_lockClient.Right,
+                offsetX: (at.X - m_lockCentre.X),
+                offsetY: (at.Y - m_lockCentre.Y)
+            )
         ) {
             WarpPointer(screen: m_lockCentre);
         }
@@ -331,7 +337,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
 
         foreach (var state in m_rawMouseStates.Values) {
-            if (state.LastAbsoluteX is null) {
+            if (!state.Absolute.HasReported) {
                 continue;
             }
 
@@ -343,9 +349,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
                 continue;
             }
 
-            state.WarpX = ((int)((((long)(screen.X - left)) * 65535L) / width));
-            state.WarpY = ((int)((((long)(screen.Y - top)) * 65535L) / height));
-            state.WarpReports = 0;
+            state.Absolute.Warp(
+                x: ((int)((((long)(screen.X - left)) * 65535L) / width)),
+                y: ((int)((((long)(screen.Y - top)) * 65535L) / height))
+            );
         }
     }
 
@@ -720,8 +727,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
                 m_pointerPositionDirty = false;
                 m_frameMouseDelta = Vector2.Zero;
                 foreach (var state in m_rawMouseStates.Values) {
-                    state.LastAbsoluteX = null;
-                    state.LastAbsoluteY = null;
+                    state.Absolute.Forget();
                     state.PendingDelta = Vector2.Zero;
                 }
 
@@ -1174,37 +1180,19 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
             state.VirtualDesktop = virtualDesktop;
 
-            if (
-                (state.LastAbsoluteX is { } previousX) &&
-                (state.LastAbsoluteY is { } previousY)
-            ) {
-                // After a pointer-lock warp, a report nearer the warp's target than the last report is the first the
-                // device sent from the target; one nearer the last report was sent before the device followed the warp.
-                if (
-                    (state.WarpX is { } warpX) &&
-                    (state.WarpY is { } warpY)
-                ) {
-                    if (DistanceSquared(x: (mouse.LastX - warpX), y: (mouse.LastY - warpY)) < DistanceSquared(x: (mouse.LastX - previousX), y: (mouse.LastY - previousY))) {
-                        (previousX, previousY) = (warpX, warpY);
-                        state.WarpX = null;
-                        state.WarpY = null;
-                    } else if (++state.WarpReports >= WarpReportLimit) {
-                        state.WarpX = null;
-                        state.WarpY = null;
-                    }
-                }
+            var (motionX, motionY) = state.Absolute.Report(
+                x: mouse.LastX,
+                y: mouse.LastY
+            );
 
+            if ((motionX != 0) || (motionY != 0)) {
                 state.PendingDelta += new Vector2(
-                    x: (((mouse.LastX - previousX) / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCxVirtualScreen : SmCxScreen))),
-                    y: (((mouse.LastY - previousY) / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCyVirtualScreen : SmCyScreen)))
+                    x: ((motionX / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCxVirtualScreen : SmCxScreen))),
+                    y: ((motionY / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCyVirtualScreen : SmCyScreen)))
                 );
             }
-
-            state.LastAbsoluteX = mouse.LastX;
-            state.LastAbsoluteY = mouse.LastY;
         } else {
-            state.LastAbsoluteX = null;
-            state.LastAbsoluteY = null;
+            state.Absolute.Forget();
 
             state.PendingDelta += new Vector2(
                 x: mouse.LastX,
@@ -1212,7 +1200,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             );
         }
     }
-    private static long DistanceSquared(long x, long y) => ((x * x) + (y * y));
     private void HandleRawKeyboard(nint deviceHandle, in RawKeyboard keyboard) {
         if (keyboard.VKey == RawKeyboardNoVKey) {
             // No VK mapping (an E1 Pause/Break packet, among others) — nothing to resolve.

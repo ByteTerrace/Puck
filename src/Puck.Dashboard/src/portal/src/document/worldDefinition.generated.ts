@@ -3452,11 +3452,11 @@ export type WorldBindingBarAuthoring = {
    */
   enabled?: boolean;
   /**
-   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
+   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and a chord hint's label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
    */
   text?: boolean;
   /**
-   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text's, not this one's.
+   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.
    */
   modifiers?: boolean;
   /**

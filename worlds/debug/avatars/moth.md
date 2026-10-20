@@ -69,7 +69,9 @@ The debug world and the garden draw these controls on screen from
 [`controls.puck`](../controls.puck): the standard controller bar along the bottom
 edge (the d-pad diamond with LB and the left stick's press, the face diamond
 with RB and the right stick's press, each plate showing its action) and the
-play wheel. Hold Tab and point with the mouse, or hold LB and aim the right
+play wheel. The bar shows a chord only over controls it places, as their caps
+and the action's icon, so the both-mouse-buttons walk stays off this
+controller bar. Hold Tab and point with the mouse, or hold LB and aim the right
 stick, then release over a sector: Console, Build, Where (`body.where`),
 Channels (`body.channels`), Annotate, Respawn (back to the stage), Desktop
 (the desktop pane, `view.override layout desktop`) and Play (the play view
