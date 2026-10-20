@@ -1577,15 +1577,21 @@ per producer under its source package, which opens the instance's feed from
 the instance's settings: an uploaded producer's (`testPattern`, `qr`, `color`) is an
 upload, whose instance the render-graph runtime converts once a frame at most
 from the region its feed writes, through the shipped conversion its format
-names. A `views.graphs` row names an uploaded producer's source package with
-its `settings` (`"package": "source.qr", "settings": { "payload": "puck" }`),
-so a layout slot shows the source as a pane and a `captures` row can capture
-it before composition. Any other producer's instance (`camera`, `capture`, a
-host's imported producer) renders through an external producer that owns the
-feed, publishes it when the runtime renders the instance and hands out its
-image through the capture gate, and the `machine` and `probe` ids register the
-binder's own. Such a source hands out an image view that only the SDF world
-samples, so a pane or graph input bound to one draws a stand-in.
+names. Any other producer's instance (`camera`, `capture`, a host's imported
+producer) renders through an external producer that owns the feed, publishes
+it when the runtime renders the instance and hands out its image through the
+capture gate, and the `machine` and `probe` ids register the binder's own. A
+`views.graphs` row names any registered producer's source package with its
+`settings` (`"package": "source.qr", "settings": { "payload": "puck" }`, or
+`"package": "source.capture"` with a `windowTitle` and `profile`), so a layout
+slot shows the source as a pane and a `captures` row can capture it before
+composition. A capture's and a camera's lease carries the complete image it
+acquired (`GpuImageLease.Image`: the shared ring's slot, or the converted
+image on the CPU and HDR routes), so a pane or graph input bound to one draws
+it; a reader draws a stand-in only while the source has no image yet, or for
+a feed that hands out an image view alone. While a capture is armed, an
+external source resolves to its capture fill, so a capture of the display shows
+the fill in its pane, never the window.
 
 The live render graph runs every source a screen shows, its row's or the one a
 presentation verb bound over the row (`screen.source <index> <kind>`, a
@@ -1891,6 +1897,15 @@ currency, translated once into a neutral pad image through the named kit's
 `pad` map, folded server-side (`WorldEngagement.FoldTick`) and read directly by
 `WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
 rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
+
+A screen whose route names an `engageChannel` is also engaged from the
+controls: that channel's press within `engageRadius` composes the application,
+and the same press leaves it (the debug world's devices use the Moth's
+`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
+While a seat is captured on a screen, its camera eases into the emulator view:
+the screen's glass fills the viewport's limiting axis, square-on, derived from
+the row's own frame, with nothing between the camera and the glass drawn
+([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen)).
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated

@@ -12,12 +12,19 @@
 
 let mono = "jetbrains-mono-regular"
 
-// The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input.
+// The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input. Both
+// step aside while the seat is engaged on a screen, so the emulator view shows the screen alone.
 let shownWhilePlaying = {
-  $type: "recently"
-  fact: SeatInput
-  windowSeconds: 6
-  fadeSeconds: 1
+  $type: "all"
+  predicates [
+    {
+      $type: "recently"
+      fact: SeatInput
+      windowSeconds: 6
+      fadeSeconds: 1
+    }
+    { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+  ]
 }
 
 hud {
@@ -30,14 +37,19 @@ hud {
       sizePx: 7
       role: TextPrimary
       visible {
-        $type: "recently"
-        fact: PointerMotion
-        windowSeconds: 3
-        fadeSeconds: 0.5
+        $type: "all"
+        predicates [
+          {
+            $type: "recently"
+            fact: PointerMotion
+            windowSeconds: 3
+            fadeSeconds: 0.5
+          }
+          { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+        ]
       }
     }
   }
-  panels []
 }
 
 icons {
@@ -47,6 +59,7 @@ icons {
     { name: "key.a", label: "A" }
     { name: "key.s", label: "S" }
     { name: "key.d", label: "D" }
+    { name: "key.e", label: "E" }
     { name: "key.f", label: "F" }
     { name: "key.1", label: "1" }
     { name: "key.2", label: "2" }
@@ -114,7 +127,9 @@ icons {
     { name: "act.where", glyph { font: mono, glyph: "U+25C8" } }
     { name: "act.channels", glyph { font: mono, glyph: "U+2261" } }
     { name: "act.respawn", glyph { font: mono, glyph: "U+23CE" } }
-    { name: "act.disengage", glyph { font: mono, glyph: "U+238B" } }
+    { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
+    { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
+    { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -123,6 +138,7 @@ icons {
     { source: "keyboard.a", icon: "key.a" }
     { source: "keyboard.s", icon: "key.s" }
     { source: "keyboard.d", icon: "key.d" }
+    { source: "keyboard.e", icon: "key.e" }
     { source: "keyboard.f", icon: "key.f" }
     { source: "keyboard.1", icon: "key.1" }
     { source: "keyboard.2", icon: "key.2" }
@@ -200,6 +216,7 @@ state {
       rise = "act.rise"
       descend = "act.descend"
       jump = "act.jump"
+      interact = "act.interact"
       camera1 = "act.camera1"
       camera2 = "act.camera2"
       camera3 = "act.camera3"
@@ -218,7 +235,8 @@ state {
       channels = "Channels"
       annotate = "Annotate"
       respawn = "Respawn"
-      disengage = "Disengage"
+      desktop = "Desktop"
+      play = "Play"
       cancel = "Cancel"
     }
 
@@ -229,7 +247,8 @@ state {
       channels = "act.channels"
       annotate = "act.annotate"
       respawn = "act.respawn"
-      disengage = "act.disengage"
+      desktop = "act.desktop"
+      play = "act.play"
     }
   }
 }
@@ -394,7 +413,9 @@ bindingOverlays [
                 { id: "channels", command: "body.channels", sources: null }
                 { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
                 { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
-                { id: "disengage", command: "body.disengage", sources: null }
+                // view.override takes an Axis1D from a binding; its text names the layout, so the value is never read.
+                { id: "desktop", command: "view.override", text: "layout desktop", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
+                { id: "play", command: "view.override", text: "layout play", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
               ]
             }
           ]

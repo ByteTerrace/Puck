@@ -65,8 +65,8 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
 | Change a brick's revision live | `machine.operation <instance> <generation> device.model {"schema":"puck.gaming-brick.device-model-set.v1","model":"sgb"}` |
 | Stand at a device, facing it | `body.pose <x> 0 -4.5 0 0 0` |
-| Engage it (within 3 m), playing it with the Moth's controls | `body.engage <screen>` |
-| Disengage | `body.disengage` |
+| Engage it (within 3 m), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
+| Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its authored cartridge (and pick up an edit to `devices.puck`) | `world.reload` |
 | Frame the whole row | `view.override camera look -13 2.2 -1.5 -13 0.6 -6`, then `view.override camera auto` |
@@ -77,12 +77,25 @@ Every line runs at the console; `<instance>` is a name from the table.
 prints the generation an operation names; a swap, reset or eject replaces the
 machine under a new generation.
 
+## Engaging a device
+
+Walk up to a device and press the context button, E on a keyboard or X on a
+pad (the Moth's `interact` channel, which every screen route here names as its
+`engageChannel`). Within 2.8 m of a device an `E / X  ENGAGE` prompt shows
+(the `device-engage` HUD panel); a press within the route's 3 m engages the
+first device in document order that is free. Engaging captures the seat, so the
+Moth stands still, and brings up the emulator view: the camera eases in until
+the device's screen fills the window's limiting axis, square-on, with
+everything between the camera and the screen (the Moth included) left out, and
+the binding bar and the cursor step aside. An `E / X  LEAVE` chip shows in the
+bottom-left corner; the same button leaves the device and the camera eases back
+to the Moth. The device's pad does not play the context button, so it never
+reaches the machine.
+
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
-jump is A, flight is B and the Moth's `start` channel is start. Engaging
-captures the seat, so the Moth stands still until `body.disengage`. The screens
-name no engage channel, so a jump beside a device stays a jump; engaging is the
-console line. On a brick, each control lands in the joypad byte a forged
-cartridge copies to `0xC280` each frame (`screen.peek <screen> 0xC280`):
+jump is A, flight is B and the Moth's `start` channel is start. On a brick, each
+control lands in the joypad byte a forged cartridge copies to `0xC280` each
+frame (`screen.peek <screen> 0xC280`):
 
 | Control (`player.signal` source) | Keyboard | Machine button | Byte |
 |---|---|---|---|
@@ -90,6 +103,7 @@ cartridge copies to `0xC280` each frame (`screen.peek <screen> 0xC280`):
 | `gamepad.buttonSouth` | `space` | A | `0x10` |
 | `gamepad.buttonNorth` | `f` | B | `0x20` |
 | `gamepad.start` | `enter` | start | `0x80` |
+| `gamepad.buttonWest` | `e` | none: engages and leaves | none |
 
 Each `machine.swap` restarts the device on the new cartridge and keeps the rest
 of its configuration (its model and boot mode). A name the folders do not hold

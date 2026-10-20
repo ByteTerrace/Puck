@@ -23,6 +23,7 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Application storage — one table, one derivation
 - `Compose` = check Control → rebuild the set → sync the latch
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
+- The emulator view — the camera frames the engaged screen
 - `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 - `Dissolve` — three outcomes, no repair
 - The one fold
@@ -212,6 +213,17 @@ ordinary `Compose` with `actingPrincipal = targetPrincipal =
 Principal.Seat(slot)`, printing `[world.engage: <principal> auto-engaged
 <target> — context button]` on stderr.
 
+**The same button leaves.** A local seat CAPTURED on a screen (its body's
+`Engaged` latch set) whose route names an `EngageChannel` the channel table
+resolves is probed on that channel too (`ResolveLeaveProbe`); its rising edge
+runs the ordinary `Dissolve` and narrates `[world.engage: <principal> left
+<target> — context button]`. A held button presses once: after the leave the
+seat's previous channel bit is high, so the next tick's engage probe sees no
+edge. A mirrored seat (own body still applied) is not probed for leaving.
+`WorldDefinitionValidator.ValidateRoute` refuses an `engageChannel` the route's
+kit `pad` maps (`… is a pad button of kit …`), so the leave press is never also
+a machine button. `ContextButtonLeaveLawTests` holds both.
+
 **Replay.** Nothing about this is taped. It is pure re-derivation from tick-local
 sim state (position, channel bits, document/grant state) — a shadow replay
 re-executes `ResolveEngageProbes` from the SAME taped inputs and reaches the
@@ -219,6 +231,25 @@ identical decision at the identical tick.
 
 **Scope today**: local seats only (`AdvanceSeats`, indices 0..3) —
 `AdvanceSimulated`'s peers/inhabitants are not probed.
+
+## The emulator view — the camera frames the engaged screen
+
+A seat captured on a screen frames it: `WorldSeatContextSync.Publish` publishes
+the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
+`Applications` read (−1 while unengaged, mirrored or possessing), and
+`WorldFramePresenter.ResolveCamera` hands the row to the seat's
+`WorldScreenFraming` (`src/Puck.World.Client`). `TryFrame` puts the eye on the
+face normal (`cross(right, up)`), far enough that the glass fills the
+viewport's limiting axis exactly at the seat rig's field of view, and sets the
+camera's `Near` one slab thickness (`2 × halfDepth`) short of the glass, so the
+engaging avatar and anything else between eye and glass draws nothing. The
+seat's camera eases to it and back on the seat rig's own reported `dynamics`
+(the Moth's `camera-boom`); a rig with none cuts. It is the engine default for
+every captured screen application, presentation only, and needs no authored
+field. The overlay fact `ScreenEngaged` (`WorldOverlayFacts`) reads the same
+anchor, so a panel, the cursor or the bar can show or step aside while
+engaged. `WorldScreenFramingLawTests` holds the fit, the near plane and the
+ease.
 
 ## `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 
@@ -454,8 +485,11 @@ control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
 world's device row declares engageable machine screens 0 to 2 (kit
-`devicePad`, engage radius 3; `devices.md` has the stand-there `body.pose`
-lines), so the screen path runs in the live world. Remember actor ≠ target: every seat holds wide grants by default, so
+`devicePad`, engage radius 3, engage channel `interact`, the Moth's context
+button on E and the pad's X; `devices.md` has the stand-there `body.pose`
+lines), so the screen path runs in the live world: drive the button through
+the real input path with `player.signal keyboard.e press`, a `world.wait`, and
+`release`, never `body.engage`, when the probe is what you are showing. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:
 `world.grant … control body:<n>`/`drive body:<n>` is 0-based; `player.*` verbs are

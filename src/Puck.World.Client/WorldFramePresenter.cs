@@ -143,6 +143,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Quaternion[] m_lastSeatAnchorOrientation = new Quaternion[PlayerRoster.MaxSlots];
     private readonly bool[] m_hasSeatAnchor = new bool[PlayerRoster.MaxSlots];
     private readonly bool[] m_missingSeatAnchorNarrated = new bool[PlayerRoster.MaxSlots];
+    // Each seat's emulator view: the ease toward the screen it is captured on, and back.
+    private readonly WorldScreenFraming[] m_screenFraming = NewScreenFraming();
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     // views.cameraRig's compiled-rig cache, one slot per seat. Slot-indexed rather than owned by WorldSeatViewState
@@ -731,6 +733,19 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         var placed = PlacedExtent(height: height, region: region, width: width);
+        // A seat captured on a screen of the world it is presented in frames that screen (the emulator view), easing
+        // in and out on the chase rig's own dynamics.
+        var near = m_screenFraming[slot].Apply(
+            aspectRatio: (placed.X / placed.Y),
+            deltaSeconds: deltaSeconds,
+            dynamics: chase.Dynamics,
+            eye: ref eye,
+            fieldOfViewRadians: fieldOfView,
+            screen: (presentedHere
+                ? EngagedScreenRow(slot: slot)
+                : null),
+            target: ref target
+        );
 
         return CameraSnapshot.LookAt(
             fieldOfViewRadians: fieldOfView,
@@ -738,7 +753,34 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             target: target,
             viewportHeight: placed.Y,
             viewportWidth: placed.X
-        );
+        ) with {
+            Near = near
+        };
+    }
+    // The screen row the seat is captured on, or null when it engages none or the row is gone.
+    private WorldScreen? EngagedScreenRow(int slot) {
+        var index = m_anchor.EngagedScreen(slot: slot);
+
+        if (index < 0) {
+            return null;
+        }
+
+        foreach (var screen in m_client.Definition.Screens) {
+            if (screen.Index == index) {
+                return screen;
+            }
+        }
+
+        return null;
+    }
+    private static WorldScreenFraming[] NewScreenFraming() {
+        var framing = new WorldScreenFraming[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < framing.Length); slot++) {
+            framing[slot] = new WorldScreenFraming();
+        }
+
+        return framing;
     }
     // The compiled collider of a local body's kit, or null for a body whose kit authors none.
     private FixedWorldCollider? SubjectCollider(int body) {

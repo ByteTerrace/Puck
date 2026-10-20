@@ -3319,7 +3319,8 @@
         "PointerMotion",
         "WheelOpen",
         "ConsoleOpen",
-        "SeatCameraApplication"
+        "SeatCameraApplication",
+        "ScreenEngaged"
       ],
       "title": "OverlayFact"
     },

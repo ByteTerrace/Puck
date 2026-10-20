@@ -4,7 +4,8 @@
 // island is built up from, in engine: boot its package with `--world worlds/debug`, edit this
 // source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals. The
 // standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play wheel)
-// are imported documents.
+// are imported documents, as are the device row (devices.puck), the Claude desktop app's window as a pane and a
+// screen (desktop.puck), and the loop shaft's floor and ceiling portals (loop.puck).
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -16,6 +17,7 @@ import "studio"
 import "theme"
 import "controls"
 import "devices"
+import "desktop"
 import "loop"
 
 // The test room's palette slots.

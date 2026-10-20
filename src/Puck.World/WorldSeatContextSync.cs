@@ -49,6 +49,7 @@ internal static class WorldSeatContextSync {
             var own = GrantSubject.Body(index: principal.Index);
             var holdsOwn = false;
             var possessed = -1;
+            var screen = -1;
             var composed = false;
 
             foreach (var application in applications) {
@@ -65,6 +66,11 @@ internal static class WorldSeatContextSync {
                     (possessed < 0)
                 ) {
                     possessed = application.Target.Value;
+                } else if (
+                    (application.Target.Kind == GrantSubjectKind.Screen) &&
+                    (screen < 0)
+                ) {
+                    screen = application.Target.Value;
                 }
             }
 
@@ -97,6 +103,14 @@ internal static class WorldSeatContextSync {
                 bodyIndex: ((!holdsOwn && (possessed >= 0))
                 ? possessed
                 : slot),
+                slot: slot
+            );
+            // A seat captured on a screen (no own-body application beside it) engages that screen; a mirrored one
+            // still walks its avatar and engages nothing the camera or overlay would frame.
+            anchor.PublishEngagedScreen(
+                screenIndex: (holdsOwn
+                ? -1
+                : screen),
                 slot: slot
             );
         }

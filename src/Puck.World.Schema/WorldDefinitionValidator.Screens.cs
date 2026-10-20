@@ -549,9 +549,10 @@ public static partial class WorldDefinitionValidator {
     // plus the channel MASK (channelNames must resolve) and the pad KIT reference (padKits must carry it).
     // engageChannel is CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel
     // ordinal table), so it is held to the same "must resolve" bar — a misspelled name is otherwise a silent,
-    // permanent no-op. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
+    // permanent no-op. The engage channel's press also leaves the screen it engaged, so the route's kit may not play
+    // it as a pad button. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
     // bar.
-    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, ISet<string> padKits, List<string> errors) {
+    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
         RequireNonNegative(
             value: route.EngageRadius,
             name: $"{path}.engageRadius",
@@ -595,11 +596,18 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (
-            (route.Kit is { Length: > 0 } kit) &&
-            !padKits.Contains(item: kit)
-        ) {
-            errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
+        if (route.Kit is { Length: > 0 } kit) {
+            if (!padKits.TryGetValue(
+                key: kit,
+                value: out var pad
+            )) {
+                errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
+            } else if (
+                (route.EngageChannel is { Length: > 0 } padEngageChannel) &&
+                pad.ContainsKey(key: padEngageChannel)
+            ) {
+                errors.Add(item: $"{path}.engageChannel '{padEngageChannel}' is a pad button of kit '{kit}': the engage channel's press also leaves the screen, so it cannot also play it.");
+            }
         }
         if (route.Input == SourceDestination.Passthrough) {
             errors.Add(item: $"{path}.input 'Passthrough' is refused: host passthrough exists only for a source the local user opened on their own machine, and a world document, whether authored locally or arrived through a portal, can never create a passthrough source or send it input.");
