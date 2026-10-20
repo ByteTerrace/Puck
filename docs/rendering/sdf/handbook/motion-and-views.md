@@ -160,6 +160,18 @@ reads a tainted or stand-in image is not counted, so the view renders the same
 sample again, and the Nth counted sample, the one captured, is at index N − 1
 however many such frames come first.
 A capture can request up to 256 samples; zero retains ordinary capture behavior.
+
+Every capture, converging or not, holds its residency's frame until it is
+served (`SdfWorldResidency.HoldsFrame`). Under the `motion` debug view, each
+render of the held frame reads the motion that frame was presented with: an
+upload that moves no pose leaves the previous transform tables and both pose
+revisions where they stand (`SdfWorldTables.HoldsFrame`), and the view's
+history renders it with the previous view its latest completed render read, committing
+nothing. A capture of a moving scene's motion view therefore reads its motion,
+and a still or paused one reads zero. Every other view settles a held frame as
+it settles any still frame, so a temporal view's history accumulates over the
+held frame's renders with no motion between them.
+
 The `temporal-jitter` canary checks the center and offset samples repeating
 after eight renders on each backend. A view whose quality asks for it resolves
 its samples into color over its history

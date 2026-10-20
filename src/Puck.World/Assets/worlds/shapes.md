@@ -244,8 +244,9 @@ to step along it.
 - **Motion vectors.** `view.override camera look 17 2.3 54.6 17 1 59`, then
   `world.debug-view motion`. The spin, rock and slide exhibits must read their
   own motion and their plinths stationary, and pausing the clock must still
-  every vector within a frame. Today every pixel reads zero (see Known
-  defects).
+  every vector within a frame. A capture holds the frame it serves and shows
+  the motion that frame was presented with, so raise the clock's rate
+  (`perSecondNumerator` 8) for vectors large enough to read.
 - **Paused against running.** Capture the motion row running, pause the clock,
   wait for the confirmation toast to fade (`world.wait 240`), capture twice:
   the paused pair must match up to temporal noise, and the poses must hold
@@ -288,9 +289,6 @@ to step along it.
 Each of these was seen in a Direct3D 12 capture of the gallery.
 `docs/plans/open-items.md` tracks them.
 
-- **Motion vectors.** `world.debug-view motion` reads zero for every moving
-  exhibit, even with the clock at eight times its rate and `world.cadence off`,
-  so the motion-vector recipe below shows the defect rather than the motion.
 - **Pooled labels.** The motion rows' plinth labels bake frayed, letters
   broken into slivers. The same labels on the still rows bake crisp, because
   the static stamper refines a text group toward its glyphs.

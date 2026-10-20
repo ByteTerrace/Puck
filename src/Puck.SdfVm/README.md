@@ -478,7 +478,12 @@ graph inputs.
 
 Freezing or releasing a source may replace its transform collection with an
 identical copy. That replacement reseeds motion history, while geometry cadence
-changes only for different packed rows or an active row-count change.
+changes only for different packed rows or an active row-count change. Under the
+`motion` debug view a held frame keeps the motion it was presented with: its
+still uploads leave the previous transform tables and pose revisions as they
+stand (`SdfWorldTables.HoldsFrame`), and the view renders it with the previous
+view of its latest completed render, so a capture of a moving scene reads its
+motion rather than settling to still.
 
 A readback `DeviceLostException` completes the request with that failure and
 is then rethrown so the host can rebuild the graphics device. Ordinary PNG or

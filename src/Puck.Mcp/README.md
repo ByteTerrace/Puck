@@ -312,7 +312,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 |---|---|---|
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc` and `current`. |
 | `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, and `world`, the World reached. Empty output is `submitted`, not authoritative application. |
-| `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
+| `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. The capture holds presentation from the frame it is armed in until it is served, and the PNG is a render of that held frame. |
 | `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`), `timeoutMs`, same range/default, and `world`. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
 Mutation commands that provide an authority settlement wait for its applied or

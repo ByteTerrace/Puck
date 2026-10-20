@@ -28,6 +28,10 @@ public readonly record struct SdfReprojectionView(CameraSnapshot Camera, Vector2
 /// transform tables hold the poses the instance last rendered (<see cref="SdfWorldTables.PoseRevision"/>): frames the
 /// instance stood through, or that other views of the residency rendered without moving a pose, break nothing.
 /// </para>
+/// <para>
+/// A frame held for a capture renders again with the temporal inputs of its latest completed render while the view
+/// shows motion, so a capture of the <c>motion</c> view reads the motion the held frame was presented with.
+/// </para>
 /// </summary>
 public sealed class SdfTemporalHistory {
     private SdfTemporalEpoch m_epoch;
@@ -48,11 +52,17 @@ public sealed class SdfTemporalHistory {
     private Inputs m_standing;
     // The renders since the inputs the instance's view is rendered from last changed (Changed).
     private uint m_settled;
+    private SdfReprojectionView m_previousView;
+    private bool m_hasPreviousView;
+    // Whether the prepared render renders a held frame again with the temporal inputs of its latest completed render.
+    private bool m_holding;
 
-    /// <summary>Gets the camera and sample grid of this instance's preceding completed render.</summary>
-    public SdfReprojectionView PreviousView { get; private set; }
-    /// <summary>Gets whether the preceding render belongs to this epoch, independently of whether jitter is enabled.</summary>
-    public bool HasPreviousView { get; private set; }
+    /// <summary>Gets the camera and sample grid of this instance's preceding completed render, or, while a held frame
+    /// renders again under the motion view, those its latest completed render read.</summary>
+    public SdfReprojectionView PreviousView => (m_holding ? m_standing.PreviousView : m_previousView);
+    /// <summary>Gets whether the preceding render belongs to this epoch, independently of whether jitter is enabled;
+    /// while a held frame renders again under the motion view, whether its latest completed render had one.</summary>
+    public bool HasPreviousView => (m_holding ? m_standing.HasPreviousView : m_hasPreviousView);
 
     /// <summary>Gets the epoch the latest render was prepared in.</summary>
     public SdfTemporalEpoch Epoch => m_epoch;
@@ -86,12 +96,28 @@ public sealed class SdfTemporalHistory {
     /// <param name="counted">The samples a converging capture has counted (<c>RenderGraphConvergence.Samples</c>),
     /// which then drive the index from the epoch's first render, or <see langword="null"/> when each completed render
     /// advances it.</param>
-    public void Prepare(SdfTemporalEpoch epoch, CameraSnapshot camera, long previousPoses, long currentPoses, uint renderWidth = 0, uint renderHeight = 0, int? counted = null) {
+    /// <param name="held">Whether the render renders a frame held for a capture (<see cref="SdfWorldResidency.HoldsFrame"/>).
+    /// Under the motion view, while the tables still hold the poses its latest completed render read
+    /// (<see cref="SdfWorldTables.HoldsFrame"/>), the render reads that render's previous view and commits nothing, so
+    /// every render of the held frame shows the motion it was presented with.</param>
+    public void Prepare(SdfTemporalEpoch epoch, CameraSnapshot camera, long previousPoses, long currentPoses, uint renderWidth = 0, uint renderHeight = 0, int? counted = null, bool held = false) {
         var width = ((renderWidth == 0) ? epoch.Width : renderWidth);
         var height = ((renderHeight == 0) ? epoch.Height : renderHeight);
 
         if ((m_currentView.Width != width) || (m_currentView.Height != height)) {
             Changed();
+        }
+
+        m_holding = (
+            held &&
+            ReadsMotion(epoch: epoch) &&
+            m_rendered &&
+            Continues(epoch: epoch, previousPoses: currentPoses) &&
+            (m_standing.PreviousPoses == previousPoses)
+        );
+
+        if (m_holding) {
+            return;
         }
         if (!Continues(epoch: epoch, previousPoses: previousPoses)) {
             Reset();
@@ -114,7 +140,8 @@ public sealed class SdfTemporalHistory {
     /// no previous view.</summary>
     public void Reset() {
         Frames = 0;
-        HasPreviousView = false;
+        m_hasPreviousView = false;
+        m_holding = false;
         m_prepared = false;
         m_rebase = true;
     }
@@ -122,10 +149,14 @@ public sealed class SdfTemporalHistory {
     /// temporally resolved view renders one more period of samples before it stands again.</summary>
     public void Changed() =>
         m_settled = 0;
-    /// <summary>Accounts for one rendered frame.</summary>
+    /// <summary>Accounts for one rendered frame. A held frame rendered again under the motion view commits no
+    /// temporal inputs (<see cref="Prepare"/>).</summary>
     public void Rendered() {
         if (m_settled < uint.MaxValue) {
             m_settled++;
+        }
+        if (m_holding) {
+            return;
         }
         m_standing = new Inputs(
             HasPreviousView: HasPreviousView,
@@ -135,8 +166,8 @@ public sealed class SdfTemporalHistory {
         );
         m_rendered = true;
         m_renderedPoses = m_poses;
-        PreviousView = m_currentView;
-        HasPreviousView = true;
+        m_previousView = m_currentView;
+        m_hasPreviousView = true;
         if (!m_counted && Sampling(epoch: m_epoch) && (Frames < uint.MaxValue)) {
             Frames++;
         }
@@ -171,7 +202,7 @@ public sealed class SdfTemporalHistory {
                 (
                     !continues ||
                     (
-                        (m_standing.PreviousView == PreviousView) &&
+                        (m_standing.PreviousView == m_previousView) &&
                         (m_standing.PreviousPoses == previousPoses)
                     )
                 )
