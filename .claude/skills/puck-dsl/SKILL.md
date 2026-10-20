@@ -124,9 +124,11 @@ commands [
 - A line's first token (the verb) is literal; it may be another authored
   command (no loops) or any verb a binding may name. Operator verbs,
   unbindable verbs (`quit`, `world.save`, `storage.*`) and engine-verb names
-  are refused when the World validates the document (boot, `world.reload`).
-  `puck compile --validate` has no registry, so offline it checks names,
-  parameters, defaults and templates only.
+  are refused by `puck compile --validate` (against the generated catalog
+  `puck verbs` writes) and again when the World validates the document (boot,
+  `world.reload`). Only the live check refuses a line calling a verb nothing
+  registers, since a windowed-only verb is absent from the catalog.
+  Regenerate the catalog with `puck verbs` after adding or changing a verb.
 - `commands` is keyed by `name`, so each imported document authors its own
   rows. Bind one like any verb (`command: "debug.go", text: "chess"`), or run
   `run <name> [args]`. Verify by booting the world: `help --names <prefix>`

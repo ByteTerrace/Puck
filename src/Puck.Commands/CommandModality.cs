@@ -10,4 +10,8 @@ internal sealed class CommandModality {
 
     internal bool[] ActiveCommands { get; }
     internal bool[] ActiveMaps { get; }
+
+    // An id past the registered commands is a document-authored command's (CommandRegistry.TryGetId), and every
+    // authored command belongs to the Global map, which is always active.
+    internal bool IsActive(ushort commandId) => ((commandId >= ActiveCommands.Length) || ActiveCommands[commandId]);
 }

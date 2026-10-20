@@ -110,7 +110,8 @@ claims.
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files by running their generators, never by hand-merging: the world
 schemas and the portal's TypeScript (`puck schema`), the name registry
-(`puck registry`), the vocabulary page (`puck vocabulary`) and
+(`puck registry`), the vocabulary page (`puck vocabulary`), the console verb
+catalog (`puck verbs`, which boots a headless World) and
 `packages.lock.json` (`puck locks`).
 
 The integration branch is where the lead lands work. Work reaches `main` in
