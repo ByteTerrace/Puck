@@ -12,24 +12,25 @@ public sealed partial class WorldInstanceHost {
     private static bool TryResolvePortalCounterpartFrame(in PendingTransfer transfer, in WorldFaceFrame sourceFrame, WorldDefinition destinationDefinition, string targetName, out WorldFaceFrame frame, out string reason) {
         frame = default;
 
-        if (!WorldPortalCounterpart.TryResolve(
+        var counterpartRow = default(WorldFaceRow);
+
+        // A validated destination declares every face a placement row overrides, so a counterpart that resolves to a
+        // placement face also derives a catalog row; the catalog is read for the frame.
+        if (
+            !WorldPortalCounterpart.TryResolve(
             definition: destinationDefinition,
             counterpart: transfer.Counterpart,
             placement: out var counterpartPlacement,
             face: out var counterpartFace,
             reason: out var counterpartReason
-        )) {
-            reason = $"mapped arrival's {counterpartReason} in '{targetName}'";
-
-            return false;
-        }
-
-        if (!WorldFaceCatalog.For(definition: destinationDefinition).TryFind(
+        ) ||
+            !WorldFaceCatalog.For(definition: destinationDefinition).TryFind(
             placementId: counterpartPlacement!.Id,
             faceName: counterpartFace!.Face,
-            out var counterpartRow
-        )) {
-            reason = $"mapped arrival's counterpart '{transfer.Counterpart}' names no DECLARED creation face in '{targetName}'";
+            out counterpartRow
+        )
+        ) {
+            reason = $"mapped arrival's {((counterpartReason.Length > 0) ? counterpartReason : $"counterpart '{transfer.Counterpart}' names no declared creation face")} in '{targetName}'";
 
             return false;
         }
@@ -102,14 +103,15 @@ public sealed partial class WorldInstanceHost {
         );
 
         foreach (var (slot, state, position) in crossed) {
-            // A turning pair turns the seat's view with its body, as a mapped arrival does; a pair that keeps the
-            // heading leaves the chase boom as it was, and the camera rides the carried body.
+            // A turning pair turns the view of the seat routed to the body, as a mapped arrival does; a pair that
+            // keeps the heading leaves the chase boom as it was, and the camera rides the carried body.
             if (
                 (turn != FixedQ4816.Zero) &&
-                (FollowedRosterSlot(
-                    instance: source,
-                    slot: slot
-                ) is { } rosterSlot)
+                TryFindFollowedRosterSlot(
+                instanceName: sourceName,
+                instanceSlot: slot,
+                rosterSlot: out var rosterSlot
+            )
             ) {
                 m_seats.CrossView(
                     slot: rosterSlot,
@@ -131,22 +133,6 @@ public sealed partial class WorldInstanceHost {
         static string Format(double value) => value.ToString(
             format: "0.00",
             provider: CultureInfo.InvariantCulture
-        );
-    }
-    // The local roster seat whose view follows an instance's body: the seat routed to it, or, in the boot world, the
-    // local seat at its own index.
-    private int? FollowedRosterSlot(WorldInstance instance, int slot) {
-        if (TryFindFollowedRosterSlot(
-            instanceName: instance.Name,
-            instanceSlot: slot,
-            rosterSlot: out var routed
-        )) {
-            return routed;
-        }
-
-        return ((ReferenceEquals(objA: instance, objB: Boot) && (slot < instance.Server.Population.LocalSeatCount))
-            ? slot
-            : null
         );
     }
 }
