@@ -145,10 +145,6 @@ public static class CreationStampSampling {
             seed: seed,
             worldSeed: worldSeed
         );
-        var inset = Math.Max(
-            val1: 0,
-            val2: (effectiveSpacing - (2 * effectiveRadius))
-        );
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
             count: effectiveWidth
@@ -162,19 +158,15 @@ public static class CreationStampSampling {
 
         for (var bz = 0; (bz < blocksZ); bz++) {
             for (var bx = 0; (bx < blocksX); bx++) {
-                var h = Pcg3dLatticeNoise.Pcg3d(
-                    x: unchecked((uint)bx),
-                    y: unchecked((uint)bz),
-                    z: hashSeed
-                );
                 // The point sits inside its block, radius-inset so it (and the creation's own footprint) stays clear
-                // of the block edge — the same inset FieldLattice.ApplyScatterFill derives its disc from.
-                var px = (((bx * effectiveSpacing) + effectiveRadius) + ((inset > 0)
-                    ? (int)(h.X % ((uint)inset))
-                    : 0));
-                var pz = (((bz * effectiveSpacing) + effectiveRadius) + ((inset > 0)
-                    ? (int)(h.Y % ((uint)inset))
-                    : 0));
+                // of the block edge — the same point FieldLattice.ApplyScatterFill centres its disc on.
+                var (px, pz) = Pcg3dLatticeNoise.ScatterPoint(
+                    blockX: bx,
+                    blockZ: bz,
+                    radius: effectiveRadius,
+                    seed: hashSeed,
+                    spacing: effectiveSpacing
+                );
 
                 offsets[index++] = new FixedVector3(
                     X: (originX + (cellSize * FixedQ4816.FromInteger(value: px))),
