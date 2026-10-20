@@ -6594,6 +6594,10 @@ export type WorldMachine = {
    * The folders holding the content this device can swap to, in the order they are listed and searched, each relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. A folder that does not exist on this machine is listed as absent, never refused, so a world can name a local folder that only some machines hold. machine.content lists the files in them the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folders is listed. Omitted from the wire when null.
    */
   contentFolders?: (string | null)[] | null;
+  /**
+   * Whether the device boots the default its ContentFolders name, when one names a file it can mount, in place of its configuration's authored content. A folder names its default in its own folder.json (SettingsFile), which the folder's owner writes (machine.default) and the boot and every world.reload read, so the default lives beside the content and no document names it. A device with no default set, or whose default is absent or unmountable, boots its authored content. Omitted from the wire when false.
+   */
+  preferFolderDefault?: boolean;
 };
 
 export type WorldMachineCable = {

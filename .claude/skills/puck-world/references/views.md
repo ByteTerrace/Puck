@@ -25,7 +25,7 @@ Primary code:
 - `Puck.World.Client/WorldCameraClearance.cs` and `WorldChaseBody.cs` — where the
   chase eye stands: out of the static field and out of the framed body's kit
   collider (see "Chase eye clearance" below).
-- `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
+- `Puck.World/WorldSeatViewInput.cs` — the pointer adapter: turns the seat camera while a drag holds, and keeps the motion since a pointer press for the drag that press starts (`BeginDrag`).
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
@@ -370,8 +370,10 @@ observers, not the filters, so a scripted drag cannot draw; `view.annotate
 add` keeps an outline from text instead.
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
-motion only for camera steering and asks the active preference whether the
-pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is
+motion only for camera steering; the router dispatches a drag's press at the
+next fixed tick, so it keeps the motion since the latest pointer press while a
+button stays down, and the `player.orbit`/`player.steer` press turns the camera
+by it (`BeginDrag`). `WorldCursorFeed` asks that same adapter whether steering is
 active, so pointer consumption and cursor visibility cannot disagree. This is
 the presentation projection: the same relative motion, wheel, and button
 events independently enter `Puck.Commands` through `InputSources.Mouse`. The

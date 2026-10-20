@@ -18,7 +18,9 @@ namespace Puck.World.Machines.Tests;
 /// than refusing it; <c>machine.swap</c> mounts one mountable file by file name, folder-qualified name or unambiguous
 /// stem, and refuses any other name by name. An engine mounts what its content provider prepares, or a raw image it
 /// judges runnable by the image's header, whatever the file's extension. A machine whose authored content is absent
-/// boots with no cartridge, and a folder that vanishes while the World runs leaves the mounted cartridge running.
+/// boots with no cartridge, and a folder that vanishes while the World runs leaves the mounted cartridge running. A
+/// machine preferring a folder default boots the file its folders' own settings name, and its authored content when
+/// none is named or the named file cannot boot.
 /// </summary>
 public sealed class MachineContentFolderLawTests {
     private sealed class FixtureAuthority(WorldInstance instance) : IWorldConsoleAuthority {
@@ -85,7 +87,7 @@ public sealed class MachineContentFolderLawTests {
 
         return root;
     }
-    private static WorldDefinition WithCabinet(IReadOnlyList<string>? contentFolders, string contentPath = Mirror) {
+    private static WorldDefinition WithCabinet(IReadOnlyList<string>? contentFolders, string contentPath = Mirror, bool preferFolderDefault = false) {
         var document = Fixtures.BuildDocument();
 
         return document with {
@@ -93,7 +95,8 @@ public sealed class MachineContentFolderLawTests {
                 "cabinet",
                 "gaming-brick",
                 JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = contentPath } }),
-                ContentFolders: contentFolders
+                ContentFolders: contentFolders,
+                PreferFolderDefault: preferFolderDefault
             )],
             ScreensRaw = [
                 .. document.Screens,
@@ -112,9 +115,10 @@ public sealed class MachineContentFolderLawTests {
             ],
         };
     }
-    private static (WorldFixture Fixture, CommandRegistry Registry) Boot(TemporaryDirectory root, IReadOnlyList<string>? contentFolders, string contentPath = Mirror) {
+    private static (WorldFixture Fixture, CommandRegistry Registry) Boot(TemporaryDirectory root, IReadOnlyList<string>? contentFolders, string contentPath = Mirror,
+        bool preferFolderDefault = false) {
         var fixture = Fixtures.FreshServer(
-            definition: WithCabinet(contentFolders: contentFolders, contentPath: contentPath),
+            definition: WithCabinet(contentFolders: contentFolders, contentPath: contentPath, preferFolderDefault: preferFolderDefault),
             documentPath: Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json"),
             machineCatalog: TestMachines.Catalog()
         );
@@ -131,6 +135,162 @@ public sealed class MachineContentFolderLawTests {
         return (fixture, new CommandRegistry(modules: [new WorldMachineCommandModule(authority: new FixtureAuthority(instance: instance))]));
     }
 
+    // Re-applies the cabinet document through the reload leaf, as world.reload does, and runs the tick it lands in.
+    private static void Reload(WorldFixture fixture, TemporaryDirectory root) {
+        var path = Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json");
+        var reread = (WithCabinet(contentFolders: ["../carts", "../local"], preferFolderDefault: true) with {
+            DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path),
+        });
+
+        fixture.Server.EnqueueRebuild(principal: Principal.Console, request: new WorldRebuildRequest(
+            ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: reread)),
+            Definition: reread,
+            Force: true,
+            Kind: WorldRebuildKind.Reload,
+            Origin: new WorldRebuildOrigin.File(Path: path)
+        ));
+        fixture.Step();
+    }
+    private static string CapturedContent(WorldFixture fixture) => ContentOf(machines: fixture.Server.Machines.CaptureInstances());
+    private static string DocumentContent(WorldFixture fixture) => ContentOf(machines: fixture.Server.Definition.Machines);
+    private static string ContentOf(IReadOnlyList<WorldMachine> machines) => machines.Single(predicate: static machine => (machine.Name == "cabinet"))
+        .Configuration.GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString()!;
+
+    // A machine preferring a folder default boots the file its folders' settings name, at boot and at every reload,
+    // while a capture of the session keeps its authored content; machine.default writes the settings, and with none set
+    // the machine boots its authored content again.
+    [Fact]
+    public void AMachinePreferringAFolderDefaultBootsTheDefaultItsFolderNames() {
+        using var root = Layout();
+
+        WorldMachineContentFolder.WriteSettings(folder: root.PathOf(name: "local"), name: "plain.rom");
+
+        var (fixture, registry) = Boot(contentFolders: ["../carts", "../local"], preferFolderDefault: true, root: root);
+
+        using (fixture) {
+            Assert.Equal(expected: "../local/plain.rom", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+
+            var listed = registry.Submit(line: "machine.content cabinet");
+
+            Assert.Contains(expectedSubstring: "preferDefault=true default=../local/plain.rom |", actualString: listed.Output);
+            Assert.Contains(expectedSubstring: "files=3 default=plain.rom", actualString: listed.Output);
+            Assert.DoesNotContain(expectedSubstring: WorldMachineContentFolder.SettingsFile, actualString: listed.Output);
+            Assert.Equal(expected: Mirror, actual: CapturedContent(fixture: fixture));
+
+            // A reset recreates the default it runs, and the capture still names the authored content.
+            var generation = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
+
+            var reset = registry.Submit(line: $"machine.operation cabinet {generation} machine.reset {{\"schema\":\"puck.gaming-brick.machine-reset.v1\"}}");
+
+            Assert.False(condition: reset.IsError, userMessage: reset.Output);
+            Assert.NotEqual(expected: generation, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation);
+            Assert.Equal(expected: "../local/plain.rom", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Assert.Equal(expected: Mirror, actual: CapturedContent(fixture: fixture));
+            Assert.Equal(expected: Mirror, actual: DocumentContent(fixture: fixture));
+
+            // A swap is captured and adopted by the document, and a re-preparation of the document keeps it; a reload
+            // boots the default again, and a second reload keeps the running machine.
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: registry.Submit(line: "machine.swap cabinet ../carts/gun.cgb.cartridge.json").Output);
+            Assert.Equal(expected: "../carts/gun.cgb.cartridge.json", actual: CapturedContent(fixture: fixture));
+            Assert.Equal(expected: "../carts/gun.cgb.cartridge.json", actual: DocumentContent(fixture: fixture));
+
+            var swapped = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
+
+            Assert.True(condition: fixture.Server.Machines.TryPrepare(current: fixture.Server.Definition, candidate: fixture.Server.Definition, plan: out var plan, reason: out var reason), userMessage: reason);
+            fixture.Server.Machines.Commit(plan: plan!);
+            fixture.Server.Machines.Finish(plan: plan!);
+            Assert.Equal(expected: swapped, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation);
+            Assert.Equal(expected: "../carts/gun.cgb.cartridge.json", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Reload(fixture: fixture, root: root);
+            Assert.Equal(expected: "../local/plain.rom", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+
+            var reloaded = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
+
+            Reload(fixture: fixture, root: root);
+            Assert.Equal(expected: reloaded, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation);
+
+            // A swap onto the authored content itself still leaves the default to the next reload.
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: registry.Submit(line: "machine.swap cabinet mirror").Output);
+            Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Reload(fixture: fixture, root: root);
+            Assert.Equal(expected: "../local/plain.rom", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+
+            // Setting a default in another folder names none in the first; none names none anywhere.
+            var set = registry.Submit(line: "machine.default cabinet ../carts/gun.cgb.cartridge.json");
+
+            Assert.False(condition: set.IsError, userMessage: set.Output);
+            Assert.Contains(expectedSubstring: "default=../carts/gun.cgb.cartridge.json preferDefault=true", actualString: set.Output);
+            Assert.DoesNotContain(expectedSubstring: "default", actualString: File.ReadAllText(path: Path.Combine(path1: root.PathOf(name: "local"), path2: WorldMachineContentFolder.SettingsFile)));
+            Reload(fixture: fixture, root: root);
+            Assert.Equal(expected: "../carts/gun.cgb.cartridge.json", actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Assert.Contains(expectedSubstring: "default=none", actualString: registry.Submit(line: "machine.default cabinet none").Output);
+            Reload(fixture: fixture, root: root);
+            Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Assert.Contains(expectedSubstring: "preferDefault=true default=none |", actualString: registry.Submit(line: "machine.content cabinet").Output);
+
+            // The verb takes a mountable file the folders hold, from a local console or seat only.
+            Assert.True(condition: registry.Submit(line: "machine.default cabinet").IsError);
+            Assert.Contains(expectedSubstring: "cannot be mounted", actualString: registry.Submit(line: "machine.default cabinet banked.rom").Output);
+            Assert.Contains(expectedSubstring: "no machine 'nobody'", actualString: registry.Submit(line: "machine.default nobody plain.rom").Output);
+            Assert.Contains(
+                expectedSubstring: "requires a local console or seat",
+                actualString: registry.SubmitSession(line: "machine.default cabinet plain.rom", session: new TextCommandSource(registry: registry).CreateSession(principal: Principal.Peer(index: 0, generation: 0))).Output
+            );
+
+            // A folder whose settings cannot be written refuses by name.
+            var localSettings = Path.Combine(path1: root.PathOf(name: "local"), path2: WorldMachineContentFolder.SettingsFile);
+
+            File.Delete(path: localSettings);
+            _ = Directory.CreateDirectory(path: localSettings);
+            Assert.Contains(expectedSubstring: $"cannot write {WorldMachineContentFolder.SettingsFile}", actualString: registry.Submit(line: "machine.default cabinet plain.rom").Output);
+        }
+    }
+    // A default the machine cannot boot leaves it on its authored content, refused by folder and never by the default's
+    // own name; settings are read strictly.
+    [Theory]
+    [InlineData("{ \"schema\": \"puck.content-folder.v1\", \"default\": \"absent.rom\" }", "names a default the folder does not hold")]
+    [InlineData("{ \"schema\": \"puck.content-folder.v1\", \"default\": \"banked.rom\" }", "names a default the engine cannot mount")]
+    [InlineData("{ \"schema\": \"puck.content-folder.v1\", \"defualt\": \"plain.rom\" }", "has unknown member 'defualt'")]
+    [InlineData("{ \"schema\": \"puck.content-folder.v2\", \"default\": \"plain.rom\" }", "must carry schema")]
+    [InlineData("{ \"schema\": \"puck.content-folder.v1\", \"default\": 7 }", "member 'default' must be a string")]
+    [InlineData("{ \"schema\": \"puck.content-folder.v1\", \"default\": \"../carts/x.rom\" }", "default must be the bare name of a file in the folder")]
+    [InlineData("[]", "must be a JSON object")]
+    [InlineData("{ not json", "is not valid JSON")]
+    [InlineData(null, "is unreadable")]
+    public void AFolderDefaultTheMachineCannotBootLeavesItsAuthoredContent(string? settings, string refusal) {
+        using var root = Layout();
+        var path = Path.Combine(path1: root.PathOf(name: "local"), path2: WorldMachineContentFolder.SettingsFile);
+
+        if (settings is null) {
+            _ = Directory.CreateDirectory(path: path);
+        } else {
+            File.WriteAllText(contents: settings, path: path);
+        }
+
+        var (fixture, registry) = Boot(contentFolders: ["../carts", "../local"], preferFolderDefault: true, root: root);
+
+        using (fixture) {
+            Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+            Assert.Contains(expectedSubstring: $"defaultRefused=\"folder '../local' {WorldMachineContentFolder.SettingsFile} {refusal}", actualString: registry.Submit(line: "machine.content cabinet").Output);
+        }
+    }
+    [Fact]
+    public void FolderSettingsNameABareFileOrNone() {
+        using var root = Layout();
+        var local = root.PathOf(name: "local");
+
+        File.WriteAllText(contents: "{ \"schema\": \"puck.content-folder.v1\", \"default\": null }", path: Path.Combine(path1: local, path2: WorldMachineContentFolder.SettingsFile));
+        Assert.True(condition: WorldMachineContentFolder.TryList(catalog: TestMachines.Catalog(), documentDirectory: root.PathOf(name: "world"), entries: out var entries, folders: out var folders, machine: WithCabinet(contentFolders: ["../local"]).Machines[^1], reason: out var reason), userMessage: reason);
+        Assert.False(condition: WorldMachineContentFolder.TryDefault(entries: entries, entry: out _, folders: folders, refusal: out var refusal));
+        Assert.Null(@object: refusal);
+        File.WriteAllBytes(bytes: new byte[5000], path: Path.Combine(path1: local, path2: WorldMachineContentFolder.SettingsFile));
+        Assert.True(condition: WorldMachineContentFolder.TryList(catalog: TestMachines.Catalog(), documentDirectory: root.PathOf(name: "world"), entries: out entries, folders: out folders, machine: WithCabinet(contentFolders: ["../local"]).Machines[^1], reason: out reason), userMessage: reason);
+        Assert.Contains(expectedSubstring: "is larger than", actualString: Assert.Single(collection: folders).SettingsRefusal);
+        Assert.Throws<ArgumentException>(testCode: () => WorldMachineContentFolder.WriteSettings(folder: local, name: WorldMachineContentFolder.SettingsFile));
+        Assert.Throws<ArgumentException>(testCode: () => WorldMachineContentFolder.WriteSettings(folder: local, name: ".."));
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: WithCabinet(contentFolders: null, preferFolderDefault: true), machines: TestMachines.Catalog(), neighbours: null, reason: out var unfoldered));
+        Assert.Contains(expectedSubstring: "preferFolderDefault needs contentFolders", actualString: unfoldered);
+    }
     [Fact]
     public void TheFoldersListWhatTheEngineMountsAndASwapMountsItByName() {
         using var root = Layout();
