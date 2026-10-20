@@ -446,6 +446,79 @@ public sealed class AuthoredCommandSet {
     /// <summary>Gets the commands, ordinal-ordered by name.</summary>
     public ImmutableArray<AuthoredCommand> Commands { get; }
 
+    /// <summary>Returns why an authored line may not call a verb with these facts, or <see langword="null"/> when it
+    /// may: an authored line calls only what a binding document may name, a bindable verb answering anyone.</summary>
+    /// <param name="metadata">The called verb's facts.</param>
+    /// <returns>The refusal clause, or <see langword="null"/>.</returns>
+    public static string? RefusesCall(CommandMetadata metadata) {
+        if (metadata.Audience != CommandAudience.Anyone) {
+            return "which answers the operator alone; an authored command calls only what a binding may name";
+        }
+
+        return ((metadata.Bindability == CommandBindability.Bindable)
+            ? null
+            : "which is not bindable; an authored command calls only what a binding may name");
+    }
+    /// <summary>Checks this set against a vocabulary of registered verbs: no command takes a registered verb's name,
+    /// every line calls a registered verb a binding may name (<see cref="RefusesCall"/>) or another command of the
+    /// set, and no command reaches itself through the set.</summary>
+    /// <param name="registered">Returns a registered verb's facts by name or alias, ignoring case, or
+    /// <see langword="null"/> for a name it does not know.</param>
+    /// <param name="refuseUnknown">Whether a line calling a name <paramref name="registered"/> does not know is
+    /// refused: true against a live registry, false against a catalog that may not hold every verb.</param>
+    /// <param name="errors">The list each refusal is appended to, naming the command and line.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="registered"/> or <paramref name="errors"/> is
+    /// <see langword="null"/>.</exception>
+    public void CheckAgainst(Func<string, CommandMetadata?> registered, bool refuseUnknown, List<string> errors) {
+        ArgumentNullException.ThrowIfNull(argument: registered);
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        foreach (var command in Commands) {
+            if (registered(arg: command.Name) is { } shadowed) {
+                errors.Add(item: $"command '{command.Name}' takes the name of the engine verb '{shadowed.Name}'; an authored command never shadows a registered verb or alias.");
+            }
+
+            for (var index = 0; (index < command.Lines.Length); index++) {
+                var verb = command.Lines[index].Verb;
+
+                if (TryGet(command: out _, name: verb)) {
+                    continue;
+                }
+
+                if (registered(arg: verb) is not { } called) {
+                    if (refuseUnknown) {
+                        errors.Add(item: $"command '{command.Name}' line {(index + 1)} calls '{verb}', which no registered verb or authored command answers.");
+                    }
+                } else if (RefusesCall(metadata: called) is { } refusal) {
+                    errors.Add(item: $"command '{command.Name}' line {(index + 1)} calls '{verb}', {refusal}.");
+                }
+            }
+
+            if (FindCycle(path: [command.Name]) is { } cycle) {
+                errors.Add(item: $"command '{command.Name}' calls itself: {string.Join(separator: " -> ", values: cycle)}.");
+            }
+        }
+    }
+
+    private List<string>? FindCycle(List<string> path) {
+        _ = TryGet(command: out var command, name: path[^1]);
+
+        foreach (var line in command!.Lines) {
+            if (!TryGet(command: out var callee, name: line.Verb)) {
+                continue;
+            }
+
+            if (string.Equals(a: callee!.Name, b: path[0], comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                return [.. path, callee.Name];
+            }
+
+            if (!path.Contains(value: callee.Name, comparer: StringComparer.OrdinalIgnoreCase) && (FindCycle(path: [.. path, callee.Name]) is { } cycle)) {
+                return cycle;
+            }
+        }
+
+        return null;
+    }
     /// <summary>Finds the command a verb token names, ignoring case.</summary>
     /// <param name="name">The verb token.</param>
     /// <param name="command">When this method returns <see langword="true"/>, the command.</param>

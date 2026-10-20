@@ -474,7 +474,7 @@ public sealed partial class InputRouter : IDisposable {
         ) {
             m_lastInputTickBySlot[slot] = tick;
         }
-        var activeCommands = ModalityFor(slot: slot).ActiveCommands;
+        var modality = ModalityFor(slot: slot);
 
         var physicalControl = new HeldControlId(
             Device: signal.DeviceId,
@@ -633,7 +633,7 @@ public sealed partial class InputRouter : IDisposable {
                 signal: in signal
             );
             var controlId = physicalControl;
-            var sourceCommandActive = ((commandId < activeCommands.Length) && activeCommands[commandId]);
+            var sourceCommandActive = modality.IsActive(commandId: commandId);
 
             var memoIndex = IndexOfMemo(
                 commandId: commandId,
@@ -1277,14 +1277,7 @@ public sealed partial class InputRouter : IDisposable {
         )
         );
     }
-    private bool IsSourceCommandActive(int slot, ushort commandId) {
-        var activity = ModalityFor(slot: slot).ActiveCommands;
-
-        return (
-            (commandId < activity.Length) &&
-            activity[commandId]
-        );
-    }
+    private bool IsSourceCommandActive(int slot, ushort commandId) => ModalityFor(slot: slot).IsActive(commandId: commandId);
     private CommandModality ModalityFor(int slot) {
         return (m_modalityBySlot.TryGetValue(
             key: slot,
@@ -2052,7 +2045,7 @@ public sealed partial class InputRouter : IDisposable {
             List<ushort>? commandsToDrop = null;
 
             foreach (var (commandId, state) in held) {
-                if (!next.ActiveCommands[commandId]) {
+                if (!next.IsActive(commandId: commandId)) {
                     cancellations ??= [];
 
                     AppendCancellations(
@@ -2101,7 +2094,7 @@ public sealed partial class InputRouter : IDisposable {
         foreach (var (key, _) in m_toggleLatches) {
             if (
                 (key.Slot == slot) &&
-                !next.ActiveCommands[key.CommandId]
+                !next.IsActive(commandId: key.CommandId)
             ) {
                 (latchesToDrop ??= []).Add(item: key);
             }
