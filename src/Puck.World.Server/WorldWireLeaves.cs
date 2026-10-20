@@ -22,7 +22,7 @@ public static class WorldWireLeaves {
         Generation: reader.ReadInt32()
     );
     /// <summary>Reads a traveler's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), refusing a
-    /// value outside the reduced interval <c>[-pi, pi)</c>, which no accumulation produces.</summary>
+    /// value outside the reduced interval <c>[-pi, pi]</c>, which no accumulation produces.</summary>
     public static Puck.Maths.FixedQ4816 ReadTravelTurn(ref WireReader reader, string field) {
         var turn = reader.ReadFixed();
 
@@ -31,7 +31,7 @@ public static class WorldWireLeaves {
             !WorldFrameIsometry.IsTurn(turn: turn)
         ) {
             reader.Fail(
-                detail: $"{field} {turn} is outside the reduced turn interval [-pi, pi)",
+                detail: $"{field} {turn} is outside the reduced turn interval [-pi, pi]",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
