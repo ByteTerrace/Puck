@@ -1,5 +1,6 @@
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick;
 

@@ -15,6 +15,13 @@ public static class LowDiscrepancy {
     private const ulong PlasticInverseQ64 = 13925035116211876495UL;         // round(2^64 / ρ)
     private const ulong PlasticInverseSquaredQ64 = 10511698010929265437UL;  // round(2^64 / ρ²)
 
+    /// <summary>The first R2 increment at 32 bits, <c>round(2^32 / ρ)</c>: <see cref="R2"/>'s first Q64 constant
+    /// rounded to nearest, the alpha a 32-bit wrapping recurrence (a GPU dither) multiplies its index by.</summary>
+    public const uint R2AlphaXQ32 = ((uint)((PlasticInverseQ64 + (1UL << 31)) >> 32));
+    /// <summary>The second R2 increment at 32 bits, <c>round(2^32 / ρ²)</c>, rounded from <see cref="R2"/>'s second
+    /// Q64 constant the same way.</summary>
+    public const uint R2AlphaYQ32 = ((uint)((PlasticInverseSquaredQ64 + (1UL << 31)) >> 32));
+
     /// <summary>Returns the <paramref name="index"/>-th point of the one-dimensional golden-ratio sequence.</summary>
     /// <param name="index">The point index; consecutive indices land maximally far apart.</param>
     /// <returns>The fraction <c>frac(index / φ)</c> in <c>[0, 1)</c>.</returns>

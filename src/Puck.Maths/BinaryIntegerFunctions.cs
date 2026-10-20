@@ -1383,6 +1383,84 @@ public static class BinaryIntegerFunctions {
             : (sum >= left)
         );
     }
+    /// <summary>Adds two values, clamping to the carrier's extremes instead of wrapping.</summary>
+    /// <typeparam name="T">The binary integer type, which must declare its extremes.</typeparam>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <returns>The exact sum when it is representable; otherwise <see cref="IMinMaxValue{TSelf}.MaxValue"/> when
+    /// <paramref name="right"/> is positive and <see cref="IMinMaxValue{TSelf}.MinValue"/> when it is negative, the
+    /// extreme the exact sum lies beyond.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T AddSaturating<T>(this T left, T right) where T : IBinaryInteger<T>, IMinMaxValue<T> =>
+        (TryAdd(
+            left: left,
+            right: right,
+            sum: out var sum
+        )
+            ? sum
+            : (T.IsNegative(value: right)
+                ? T.MinValue
+                : T.MaxValue));
+    /// <summary>Subtracts one value from another, clamping to the carrier's extremes instead of wrapping.</summary>
+    /// <typeparam name="T">The binary integer type, which must declare its extremes.</typeparam>
+    /// <param name="left">The minuend.</param>
+    /// <param name="right">The subtrahend.</param>
+    /// <returns>The exact difference when it is representable; otherwise <see cref="IMinMaxValue{TSelf}.MinValue"/>
+    /// when <paramref name="right"/> is positive and <see cref="IMinMaxValue{TSelf}.MaxValue"/> when it is negative,
+    /// the extreme the exact difference lies beyond. An unsigned difference below zero clamps to zero.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T SubtractSaturating<T>(this T left, T right) where T : IBinaryInteger<T>, IMinMaxValue<T> {
+        var difference = unchecked((left - right));
+
+        // The exact difference moves against the subtrahend's sign; a wrapped one moves with it.
+        return (T.IsNegative(value: right)
+            ? ((difference < left)
+                ? T.MaxValue
+                : difference)
+            : ((difference > left)
+                ? T.MinValue
+                : difference));
+    }
+    /// <summary>Multiplies two values, clamping to the carrier's extremes instead of wrapping.</summary>
+    /// <typeparam name="T">The binary integer type, which must declare its extremes.</typeparam>
+    /// <param name="left">The first factor.</param>
+    /// <param name="right">The second factor.</param>
+    /// <returns>The exact product when it is representable; otherwise <see cref="IMinMaxValue{TSelf}.MinValue"/> when
+    /// exactly one factor is negative and <see cref="IMinMaxValue{TSelf}.MaxValue"/> otherwise, the extreme the exact
+    /// product lies beyond.</returns>
+    public static T MultiplySaturating<T>(this T left, T right) where T : IBinaryInteger<T>, IMinMaxValue<T> =>
+        (TryMultiply(
+            left: left,
+            product: out var product,
+            right: right
+        )
+            ? product
+            : ((T.IsNegative(value: left) != T.IsNegative(value: right))
+                ? T.MinValue
+                : T.MaxValue));
+    /// <summary>Folds a signed value onto the naturals, <c>0, −1, 1, −2, 2, … ↦ 0, 1, 2, 3, 4, …</c>, so small
+    /// magnitudes of either sign take small codes.</summary>
+    /// <typeparam name="TSigned">The signed binary integer type.</typeparam>
+    /// <typeparam name="TUnsigned">The unsigned binary integer type of the same width.</typeparam>
+    /// <param name="value">The value to fold.</param>
+    /// <returns><c>(value &lt;&lt; 1) ^ (value &gt;&gt; (width − 1))</c> read as unsigned: twice the magnitude, less
+    /// one for a negative value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TUnsigned ZigZagEncode<TSigned, TUnsigned>(this TSigned value)
+        where TSigned : IBinaryInteger<TSigned>, ISignedNumber<TSigned>
+        where TUnsigned : IBinaryInteger<TUnsigned>, IUnsignedNumber<TUnsigned> =>
+        TUnsigned.CreateTruncating(value: ((value << 1) ^ (value >> (((int)value.GetByteCount() * 8) - 1))));
+    /// <summary>Unfolds a <see cref="ZigZagEncode{TSigned, TUnsigned}"/> code back to its signed value.</summary>
+    /// <typeparam name="TSigned">The signed binary integer type of the same width.</typeparam>
+    /// <typeparam name="TUnsigned">The unsigned binary integer type.</typeparam>
+    /// <param name="folded">The code to unfold.</param>
+    /// <returns><c>(folded &gt;&gt; 1) ^ −(folded &amp; 1)</c> read as signed: an even code's half, an odd code's
+    /// negated half rounded away from zero.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TSigned ZigZagDecode<TSigned, TUnsigned>(this TUnsigned folded)
+        where TSigned : IBinaryInteger<TSigned>, ISignedNumber<TSigned>
+        where TUnsigned : IBinaryInteger<TUnsigned>, IUnsignedNumber<TUnsigned> =>
+        (TSigned.CreateTruncating(value: (folded >> 1)) ^ -TSigned.CreateTruncating(value: (folded & TUnsigned.One)));
     /// <summary>Multiplies two values, reporting whether the exact product is representable in <typeparamref name="T"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="left">The first factor.</param>

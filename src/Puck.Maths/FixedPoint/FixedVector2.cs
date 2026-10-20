@@ -92,6 +92,56 @@ public readonly record struct FixedVector2(FixedQ4816 X, FixedQ4816 Y)
         return true;
     }
 
+    /// <summary>Shortens the vector to a length of at most <paramref name="maximum"/>, keeping its direction.</summary>
+    /// <param name="maximum">The greatest length allowed.</param>
+    /// <returns>This vector unchanged when its exact squared length is at most <c>maximum²</c>; otherwise
+    /// <see cref="WithLength"/> at <paramref name="maximum"/>, whose length never exceeds it.</returns>
+    public FixedVector2 ClampLength(FixedQ4816 maximum) =>
+        (FixedVectorMath.IsMagnitudeAtMost(
+            bound: maximum.Value,
+            x: X.Value,
+            y: Y.Value
+        )
+            ? this
+            : WithLength(length: maximum));
+    /// <summary>Converts a single-precision <see cref="System.Numerics.Vector2"/> componentwise into fixed point —
+    /// the planar door an authored or input-side float takes into the deterministic world.</summary>
+    /// <param name="value">The vector to convert.</param>
+    /// <returns>The nearest fixed-point vector, each component rounded to nearest with ties to even by
+    /// <see cref="FixedQ4816.FromDouble"/>, saturating at the carrier's extremes; a not-a-number component becomes
+    /// zero.</returns>
+    public static FixedVector2 FromVector2(System.Numerics.Vector2 value) =>
+        new(
+            X: FixedQ4816.FromDouble(value: value.X),
+            Y: FixedQ4816.FromDouble(value: value.Y)
+        );
+    /// <summary>Converts to a single-precision <see cref="System.Numerics.Vector2"/> for presentation.</summary>
+    /// <returns>The nearest single-precision vector; precision may be lost for large magnitudes.</returns>
+    public System.Numerics.Vector2 ToVector2() =>
+        new(
+            x: ((float)X),
+            y: ((float)Y)
+        );
+    /// <summary>Rescales the vector to a length of at most <paramref name="length"/> along its own direction, each
+    /// component rounded toward zero.</summary>
+    /// <param name="length">The length to scale to.</param>
+    /// <returns>The vector along this direction whose exact length never exceeds <paramref name="length"/>, each
+    /// component within one raw (plus <c>2⁻⁴⁵</c> of its magnitude) below the exact scaled component; <see cref="Zero"/>
+    /// for a zero vector or a non-positive length.</returns>
+    /// <remarks>The exact sum of squares is rooted up and each component is truncated toward zero, so the bound holds
+    /// by direction, never by a repair after a nearest rounding.</remarks>
+    public FixedVector2 WithLength(FixedQ4816 length) {
+        var (x, y) = FixedVectorMath.WithLengthTowardZero(
+            length: length.Value,
+            x: X.Value,
+            y: Y.Value
+        );
+
+        return new(
+            X: FixedQ4816.FromRawBits(value: x),
+            Y: FixedQ4816.FromRawBits(value: y)
+        );
+    }
     /// <summary>Gets the dot product of two vectors.</summary>
     /// <param name="left">The first vector.</param>
     /// <param name="right">The second vector.</param>

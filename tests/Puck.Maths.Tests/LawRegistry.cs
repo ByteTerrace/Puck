@@ -928,6 +928,7 @@ internal static partial class LawRegistry {
         .. MagicConstantCases(),
         .. SignedByteVectorCases(),
         .. VectorFunctionsCases(),
+        .. SharedKernelCases(),
     ];
     /// <summary>Builds a declared case: looks up the id's authored declaration in <see cref="LawDeclarations.All"/>
     /// for the tier, covered members and legs, and pairs it with the run delegate given here — the one part of a case

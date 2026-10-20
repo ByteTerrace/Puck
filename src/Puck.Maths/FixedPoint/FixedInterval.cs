@@ -163,13 +163,13 @@ public readonly record struct FixedInterval {
         if (right.Lower == right.Upper) {
             var denominator = right.Lower.Value;
 
-            var (lowFloor, lowCeiling) = DirectedQuotient(denominator: denominator, numerator: (((Int128)left.Lower.Value) << FractionBitCount));
+            var (lowFloor, lowCeiling) = FixedDirectedRounding.DirectedQuotients(denominator: denominator, numerator: (((Int128)left.Lower.Value) << FractionBitCount));
 
             if (left.Lower == left.Upper) {
                 return Exact(lower: lowFloor, upper: lowCeiling);
             }
 
-            var (highFloor, highCeiling) = DirectedQuotient(denominator: denominator, numerator: (((Int128)left.Upper.Value) << FractionBitCount));
+            var (highFloor, highCeiling) = FixedDirectedRounding.DirectedQuotients(denominator: denominator, numerator: (((Int128)left.Upper.Value) << FractionBitCount));
 
             return Exact(lower: Int128.Min(x: lowFloor, y: highFloor), upper: Int128.Max(x: lowCeiling, y: highCeiling));
         }
@@ -182,7 +182,7 @@ public readonly record struct FixedInterval {
         // A quotient is monotone in each operand over a divisor of one sign, so its extremes sit at the four corners.
         foreach (var numerator in numerators) {
             foreach (var denominator in denominators) {
-                var (floor, ceiling) = DirectedQuotient(
+                var (floor, ceiling) = FixedDirectedRounding.DirectedQuotients(
                     denominator: denominator,
                     numerator: (((Int128)numerator) << FractionBitCount)
                 );
@@ -491,56 +491,10 @@ public readonly record struct FixedInterval {
     // Int128's arithmetic shift is the floor; the ceiling is the negated floor of the negation.
     private static Int128 Ceiling(Int128 value, int shift) =>
         -((-value) >> shift);
-    // The floor and ceiling of numerator/denominator for a non-zero denominator. A positive power-of-two denominator is
-    // an arithmetic shift, which floors, and its ceiling the negated floor of the negation; a numerator inside the
-    // 64-bit range divides in 64 bits, whose truncated quotient and remainder are Int128's (long.MinValue is left out,
-    // since its quotient by −1 is not a long).
-    private static (Int128 Floor, Int128 Ceiling) DirectedQuotient(Int128 numerator, long denominator) {
-        if ((denominator > 0L) && long.IsPow2(value: denominator)) {
-            var shift = ((int)long.TrailingZeroCount(value: denominator));
-
-            return ((numerator >> shift), Ceiling(shift: shift, value: numerator));
-        }
-
-        if ((numerator > long.MinValue) && (numerator <= long.MaxValue)) {
-            var (narrowQuotient, narrowRemainder) = Math.DivRem(left: ((long)numerator), right: denominator);
-
-            if (narrowRemainder == 0L) {
-                return (narrowQuotient, narrowQuotient);
-            }
-
-            return (((narrowRemainder < 0L) != (denominator < 0L))
-                ? ((((Int128)narrowQuotient) - 1), narrowQuotient)
-                : (narrowQuotient, (((Int128)narrowQuotient) + 1)));
-        }
-
-        var quotient = Int128.DivRem(left: numerator, right: denominator);
-        var floor = quotient.Quotient;
-        var ceiling = quotient.Quotient;
-
-        if (quotient.Remainder != Int128.Zero) {
-            // Truncation rounds toward zero: a positive exact quotient's floor is the truncation, a negative one's the
-            // truncation less one, and the ceiling the other way about.
-            if ((quotient.Remainder < Int128.Zero) != (denominator < 0L)) {
-                --floor;
-            } else {
-                ++ceiling;
-            }
-        }
-
-        return (floor, ceiling);
-    }
     private static Int128 FloorRoot(UInt128 radicand) =>
         ((Int128)radicand.SquareRoot());
-    private static Int128 CeilingRoot(UInt128 radicand) {
-        var root = radicand.SquareRoot();
-
-        if ((root * root) != radicand) {
-            ++root;
-        }
-
-        return ((Int128)root);
-    }
+    private static Int128 CeilingRoot(UInt128 radicand) =>
+        ((Int128)FusedArithmetic.CeilingSquareRoot(radicand: radicand));
     // The least and greatest exact squares over an interval, in raw² units; a magnitude of 2⁶³ squares to 2¹²⁶.
     private static UInt128 LeastSquare(FixedInterval value) {
         if (value.Contains(value: FixedQ4816.Zero)) {

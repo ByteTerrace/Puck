@@ -314,8 +314,8 @@ internal static class FixedPointContractClaims {
 
         return null;
     }
-    /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationTicks"/> at every rate in
-    /// <see cref="TickRates"/>, and <see cref="FixedTickConversion.DurationEngineTicks"/> as its
+    /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationTicks(FixedQ4816, ulong)"/> at every rate in
+    /// <see cref="TickRates"/>, and <see cref="FixedTickConversion.DurationEngineTicks(FixedQ4816)"/> as its
     /// <see cref="FixedTickConversion.TicksPerSecond"/> case, match independent BigInteger rational ceiling division
     /// over a curated edge set (zero, the smallest positive raw, one-second and near-one-second boundaries, negative
     /// raws) plus a dense sweep across the first five seconds (positive and negative), so every residue class the

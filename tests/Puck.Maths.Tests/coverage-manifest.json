@@ -637,6 +637,13 @@
     },
     {
       "CoveredBy": [
+        "integer.saturating-arithmetic-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.AddSaturating(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "integer.align-bit-oracle",
         "integer.bit-kernel-refusals"
       ],
@@ -827,6 +834,13 @@
     },
     {
       "CoveredBy": [
+        "integer.saturating-arithmetic-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.MultiplySaturating(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "integer.bit-kernel-refusals",
         "integer.fermat-mask-bit-oracle"
       ],
@@ -940,6 +954,13 @@
     },
     {
       "CoveredBy": [
+        "integer.saturating-arithmetic-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.SubtractSaturating(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "integer.try-add-and-try-narrow-vs-exact"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.TryAdd(T,T,T&)",
@@ -964,6 +985,20 @@
         "integer.try-add-and-try-narrow-vs-exact"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.TryNarrow(TWide,TNarrow&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.zigzag-bijection"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.ZigZagDecode(TUnsigned)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.zigzag-bijection"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.ZigZagEncode(TSigned)",
       "State": "covered"
     },
     {
@@ -5542,6 +5577,29 @@
     },
     {
       "CoveredBy": [
+        "deep.directed-rounding-signed-quotients-vs-oracle",
+        "directed-rounding.signed-quotients-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedDirectedRounding.CeilingQuotient(System.Int128,System.Int128)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.directed-rounding-signed-quotients-vs-oracle",
+        "directed-rounding.signed-quotients-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedDirectedRounding.FloorQuotient(System.Int128,System.Int128)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "directed-rounding.double-enclosure-seams"
+      ],
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingFromDouble(System.Double,Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "directed-rounding.ceiling-magnitude-is-least-upper-bound"
       ],
       "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingMagnitude(System.Int64,System.Int64,System.Int64&)",
@@ -5580,6 +5638,13 @@
         "directed-rounding.ceiling-square-root-is-least-upper-bound"
       ],
       "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingSquareRoot(System.Int64,System.Int32,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "directed-rounding.double-enclosure-seams"
+      ],
+      "Id": "Puck.Maths.FixedDirectedRounding.TryFloorFromDouble(System.Double,Puck.Maths.FixedQ4816&)",
       "State": "covered"
     },
     {
@@ -7874,6 +7939,24 @@
     },
     {
       "CoveredBy": [
+        "deep.scalar-from-degrees-vs-exact-rational",
+        "scalar.from-degrees-double-ladder",
+        "scalar.from-degrees-vs-exact-rational"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.FromDegrees(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.scalar-from-degrees-vs-exact-rational",
+        "scalar.from-degrees-double-ladder",
+        "scalar.from-degrees-vs-exact-rational"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.FromDegrees(System.Double)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "scalar.double-projection-vs-oracle",
         "scalar.grid-and-construction"
       ],
@@ -7896,6 +7979,13 @@
         "scalar.grid-and-construction"
       ],
       "Id": "Puck.Maths.FixedQ4816.FromRawBits(System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.HalfPi",
       "State": "covered"
     },
     {
@@ -8165,6 +8255,41 @@
     },
     {
       "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Pi",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.PiQ189",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.PiQ189FractionBitCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.PiQ189LowLimb",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.PiQ189MiddleLimb",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "mass-properties.pinned-pi-is-correctly-rounded"
       ],
       "Id": "Puck.Maths.FixedQ4816.PiQ61",
@@ -8318,6 +8443,13 @@
     },
     {
       "CoveredBy": [
+        "scalar.pi-constants-vs-machin"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Tau",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "scalar.grid-and-construction"
       ],
       "Id": "Puck.Maths.FixedQ4816.TotalBitCount",
@@ -8390,6 +8522,14 @@
         "scalar.text-round-trip"
       ],
       "Id": "Puck.Maths.FixedQ4816.Value",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.scalar-wrap-angle-residue-and-range",
+        "scalar.wrap-angle-residue-and-range"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.WrapAngle(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -8471,7 +8611,8 @@
     },
     {
       "CoveredBy": [
-        "scalar.double-projection-vs-oracle"
+        "scalar.double-projection-vs-oracle",
+        "scalar.float-projection-through-double"
       ],
       "Id": "Puck.Maths.FixedQ4816.op_Explicit(Puck.Maths.FixedQ4816)",
       "State": "covered"
@@ -8644,6 +8785,14 @@
     },
     {
       "CoveredBy": [
+        "deep.quaternion-from-yaw-pitch-roll-product-and-readback",
+        "quaternion.from-yaw-pitch-roll-product-and-readback"
+      ],
+      "Id": "Puck.Maths.FixedQuaternion.FromYawPitchRoll(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "quaternion.additive-group-exact",
         "quaternion.axis-angle-ladder",
         "quaternion.dot-vs-oracle",
@@ -8811,6 +8960,13 @@
         "quaternion.slerp-endpoints-and-arc"
       ],
       "Id": "Puck.Maths.FixedQuaternion.Y",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.yaw-of-facing-and-attitude"
+      ],
+      "Id": "Puck.Maths.FixedQuaternion.Yaw()",
       "State": "covered"
     },
     {
@@ -9144,6 +9300,13 @@
     },
     {
       "CoveredBy": [
+        "core.fixed-saturate-multiply-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedSaturate.Multiply(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.fixed-saturate-clamps-to-the-extremes"
       ],
       "Id": "Puck.Maths.FixedSaturate.ToInt64(System.Int128)",
@@ -9394,16 +9557,54 @@
     },
     {
       "CoveredBy": [
-        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
+        "core.decimal-durations-and-rate-periods",
+        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
+        "deep.core-decimal-durations-and-rate-periods"
       ],
       "Id": "Puck.Maths.FixedTickConversion.DurationEngineTicks(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
+        "core.decimal-durations-and-rate-periods",
+        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
+        "deep.core-decimal-durations-and-rate-periods"
+      ],
+      "Id": "Puck.Maths.FixedTickConversion.DurationEngineTicks(System.Decimal)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.decimal-durations-and-rate-periods",
+        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
+        "deep.core-decimal-durations-and-rate-periods"
       ],
       "Id": "Puck.Maths.FixedTickConversion.DurationTicks(Puck.Maths.FixedQ4816,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.decimal-durations-and-rate-periods",
+        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
+        "deep.core-decimal-durations-and-rate-periods"
+      ],
+      "Id": "Puck.Maths.FixedTickConversion.DurationTicks(System.Decimal,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.decimal-durations-and-rate-periods",
+        "deep.core-decimal-durations-and-rate-periods"
+      ],
+      "Id": "Puck.Maths.FixedTickConversion.PerRate(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.seconds-of-ticks-vs-oracle",
+        "deep.core-seconds-of-ticks-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedTickConversion.SecondsOf(System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
@@ -9411,6 +9612,13 @@
         "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
       ],
       "Id": "Puck.Maths.FixedTickConversion.TicksPerSecond",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.decimal-durations-and-rate-periods"
+      ],
+      "Id": "Puck.Maths.FixedTickConversion.ToSeconds(System.UInt64)",
       "State": "covered"
     },
     {
@@ -9437,6 +9645,13 @@
     },
     {
       "CoveredBy": [
+        "vector.plane-doors-and-clamp"
+      ],
+      "Id": "Puck.Maths.FixedVector2.ClampLength(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.vector-narrow-lane-vs-oracle",
         "deep.vector-plane-products-vs-oracle",
         "vector.exact-algebra-on-the-sublattice",
@@ -9449,6 +9664,13 @@
         "vector.plane-products-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector2.Dot(Puck.Maths.FixedVector2,Puck.Maths.FixedVector2)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.plane-doors-and-clamp"
+      ],
+      "Id": "Puck.Maths.FixedVector2.FromVector2(System.Numerics.Vector2)",
       "State": "covered"
     },
     {
@@ -9478,6 +9700,13 @@
         "vector.componentwise-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector2.Lerp(Puck.Maths.FixedVector2,Puck.Maths.FixedVector2,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.plane-doors-and-clamp"
+      ],
+      "Id": "Puck.Maths.FixedVector2.ToVector2()",
       "State": "covered"
     },
     {
@@ -9513,6 +9742,13 @@
         "vector.plane-products-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector2.Wedge(Puck.Maths.FixedVector2,Puck.Maths.FixedVector2)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.plane-doors-and-clamp"
+      ],
+      "Id": "Puck.Maths.FixedVector2.WithLength(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -9620,6 +9856,14 @@
     },
     {
       "CoveredBy": [
+        "deep.vector-with-length-toward-zero",
+        "vector.with-length-toward-zero"
+      ],
+      "Id": "Puck.Maths.FixedVector3.ClampLength(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.compare-length-matches-the-squares"
       ],
       "Id": "Puck.Maths.FixedVector3.CompareLengthTo(Puck.Maths.FixedVector3)",
@@ -9668,9 +9912,19 @@
     },
     {
       "CoveredBy": [
-        "vector.is-within-matches-length"
+        "deep.vector-is-within-exact-squares",
+        "vector.is-within-exact-squares"
       ],
       "Id": "Puck.Maths.FixedVector3.IsWithin(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.vector-is-within-cone-vs-exact-rational",
+        "vector.is-within-cone-ladder",
+        "vector.is-within-cone-vs-exact-rational"
+      ],
+      "Id": "Puck.Maths.FixedVector3.IsWithinCone(Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -9750,6 +10004,13 @@
     },
     {
       "CoveredBy": [
+        "vector.reject-from-and-normalized"
+      ],
+      "Id": "Puck.Maths.FixedVector3.RejectFrom(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.componentwise-helpers-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector3.Round(Puck.Maths.FixedVector3)",
@@ -9760,6 +10021,13 @@
         "vector.presentation-ladder"
       ],
       "Id": "Puck.Maths.FixedVector3.ToVector3()",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.try-add-subtract-refuse-outside-carrier"
+      ],
+      "Id": "Puck.Maths.FixedVector3.TryAdd(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&)",
       "State": "covered"
     },
     {
@@ -9791,6 +10059,20 @@
     },
     {
       "CoveredBy": [
+        "vector.reject-from-and-normalized"
+      ],
+      "Id": "Puck.Maths.FixedVector3.TryRejectNormalized(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&,Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.try-add-subtract-refuse-outside-carrier"
+      ],
+      "Id": "Puck.Maths.FixedVector3.TrySubtract(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.unit-axes-are-exact"
       ],
       "Id": "Puck.Maths.FixedVector3.UnitX",
@@ -9808,6 +10090,14 @@
         "vector.unit-axes-are-exact"
       ],
       "Id": "Puck.Maths.FixedVector3.UnitZ",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.vector-with-length-toward-zero",
+        "vector.with-length-toward-zero"
+      ],
+      "Id": "Puck.Maths.FixedVector3.WithLength(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -9830,6 +10120,13 @@
         "vector.normalize-vs-ideal-and-staged"
       ],
       "Id": "Puck.Maths.FixedVector3.Y",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.yaw-of-facing-and-attitude"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Yaw()",
       "State": "covered"
     },
     {
@@ -12574,6 +12871,20 @@
     },
     {
       "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.FirstMultiplier64",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.FirstMultiplier64Inverse",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "sampling.bit-mix-constants-invert"
       ],
       "Id": "Puck.Maths.InvertibleBitMix.FirstMultiplierInverse",
@@ -12588,9 +12899,30 @@
     },
     {
       "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.FirstShift64",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.LastShift64",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "sampling.bit-mix-constants-invert"
       ],
       "Id": "Puck.Maths.InvertibleBitMix.MiddleShift",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.MiddleShift64",
       "State": "covered"
     },
     {
@@ -12603,9 +12935,31 @@
     },
     {
       "CoveredBy": [
+        "deep.sampling-bit-mix64-finalizer-and-inverse",
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.Mix64(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "sampling.bit-mix-constants-invert"
       ],
       "Id": "Puck.Maths.InvertibleBitMix.SecondMultiplier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.SecondMultiplier64",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.SecondMultiplier64Inverse",
       "State": "covered"
     },
     {
@@ -12621,6 +12975,14 @@
         "sampling.bit-mix-is-a-permutation"
       ],
       "Id": "Puck.Maths.InvertibleBitMix.Unmix(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.sampling-bit-mix64-finalizer-and-inverse",
+        "sampling.bit-mix64-finalizer-and-inverse"
+      ],
+      "Id": "Puck.Maths.InvertibleBitMix.Unmix64(System.UInt64)",
       "State": "covered"
     },
     {
@@ -12806,6 +13168,20 @@
         "sampling.low-discrepancy-recurrence"
       ],
       "Id": "Puck.Maths.LowDiscrepancy.R2(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.r2-alphas-are-the-rounded-increments"
+      ],
+      "Id": "Puck.Maths.LowDiscrepancy.R2AlphaXQ32",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.r2-alphas-are-the-rounded-increments"
+      ],
+      "Id": "Puck.Maths.LowDiscrepancy.R2AlphaYQ32",
       "State": "covered"
     },
     {
@@ -14563,9 +14939,66 @@
     },
     {
       "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.HashStreamA",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.HashStreamB",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.HashTumble",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.NoiseSeedStreamY",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.NoiseSeedStreamZ",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "sampling.pcg3d-lattice-noise-reference-and-corners"
       ],
       "Id": "Puck.Maths.Pcg3dLatticeNoise.Pcg3d(System.UInt32,System.UInt32,System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.PcgIncrement",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.PcgMultiplier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.sampling-scatter-point-and-hash-constants",
+        "sampling.scatter-point-and-hash-constants"
+      ],
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.ScatterPoint(System.Int32,System.Int32,System.UInt32,System.Int32,System.Int32)",
       "State": "covered"
     },
     {
@@ -20584,6 +21017,20 @@
     },
     {
       "CoveredBy": [
+        "core.rational-doors-exact"
+      ],
+      "Id": "Puck.Maths.Rational.FromDecimal(System.Decimal)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.rational-doors-exact"
+      ],
+      "Id": "Puck.Maths.Rational.FromDouble(System.Double)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "algebra.rational-field-axioms"
       ],
       "Id": "Puck.Maths.Rational.IsInteger",
@@ -20952,6 +21399,48 @@
         "presented.zeta-traces-vs-walk-counts"
       ],
       "Id": "Puck.Maths.RationalMaterial.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator..ctor(System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator.Advance(System.Int64,System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator.Phase",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator.QuietSteps(System.Int64,System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator.Reset()",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "rate.rational-accumulator-vs-ledger"
+      ],
+      "Id": "Puck.Maths.RationalRateAccumulator.Skip(System.Int64)",
       "State": "covered"
     },
     {
@@ -23651,6 +24140,20 @@
     },
     {
       "CoveredBy": [
+        "dynamics.follower-lane-replacement"
+      ],
+      "Id": "Puck.Maths.SecondOrderState.WithPosition(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "dynamics.follower-lane-replacement"
+      ],
+      "Id": "Puck.Maths.SecondOrderState.WithVelocity(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "dynamics.vector-lanes-independent"
       ],
       "Id": "Puck.Maths.SecondOrderState3..ctor(Puck.Maths.SecondOrderState,Puck.Maths.SecondOrderState,Puck.Maths.SecondOrderState)",
@@ -23682,6 +24185,20 @@
         "dynamics.vector-lanes-independent"
       ],
       "Id": "Puck.Maths.SecondOrderState3.Velocity",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "dynamics.follower-lane-replacement"
+      ],
+      "Id": "Puck.Maths.SecondOrderState3.WithPosition(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "dynamics.follower-lane-replacement"
+      ],
+      "Id": "Puck.Maths.SecondOrderState3.WithVelocity(Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {
@@ -26902,9 +27419,149 @@
     },
     {
       "CoveredBy": [
+        "vector-functions.attitude-readbacks"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.EulerOf(System.Numerics.Quaternion)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.easing-and-fract"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.Fract(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.attitude-readbacks"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.Heading(System.Single,System.Single)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.is-finite-vs-oracle"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Quaternion)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.is-finite-vs-oracle"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Vector2)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector-functions.is-finite-vs-oracle"
       ],
       "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.is-finite-vs-oracle"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Vector4)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.unorm-packing-vs-exact"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.PackRgba8(System.Numerics.Vector4)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.unorm-packing-vs-exact"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.PackUnorm2x16(System.Numerics.Vector2)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.shortest-arc-and-perpendicular"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.Perpendicular(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.attitude-readbacks"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.PitchOf(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.shortest-arc-and-perpendicular"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.ShortestArc(System.Numerics.Vector3,System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.easing-and-fract"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.Smoothstep(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.easing-and-fract"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.Smoothstep(T,T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.unorm-packing-vs-exact"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.ToUnorm8(System.Double)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.unorm-packing-vs-exact"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.ToUnorm8(System.Single)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.unorm-packing-vs-exact"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.UnpackRgba8(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.angle-wraps-range-and-congruence"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.WrapAngle(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.angle-wraps-range-and-congruence"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.WrapTurn(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.attitude-readbacks"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.YawOf(System.Numerics.Quaternion)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.attitude-readbacks"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.YawOf(System.Numerics.Vector3)",
       "State": "covered"
     },
     {
@@ -27613,6 +28270,14 @@
         "sampling.alias-table-frequency-distribution"
       ],
       "Id": "Puck.Maths.WeightedSampler.Create(System.ReadOnlySpan<System.ValueTuple<TElement,System.UInt64>>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.sampling-sample-once-matches-alias-table",
+        "sampling.sample-once-matches-alias-table"
+      ],
+      "Id": "Puck.Maths.WeightedSampler.SampleOnce(System.ReadOnlySpan<System.UInt64>,TGenerator&)",
       "State": "covered"
     },
     {

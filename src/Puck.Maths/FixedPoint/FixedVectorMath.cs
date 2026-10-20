@@ -335,24 +335,236 @@ public static class FixedVectorMath {
         );
         return true;
     }
-    // Whether the magnitude Length reports (the nearest raw Q16 root of x² + y² + z², saturating at MaxValue) is at
-    // most bound, decided on the squares alone. For a bound R with 0 ≤ R < MaxValue, round(√S) ≤ R exactly when
-    // S ≤ R² + R: the root rounds up past R only once √S > R + ½, and an integer S never equals (R + ½)². The sum of
-    // three squares and R² + R both stay below 2¹²⁸. A bound of MaxValue admits every vector, because the reported
-    // magnitude saturates there, and a negative bound admits none.
+    // The exact predicate x² + y² + z² ≤ bound² on the raw sums, which stay below 2¹²⁸; a negative bound admits
+    // nothing, zero admits only the zero vector.
     internal static bool IsMagnitudeAtMost(long x, long y, long z, long bound) {
         if (bound < 0L) {
             return false;
         }
 
-        if (bound == long.MaxValue) {
+        return (((Square(value: x) + Square(value: y)) + Square(value: z)) <= Square(value: bound));
+    }
+    // The exact planar predicate x² + y² ≤ bound².
+    internal static bool IsMagnitudeAtMost(long x, long y, long bound) {
+        if (bound < 0L) {
+            return false;
+        }
+
+        return ((Square(value: x) + Square(value: y)) <= Square(value: bound));
+    }
+    // (x, y, z) rescaled to a magnitude of at most `length` along its own direction, each lane rounded TOWARD ZERO so
+    // the result never exceeds `length`: the lanes are landed by an exact left shift so the largest sits in
+    // [2^45, 2^46), the exact sum of squares is rooted UP to R, and each lane is trunc(lane · length / R). Since
+    // R ≥ √S the truncation only shortens, and since √S ≥ 2^45 after landing, R overstates √S by less than 2⁻⁴⁵ of
+    // it, so each lane sits within one raw plus 2⁻⁴⁵ of the exact lane's magnitude below it.
+    internal static (long X, long Y, long Z) WithLengthTowardZero(long x, long y, long z, long length) {
+        var max = Math.Max(
+            val1: FusedArithmetic.RawMagnitude(value: x),
+            val2: Math.Max(
+                val1: FusedArithmetic.RawMagnitude(value: y),
+                val2: FusedArithmetic.RawMagnitude(value: z)
+            )
+        );
+
+        if (
+            (max == 0UL) ||
+            (length <= 0L)
+        ) {
+            return default;
+        }
+
+        var shift = Math.Max(
+            val1: 0,
+            val2: DirectionShift(rawMagnitude: max)
+        );
+
+        x = ScaleRaw(
+            shift: shift,
+            value: x
+        );
+        y = ScaleRaw(
+            shift: shift,
+            value: y
+        );
+        z = ScaleRaw(
+            shift: shift,
+            value: z
+        );
+
+        var root = FusedArithmetic.CeilingSquareRoot(radicand: ((Square(value: x) + Square(value: y)) + Square(value: z)));
+
+        return (
+            ScaleLaneTowardZero(
+                lane: x,
+                length: length,
+                root: root
+            ),
+            ScaleLaneTowardZero(
+                lane: y,
+                length: length,
+                root: root
+            ),
+            ScaleLaneTowardZero(
+                lane: z,
+                length: length,
+                root: root
+            )
+        );
+    }
+    // The planar WithLengthTowardZero, under the same landing and the same directed rounding.
+    internal static (long X, long Y) WithLengthTowardZero(long x, long y, long length) {
+        var max = Math.Max(
+            val1: FusedArithmetic.RawMagnitude(value: x),
+            val2: FusedArithmetic.RawMagnitude(value: y)
+        );
+
+        if (
+            (max == 0UL) ||
+            (length <= 0L)
+        ) {
+            return default;
+        }
+
+        var shift = Math.Max(
+            val1: 0,
+            val2: DirectionShift(rawMagnitude: max)
+        );
+
+        x = ScaleRaw(
+            shift: shift,
+            value: x
+        );
+        y = ScaleRaw(
+            shift: shift,
+            value: y
+        );
+
+        var root = FusedArithmetic.CeilingSquareRoot(radicand: (Square(value: x) + Square(value: y)));
+
+        return (
+            ScaleLaneTowardZero(
+                lane: x,
+                length: length,
+                root: root
+            ),
+            ScaleLaneTowardZero(
+                lane: y,
+                length: length,
+                root: root
+            )
+        );
+    }
+    // Whether the offset lies inside the closed cone about `forward` whose half-angle cosine is `cosine` (raw Q16):
+    // offset · f̂ ≥ |offset| · cosine, decided as (offset · f)·2^16 ≥ cosine · √(|offset|²·|f|²) on exact integers.
+    // Lanes at or above 2^31 in magnitude are first scaled down by a common per-vector power of two with rounding —
+    // the one approximation, and the envelope — so every square, product and 256-bit square below stays exact.
+    internal static bool IsWithinCone(long ox, long oy, long oz, long fx, long fy, long fz, long cosine) {
+        const int ConeLaneBit = 30;
+
+        if ((fx | fy | fz) == 0L) {
+            return false;
+        }
+
+        (ox, oy, oz) = LandConeLanes(
+            x: ox,
+            y: oy,
+            z: oz,
+            leadingBit: ConeLaneBit
+        );
+        (fx, fy, fz) = LandConeLanes(
+            x: fx,
+            y: fy,
+            z: fz,
+            leadingBit: ConeLaneBit
+        );
+
+        var cosineRaw = Math.Clamp(
+            max: (1L << FixedQ4816.FractionBitCount),
+            min: -(1L << FixedQ4816.FractionBitCount),
+            value: cosine
+        );
+        // Every lane is below 2^31, so each product is below 2^62 and the three-term dot below 3·2^62, which the
+        // signed 64-bit word cannot hold.
+        var dot = (((((Int128)ox) * fx) + (((Int128)oy) * fy)) + (((Int128)oz) * fz));
+
+        if (cosineRaw >= 0L) {
+            if (dot < Int128.Zero) {
+                return false;
+            }
+
+            return (CompareConeSides(
+                cosineRaw: cosineRaw,
+                dotMagnitude: ((UInt128)dot),
+                forwardSquares: ((Square(value: fx) + Square(value: fy)) + Square(value: fz)),
+                offsetSquares: ((Square(value: ox) + Square(value: oy)) + Square(value: oz))
+            ) >= 0);
+        }
+
+        if (dot >= Int128.Zero) {
             return true;
         }
 
-        var limit = ((UInt128)((ulong)bound));
-
-        return (((Square(value: x) + Square(value: y)) + Square(value: z)) <= ((limit * limit) + limit));
+        return (CompareConeSides(
+            cosineRaw: -cosineRaw,
+            dotMagnitude: ((UInt128)(-dot)),
+            forwardSquares: ((Square(value: fx) + Square(value: fy)) + Square(value: fz)),
+            offsetSquares: ((Square(value: ox) + Square(value: oy)) + Square(value: oz))
+        ) <= 0);
     }
+
+    // Each lane below 2^(leadingBit + 1): an exact pass-through when the vector already fits, otherwise a common
+    // rounded right shift of every lane.
+    private static (long X, long Y, long Z) LandConeLanes(long x, long y, long z, int leadingBit) {
+        var max = Math.Max(
+            val1: FusedArithmetic.RawMagnitude(value: x),
+            val2: Math.Max(
+                val1: FusedArithmetic.RawMagnitude(value: y),
+                val2: FusedArithmetic.RawMagnitude(value: z)
+            )
+        );
+        var shift = (leadingBit - (63 - BitOperations.LeadingZeroCount(value: max)));
+
+        if (shift >= 0) {
+            return (x, y, z);
+        }
+
+        return (
+            ScaleRaw(
+                shift: shift,
+                value: x
+            ),
+            ScaleRaw(
+                shift: shift,
+                value: y
+            ),
+            ScaleRaw(
+                shift: shift,
+                value: z
+            )
+        );
+    }
+    // The sign of (dot·2^16)² − cosine²·|o|²·|f|² for a non-negative dot and cosine: both sides are formed as exact
+    // 256-bit products, since (3·2^62·2^16)² and 2^32·(3·2^62)² each pass 2^128.
+    private static int CompareConeSides(UInt128 dotMagnitude, long cosineRaw, UInt128 offsetSquares, UInt128 forwardSquares) {
+        var scaledDot = (dotMagnitude << FixedQ4816.FractionBitCount);
+        var left = FusedArithmetic.Multiply256(
+            left: scaledDot,
+            right: scaledDot
+        );
+        var right = FusedArithmetic.Multiply256(
+            left: (offsetSquares * forwardSquares),
+            right: ((UInt128)((ulong)(cosineRaw * cosineRaw)))
+        );
+
+        return ((left.High != right.High)
+            ? left.High.CompareTo(value: right.High)
+            : left.Low.CompareTo(value: right.Low)
+        );
+    }
+    // trunc(lane · length / root): the lane and length are each below 2^63 in magnitude, so their product fits
+    // Int128, and the root is at least the lane's magnitude, so the quotient fits the raw.
+    private static long ScaleLaneTowardZero(long lane, long length, UInt128 root) =>
+        ((long)((((Int128)lane) * length) / ((Int128)root)));
     // The sign of (x² + y² + z²) − (otherX² + otherY² + otherZ²) on the exact raw sums, each at most 3·2¹²⁶ and so
     // exact in 128 bits for every pair. The reported magnitude rounds and saturates a monotone root of the sum, so the
     // side this compare calls longer never reports the shorter magnitude.

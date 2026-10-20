@@ -21,8 +21,8 @@ any question asked of it. Cost is measured outside the suite, by `puck bench`.
 
 ## Default
 
-- law cases executed: 708
-- last run: 2026-10-19
+- law cases executed: 740
+- last run: 2026-10-20
 
 ## Deep
 
@@ -36,170 +36,192 @@ any question asked of it. Cost is measured outside the suite, by `puck bench`.
 
 ## Coverage
 
-- covered: 2525
+- covered: 2616
 - waived: 106
 - uncovered: 634
-- total public members: 3265
-- last run: 2026-10-19
+- total public members: 3356
+- last run: 2026-10-20
 
 ## Legs
 
 | leg kind | legs |
 | --- | --- |
-| classical | 878 |
-| in-tree-independent | 34 |
+| classical | 911 |
+| in-tree-independent | 33 |
 | presented-twin | 9 |
 | relative-canary | 18 |
-| shared-substrate:delegation-twin | 46 |
+| shared-substrate:delegation-twin | 47 |
 | shared-substrate:fused-substrate | 33 |
 | shared-substrate:intra-presented | 80 |
-| shared-substrate:shared-exact-kernel | 21 |
+| shared-substrate:shared-exact-kernel | 24 |
 | shared-substrate:shared-upstream | 23 |
-| shared-substrate:transcription | 27 |
-| structural | 1233 |
-| **total** | **2402** |
+| shared-substrate:transcription | 32 |
+| structural | 1254 |
+| **total** | **2464** |
 
-- statements: 826
-- statements with no independent leg: 223
-- last run: 2026-10-19
+- statements: 870
+- statements with no independent leg: 234
+- last run: 2026-10-20
 
 ## Frontier
 
 | domain | block | index |
 | --- | --- | --- |
-| algebra-fractional | 512 | 10683 |
-| binary-field | 256 | 516 |
-| binary-field-axioms | 256 | 516 |
-| binary-field-group | 256 | 611 |
-| binary-polynomial | 256 | 614 |
-| binary-polynomial-division | 256 | 614 |
-| binary-polynomial-gcd | 256 | 614 |
-| clifford-motor | 512 | 433 |
-| clifford-multivector | 512 | 433 |
-| clifford-planar-complex | 512 | 433 |
-| clifford-planar-dual | 512 | 433 |
-| clifford-planar-split | 512 | 433 |
-| clifford-quaternion-even | 512 | 433 |
-| clifford-reverse | 512 | 433 |
-| closed-unit | 512 | 667 |
-| complex | 512 | 10684 |
-| complex-direction | 512 | 561 |
-| complex-divide | 512 | 674 |
-| complex-rotate | 512 | 674 |
-| contribution-fold-analog | 512 | 352 |
-| contribution-fold-formula | 512 | 352 |
-| contribution-fold-no-pool | 512 | 352 |
-| contribution-fold-order | 512 | 352 |
-| contribution-fold-quantization | 512 | 352 |
-| core-word-modular | 512 | 58 |
-| cost-bound-arithmetic | 512 | 99 |
-| cost-model-budgets | 512 | 99 |
-| cost-model-conversions | 512 | 99 |
-| directed-magnitude | 512 | 284 |
-| directed-product | 512 | 284 |
-| directed-product-sum | 512 | 284 |
-| directed-quotient | 512 | 284 |
-| directed-root | 512 | 284 |
-| dual | 512 | 8451 |
-| dual-divide | 512 | 561 |
-| dual-generic | 512 | 561 |
-| dual-quaternion | 512 | 674 |
-| dynamics | 512 | 169 |
-| extension-field | 256 | 600 |
-| extension-field-inverse | 256 | 509 |
-| extension-field-norm | 256 | 600 |
-| extension-field-power | 256 | 509 |
-| extension-field-product | 256 | 600 |
-| fixed-saturate | 512 | 99 |
-| integer-bit-align | 256 | 73 |
-| integer-bit-morton | 128 | 73 |
-| integer-bit-scatter | 128 | 73 |
-| integer-bit-smear | 256 | 73 |
-| integer-hexagonal-index | 512 | 138 |
-| integer-magic-constants | 512 | 130 |
-| integer-try-arithmetic | 512 | 63 |
-| integer-try-multiplication | 512 | 58 |
-| interval-arc-functions | 512 | 43 |
-| interval-arctangent | 512 | 43 |
-| interval-arithmetic | 512 | 43 |
-| interval-circular | 512 | 43 |
-| interval-isotonic | 512 | 43 |
-| interval-power | 512 | 43 |
-| mass-box | 256 | 284 |
-| mass-capsule | 256 | 284 |
-| mass-compound | 256 | 284 |
-| mass-cylinder | 256 | 284 |
-| mass-parallel-axis | 256 | 284 |
-| mass-sphere | 256 | 284 |
-| mass-volume | 256 | 284 |
-| meet-associative | 512 | 343 |
-| meet-bottom-absorption | 512 | 343 |
-| meet-commutative | 512 | 343 |
-| meet-idempotent | 512 | 343 |
-| meet-monotonicity | 512 | 343 |
-| meet-order-coherence | 512 | 343 |
-| meet-product-composition | 512 | 343 |
-| meet-top-identity | 512 | 343 |
-| mixed-scale | 512 | 284 |
-| mixed-scale-triple | 512 | 284 |
-| mobius | 512 | 8451 |
-| monogenic-exact | 512 | 433 |
-| monogenic-fusion | 512 | 433 |
-| position | 512 | 548 |
-| position-delta | 512 | 657 |
-| position-translate | 512 | 657 |
-| presented | 512 | 955 |
-| prime-exploration-primality | 512 | 39 |
-| prime-field | 256 | 605 |
-| prime-field-chain | 256 | 605 |
-| prime-field-lucas | 256 | 605 |
-| prime-field-primality | 256 | 605 |
-| prime-field-root | 256 | 605 |
-| q1648-scalar | 512 | 334 |
-| q1648-scalar-division | 512 | 332 |
-| q3232-scalar | 512 | 297 |
-| q3232-scalar-division | 512 | 296 |
-| quaternion | 512 | 674 |
-| quaternion-antiparallel | 512 | 48 |
-| quaternion-arc | 512 | 48 |
-| quaternion-direction | 512 | 561 |
-| quaternion-rotate | 512 | 561 |
-| quaternion-sublattice | 256 | 561 |
-| rate | 512 | 658 |
-| rigid | 512 | 697 |
-| rigid-direction | 512 | 572 |
-| rigid-exp-series | 512 | 46 |
-| rigid-log-series | 512 | 46 |
-| rigid-point | 512 | 697 |
-| scalar | 512 | 8455 |
-| scalar-division | 512 | 692 |
-| scalar-smoothstep | 512 | 50 |
-| scalar-text | 512 | 692 |
-| scalar-transcendental | 512 | 694 |
+| algebra-fractional | 512 | 10684 |
+| angle-wrap | 512 | 1 |
+| binary-field | 256 | 517 |
+| binary-field-axioms | 256 | 517 |
+| binary-field-group | 256 | 612 |
+| binary-polynomial | 256 | 615 |
+| binary-polynomial-division | 256 | 615 |
+| binary-polynomial-gcd | 256 | 615 |
+| bit-mix-64 | 512 | 1 |
+| clifford-motor | 512 | 434 |
+| clifford-multivector | 512 | 434 |
+| clifford-planar-complex | 512 | 434 |
+| clifford-planar-dual | 512 | 434 |
+| clifford-planar-split | 512 | 434 |
+| clifford-quaternion-even | 512 | 434 |
+| clifford-reverse | 512 | 434 |
+| closed-unit | 512 | 668 |
+| complex | 512 | 10685 |
+| complex-direction | 512 | 562 |
+| complex-divide | 512 | 675 |
+| complex-rotate | 512 | 675 |
+| contribution-fold-analog | 512 | 353 |
+| contribution-fold-formula | 512 | 353 |
+| contribution-fold-no-pool | 512 | 353 |
+| contribution-fold-order | 512 | 353 |
+| contribution-fold-quantization | 512 | 353 |
+| core-word-modular | 512 | 59 |
+| cost-bound-arithmetic | 512 | 100 |
+| cost-model-budgets | 512 | 100 |
+| cost-model-conversions | 512 | 100 |
+| degree-conversion | 512 | 1 |
+| directed-magnitude | 512 | 285 |
+| directed-product | 512 | 285 |
+| directed-product-sum | 512 | 285 |
+| directed-quotient | 512 | 285 |
+| directed-root | 512 | 285 |
+| double-seams | 512 | 1 |
+| dual | 512 | 8452 |
+| dual-divide | 512 | 562 |
+| dual-generic | 512 | 562 |
+| dual-quaternion | 512 | 675 |
+| dynamics | 512 | 170 |
+| extension-field | 256 | 601 |
+| extension-field-inverse | 256 | 510 |
+| extension-field-norm | 256 | 601 |
+| extension-field-power | 256 | 510 |
+| extension-field-product | 256 | 601 |
+| fixed-saturate | 512 | 100 |
+| float-projection | 512 | 1 |
+| follower-lanes | 512 | 1 |
+| integer-bit-align | 256 | 74 |
+| integer-bit-morton | 128 | 74 |
+| integer-bit-scatter | 128 | 74 |
+| integer-bit-smear | 256 | 74 |
+| integer-hexagonal-index | 512 | 139 |
+| integer-magic-constants | 512 | 131 |
+| integer-try-arithmetic | 512 | 64 |
+| integer-try-multiplication | 512 | 59 |
+| interval-arc-functions | 512 | 44 |
+| interval-arctangent | 512 | 44 |
+| interval-arithmetic | 512 | 44 |
+| interval-circular | 512 | 44 |
+| interval-isotonic | 512 | 44 |
+| interval-power | 512 | 44 |
+| mass-box | 256 | 285 |
+| mass-capsule | 256 | 285 |
+| mass-compound | 256 | 285 |
+| mass-cylinder | 256 | 285 |
+| mass-parallel-axis | 256 | 285 |
+| mass-sphere | 256 | 285 |
+| mass-volume | 256 | 285 |
+| meet-associative | 512 | 344 |
+| meet-bottom-absorption | 512 | 344 |
+| meet-commutative | 512 | 344 |
+| meet-idempotent | 512 | 344 |
+| meet-monotonicity | 512 | 344 |
+| meet-order-coherence | 512 | 344 |
+| meet-product-composition | 512 | 344 |
+| meet-top-identity | 512 | 344 |
+| mixed-scale | 512 | 285 |
+| mixed-scale-triple | 512 | 285 |
+| mobius | 512 | 8452 |
+| monogenic-exact | 512 | 434 |
+| monogenic-fusion | 512 | 434 |
+| plane-doors-and-clamp | 512 | 1 |
+| position | 512 | 549 |
+| position-delta | 512 | 658 |
+| position-translate | 512 | 658 |
+| presented | 512 | 956 |
+| prime-exploration-primality | 512 | 40 |
+| prime-field | 256 | 606 |
+| prime-field-chain | 256 | 606 |
+| prime-field-lucas | 256 | 606 |
+| prime-field-primality | 256 | 606 |
+| prime-field-root | 256 | 606 |
+| q1648-scalar | 512 | 335 |
+| q1648-scalar-division | 512 | 333 |
+| q3232-scalar | 512 | 298 |
+| q3232-scalar-division | 512 | 297 |
+| quaternion | 512 | 675 |
+| quaternion-antiparallel | 512 | 49 |
+| quaternion-arc | 512 | 49 |
+| quaternion-direction | 512 | 562 |
+| quaternion-rotate | 512 | 562 |
+| quaternion-sublattice | 256 | 562 |
+| rate | 512 | 659 |
+| rational-doors | 512 | 1 |
+| rational-rate | 512 | 1 |
+| rigid | 512 | 698 |
+| rigid-direction | 512 | 573 |
+| rigid-exp-series | 512 | 47 |
+| rigid-log-series | 512 | 47 |
+| rigid-point | 512 | 698 |
+| saturate-multiply | 512 | 1 |
+| saturating-integers | 512 | 1 |
+| scalar | 512 | 8456 |
+| scalar-division | 512 | 693 |
+| scalar-smoothstep | 512 | 51 |
+| scalar-text | 512 | 693 |
+| scalar-transcendental | 512 | 695 |
+| scatter-point | 512 | 1 |
+| seconds-of-ticks | 512 | 1 |
+| signed-quotients | 512 | 1 |
 | smoke | 64 | 2178 |
-| split | 512 | 10684 |
-| split-divide | 512 | 674 |
-| split-transform | 512 | 674 |
-| square-grid | 512 | 127 |
-| sublattice | 256 | 4611 |
-| symmetric-apply2 | 512 | 284 |
-| symmetric-apply3 | 512 | 284 |
-| symmetric-invert2 | 256 | 327 |
-| symmetric-invert3 | 256 | 327 |
-| symmetric-solve2 | 512 | 327 |
-| symmetric-solve3 | 512 | 328 |
-| unit-fraction16 | 512 | 581 |
-| unit-fraction32 | 512 | 699 |
-| unsigned-scalar | 512 | 685 |
-| vector | 512 | 669 |
-| vector-compare-length | 512 | 44 |
-| vector-componentwise-helpers | 512 | 63 |
-| vector-direction | 512 | 669 |
-| vector-lattice | 512 | 557 |
-| vector-narrow | 512 | 669 |
-| vector-norm | 512 | 557 |
-| vector-orthonormal-basis | 512 | 220 |
-| vector-ray-plane | 512 | 61 |
+| split | 512 | 10685 |
+| split-divide | 512 | 675 |
+| split-transform | 512 | 675 |
+| square-grid | 512 | 128 |
+| sublattice | 256 | 4612 |
+| symmetric-apply2 | 512 | 285 |
+| symmetric-apply3 | 512 | 285 |
+| symmetric-invert2 | 256 | 328 |
+| symmetric-invert3 | 256 | 328 |
+| symmetric-solve2 | 512 | 328 |
+| symmetric-solve3 | 512 | 329 |
+| unit-fraction16 | 512 | 582 |
+| unit-fraction32 | 512 | 700 |
+| unsigned-scalar | 512 | 686 |
+| vector | 512 | 670 |
+| vector-compare-length | 512 | 45 |
+| vector-componentwise-helpers | 512 | 64 |
+| vector-cone | 512 | 1 |
+| vector-direction | 512 | 670 |
+| vector-lattice | 512 | 558 |
+| vector-narrow | 512 | 670 |
+| vector-norm | 512 | 558 |
+| vector-orthonormal-basis | 512 | 221 |
+| vector-ray-plane | 512 | 62 |
+| vector-reject | 512 | 1 |
+| vector-rescale | 512 | 1 |
+| vector-try-arithmetic | 512 | 1 |
 | vector-within | 512 | 49 |
+| vector-within-exact | 512 | 1 |
+| vector-yaw | 512 | 1 |
+| yaw-pitch-roll | 512 | 1 |
+| zigzag | 512 | 1 |
 
-- last run: 2026-10-19
+- last run: 2026-10-20

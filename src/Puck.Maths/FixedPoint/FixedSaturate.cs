@@ -30,6 +30,31 @@ public static class FixedSaturate {
             right: right.Z
         )
     );
+    /// <summary>Multiplies two fixed-point values, rounding once to nearest with ties to even and clamping to the
+    /// representable extremes instead of wrapping.</summary>
+    /// <param name="left">The multiplicand.</param>
+    /// <param name="right">The multiplier.</param>
+    /// <returns>The rounded product where it fits — the same bits as the <c>*</c> operator and as
+    /// <see cref="FusedArithmetic.TryMixedScaleProduct(long, int, long, int, int, out long)"/> at sixteen fraction
+    /// bits throughout — and otherwise <see cref="FixedQ4816.MaxValue"/> for a positive exact product or
+    /// <see cref="FixedQ4816.MinValue"/> for a negative one.</returns>
+    public static FixedQ4816 Multiply(FixedQ4816 left, FixedQ4816 right) {
+        if (FusedArithmetic.TryMixedScaleProduct(
+            a: left.Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: right.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var product
+        )) {
+            return FixedQ4816.FromRawBits(value: product);
+        }
+
+        return (((left.Value < 0L) != (right.Value < 0L))
+            ? FixedQ4816.MinValue
+            : FixedQ4816.MaxValue
+        );
+    }
     /// <summary>Clamps a widened accumulator into the <see cref="long"/> range and narrows it.</summary>
     /// <param name="value">The widened value.</param>
     /// <returns><paramref name="value"/> narrowed, or the nearer <see cref="long"/> extreme when it lies outside.</returns>

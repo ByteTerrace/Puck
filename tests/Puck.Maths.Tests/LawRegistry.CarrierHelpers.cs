@@ -7,12 +7,6 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
-    private static readonly Domain VectorWithin = new(
-        Key: "vector-within",
-        Block: 512,
-        EdgeFraction: 0.4,
-        NeighborhoodFraction: 0.3
-    );
     private static readonly Domain VectorCompareLength = new(
         Key: "vector-compare-length",
         Block: 512,
@@ -96,12 +90,6 @@ internal static partial class LawRegistry {
             domain: RigidLogSeries,
             id: "rigid.log-matches-the-series",
             width: 4
-        ),
-        SweptCase(
-            claim: Subjects.FixedVectorIsWithinMatchesLength,
-            domain: VectorWithin,
-            id: "vector.is-within-matches-length",
-            width: 3
         ),
         SweptCase(
             claim: Subjects.FixedVectorCompareLengthMatchesTheSquares,

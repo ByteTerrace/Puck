@@ -76,7 +76,7 @@ namespace Puck.World.Server;
 /// materialized" class of gap as the pending channel press.
 /// <see cref="TapeIntents"/>/<see cref="TapeRemainingTicks"/> — the scripted tape (<c>body.fly</c>) in FIFO
 /// order, captured/restored at exact tick counts (never round-tripped through
-/// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
+/// <see cref="FixedTickConversion.DurationEngineTicks(FixedQ4816)"/>'s own seconds conversion, which would drift the
 /// restored duration from what was actually live) — the body's own future trajectory.</para>
 /// <para><b>Deliberately re-derived (with reason) — never added to this struct.</b>
 /// <c>m_tuning</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/

@@ -26,20 +26,164 @@ namespace Puck.Maths;
 /// <see cref="TryCeilingMagnitude(long, long, long, out long)"/> of the second.</para>
 /// </remarks>
 public static class FixedDirectedRounding {
-    // The floor root, carried up by one whenever the radicand is not a perfect square, then narrowed with refusal.
-    // The floor never reaches 2^64 for a radicand below 2^128, so the settling square cannot itself overflow.
-    private static bool TryCeilingRoot(UInt128 radicand, out long result) {
-        var root = radicand.SquareRoot();
+    // 2^63 as a double, the one binary64 bound both carrier edges are tested against: a floor below −2^63 or at or
+    // above 2^63 has no raw.
+    private const double RawCarrierLimit = 9223372036854775808d;
 
-        if ((root * root) < radicand) {
-            ++root;
-        }
-
-        return FusedArithmetic.TryNarrowSignedMagnitude(
-            magnitude: root,
+    private static bool TryCeilingRoot(UInt128 radicand, out long result) =>
+        FusedArithmetic.TryNarrowSignedMagnitude(
+            magnitude: FusedArithmetic.CeilingSquareRoot(radicand: radicand),
             negative: false,
             result: out result
         );
+
+    /// <summary>Returns the greatest integer at or below the exact quotient of two signed wide integers.</summary>
+    /// <param name="numerator">The dividend.</param>
+    /// <param name="denominator">The divisor, which must be non-zero.</param>
+    /// <returns><c>⌊numerator / denominator⌋</c>, exact.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="denominator"/> is zero.</exception>
+    /// <exception cref="OverflowException"><paramref name="numerator"/> is <see cref="Int128.MinValue"/> and
+    /// <paramref name="denominator"/> is minus one, the one quotient outside the carrier.</exception>
+    /// <remarks>A positive power-of-two divisor is an arithmetic shift, a numerator inside the 64-bit range divides in
+    /// 64 bits, and the rest take <see cref="Int128"/>'s own division; the floor is the truncated quotient less one
+    /// exactly when a non-zero remainder's sign differs from the divisor's.</remarks>
+    public static Int128 FloorQuotient(Int128 numerator, Int128 denominator) =>
+        DirectedQuotients(
+            denominator: denominator,
+            numerator: numerator
+        ).Floor;
+    /// <summary>Returns the least integer at or above the exact quotient of two signed wide integers.</summary>
+    /// <param name="numerator">The dividend.</param>
+    /// <param name="denominator">The divisor, which must be non-zero.</param>
+    /// <returns><c>⌈numerator / denominator⌉</c>, exact.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="denominator"/> is zero.</exception>
+    /// <exception cref="OverflowException"><paramref name="numerator"/> is <see cref="Int128.MinValue"/> and
+    /// <paramref name="denominator"/> is minus one, the one quotient outside the carrier.</exception>
+    /// <remarks>The ceiling is the negated floor of the negated quotient: the truncated quotient plus one exactly when
+    /// a non-zero remainder's sign matches the divisor's. The same paths as <see cref="FloorQuotient"/>.</remarks>
+    public static Int128 CeilingQuotient(Int128 numerator, Int128 denominator) =>
+        DirectedQuotients(
+            denominator: denominator,
+            numerator: numerator
+        ).Ceiling;
+    /// <summary>Returns the greatest raw at or below the exact real value of a double, the directed-down inbound seam
+    /// of a conservative enclosure.</summary>
+    /// <param name="value">The double whose exact value is bounded.</param>
+    /// <param name="result">The floor on success; zero on refusal.</param>
+    /// <returns><see langword="false"/> when <paramref name="value"/> is not finite or when its floor lies outside the
+    /// raw carrier.</returns>
+    /// <remarks>A double times <c>2¹⁶</c> is exact (a power of two only moves the exponent, and an overflow reads as
+    /// infinity and is refused), and <see cref="Math.Floor(double)"/> of a finite double is exact, so the result is the
+    /// true floor rather than the nearest value a tiny positive operand would round to zero under.</remarks>
+    public static bool TryFloorFromDouble(double value, out FixedQ4816 result) {
+        var scaled = (value * (1L << FixedQ4816.FractionBitCount));
+
+        if (!double.IsFinite(d: scaled)) {
+            result = default;
+            return false;
+        }
+
+        var floor = Math.Floor(d: scaled);
+
+        if (
+            (floor < -RawCarrierLimit) ||
+            (floor >= RawCarrierLimit)
+        ) {
+            result = default;
+            return false;
+        }
+
+        result = FixedQ4816.FromRawBits(value: ((long)floor));
+        return true;
+    }
+    /// <summary>Returns the least raw at or above the exact real value of a double, the directed-up inbound seam of a
+    /// conservative enclosure.</summary>
+    /// <param name="value">The double whose exact value is bounded.</param>
+    /// <param name="result">The ceiling on success; zero on refusal.</param>
+    /// <returns><see langword="false"/> when <paramref name="value"/> is not finite or when its ceiling lies outside
+    /// the raw carrier.</returns>
+    /// <remarks>The directed-up sibling of <see cref="TryFloorFromDouble"/>, exact for the same reason.</remarks>
+    public static bool TryCeilingFromDouble(double value, out FixedQ4816 result) {
+        var scaled = (value * (1L << FixedQ4816.FractionBitCount));
+
+        if (!double.IsFinite(d: scaled)) {
+            result = default;
+            return false;
+        }
+
+        var ceiling = Math.Ceiling(a: scaled);
+
+        if (
+            (ceiling < -RawCarrierLimit) ||
+            (ceiling >= RawCarrierLimit)
+        ) {
+            result = default;
+            return false;
+        }
+
+        result = FixedQ4816.FromRawBits(value: ((long)ceiling));
+        return true;
+    }
+
+    // The floor and ceiling of numerator/denominator for a non-zero denominator, from one division. A positive
+    // power-of-two denominator inside the long range is an arithmetic shift, which floors, and its ceiling the
+    // negated floor of the negation; a numerator and denominator both inside the 64-bit range divide in 64 bits,
+    // whose truncated quotient and remainder are Int128's (long.MinValue is left out, since its quotient by −1 is
+    // not a long); everything else takes Int128's own division.
+    internal static (Int128 Floor, Int128 Ceiling) DirectedQuotients(Int128 numerator, Int128 denominator) {
+        if (
+            (denominator > Int128.Zero) &&
+            (denominator <= long.MaxValue) &&
+            long.IsPow2(value: ((long)denominator))
+        ) {
+            var shift = ((int)long.TrailingZeroCount(value: ((long)denominator)));
+            var shifted = (numerator >> shift);
+
+            // The ceiling is the floor plus one exactly when a discarded bit is set; negating the numerator to reuse
+            // the floor would wrap at Int128.MinValue.
+            return (shifted, (((numerator & ((Int128.One << shift) - Int128.One)) == Int128.Zero)
+                ? shifted
+                : (shifted + Int128.One)));
+        }
+
+        if (
+            (numerator > long.MinValue) &&
+            (numerator <= long.MaxValue) &&
+            (denominator >= long.MinValue) &&
+            (denominator <= long.MaxValue)
+        ) {
+            var (narrowQuotient, narrowRemainder) = Math.DivRem(
+                left: ((long)numerator),
+                right: ((long)denominator)
+            );
+
+            if (narrowRemainder == 0L) {
+                return (narrowQuotient, narrowQuotient);
+            }
+
+            return (((narrowRemainder < 0L) != (denominator < Int128.Zero))
+                ? ((((Int128)narrowQuotient) - 1), narrowQuotient)
+                : (narrowQuotient, (((Int128)narrowQuotient) + 1)));
+        }
+
+        var quotient = Int128.DivRem(
+            left: numerator,
+            right: denominator
+        );
+        var floor = quotient.Quotient;
+        var ceiling = quotient.Quotient;
+
+        if (quotient.Remainder != Int128.Zero) {
+            // Truncation rounds toward zero: a positive exact quotient's floor is the truncation, a negative one's the
+            // truncation less one, and the ceiling the other way about.
+            if ((quotient.Remainder < Int128.Zero) != (denominator < Int128.Zero)) {
+                --floor;
+            } else {
+                ++ceiling;
+            }
+        }
+
+        return (floor, ceiling);
     }
 
     /// <summary>Returns the least raw at or above the exact planar magnitude <c>√(x² + y²)</c>, at the components' own

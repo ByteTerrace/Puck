@@ -253,6 +253,61 @@ public static class FusedArithmetic {
             : raw
         );
     }
+    /// <summary>Returns the least integer at or above the exact square root of a wide radicand.</summary>
+    /// <param name="radicand">The radicand.</param>
+    /// <returns><c>⌈√radicand⌉</c>: the floor root carried up by one whenever the radicand is not a perfect square.
+    /// The floor never reaches <c>2^64</c> for a radicand below <c>2^128</c>, so the settling square cannot overflow,
+    /// and the result reaches exactly <c>2^64</c> only above <c>(2^64 − 1)²</c>.</returns>
+    internal static UInt128 CeilingSquareRoot(UInt128 radicand) {
+        var root = radicand.SquareRoot();
+
+        if ((root * root) < radicand) {
+            ++root;
+        }
+
+        return root;
+    }
+    /// <summary>Forms the exact 256-bit product of two wide magnitudes as a high and a low word.</summary>
+    /// <param name="left">The first factor.</param>
+    /// <param name="right">The second factor.</param>
+    /// <returns>The product's high and low 128-bit words; an ordinal compare of the pairs (high first) orders the
+    /// products.</returns>
+    internal static (UInt128 High, UInt128 Low) Multiply256(UInt128 left, UInt128 right) {
+        var leftLow = ((ulong)left);
+        var leftHigh = ((ulong)(left >> 64));
+        var rightLow = ((ulong)right);
+        var rightHigh = ((ulong)(right >> 64));
+        var lowLow = Math.BigMul(
+            a: leftLow,
+            b: rightLow
+        );
+        var lowHigh = Math.BigMul(
+            a: leftLow,
+            b: rightHigh
+        );
+        var highLow = Math.BigMul(
+            a: leftHigh,
+            b: rightLow
+        );
+        var highHigh = Math.BigMul(
+            a: leftHigh,
+            b: rightHigh
+        );
+        // The two cross products land on the middle 128 bits; each addition into the low word carries at most one.
+        var low = (lowLow + (lowHigh << 64));
+        var carry = ((low < lowLow)
+            ? UInt128.One
+            : UInt128.Zero
+        );
+        var lowAfterCross = (low + (highLow << 64));
+
+        carry += ((lowAfterCross < low)
+            ? UInt128.One
+            : UInt128.Zero
+        );
+
+        return (((highHigh + (lowHigh >> 64)) + (highLow >> 64)) + carry, lowAfterCross);
+    }
     /// <summary>Returns the exact square of a raw carrier value as a <see cref="UInt128"/>.</summary>
     /// <param name="value">The raw value to square.</param>
     /// <returns><c>value²</c>.</returns>

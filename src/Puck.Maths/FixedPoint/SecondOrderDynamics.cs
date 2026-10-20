@@ -689,24 +689,54 @@ public readonly record struct SecondOrderState(long PositionRaw, long VelocityRa
     /// <param name="velocity">The velocity.</param>
     /// <returns>The Q32 state.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
-    public static SecondOrderState FromValue(FixedQ4816 position, FixedQ4816 velocity) {
+    public static SecondOrderState FromValue(FixedQ4816 position, FixedQ4816 velocity) =>
+        new(
+            PositionRaw: GuardLane(
+                paramName: nameof(position),
+                value: position
+            ),
+            VelocityRaw: GuardLane(
+                paramName: nameof(velocity),
+                value: velocity
+            )
+        );
+    /// <summary>Returns this state with its position lane replaced exactly by a Q16 value and its velocity raw kept.</summary>
+    /// <param name="position">The new position.</param>
+    /// <returns>The state whose position lane is <paramref name="position"/> at Q32 (an exact left shift) and whose
+    /// <see cref="VelocityRaw"/> is this state's.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
+    public SecondOrderState WithPosition(FixedQ4816 position) =>
+        new(
+            PositionRaw: GuardLane(
+                paramName: nameof(position),
+                value: position
+            ),
+            VelocityRaw: VelocityRaw
+        );
+    /// <summary>Returns this state with its velocity lane replaced exactly by a Q16 value and its position raw kept.</summary>
+    /// <param name="velocity">The new velocity.</param>
+    /// <returns>The state whose velocity lane is <paramref name="velocity"/> at Q32 (an exact left shift) and whose
+    /// <see cref="PositionRaw"/> is this state's.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
+    public SecondOrderState WithVelocity(FixedQ4816 velocity) =>
+        new(
+            PositionRaw: PositionRaw,
+            VelocityRaw: GuardLane(
+                paramName: nameof(velocity),
+                value: velocity
+            )
+        );
+
+    // The exact Q32 lane of a Q16 value, refusing a raw whose shift would leave the guard bits.
+    private static long GuardLane(FixedQ4816 value, string paramName) {
         if (
-            (position.Value >= (1L << 47)) ||
-            (position.Value < -(1L << 47))
+            (value.Value >= (1L << 47)) ||
+            (value.Value < -(1L << 47))
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(position));
-        }
-        if (
-            (velocity.Value >= (1L << 47)) ||
-            (velocity.Value < -(1L << 47))
-        ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(velocity));
+            throw new ArgumentOutOfRangeException(paramName: paramName);
         }
 
-        return new(
-            PositionRaw: (position.Value << 16),
-            VelocityRaw: (velocity.Value << 16)
-        );
+        return (value.Value << 16);
     }
 }
 /// <summary>Three independent <see cref="SecondOrderState"/> lanes — a planar (X, Y, Z) follower's authoritative
@@ -753,6 +783,26 @@ public readonly record struct SecondOrderState3(SecondOrderState X, SecondOrderS
             position: position.Z,
             velocity: velocity.Z
         )
+    );
+    /// <summary>Returns this state with each lane's position replaced exactly by the vector's component and its
+    /// velocity raw kept.</summary>
+    /// <param name="position">The new position.</param>
+    /// <returns>The state of <see cref="SecondOrderState.WithPosition"/> applied lane by lane, X then Y then Z.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A component's raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
+    public SecondOrderState3 WithPosition(FixedVector3 position) => new(
+        X: X.WithPosition(position: position.X),
+        Y: Y.WithPosition(position: position.Y),
+        Z: Z.WithPosition(position: position.Z)
+    );
+    /// <summary>Returns this state with each lane's velocity replaced exactly by the vector's component and its
+    /// position raw kept.</summary>
+    /// <param name="velocity">The new velocity.</param>
+    /// <returns>The state of <see cref="SecondOrderState.WithVelocity"/> applied lane by lane, X then Y then Z.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A component's raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
+    public SecondOrderState3 WithVelocity(FixedVector3 velocity) => new(
+        X: X.WithVelocity(velocity: velocity.X),
+        Y: Y.WithVelocity(velocity: velocity.Y),
+        Z: Z.WithVelocity(velocity: velocity.Z)
     );
 }
 /// <summary>One evaluated sample of a <see cref="SecondOrderDynamics"/> follower.</summary>

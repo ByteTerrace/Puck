@@ -1,0 +1,1358 @@
+[
+  {
+    "Id": "scalar.pi-constants-vs-machin",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Pi"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "HalfPi"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Tau"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "PiQ189"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "PiQ189MiddleLimb"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "PiQ189LowLimb"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "PiQ189FractionBitCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pi, HalfPi and Tau as raws, and PiQ189 read back from its three public limbs",
+        "Against": "Oracles.Pi at 256 bits, Machin's formula through the module's own arctangent series, rounded to each constant's scale against BOTH enclosure endpoints, which must agree; a transposed digit in any limb or a rounding one raw off fails outright",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Tau's raw is odd and is not Pi + Pi, the fact WrapAngle's closed-at-+Pi interval rests on; PiQ189's high limb IS PiQ61, so the three limbs extend one constant rather than carry a second rounding of pi",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.from-degrees-vs-exact-rational",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromDegrees"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.FromDegrees(FixedQ4816) at the swept degree raw, and FromDegrees(double) at a second raw read as the exact double raw/65536, with the two overloads agreeing there",
+        "Against": "Oracles.TryDegreesToRadiansRaw: the exact rational degrees\u00b7pi/180\u00b72^16 rounded ties-to-even against the Machin pi enclosure at 256 bits, both endpoints; a case the endpoints round apart is a named failure rather than a skip. The subject multiplies by PiQ189 and rounds through FixedPointRounding.RoundRational; the oracle never reads PiQ189 and rounds through the module's own tie body. ENVELOPE: the enclosure pins the nearest raw wherever no half-raw lies within 2^-100 of the exact value, which no swept operand has reached",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.scalar-from-degrees-vs-exact-rational",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromDegrees"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of scalar.from-degrees-vs-exact-rational, plus the whole-and-half-degree ladder over four turns (\u2212720 to 720 degrees in halves) through both overloads \u2014 the authoring band every document degree lands in, swept whole rather than sampled",
+        "Against": "Oracles.TryDegreesToRadiansRaw at 256 bits, as the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.from-degrees-double-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromDegrees"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.FromDegrees(double) over a hand-derived ladder: the cardinal angles, fractions, 1e-7 and the smallest subnormal, 1e6 through 1.5e14 degrees past the carrier",
+        "Against": "each double's IEEE 754 fields read off its bits into an exact rational (Oracles.Binary64Rational) and rounded against the 256-bit pi enclosure; 180, 90 and 360 degrees must land exactly on Pi, HalfPi and Tau",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "NaN maps to zero and each infinity saturates, the rule FixedDouble takes; a magnitude past the carrier saturates; 45 degrees is raw 51472",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.wrap-angle-residue-and-range",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "WrapAngle"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.WrapAngle at the swept raws and at the interval's ends and their neighbours, both carrier extremes and a full turn",
+        "Against": "the residue test in BigInteger: input minus output divisible by Tau's raw 411775, the output inside the closed raw interval [\u2212205887, 205887], and the identity on an input already inside; the subject's floored modulo is never recomputed by the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "one raw past +Pi lands one raw past \u2212Pi, one raw below \u2212Pi lands on +Pi, and a full turn wraps to zero: the half-open [\u2212Pi, \u2212Pi + Tau) reading of the odd-raw interval",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.scalar-wrap-angle-residue-and-range",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "WrapAngle"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of scalar.wrap-angle-residue-and-range, plus the band [\u22122\u00b7Tau, 2\u00b7Tau] swept whole, every raw",
+        "Against": "the BigInteger residue and range test of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.float-projection-through-double",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Explicit"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "the explicit float conversion at the swept raws, both carrier extremes, zero, the units and the 2^24 seam",
+        "Against": "(float)(double)value spelled inline, bit for bit",
+        "Shared": "the conversion IS that expression; this leg pins the carriage and nothing about the double projection itself",
+        "Citation": "the double projection's rounding is pinned at scalar.double-projection-vs-oracle; below 2^24 raw the float is additionally checked to be the exact quotient raw/65536f",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.plane-doors-and-clamp",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "FromVector2"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "ToVector2"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "ClampLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "WithLength"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedVector2.FromVector2 and ToVector2 at the swept pair, lane by lane",
+        "Against": "FixedQ4816.FromDouble and the explicit float conversion, lane by lane",
+        "Shared": "the doors are those two scalar members applied per lane; the leg pins lane order and carriage only",
+        "Citation": "FromDouble's rounding is pinned at scalar.grid-and-construction and the float projection at scalar.float-projection-through-double",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.WithLength and ClampLength at the swept vector against the drawn bound, zero, \u22121, one raw, one and MaxValue",
+        "Against": "the exact integers: the result's sum of squares never exceeds bound\u00b2, each lane keeps its sign and is at most the exact lane v\u00b7bound/|v| in magnitude, and each lane plus one raw exceeds (1 \u2212 2^-45) of the exact lane \u2014 the squared forms compared in BigInteger, no root taken; ClampLength is the identity exactly when |v|\u00b2 \u2264 bound\u00b2 and WithLength otherwise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.with-length-toward-zero",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "WithLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "ClampLength"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.WithLength and ClampLength at the swept vector against three drawn bounds and a ladder (zero, \u22121, one raw, three raw, one, a thousand, 2^45, MaxValue)",
+        "Against": "the exact integers in BigInteger: |w|\u00b2 \u2264 bound\u00b2, per-lane sign agreement, |w_i| \u2264 |exact_i| and |w_i| + 1 > |exact_i|\u00b7(1 \u2212 2^-45) in squared form, Zero for a zero vector or non-positive bound; ClampLength the identity exactly where the exact squares admit the vector, WithLength otherwise. The subject roots up and truncates after landing; the oracle takes no root",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-with-length-toward-zero",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "WithLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "ClampLength"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of vector.with-length-toward-zero, plus every power-of-two bound from 1 to 2^62 with its two neighbours: the ladder every rescale seam (the 2^45 landing, the narrow and wide roots) sits on",
+        "Against": "the BigInteger squared-form test of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.is-within-exact-squares",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithin"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.IsWithin(radius) over vectors drawn across the whole raw carrier at eleven radii per vector: three drawn freely, the floor root and its two raw neighbours, MaxValue and MaxValue \u2212 1, zero, \u22121 and MinValue",
+        "Against": "the exact predicate x\u00b2 + y\u00b2 + z\u00b2 \u2264 r\u00b2 in BigInteger with a negative radius refused; the floor root is Oracles.IntegerSquareRoot, Newton descent settled by one squaring, which the subject never takes. A rounded-length form (S \u2264 R\u00b2 + R), a universal admission at MaxValue or a negative radius admitted fails at the root's own neighbours",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-is-within-exact-squares",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithin"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of vector.is-within-exact-squares, plus every power-of-two radius from 1 to 2^62 with its two neighbours and its negation",
+        "Against": "the exact BigInteger predicate of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.is-within-cone-vs-exact-rational",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithinCone"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.IsWithinCone at the swept offset and forward, both folded onto lanes below 2^31 in magnitude, at twelve half-angle cosines from +1 through 0 to \u22121",
+        "Against": "Oracles.ConeContains: (o\u00b7f)\u00b72^16 \u2265 c\u00b7\u221a(|o|\u00b2|f|\u00b2) decided in BigInteger by settling the signs and squaring both sides; the subject forms the same squares as exact 256-bit products through FusedArithmetic.Multiply256, the oracle in arbitrary width. ENVELOPE: the fold keeps every operand inside the band the subject decides exactly; above 2^31 the subject scales each vector down with one rounding per lane, which only vector.is-within-cone-ladder's far-offset rows reach",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a cosine past \u00b11 answers as \u00b11: the clamp",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-is-within-cone-vs-exact-rational",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithinCone"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of vector.is-within-cone-vs-exact-rational with the cosine walked at every 1/64 of the unit from \u22121 to +1 beside the Default ladder, and the offset folded onto lanes below 2^20, where |o|\u00b2|f|\u00b2 is a perfect square far more often and the ambiguous band of the rooted compare is reached",
+        "Against": "Oracles.ConeContains in BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.is-within-cone-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithinCone"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the hand-derived cone ladder under the \u2212Z forward: the apex is inside the narrowest and the widest cone, a zero forward names no cone, the axis ray is inside the narrowest cone and a perpendicular offset is not, the quarter-turn cone admits the perpendicular and refuses the backward ray, the widest cone admits the backward ray, the 45-degree ray is inside a cone one raw wider than 45 degrees and outside one a raw narrower, a forward a thousand times longer names the same cone, and an offset of 2^40 raw \u2014 past the exact band, where the subject scales down with rounding \u2014 is judged by the same rays",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.reject-from-and-normalized",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "RejectFrom"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryRejectNormalized"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedVector3.RejectFrom at the swept vector about the swept axis normalized, bit for bit",
+        "Against": "v \u2212 (axis * Dot(v, axis)) spelled inline over the public operators",
+        "Shared": "the member IS that expression over FixedVector3.Dot, operator * and operator \u2212, so this leg pins carriage of the inline form the call sites held",
+        "Citation": "the residual along the axis is checked independently below; Dot and the operators are pinned at vector.space-products-vs-oracle",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the rejection's residual along the unit axis, and TryRejectNormalized's unit and length at the same operands",
+        "Against": "Dot(rejected, axis) within four raw of zero for lanes below 2^40 (the rounding budget of one scaled axis lane plus the dot's); the length equal to Oracles.NearestIntegerRoot of the rejection's exact sum of squares \u2014 a bracketed search, no root \u2014 and the unit's own nearest-root length within one raw of 2^16; refusal, leaving Zero and zero, exactly when the rejection is zero or its root leaves the carrier",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.try-add-subtract-refuse-outside-carrier",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryAdd"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TrySubtract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.TryAdd and TrySubtract at the swept pair, lane by lane",
+        "Against": "each lane's exact sum and difference in BigInteger: the answer is true with those lanes exactly when every lane fits the signed 64-bit raw, and false leaving Zero otherwise; the edge battery reaches both carrier extremes on every lane",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.yaw-of-facing-and-attitude",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Yaw"
+      },
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "Yaw"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedVector3.Yaw at the swept facing, and FixedQuaternion.Yaw at a pure yaw attitude",
+        "Against": "FixedQ4816.Atan2(\u2212x, \u2212z) spelled inline, and the vector Yaw of Rotate(\u2212UnitZ) spelled inline",
+        "Shared": "both members ARE those expressions; the legs pin the argument order and the sign convention, not Atan2",
+        "Citation": "Atan2 is pinned at scalar.atan2-vs-series",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the cardinal facings read as the \u2212Z-forward convention says: \u2212Z is zero, \u2212X a left quarter turn (HalfPi), +X a right quarter turn, +Z a half turn (Pi), and a facing with no planar part zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quaternion.from-yaw-pitch-roll-product-and-readback",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "FromYawPitchRoll"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedQuaternion.FromYawPitchRoll at the swept yaw, pitch and roll folded onto a turn, bit for bit",
+        "Against": "(FromAxisAngle(UnitY, yaw) * FromAxisAngle(UnitX, pitch)) * FromAxisAngle(UnitZ, roll), normalized, spelled inline",
+        "Shared": "the member IS that product; the leg pins the axis order Ry\u00b7Rx\u00b7Rz and the single closing normalize",
+        "Citation": "FromAxisAngle, the Hamilton product and Normalize are pinned at quaternion.axis-angle-ladder, quaternion.mul-vs-oracle and quaternion.normalize-unit-direction",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the attitude's norm, and a pure yaw's readback and rotated forward",
+        "Against": "the nearest integer root of the exact four-square sum within one raw of 2^16; FixedQuaternion.Yaw of the pure yaw within two raw of WrapAngle(yaw); Rotate(\u2212UnitZ) within two raw per lane of (\u2212sin yaw, 0, \u2212cos yaw) from the shipped SinCos, which scalar.sincos-vs-series pins against the series",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.quaternion-from-yaw-pitch-roll-product-and-readback",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "FromYawPitchRoll"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of quaternion.from-yaw-pitch-roll-product-and-readback with the yaw walked over every 1/256 of a turn from \u22121 to +1 turns beside the drawn pitch and roll",
+        "Against": "the product transcription and the norm, readback and forward checks of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.fixed-saturate-multiply-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSaturate",
+        "Name": "Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSaturate.Multiply over the swept pair",
+        "Against": "Oracles.ExactRoundedProduct \u2014 one ties-to-even rounding of the exact BigInteger product at shift 16 \u2014 clamped to the signed 64-bit raw; the subject routes through FusedArithmetic.TryMixedScaleProduct and chooses its extreme by the operand signs, the oracle clamps the unwrapped exact value. The edge battery's products past 2^63 reach both saturations",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.decimal-durations-and-rate-periods",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "PerRate"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "ToSeconds"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedTickConversion.DurationTicks(decimal) at a hand-derived ladder (0.1 s at 30 Hz is three ticks, not the four its binary quantization rounds to) and at 512 drawn decimals of every scale, with DurationEngineTicks(decimal) as its 50400 case",
+        "Against": "the decimal's own bits read off decimal.GetBits into an exact rational and the ceiling of its product with the rate taken in BigInteger (Oracles.DecimalRational and Oracles.CeilingQuotient); the subject goes through Rational.FromDecimal and Rational.Ceiling. A non-positive duration is zero and a tick count past ulong throws OverflowException",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PerRate answers the exact period at 240, 60, 24, 7, 50400 and 1 Hz, refuses zero by ArgumentOutOfRangeException and a non-divisor (11 Hz) by ArgumentException, both naming ratePerSecond; ToSeconds is exactly one at 50400 ticks, a half at 25200, zero at zero, and the double quotient 7/50400 at seven",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.core-decimal-durations-and-rate-periods",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "PerRate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of core.decimal-durations-and-rate-periods with 8192 drawn decimals and PerRate walked over every rate from 1 to 50400 Hz: the divisors answer the exact period and every other rate is refused",
+        "Against": "the BigInteger ceiling and the divisibility test of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.seconds-of-ticks-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "SecondsOf"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedTickConversion.SecondsOf at the swept tick count and rate, both read unsigned, with a zero rate the refusal probe",
+        "Against": "Oracles.RoundRationalTiesToEven of ticks\u00b72^16 over the rate, compared as 2r against d in arbitrary width where the subject compares r against d \u2212 r in UInt128; a quotient past the raw throws OverflowException and a zero rate ArgumentOutOfRangeException naming ratePerSecond; a whole and a half second at 50400 are exactly one and a half",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.core-seconds-of-ticks-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "SecondsOf"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of core.seconds-of-ticks-vs-oracle, plus the tick count folded under 2^40 against every divisor of 50400 as the rate \u2014 every rate the engine's tick base admits",
+        "Against": "the BigInteger ties-to-even rounding of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.signed-quotients-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "FloorQuotient"
+      },
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "CeilingQuotient"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.FloorQuotient and CeilingQuotient at the swept pair and at fourteen derived pairs per sweep: the numerator lifted past the long range, both operands widened, the product over its factor, the signed units, the power-of-two divisors, long.MinValue over \u22121 and over 2^16, Int128.MaxValue over the divisor and Int128.MinValue over two and over the divisor",
+        "Against": "Oracles.FloorQuotient and CeilingQuotient in BigInteger, where the signed minimum over minus one is an ordinary quotient; the subject's three paths (the shift, the 64-bit DivRem and Int128.DivRem) are all reached by the derived pairs. A zero divisor throws DivideByZeroException and Int128.MinValue over \u22121 OverflowException",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.directed-rounding-signed-quotients-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "FloorQuotient"
+      },
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "CeilingQuotient"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of directed-rounding.signed-quotients-vs-oracle, plus the numerator against every signed power of two from 2^0 to 2^126 as the divisor, lifted by half the exponent: the whole shift ladder and its negative mirror, which the shift path does not take",
+        "Against": "the BigInteger floor and ceiling of the Default sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.double-enclosure-seams",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "TryFloorFromDouble"
+      },
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "TryCeilingFromDouble"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryFloorFromDouble and TryCeilingFromDouble at a hand-derived ladder \u2014 the non-finite inputs, 1e300, zero and negative zero, the units, the half-raw and quarter-raw ties, 1e-30 and the smallest subnormal of both signs, 0.1, the 2^47 carrier seams and their neighbours \u2014 and at the swept raw read as an exact double",
+        "Against": "each double's IEEE 754 fields read off its bits into an exact rational and floored or ceilinged at the Q16 scale in BigInteger (Oracles.Binary64Rational, FloorQuotient, CeilingQuotient); the answer is true with that raw exactly when it fits the signed 64-bit raw, false leaving zero otherwise, and a non-finite input is refused outright. The subject scales by 2^16 in double and floors there; the oracle never forms a double",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.follower-lane-replacement",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SecondOrderState",
+        "Name": "WithPosition"
+      },
+      {
+        "Type": "Puck.Maths.SecondOrderState",
+        "Name": "WithVelocity"
+      },
+      {
+        "Type": "Puck.Maths.SecondOrderState3",
+        "Name": "WithPosition"
+      },
+      {
+        "Type": "Puck.Maths.SecondOrderState3",
+        "Name": "WithVelocity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SecondOrderState.WithPosition and WithVelocity at the swept raws: the replaced lane is the Q16 value shifted left by sixteen exactly, the other lane's raw is untouched bit for bit, Position reads the value back, and a magnitude at or past 2^47 is refused by ArgumentOutOfRangeException naming position or velocity; SecondOrderState3's two members are the scalar ones applied lane by lane X, Y, Z",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.saturating-arithmetic-vs-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "AddSaturating"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "SubtractSaturating"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "MultiplySaturating"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.AddSaturating, SubtractSaturating and MultiplySaturating at the swept pair as long, and the same pair narrowed to int, short, sbyte, ulong, uint and byte",
+        "Against": "the exact BigInteger sum, difference and product clamped to each carrier's declared extremes; the edge battery reaches both extremes of every width, where the signed overflow and the unsigned wrap below zero both fire",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.zigzag-bijection",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ZigZagEncode"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ZigZagDecode"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.ZigZagEncode at the swept raw and at zero, \u00b11 and both extremes, across long/ulong, int/uint, short/ushort and sbyte/byte",
+        "Against": "the fold's definition in BigInteger: twice the magnitude, less one for a negative value; the subject's shift-and-xor form is never recomputed",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ZigZagDecode inverts ZigZagEncode at every one of those values and widths",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.bit-mix64-finalizer-and-inverse",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Mix64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Unmix64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstMultiplier64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstMultiplier64Inverse"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "SecondMultiplier64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "SecondMultiplier64Inverse"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstShift64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "MiddleShift64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "LastShift64"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two 64-bit multiplier pairs multiply to ONE modulo 2^64 in BigInteger and both multipliers are odd; the multipliers and shifts are SplitMix64's published 0xBF58476D1CE4E5B9, 0x94D049BB133111EB, 30, 27 and 31; every doubled shift stays inside the word and every tripled one leaves it, which is exactly why Unmix64's three xor-shift inversions each carry two terms",
+        "Against": "",
+        "Shared": "",
+        "Citation": "Steele, Lea and Flood, Fast splittable pseudorandom number generators (OOPSLA 2014): the SplitMix64 mix64 finalizer",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "InvertibleBitMix.Mix64 at the swept words, nine edge words and the first SplitMix64 state 0x9E3779B97F4A7C15",
+        "Against": "Oracles.SplitMix64Finalizer, the published algorithm transcribed in BigInteger with the modulus taken explicitly at each multiply, and the published first output 0xE220A8397B1DCDAF of the zero-seeded generator",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Unmix64 o Mix64 and Mix64 o Unmix64 as mutual inverses at the same words",
+        "Against": "each other",
+        "Shared": "the round trip calls BOTH members and nothing else, so it pins them only as a PAIR; the constants leg above reads the multipliers without calling either, and the finalizer leg pins Mix64 alone",
+        "Citation": "a SAMPLE only; the Deep sibling runs a 2^20-step spread and no tier sweeps the 2^64 carrier",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.sampling-bit-mix64-finalizer-and-inverse",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Mix64"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Unmix64"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of sampling.bit-mix64-finalizer-and-inverse, plus Unmix64(Mix64(x)) == x over a 2^20-step golden-ratio spread of words",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.sample-once-matches-alias-table",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "SampleOnce"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "WeightedSampler.SampleOnce over ten weight sets (one entry, a zero weight, equal weights, a single non-zero, eight, 63, 64, 65 and a thousand entries with zeros, and two maximal weights) at 64 draws each",
+        "Against": "AliasTable.SampleIndex over the same weights from the same generator state",
+        "Shared": "WeightedSampler.BuildColumns and SampleColumn, the IDENTICAL members both entry points call: the leg pins that the one-shot pick builds the same partition over stack or pooled storage and draws from it the same way, and that it consumes exactly two advances",
+        "Citation": "the partition's own distribution is pinned at sampling.alias-table-frequency-distribution and its refusals at sampling.alias-refusal-and-fixed-twins",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a picked index never carries a zero weight; an empty span and all-zero weights are refused by ArgumentException naming entries",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.sampling-sample-once-matches-alias-table",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "SampleOnce"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "MIRROR of sampling.sample-once-matches-alias-table at 4096 draws per set, plus a 2^14-entry set whose columns can only be pooled",
+        "Against": "AliasTable.SampleIndex",
+        "Shared": "WeightedSampler.BuildColumns and SampleColumn, the identical members",
+        "Citation": "as the Default sibling",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.scatter-point-and-hash-constants",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "ScatterPoint"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "PcgMultiplier"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "PcgIncrement"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "HashStreamA"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "HashStreamB"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "HashTumble"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "NoiseSeedStreamY"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "NoiseSeedStreamZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg3dLatticeNoise.ScatterPoint at the swept block, seed, spacing and radius and at seven hand-chosen parameter pairs over five block pairs including the int extremes",
+        "Against": "Oracles.ScatterPointReference: the block formula formed in BigInteger over Oracles.Pcg3dReference, the PCG3D mix with every carrier reduction explicit, compared modulo 2^32 where the subject's int arithmetic wraps",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the constants are Knuth's LCG pair 1664525 and 1013904223, the golden-ratio word 0x9E3779B9, the Murmur3 finalizer word 0x85EBCA6B and the tumble word 0x27D4EB2F, and the noise seed streams are the GPU's 0x9E3779B9 and 0x85EBCA77",
+        "Against": "",
+        "Shared": "",
+        "Citation": "Jarzynski and Olano, Hash Functions for GPU Rendering (JCGT 2020), PCG3D; the GPU's sdf-hash.hlsli and sdf-noise.hlsli are generated from these fields",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.sampling-scatter-point-and-hash-constants",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "ScatterPoint"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of sampling.scatter-point-and-hash-constants, plus every spacing from 0 to 64 against every radius from 0 to 32: the whole inset ladder, zero and negative insets included",
+        "Against": "Oracles.ScatterPointReference in BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.r2-alphas-are-the-rounded-increments",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.LowDiscrepancy",
+        "Name": "R2AlphaXQ32"
+      },
+      {
+        "Type": "Puck.Maths.LowDiscrepancy",
+        "Name": "R2AlphaYQ32"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LowDiscrepancy.R2AlphaXQ32 and R2AlphaYQ32",
+        "Against": "the two plastic Q64 increments 13925035116211876495 and 10511698010929265437 rounded to 32 bits through Oracles.RoundToEvenUnits, and the published 32-bit R2 alphas 3242174889 and 2447445414 the GPU dither multiplies by",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the 32-bit wrapping recurrence by each alpha stays within one unit per index of the Q64 sequence's top 32 bits over the first 4096 indices",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rate.rational-accumulator-vs-ledger",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": "Phase"
+      },
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": "Advance"
+      },
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": "QuietSteps"
+      },
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": "Reset"
+      },
+      {
+        "Type": "Puck.Maths.RationalRateAccumulator",
+        "Name": "Skip"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RationalRateAccumulator.Advance driven over a 48-step schedule from the swept weight, period and starting phase, with zero-weight steps",
+        "Against": "an exact BigInteger ledger: the units due and the retained phase at EVERY step, the ledger identity period\u00b7\u03a3due + phase = \u03a3weight + initial phase at every prefix, and the phase's band [0, period)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "QuietSteps answers the floored quotient of the room below the period, Skip adds exactly that weight and leaves the phase below the period, the step after brings exactly one unit due, Reset zeroes the phase, an overflowing step throws OverflowException and leaves the phase unchanged, and a negative phase is refused by ArgumentOutOfRangeException naming phase",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.rational-doors-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "FromDecimal"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "FromDouble"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Rational.FromDouble at the swept raw read as an exact double and at a ladder (both zeros, the units, 0.1, 1e300, the smallest subnormal, a negative subnormal, a one-ulp-above-three double and a dyadic fraction); Rational.FromDecimal at a drawn decimal of every scale and a ladder (both extremes, trailing-zero spellings, the smallest scale-28 value, negative zero)",
+        "Against": "the IEEE 754 fields read off the double's bits and the decimal's fields read off decimal.GetBits, each assembled into a rational in BigInteger (Oracles.Binary64Rational, Oracles.DecimalRational) and compared for exact equality after the subject's reduction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a non-finite double is refused by ArgumentOutOfRangeException naming value; FromDecimal(0.1) is one tenth and FromDouble(0.1) is not, the fact DurationTicks(decimal) exists for",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector-functions.angle-wraps-range-and-congruence",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "WrapAngle"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "WrapTurn"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "VectorFunctions.WrapAngle lands in (\u2212pi, pi] and WrapTurn in [0, 2pi) over a ladder of seventeen angles in both precisions, the difference between input and output is a whole number of turns within the input's own rounding, an angle already inside passes through exactly, \u2212pi maps to +pi in both precisions, NaN and infinity come back NaN, and a lift that rounds to a whole turn is zero. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector-functions.easing-and-fract",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "Smoothstep"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "Fract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "VectorFunctions.Smoothstep(t) at nine fractions in both precisions, bit for bit",
+        "Against": "(t * t) * (3 \u2212 (2 * t)) spelled inline in each precision",
+        "Shared": "the member IS that expression; the leg pins that the generic form keeps the bits the single and double render clocks evaluated",
+        "Citation": "no independent witness stands for a float curve; the exact points below are the structural check",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Smoothstep is exactly zero, a half and one at 0, 1/2 and 1; the edged form equals the unit form on a scaled span, clamps outside its edges, reverses with reversed edges and steps at equal edges; Fract lands in [0, 1) with an integer complement at eight values and equals x \u2212 floor(x) in single precision. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector-functions.shortest-arc-and-perpendicular",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "ShortestArc"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "Perpendicular"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "VectorFunctions.ShortestArc over the hundred pairs of ten directions rotates the normalized start onto the normalized end within 1e-5 and is unit within 1e-5; it is the identity for an aligned pair, a zero or NaN input; for an antiparallel pair it is a half turn (scalar within 1e-6 of zero) about Perpendicular of the start that reverses the start within 1e-5; a pair whose cosine rounds within 1e-6 of -1 takes that half turn too, carrying the start to within the pair's own sine of the end. Perpendicular is unit within 1e-6, orthogonal within 1e-5 of the length, equals the normalized cross with the least-aligned basis axis within 1e-6, and is UnitY for a zero or non-finite direction. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector-functions.attitude-readbacks",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "YawOf"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "PitchOf"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "EulerOf"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "Heading"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "under the \u2212Z-forward convention: \u2212Z reads yaw zero, \u2212X a left quarter turn, +X a right quarter turn, +Z a half turn, +Y a quarter-turn pitch, the identity attitude yaw zero; Heading(yaw, pitch) keeps the bits of (\u2212sin yaw\u00b7cos pitch, sin pitch, \u2212cos yaw\u00b7cos pitch), is unit within 1e-6 and inverts YawOf and PitchOf within 1e-5 over forty yaw-pitch pairs; EulerOf recovers within 1e-4 the yaw, pitch and roll an Ry\u00b7Rx\u00b7Rz attitude was built from over 160 triples, and YawOf(attitude) is EulerOf's yaw and the yaw of the rotated \u2212Z. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector-functions.unorm-packing-vs-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "ToUnorm8"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "PackRgba8"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "PackUnorm2x16"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "UnpackRgba8"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "VectorFunctions.ToUnorm8 in both precisions at fifteen values including the exact binary ties 1/510, 3/510, 5/510 and 254.5/255, values outside the unit range and negative zero",
+        "Against": "the two roundings the member documents, taken in arbitrary width: the clamped double's exact rational times 255 rounded to the nearest binary64 (Oracles.NearestBinary64Bits), then that double's exact rational rounded ties-to-even to the code; a single-precision input's product is exact, so its first rounding is the identity. NaN codes as zero and the half tie goes to the even code 128",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PackRgba8 lays red in the low byte and alpha in the high (0xFF030201 for (1, 2, 3, 255)/255), UnpackRgba8 is each byte over 255 lane by lane at every one of 256 codes and PackRgba8 inverts it there; PackUnorm2x16 lays u in the low half as sdfGlyphUnpackUv decodes, rounds a half to 32768, clamps both ends and codes NaN as zero. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

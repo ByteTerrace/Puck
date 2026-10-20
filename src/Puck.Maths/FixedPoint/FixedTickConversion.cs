@@ -17,22 +17,58 @@ public static class FixedTickConversion {
     /// <c>Puck.World</c>'s fixed simulation step runs at.</summary>
     public const ulong TicksPerSecond = 50400UL;
 
-    /// <summary>Converts a duration to the smallest whole engine-tick count no less than its exact value — see
-    /// <see cref="DurationTicks(FixedQ4816, ulong)"/> at <see cref="TicksPerSecond"/>.</summary>
-    /// <param name="seconds">The duration to convert.</param>
+    /// <summary>Converts an authored duration to the smallest whole engine-tick count no less than its exact decimal
+    /// value — <see cref="DurationTicks(decimal, ulong)"/> at <see cref="TicksPerSecond"/>.</summary>
+    /// <param name="seconds">The authored duration, in seconds.</param>
+    /// <returns><paramref name="seconds"/> in engine ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is
+    /// zero or negative.</returns>
+    /// <exception cref="OverflowException">The rounded tick count exceeds <see cref="ulong.MaxValue"/>.</exception>
+    public static ulong DurationEngineTicks(decimal seconds) => DurationTicks(
+        ratePerSecond: TicksPerSecond,
+        seconds: seconds
+    );
+    /// <summary>Converts a runtime fixed-point duration to the smallest whole engine-tick count no less than its exact
+    /// value — <see cref="DurationTicks(FixedQ4816, ulong)"/> at <see cref="TicksPerSecond"/>.</summary>
+    /// <param name="seconds">The duration to convert, a value that is already fixed-point simulation state.</param>
     /// <returns><paramref name="seconds"/> in engine ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is
     /// zero or negative.</returns>
     public static ulong DurationEngineTicks(FixedQ4816 seconds) => DurationTicks(
         ratePerSecond: TicksPerSecond,
         seconds: seconds
     );
-    /// <summary>Converts a duration to the smallest whole tick count no less than its exact value at
-    /// <paramref name="ratePerSecond"/> ticks per second, so a positive duration always advances by at least one tick;
-    /// a non-positive duration converts to zero. The one rounding rule every tick clock in the engine shares — the
-    /// fixed engine tick (<see cref="DurationEngineTicks"/>) and a document's authored simulation rate alike — so two
-    /// clocks can never round the same authored seconds differently. <see cref="Int128"/> intermediate arithmetic keeps
-    /// the product exact for every raw value and rate, so a duration that divides the rate evenly always round-trips
-    /// to the same tick count.</summary>
+    /// <summary>Converts an authored duration to the smallest whole tick count no less than its exact decimal value at
+    /// <paramref name="ratePerSecond"/> ticks per second: the rule every compile path that converts authored seconds
+    /// shares, so a document's <c>0.1</c> at 30 Hz is three ticks on every clock and never the four its binary
+    /// quantization would round up to.</summary>
+    /// <param name="seconds">The authored duration, in seconds, exact as the decimal denotes it.</param>
+    /// <param name="ratePerSecond">The ticks in one second; <c>0</c> converts every duration to zero ticks.</param>
+    /// <returns><paramref name="seconds"/> in ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is zero or
+    /// negative.</returns>
+    /// <exception cref="OverflowException">The rounded tick count exceeds <see cref="ulong.MaxValue"/>.</exception>
+    public static ulong DurationTicks(decimal seconds, ulong ratePerSecond) {
+        if (seconds <= 0m) {
+            return 0UL;
+        }
+
+        var exact = Rational.FromDecimal(value: seconds);
+        var ticks = (new Rational(
+            Numerator: (exact.Numerator * ratePerSecond),
+            Denominator: exact.Denominator
+        )).Ceiling();
+
+        if (ticks > ulong.MaxValue) {
+            throw new OverflowException(message: "The rounded tick count exceeds the 64-bit tick carrier.");
+        }
+
+        return ((ulong)ticks);
+    }
+    /// <summary>Converts a runtime fixed-point duration to the smallest whole tick count no less than its exact value
+    /// at <paramref name="ratePerSecond"/> ticks per second, so a positive duration always advances by at least one
+    /// tick; a non-positive duration converts to zero. The same ceiling as <see cref="DurationTicks(decimal, ulong)"/>,
+    /// applied to a value that is already fixed-point simulation state — an authored duration takes the decimal
+    /// overload, so its ticks come from its exact decimal rather than from its binary quantization.
+    /// <see cref="Int128"/> intermediate arithmetic keeps the product exact for every raw value and rate, so a
+    /// duration that divides the rate evenly always round-trips to the same tick count.</summary>
     /// <param name="seconds">The duration to convert.</param>
     /// <param name="ratePerSecond">The ticks in one second; <c>0</c> converts every duration to zero ticks.</param>
     /// <returns><paramref name="seconds"/> in ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is zero or
@@ -47,6 +83,56 @@ public static class FixedTickConversion {
 
         return checked((ulong)scaled.CeilingDivide(divisor: ((Int128)(1L << FixedQ4816.FractionBitCount))));
     }
+    /// <summary>Returns the whole number of engine ticks in one period of the given rate.</summary>
+    /// <param name="ratePerSecond">A rate in hertz; it must divide <see cref="TicksPerSecond"/> exactly.</param>
+    /// <returns>The exact period <c><see cref="TicksPerSecond"/> / <paramref name="ratePerSecond"/></c> in engine
+    /// ticks.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ratePerSecond"/> is zero.</exception>
+    /// <exception cref="ArgumentException"><paramref name="ratePerSecond"/> does not divide <see cref="TicksPerSecond"/>
+    /// exactly: a rate that did would be truncated to a slightly different period, forfeiting the strobe-free alignment
+    /// the tick base exists for without any visible failure.</exception>
+    public static ulong PerRate(uint ratePerSecond) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: ratePerSecond);
+
+        var period = (TicksPerSecond / ratePerSecond);
+
+        if ((period * ratePerSecond) != TicksPerSecond) {
+            throw new ArgumentException(
+                message: $"The rate {ratePerSecond} Hz must divide {TicksPerSecond} engine ticks per second exactly; use a divisor of {TicksPerSecond}.",
+                paramName: nameof(ratePerSecond)
+            );
+        }
+
+        return period;
+    }
+    /// <summary>Converts a whole tick count at <paramref name="ratePerSecond"/> ticks per second to fixed-point seconds,
+    /// rounded once to nearest with ties to even.</summary>
+    /// <param name="ticks">The tick count.</param>
+    /// <param name="ratePerSecond">The ticks in one second; must be positive.</param>
+    /// <returns><c>ticks / ratePerSecond</c> seconds, the nearest Q48.16 value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ratePerSecond"/> is zero.</exception>
+    /// <exception cref="OverflowException">The rounded seconds exceed <see cref="FixedQ4816.MaxValue"/>.</exception>
+    public static FixedQ4816 SecondsOf(ulong ticks, ulong ratePerSecond) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: ratePerSecond);
+
+        var numerator = (((UInt128)ticks) << FixedQ4816.FractionBitCount);
+        var quotient = (numerator / ratePerSecond);
+        var remainder = (numerator - (quotient * ratePerSecond));
+
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (ratePerSecond - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
+
+        return FixedQ4816.FromRawBits(value: checked((long)quotient));
+    }
+    /// <summary>Converts a count of engine ticks to seconds, for presentation.</summary>
+    /// <param name="engineTicks">The number of engine ticks to convert.</param>
+    /// <returns>The duration of <paramref name="engineTicks"/> ticks in seconds, as a double; a presentation-out
+    /// value that never re-enters simulation state.</returns>
+    public static double ToSeconds(ulong engineTicks) =>
+        (((double)engineTicks) / TicksPerSecond);
     /// <summary>Converts a duration to an EXACT whole engine-tick count — the non-rounding sibling of
     /// <see cref="DurationEngineTicks(FixedQ4816)"/>, for a caller that must REFUSE an inexact duration rather than
     /// silently round it. <paramref name="seconds"/> is <see cref="decimal"/> — base-10, exact for any terminating

@@ -12,8 +12,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "VectorFunctions.IsFinite(Vector3), which resolves through Vector3.IsFinite and Vector3.AllWhereAllBitsSet's lane-mask reduction",
-        "Against": "componentwise float.IsFinite on each of the vector's three lanes, over the full cross product of a representative lane battery (zero, signed unit and ordinary magnitudes, the smallest subnormal, both carrier extremes, both infinities, and NaN) — a scalar per-lane route sharing no code with the vector's SIMD mask reduction",
+        "Subject": "VectorFunctions.IsFinite over Vector3, Vector2, Vector4 and Quaternion, each resolving through its vector type's IsFinite and AllWhereAllBitsSet lane-mask reduction (the quaternion through a Vector4 of its four lanes)",
+        "Against": "componentwise float.IsFinite on each lane, over the full cross product of a representative lane battery on the three Vector3 lanes, the Vector2 prefix of each, and three fourth-lane values for the Vector4 and Quaternion forms (zero, signed unit and ordinary magnitudes, the smallest subnormal, both carrier extremes, both infinities, and NaN) — a scalar per-lane route sharing no code with the vector's SIMD mask reduction",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

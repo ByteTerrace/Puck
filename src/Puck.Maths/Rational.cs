@@ -100,6 +100,67 @@ public readonly record struct Rational : IComparable<Rational> {
             value: (72L - magnitudeBitLength)
         ));
 
+    /// <summary>Converts a <see cref="decimal"/> to the exact rational it denotes.</summary>
+    /// <param name="value">The decimal value.</param>
+    /// <returns>The rational <c>±unscaled / 10^scale</c> read from the decimal's own 96-bit mantissa and base-10
+    /// scale, reduced; exact for every <see cref="decimal"/>.</returns>
+    public static Rational FromDecimal(decimal value) {
+        var bits = decimal.GetBits(d: value);
+        var scale = ((int)((((uint)bits[3]) >> 16) & 0xFFU));
+        var unscaled = ((((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((uint)bits[0]));
+
+        return new(
+            Numerator: ((bits[3] < 0)
+                ? -unscaled
+                : unscaled),
+            Denominator: BigInteger.Pow(
+                value: 10,
+                exponent: scale
+            )
+        );
+    }
+    /// <summary>Converts a finite <see cref="double"/> to the exact rational it denotes.</summary>
+    /// <param name="value">The finite double.</param>
+    /// <returns>The rational <c>significand · 2^exponent</c> read from the IEEE 754 binary64 bits — a sign, eleven
+    /// exponent bits biased by 1023 and fifty-two fraction bits, a subnormal carrying no implicit bit — reduced; exact
+    /// for every finite double, and a negative zero is the rational zero.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite.</exception>
+    public static Rational FromDouble(double value) {
+        if (!double.IsFinite(d: value)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(value),
+                message: "Only a finite double denotes a rational."
+            );
+        }
+
+        var bits = BitConverter.DoubleToInt64Bits(value: value);
+        var biased = ((int)((bits >> 52) & 0x7FFL));
+        var fraction = (bits & 0xFFFFFFFFFFFFFL);
+        var significand = ((BigInteger)((biased == 0)
+            ? fraction
+            : (fraction | (1L << 52))
+        ));
+        var exponent = (((biased == 0)
+            ? 1
+            : biased
+        ) - 1075);
+
+        if (bits < 0L) {
+            significand = -significand;
+        }
+
+        return ((exponent >= 0)
+            ? new(
+                Numerator: (significand << exponent),
+                Denominator: BigInteger.One
+            )
+            : new(
+                Numerator: significand,
+                Denominator: (BigInteger.One << -exponent)
+            )
+        );
+    }
+
     /// <summary>Returns the absolute value.</summary>
     public Rational Abs() => ((Numerator.Sign < 0)
         ? -this

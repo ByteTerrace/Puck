@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>

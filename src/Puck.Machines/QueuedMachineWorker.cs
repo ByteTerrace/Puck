@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Sources;
+using Puck.Maths;
 
 namespace Puck.Machines;
 

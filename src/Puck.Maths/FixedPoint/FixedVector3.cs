@@ -582,17 +582,14 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             y: ((float)Y),
             z: ((float)Z)
         );
-    /// <summary>Returns whether <see cref="Length"/> is at most <paramref name="radius"/>: exactly the answer
-    /// <c>Length &lt;= radius</c> gives, saturation included, decided on the exact sum of squares without the square
-    /// root.</summary>
-    /// <param name="radius">The bound on the length.</param>
-    /// <returns><see langword="true"/> when the rounded length is at most <paramref name="radius"/>; always
-    /// <see langword="true"/> for <see cref="FixedQ4816.MaxValue"/>, where the length saturates, and always
+    /// <summary>Returns whether the vector lies within a sphere of the given radius: the exact predicate
+    /// <c>|d|² ≤ r²</c> on the raw sums of squares, without a square root and without rounding.</summary>
+    /// <param name="radius">The sphere's radius.</param>
+    /// <returns><see langword="true"/> when the exact squared length is at most <c>radius²</c>; always
     /// <see langword="false"/> for a negative radius.</returns>
-    /// <remarks>For <c>0 ≤ R &lt; MaxValue</c> the rounded root of the raw sum of squares <c>S</c> is at most
-    /// <c>R</c> exactly when <c>S ≤ R² + R</c>, because the root rounds past <c>R</c> only once <c>√S &gt; R + ½</c>
-    /// and an integer <c>S</c> never equals <c>(R + ½)²</c>. Both sides fit 128 bits, so the compare is exact for
-    /// every vector and radius.</remarks>
+    /// <remarks>Both sides stay below <c>2¹²⁸</c>, so the compare is exact for every vector and radius. This is the
+    /// geometric test itself, not the rounded <see cref="Length"/> compared with the radius: a vector whose exact
+    /// length is a hair past the radius is outside here even where its nearest Q16 length equals the radius.</remarks>
     public bool IsWithin(FixedQ4816 radius) =>
         FixedVectorMath.IsMagnitudeAtMost(
             bound: radius.Value,
@@ -600,6 +597,164 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             y: Y.Value,
             z: Z.Value
         );
+    /// <summary>Returns whether this offset lies inside the closed cone about <paramref name="forward"/> whose
+    /// half-angle has the cosine <paramref name="cosineHalfAngle"/>: <c>offset · f̂ ≥ |offset| · cos θ</c>, with
+    /// <c>f̂</c> the normalized forward.</summary>
+    /// <param name="forward">The cone's axis, of any non-zero length; a zero axis names no cone.</param>
+    /// <param name="cosineHalfAngle">The cosine of the half-angle, clamped to <c>[−1, 1]</c>; a negative cosine is a
+    /// cone wider than a quarter turn, <c>−1</c> admits every offset and <c>1</c> only the axis ray.</param>
+    /// <returns><see langword="true"/> when the offset is inside or on the cone, the apex (a zero offset) included;
+    /// <see langword="false"/> for a zero <paramref name="forward"/>.</returns>
+    /// <remarks>Decided as <c>(offset · forward)·2¹⁶ ≥ cos θ · √(|offset|²·|forward|²)</c> on exact integers — the
+    /// squares compared as exact 256-bit products with the signs handled first — so the answer is exact whenever every
+    /// component of both vectors is below <c>2³¹</c> raw in magnitude. Above that, each vector is first scaled down
+    /// by its own power of two with one rounding per component, which is the one approximation: an offset far beyond
+    /// 32768 units can be misjudged within that rounding of the cone's surface. A caller that must exclude itself
+    /// does so by identity, never by the cone.</remarks>
+    public bool IsWithinCone(FixedVector3 forward, FixedQ4816 cosineHalfAngle) =>
+        FixedVectorMath.IsWithinCone(
+            cosine: cosineHalfAngle.Value,
+            fx: forward.X.Value,
+            fy: forward.Y.Value,
+            fz: forward.Z.Value,
+            ox: X.Value,
+            oy: Y.Value,
+            oz: Z.Value
+        );
+    /// <summary>Removes this vector's component along a unit axis.</summary>
+    /// <param name="unitAxis">The axis to reject from, which must be unit length.</param>
+    /// <returns><c>v − axis·(v·axis)</c>: the rounded <see cref="Dot"/>, then the axis scaled by it (one rounding
+    /// per component), subtracted componentwise.</returns>
+    public FixedVector3 RejectFrom(FixedVector3 unitAxis) =>
+        (this - (unitAxis * Dot(
+            left: this,
+            right: unitAxis
+        )));
+    /// <summary>Removes this vector's component along a unit axis and normalizes what remains, producing its length
+    /// in the same pass.</summary>
+    /// <param name="unitAxis">The axis to reject from, which must be unit length.</param>
+    /// <param name="unit">The unit vector along the rejection when this returns <see langword="true"/>;
+    /// <see cref="Zero"/> otherwise.</param>
+    /// <param name="length">The rejection's length, rounded once to nearest, when this returns <see langword="true"/>;
+    /// <see cref="FixedQ4816.Zero"/> otherwise.</param>
+    /// <returns><see langword="false"/> when the rejection is zero (the vector lies along the axis) or when its length
+    /// does not fit the carrier.</returns>
+    /// <remarks>Built over <see cref="FixedVectorMath.TryNormalizeWithMagnitude"/>: one root serves both the unit
+    /// direction and the length, where dividing the rejection by its separately rounded length would round every
+    /// component against an already rounded divisor.</remarks>
+    public bool TryRejectNormalized(FixedVector3 unitAxis, out FixedVector3 unit, out FixedQ4816 length) {
+        var rejected = RejectFrom(unitAxis: unitAxis);
+
+        if (
+            !FixedVectorMath.TryNormalizeWithMagnitude(
+                rawMagnitude: out var rawMagnitude,
+                unitX: out var x,
+                unitY: out var y,
+                unitZ: out var z,
+                x: rejected.X.Value,
+                y: rejected.Y.Value,
+                z: rejected.Z.Value
+            ) ||
+            (rawMagnitude > ((ulong)long.MaxValue))
+        ) {
+            unit = Zero;
+            length = FixedQ4816.Zero;
+            return false;
+        }
+
+        unit = new(
+            X: FixedQ4816.FromRawBits(value: x),
+            Y: FixedQ4816.FromRawBits(value: y),
+            Z: FixedQ4816.FromRawBits(value: z)
+        );
+        length = FixedQ4816.FromRawBits(value: ((long)rawMagnitude));
+        return true;
+    }
+    /// <summary>Shortens the vector to a length of at most <paramref name="maximum"/>, keeping its direction.</summary>
+    /// <param name="maximum">The greatest length allowed.</param>
+    /// <returns>This vector unchanged when <see cref="IsWithin"/> admits it at <paramref name="maximum"/>; otherwise
+    /// <see cref="WithLength"/> at <paramref name="maximum"/>, whose length never exceeds it.</returns>
+    public FixedVector3 ClampLength(FixedQ4816 maximum) =>
+        (IsWithin(radius: maximum)
+            ? this
+            : WithLength(length: maximum));
+    /// <summary>Rescales the vector to a length of at most <paramref name="length"/> along its own direction, each
+    /// component rounded toward zero.</summary>
+    /// <param name="length">The length to scale to.</param>
+    /// <returns>The vector along this direction whose exact length never exceeds <paramref name="length"/>, each
+    /// component within one raw (plus <c>2⁻⁴⁵</c> of its magnitude) below the exact scaled component; <see cref="Zero"/>
+    /// for a zero vector or a non-positive length.</returns>
+    /// <remarks>The exact sum of squares is rooted up and each component is truncated toward zero, so the bound holds
+    /// by direction, never by a repair after a nearest rounding — where <c>(v / v.Length) * length</c> rounds three
+    /// times and can land above the length it was asked for.</remarks>
+    public FixedVector3 WithLength(FixedQ4816 length) {
+        var (x, y, z) = FixedVectorMath.WithLengthTowardZero(
+            length: length.Value,
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value
+        );
+
+        return new(
+            X: FixedQ4816.FromRawBits(value: x),
+            Y: FixedQ4816.FromRawBits(value: y),
+            Z: FixedQ4816.FromRawBits(value: z)
+        );
+    }
+    /// <summary>Adds two vectors componentwise, refusing rather than wrapping when a component sum leaves the carrier.</summary>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <param name="sum">The componentwise sum when this returns <see langword="true"/>; <see cref="Zero"/> otherwise.</param>
+    /// <returns><see langword="false"/> when any component's exact sum, formed in <see cref="Int128"/>, lies outside
+    /// the signed 64-bit raw.</returns>
+    public static bool TryAdd(FixedVector3 left, FixedVector3 right, out FixedVector3 sum) =>
+        TryNarrowLanes(
+            result: out sum,
+            x: (((Int128)left.X.Value) + right.X.Value),
+            y: (((Int128)left.Y.Value) + right.Y.Value),
+            z: (((Int128)left.Z.Value) + right.Z.Value)
+        );
+    /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/> componentwise, refusing rather than
+    /// wrapping when a component difference leaves the carrier.</summary>
+    /// <param name="left">The minuend.</param>
+    /// <param name="right">The subtrahend.</param>
+    /// <param name="difference">The componentwise difference when this returns <see langword="true"/>;
+    /// <see cref="Zero"/> otherwise.</param>
+    /// <returns><see langword="false"/> when any component's exact difference, formed in <see cref="Int128"/>, lies
+    /// outside the signed 64-bit raw.</returns>
+    public static bool TrySubtract(FixedVector3 left, FixedVector3 right, out FixedVector3 difference) =>
+        TryNarrowLanes(
+            result: out difference,
+            x: (((Int128)left.X.Value) - right.X.Value),
+            y: (((Int128)left.Y.Value) - right.Y.Value),
+            z: (((Int128)left.Z.Value) - right.Z.Value)
+        );
+    /// <summary>Returns the yaw of this facing under the engine's −Z-forward convention: zero facing −Z, a positive
+    /// yaw turning left about +Y.</summary>
+    /// <returns><c>Atan2(−X, −Z)</c> in fixed-point radians, in <c>(−π, π]</c>; zero for a vector with no planar part.</returns>
+    public FixedQ4816 Yaw() =>
+        FixedQ4816.Atan2(
+            x: -Z,
+            y: -X
+        );
+
+    private static bool TryNarrowLanes(Int128 x, Int128 y, Int128 z, out FixedVector3 result) {
+        if (
+            (x < long.MinValue) || (x > long.MaxValue) ||
+            (y < long.MinValue) || (y > long.MaxValue) ||
+            (z < long.MinValue) || (z > long.MaxValue)
+        ) {
+            result = Zero;
+            return false;
+        }
+
+        result = new(
+            X: FixedQ4816.FromRawBits(value: ((long)x)),
+            Y: FixedQ4816.FromRawBits(value: ((long)y)),
+            Z: FixedQ4816.FromRawBits(value: ((long)z))
+        );
+        return true;
+    }
     /// <summary>Compares this vector's length with <paramref name="other"/>'s on the exact sums of squares, without
     /// a square root.</summary>
     /// <param name="other">The vector to compare with.</param>

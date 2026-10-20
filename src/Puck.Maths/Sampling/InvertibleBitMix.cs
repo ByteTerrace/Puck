@@ -34,6 +34,21 @@ public static class InvertibleBitMix {
     /// <summary>The multiplicative inverse of <see cref="SecondMultiplier"/> modulo <c>2^32</c>.</summary>
     public const uint SecondMultiplierInverse = 0x43021123U;
 
+    /// <summary>The first odd multiplier applied by <see cref="Mix64"/>: the SplitMix64 finalizer's.</summary>
+    public const ulong FirstMultiplier64 = 0xBF58476D1CE4E5B9UL;
+    /// <summary>The multiplicative inverse of <see cref="FirstMultiplier64"/> modulo <c>2^64</c>.</summary>
+    public const ulong FirstMultiplier64Inverse = 0x96DE1B173F119089UL;
+    /// <summary>The number of bits the first shift-exclusive-or step of <see cref="Mix64"/> shifts by.</summary>
+    public const int FirstShift64 = 30;
+    /// <summary>The number of bits the middle shift-exclusive-or step of <see cref="Mix64"/> shifts by.</summary>
+    public const int MiddleShift64 = 27;
+    /// <summary>The number of bits the last shift-exclusive-or step of <see cref="Mix64"/> shifts by.</summary>
+    public const int LastShift64 = 31;
+    /// <summary>The second odd multiplier applied by <see cref="Mix64"/>.</summary>
+    public const ulong SecondMultiplier64 = 0x94D049BB133111EBUL;
+    /// <summary>The multiplicative inverse of <see cref="SecondMultiplier64"/> modulo <c>2^64</c>.</summary>
+    public const ulong SecondMultiplier64Inverse = 0x319642B2D24D8EC3UL;
+
     /// <summary>Applies the mixing permutation.</summary>
     /// <param name="value">The word to mix.</param>
     /// <returns>The mixed word; <see cref="Unmix(uint)"/> recovers <paramref name="value"/> exactly.</returns>
@@ -63,6 +78,38 @@ public static class InvertibleBitMix {
             value ^= (value >>> MiddleShift) ^ (value >>> (2 * MiddleShift));
             value *= FirstMultiplierInverse;
             value ^= (value >>> FirstShift);
+
+            return value;
+        }
+    }
+    /// <summary>Applies the 64-bit mixing permutation: the published SplitMix64 output finalizer (shifts 30, 27 and
+    /// 31 between its two odd multipliers).</summary>
+    /// <param name="value">The word to mix.</param>
+    /// <returns>The mixed word; <see cref="Unmix64"/> recovers <paramref name="value"/> exactly.</returns>
+    public static ulong Mix64(ulong value) {
+        unchecked {
+            value ^= (value >>> FirstShift64);
+            value *= FirstMultiplier64;
+            value ^= (value >>> MiddleShift64);
+            value *= SecondMultiplier64;
+            value ^= (value >>> LastShift64);
+
+            return value;
+        }
+    }
+    /// <summary>Applies the inverse of the 64-bit mixing permutation.</summary>
+    /// <param name="value">The mixed word.</param>
+    /// <returns>The word <see cref="Mix64"/> would have mixed to <paramref name="value"/>.</returns>
+    /// <remarks>Each shift's inverse is the finite sum of its powers: a shift by 31 or 30 needs the doubled term too
+    /// (62 and 60 are still inside the word), a shift by 27 the doubled term (54) with the tripled one already off the
+    /// end.</remarks>
+    public static ulong Unmix64(ulong value) {
+        unchecked {
+            value ^= (value >>> LastShift64) ^ (value >>> (2 * LastShift64));
+            value *= SecondMultiplier64Inverse;
+            value ^= (value >>> MiddleShift64) ^ (value >>> (2 * MiddleShift64));
+            value *= FirstMultiplier64Inverse;
+            value ^= (value >>> FirstShift64) ^ (value >>> (2 * FirstShift64));
 
             return value;
         }

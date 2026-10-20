@@ -269,6 +269,31 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             Z: FixedQ4816.FromDouble(value: value.Z),
             W: FixedQ4816.FromDouble(value: value.W)
         );
+    /// <summary>Creates the attitude of a yaw about +Y, then a pitch about +X, then a roll about +Z, as the product
+    /// <c>Ry(yaw)·Rx(pitch)·Rz(roll)</c>, normalized once.</summary>
+    /// <param name="yaw">The yaw in fixed-point radians; zero faces −Z and a positive yaw turns left.</param>
+    /// <param name="pitch">The pitch in fixed-point radians; positive looks up.</param>
+    /// <param name="roll">The roll in fixed-point radians.</param>
+    /// <returns>The unit attitude.</returns>
+    /// <remarks>Each factor is <see cref="FromAxisAngle"/> about a unit axis; the two Hamilton products round once
+    /// per component each, and the single closing <see cref="Normalize"/> is what keeps the result on the unit
+    /// sphere whatever the three angles.</remarks>
+    public static FixedQuaternion FromYawPitchRoll(FixedQ4816 yaw, FixedQ4816 pitch, FixedQ4816 roll) =>
+        ((FromAxisAngle(
+            angle: yaw,
+            axis: FixedVector3.UnitY
+        ) * FromAxisAngle(
+            angle: pitch,
+            axis: FixedVector3.UnitX
+        )) * FromAxisAngle(
+            angle: roll,
+            axis: FixedVector3.UnitZ
+        )).Normalize();
+    /// <summary>Returns the yaw of this attitude's forward direction under the engine's −Z-forward convention.</summary>
+    /// <returns>The <see cref="FixedVector3.Yaw"/> of <c>Rotate(−UnitZ)</c>, in <c>(−π, π]</c>; zero when the
+    /// rotated forward has no planar part.</returns>
+    public FixedQ4816 Yaw() =>
+        Rotate(vector: -FixedVector3.UnitZ).Yaw();
     /// <summary>Creates the shortest-arc rotation taking the direction of <paramref name="from"/> to the direction
     /// of <paramref name="to"/>.</summary>
     /// <param name="from">The start direction; any non-zero magnitude (directions are normalized internally).</param>
