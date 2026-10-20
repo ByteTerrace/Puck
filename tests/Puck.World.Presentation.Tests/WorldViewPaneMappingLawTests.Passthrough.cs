@@ -118,8 +118,13 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.True(condition: Click(passthrough: passthrough));
         Assert.Single(collection: window.Presses);
 
-        // One frame with the pane unpublished: nothing reaches the window, and the grant is still held.
+        // The pointer resting on the pane is the window's, so the host shows the system cursor there.
+        Assert.True(condition: passthrough.HoldsPointer);
+
+        // One frame with the pane unpublished: nothing reaches the window, and the grant is still held. The resting
+        // pointer is the game's again without moving.
         Prepare(pane: null);
+        Assert.False(condition: passthrough.HoldsPointer);
         Assert.False(condition: Click(passthrough: passthrough));
         Assert.Single(collection: window.Presses);
         Assert.Null(@object: passthrough.Router.Focus.Focused);

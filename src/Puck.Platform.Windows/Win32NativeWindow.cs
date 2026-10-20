@@ -8,7 +8,7 @@ using static Puck.Platform.Windows.Win32VirtualKeys;
 
 namespace Puck.Platform.Windows;
 
-internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSource {
+internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCursor, IWindowInputSource {
     private const int CwUseDefault = unchecked((int)0x80000000);
     private const int ErrorClassAlreadyExists = 1410;
     private const int HtClient = 1;
@@ -131,6 +131,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private bool m_isOpen = true;
 
     private bool m_isVisible;
+    private bool m_showsSystemCursor;
     private Vector2 m_frameMouseDelta;
     private int m_pointerButtons;
     private bool m_pointerPositionDirty;
@@ -178,6 +179,27 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     public ulong ResizeCount => m_resizeCount;
     public string Title => m_options.Title;
     public uint Width { get; private set; }
+    public bool ShowsSystemCursor {
+        get => m_showsSystemCursor;
+        set {
+            if (value == m_showsSystemCursor) {
+                return;
+            }
+
+            m_showsSystemCursor = value;
+
+            // WM_SETCURSOR arrives only when the pointer moves, so a pointer resting over the client area takes the new
+            // cursor here. The window reports a position only while the pointer is over its client area.
+            if (m_lastMouseX is not null) {
+                _ = User32.SetCursor(cursorHandle: ClientCursor);
+            }
+        }
+    }
+
+    // The cursor the client area wears: none while the options hide it and the host asks for no system arrow.
+    private nint ClientCursor => ((m_options.HideMouseCursor && !m_showsSystemCursor)
+        ? 0
+        : ArrowCursorHandle);
 
     public void Show() {
         ObjectDisposedException.ThrowIf(
@@ -203,7 +225,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             EnterFullscreen(windowHandle: m_windowHandle);
         }
 
-        if (m_options.HideMouseCursor) {
+        if (ClientCursor == 0) {
             _ = User32.SetCursor(cursorHandle: 0);
         }
 
@@ -703,20 +725,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private nint HandleSetCursor(nint windowHandle, uint message, nint wParam, nint lParam) {
         var hitTest = (unchecked((ushort)lParam.ToInt64()));
 
-        if (
-            m_options.HideMouseCursor &&
-            (hitTest == HtClient)
-        ) {
-            _ = User32.SetCursor(cursorHandle: 0);
-            return 1;
-        }
-
         // LOWORD(lParam) is the WM_NCHITTEST result. Own only HTCLIENT: the non-client frame still belongs to
         // DefWindowProc so Windows supplies its native edge/corner resize cursors. The explicit arrow assignment is
         // needed even though the class carries IDC_ARROW too — a class with no cursor leaves whatever process-global
         // cursor happened to be active (commonly the startup wait spinner) unchanged indefinitely.
         if (hitTest == HtClient) {
-            _ = User32.SetCursor(cursorHandle: ArrowCursorHandle);
+            _ = User32.SetCursor(cursorHandle: ClientCursor);
             return 1;
         }
 

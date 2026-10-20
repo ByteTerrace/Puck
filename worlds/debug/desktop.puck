@@ -8,20 +8,24 @@
 
 let claudeTitle = "Claude"
 
-// The capture's output extent and cadence. The window is scaled into this extent and the extent into the pane, so the
-// extent matches the pane's shape on a 16 by 10 display (full width, two fifths of the height).
+// The capture's output extent and cadence. The window is scaled into this extent, and the pane shows it at the window's
+// own aspect ratio whatever the extent's, so the extent sets only how many pixels the capture keeps: about a maximized
+// window's shape on a 2560 by 1440 display, at three quarters of its size.
 let claudeCapture = {
   windowTitle: claudeTitle
-  profile { width: 1920, height: 480, refreshRateHz: 30 }
+  profile { width: 1920, height: 1044, refreshRateHz: 30 }
 }
 
 // The pane's share of the display, from the bottom edge. Two fifths leave the play view the top three fifths.
 let paneHeight = 0.4
 
 views {
+  // Contained: the window keeps its own aspect ratio, centred in its slot with bars beside it, and a pointer on a bar
+  // stays with the game.
   graph "claude" {
     package: "source.capture"
     settings: claudeCapture
+    fit: Contain
   }
 
   // `view.override layout desktop` shows it; `view.override layout play` (or `auto`) hides it.

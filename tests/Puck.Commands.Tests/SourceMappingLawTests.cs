@@ -259,6 +259,109 @@ public sealed class SourceMappingLawTests {
             ).Outcome
         );
     }
+    [Theory]
+    // A captured window wider than its slot, on a maximized display; a narrow source in a wide slot; a stretched pane.
+    [InlineData(2560, 1369, 0f, 0.6f, 1f, 0.4f, 2560, 1392, SourceFit.Contain)]
+    [InlineData(1280, 900, 0.1f, 0.05f, 0.7f, 0.3f, 300, 900, SourceFit.Contain)]
+    [InlineData(1280, 900, 0f, 0.6f, 1f, 0.4f, 1920, 480, SourceFit.Stretch)]
+    public void APaneIsDrawnOverExactlyTheRectangleItsHitsLandOn(int displayWidth, int displayHeight, float x, float y, float width, float height, int sourceWidth, int sourceHeight, SourceFit fit) {
+        var region = new NormalizedRect(
+            Height: height,
+            Width: width,
+            X: x,
+            Y: y
+        );
+        var mapping = new SourceMapping(
+            Crop: SourcePixelRect.Whole(
+                height: sourceHeight,
+                width: sourceWidth
+            ),
+            Fit: fit,
+            Placement: new SourcePlacement.Pane(Region: region),
+            Source: Emulator,
+            SourceHeight: sourceHeight,
+            SourceWidth: sourceWidth
+        );
+        var drawn = mapping.PaneDrawRegion(
+            displayHeight: displayHeight,
+            displayWidth: displayWidth
+        );
+        var left = (drawn.X * ((double)displayWidth));
+        var top = (drawn.Y * ((double)displayHeight));
+        var right = (left + (drawn.Width * ((double)displayWidth)));
+        var bottom = (top + (drawn.Height * ((double)displayHeight)));
+
+        // The drawn rectangle keeps the source's aspect ratio inside the region, or is the region when stretched.
+        if (fit == SourceFit.Contain) {
+            Assert.Equal(
+                expected: (sourceWidth / ((double)sourceHeight)),
+                actual: ((right - left) / (bottom - top)),
+                precision: 3
+            );
+        } else {
+            Assert.Equal(
+                expected: region,
+                actual: drawn
+            );
+        }
+
+        var paneLeft = (int)Math.Floor(region.X * displayWidth);
+        var paneTop = (int)Math.Floor(region.Y * displayHeight);
+        var paneRight = (int)Math.Ceiling((region.X + region.Width) * displayWidth);
+        var paneBottom = (int)Math.Ceiling((region.Y + region.Height) * displayHeight);
+
+        // Every pixel centre of the slot lands on the source inside the drawn rectangle, at the source point the drawn
+        // rectangle stretches it to, and on a letterbox bar outside it; a centre within a thousandth of a pixel of an edge
+        // is either.
+        for (var row = paneTop; (row < paneBottom); row += 7) {
+            for (var column = paneLeft; (column < paneRight); column += 5) {
+                var (px, py) = ((column + 0.5), (row + 0.5));
+                var hit = mapping.MapDisplayPoint(
+                    displayHeight: displayHeight,
+                    displayWidth: displayWidth,
+                    point: Point(
+                        x: px,
+                        y: py
+                    )
+                );
+
+                if (hit.Outcome == SourceHitOutcome.OutsidePlacement) {
+                    continue;
+                }
+
+                var edge = Math.Min(
+                    val1: Math.Min(val1: Math.Abs(px - left), val2: Math.Abs(px - right)),
+                    val2: Math.Min(val1: Math.Abs(py - top), val2: Math.Abs(py - bottom))
+                );
+
+                if (edge < 1e-3) {
+                    continue;
+                }
+
+                var inside = ((px > left) && (px < right) && (py > top) && (py < bottom));
+
+                Assert.Equal(
+                    expected: (inside ? SourceHitOutcome.OnSource : SourceHitOutcome.Letterbox),
+                    actual: hit.Outcome
+                );
+
+                // The hit's fixed point resolves a face point to 1/65536 of the face, a few hundredths of a source pixel
+                // across these extents.
+                if (inside) {
+                    Assert.InRange(
+                        actual: Math.Abs((((px - left) / (right - left)) * sourceWidth) - ((double)hit.Coordinate.X)),
+                        high: 0.05,
+                        low: 0.0
+                    );
+                    Assert.InRange(
+                        actual: Math.Abs((((py - top) / (bottom - top)) * sourceHeight) - ((double)hit.Coordinate.Y)),
+                        high: 0.05,
+                        low: 0.0
+                    );
+                }
+            }
+        }
+    }
     [Fact]
     public void CoverFillsTheFaceWithTheCropsMiddle() {
         // The face is 4:3 and the crop 1:1, so cover shows the crop's middle three quarters top to bottom.

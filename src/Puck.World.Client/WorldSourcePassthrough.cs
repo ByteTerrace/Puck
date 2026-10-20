@@ -52,6 +52,22 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
 
     /// <summary>Gets the router that hosts the keyboard focus.</summary>
     public SourcePassthroughRouter Router { get; }
+    /// <inheritdoc/>
+    /// <remarks>Read against the panes the display published last, so a pane hidden or moved under a resting pointer
+    /// gives the pointer back without waiting for it to move.</remarks>
+    public bool HoldsPointer {
+        get {
+            PublishPanes();
+
+            return Router.HoldsPointer;
+        }
+    }
+
+    private void PublishPanes() => Router.Publish(
+        displayHeight: m_graphs.DisplayHeight,
+        displayWidth: m_graphs.DisplayWidth,
+        panes: m_graphs.Panes
+    );
 
     // The first opened source that is really gone: its capture no longer shows the window it was opened on (the instance
     // stopped, or its capture reopened), or a published pane gives its name a different source. A pane that is only
@@ -180,11 +196,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     }
     /// <inheritdoc/>
     public bool Intercept(in WindowInputEvent inputEvent) {
-        Router.Publish(
-            displayHeight: m_graphs.DisplayHeight,
-            displayWidth: m_graphs.DisplayWidth,
-            panes: m_graphs.Panes
-        );
+        PublishPanes();
 
         while (Stale() is { } stale) {
             _ = Close(instance: stale);

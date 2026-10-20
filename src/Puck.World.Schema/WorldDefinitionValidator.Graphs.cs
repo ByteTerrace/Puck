@@ -87,6 +87,9 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.settings: only a source package row ('{RenderGraphInstance.SourcePackagePrefix}<producer id>') takes settings.");
             }
+            if (graph.Fit == WorldHudFrameFit.Cover) {
+                errors.Add(item: $"{path}.fit: a pane shows its whole image, so instance '{graph.Name}' takes Stretch or Contain, not Cover.");
+            }
 
             ValidateInstanceValues(
                 errors: errors,

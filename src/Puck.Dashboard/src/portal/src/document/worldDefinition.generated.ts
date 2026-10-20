@@ -12303,6 +12303,10 @@ export type WorldViewGraph = {
    * The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row's tier present the same state. null loads the variant no tier names.
    */
   tier?: QualityTier | null;
+  /**
+   * How a layout slot showing the instance fits its image: Stretch fills the slot whatever the two aspect ratios, and Contain shows the whole image at its own aspect ratio, centred, with letterbox bars where it does not reach the slot's edges, which a pointer passes through to the game. A window capture's aspect ratio is the captured window's, whatever its profile extent. A pane is never cropped, so Cover is refused. null stretches.
+   */
+  fit?: WorldHudFrameFit | null;
 };
 
 export type WorldViewGraphBudget = {

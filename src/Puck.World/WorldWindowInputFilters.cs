@@ -10,6 +10,20 @@ namespace Puck.World;
 /// <param name="filters">The filters, offered every event in this order.</param>
 public sealed class WorldWindowInputFilters(params IWindowInputFilter[] filters) : IWindowInputFilter {
     /// <inheritdoc/>
+    /// <remarks>Any filter holding the pointer holds it.</remarks>
+    public bool HoldsPointer {
+        get {
+            foreach (var filter in filters) {
+                if (filter.HoldsPointer) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
     public bool Intercept(in WindowInputEvent inputEvent) {
         foreach (var filter in filters) {
             if (filter.Intercept(inputEvent: in inputEvent)) {

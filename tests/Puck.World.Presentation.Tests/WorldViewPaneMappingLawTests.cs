@@ -55,8 +55,9 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private readonly RenderGraphRoot[] m_roots = [new RenderGraphRoot(Height: 1, Instance: WorldViewGraphs.MainInstance, Width: 1)];
     private readonly List<SdfViewSnapshot> m_views = [];
 
-    // The render.tonemap each frame composes the root with.
+    // The render.tonemap each frame composes the root with, and the views section it reconciles.
     private WorldTonemap? m_tonemap;
+    private WorldViewDefaults m_document = Views;
     private long m_frame;
     private RenderGraphHistory? m_history;
 
@@ -102,7 +103,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private void Prepare(NormalizedRect? pane) {
         m_host.BeginFrame(
             tonemap: m_tonemap,
-            views: Views
+            views: m_document
         );
         m_host.PlaceViews(
             panesCover: false,
@@ -216,6 +217,44 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
             actual: pointer,
             expected: mapping
         );
+    }
+    // A contained pane shows its source at the source's own aspect ratio: a 4:1 window in the 32x64 left half is drawn
+    // 32x8 across its middle, from display y 28 to 36, its mapping is in the window's pixels, and a point on a bar above
+    // or below picks nothing.
+    [Fact]
+    public void AContainedPaneIsDrawnAtItsSourcesAspectAndMapsInItsPixels() {
+        m_document = (Views with {
+            Graphs = [new WorldViewGraph(
+                Fit: WorldHudFrameFit.Contain,
+                Name: Pane,
+                Package: RenderGraphPackageCatalog.SdfWorld
+            )],
+        });
+        m_host.ViewScenes = new ExtentScenes(Width: 64, Height: 16);
+        Frame(pane: Left);
+        Frame(pane: Left);
+
+        var mapping = Assert.Single(collection: m_host.Panes);
+
+        Assert.Equal(
+            actual: (mapping.Fit, mapping.SourceWidth, mapping.SourceHeight, mapping.Placement),
+            expected: (SourceFit.Contain, 64, 16, (SourcePlacement)new SourcePlacement.Pane(Region: Left))
+        );
+        Assert.True(condition: m_host.TryGet(
+            instance: WorldViewGraphs.MainInstance,
+            pass: Pane,
+            placement: out var drawn
+        ));
+        Assert.Equal(
+            actual: (drawn.Left, drawn.Top, drawn.Width, drawn.Height),
+            expected: (0f, 0.4375f, 0.5f, 0.125f)
+        );
+        Assert.Equal(
+            actual: Picked(x: 16.5, y: 32.5),
+            expected: (Pane, 33L, 9L)
+        );
+        Assert.Null(@object: Picked(x: 16.5, y: 10.5));
+        Assert.Null(@object: Picked(x: 16.5, y: 50.5));
     }
     // Moving the slot moves the mapping: the point that mapped to the pane's pixel now maps to none, and the same pixel
     // sits under the moved rect.

@@ -85,6 +85,10 @@ public sealed class WorldAnnotationLawTests {
         var input = new WorldAnnotationInput(annotations: annotations, viewports: viewports);
         var filters = new WorldWindowInputFilters(input);
 
+        // The annotation filter never holds the pointer; the filters hold it once any filter does.
+        Assert.False(condition: filters.HoldsPointer);
+        Assert.True(condition: new WorldWindowInputFilters(input, new PointerHoldingFilter()).HoldsPointer);
+
         // Off, nothing is consumed; a release whose press passed on passes on too.
         Assert.False(condition: filters.Intercept(inputEvent: Button(index: 0, phase: CommandPhase.Started)));
         Assert.False(condition: filters.Intercept(inputEvent: new WindowInputEvent(Kind: WindowInputKind.PointerMove, Vector: Vector2.One)));
@@ -200,6 +204,12 @@ public sealed class WorldAnnotationLawTests {
 
             return true;
         }
+    }
+    // A filter that consumes nothing and holds the pointer, as a passthrough source under it does.
+    private sealed class PointerHoldingFilter : IWindowInputFilter {
+        public bool HoldsPointer => true;
+
+        public bool Intercept(in WindowInputEvent inputEvent) => false;
     }
     private sealed class NoFrames : IOverlayFrameSources {
         public bool TryAcquire(int key, out GpuImageLease lease) {
