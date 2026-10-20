@@ -1302,11 +1302,12 @@ public sealed partial class AgbPpu : IAgbPpu {
         var g = (bgr555 >> 5) & 0x1F;
         var b = (bgr555 >> 10) & 0x1F;
 
-        // Pack as RGBA byte order in memory (red in the low byte), matching the DMG/CGB PPU and the PNG encoder.
+        // Packed 0xAARRGGBB, red in bits 16-23: the layout IAgbPpu.Framebuffer states and every host reads a machine
+        // framebuffer in (ITimeTravelMachineCore.Framebuffer's 0x00RRGGBB, alpha ignored), as the DMG/CGB PPU packs it.
         return 0xFF000000u
-            | (((uint)((b << 3) | (b >> 2))) << 16)
+            | (((uint)((r << 3) | (r >> 2))) << 16)
             | (((uint)((g << 3) | (g >> 2))) << 8)
-            | ((uint)((r << 3) | (r >> 2)));
+            | ((uint)((b << 3) | (b >> 2)));
     }
     private static void WriteDuplicatedByte(byte[] array, uint index, byte value) {
         array[index] = value;

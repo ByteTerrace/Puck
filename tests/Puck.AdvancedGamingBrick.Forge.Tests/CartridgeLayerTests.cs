@@ -236,14 +236,14 @@ public sealed class CartridgeLayerTests {
     public void PriorityDecidesWhichOfTwoLayersCovers() {
         // Two opaque layers over each other, one on each palette entry: the nearer priority is the one on screen.
         Assert.Equal(
-            expected: 0xFFFF0000u,
+            expected: 0xFF0000FFu,
             actual: Stacked(
                 farPriority: 2,
                 nearPriority: 1
             )
         );
         Assert.Equal(
-            expected: 0xFF0000FFu,
+            expected: 0xFFFF0000u,
             actual: Stacked(
                 farPriority: 1,
                 nearPriority: 2

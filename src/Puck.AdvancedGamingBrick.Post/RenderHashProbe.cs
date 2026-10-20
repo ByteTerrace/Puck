@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick.Post;
@@ -30,8 +29,9 @@ internal static class RenderHashProbe {
             machine.Machine.Step();
         }
 
-        var bytes = MemoryMarshal.AsBytes(span: machine.Machine.Framebuffer);
-        var hash = Fnv1aHash.Compute(values: bytes);
+        // The image's RGBA bytes, as a PNG of the frame holds them, so a floor names the picture whatever word layout
+        // the framebuffer packs it in.
+        var hash = Fnv1aHash.Compute(values: FramebufferRgba.Pack(pixels: machine.Machine.Framebuffer));
 
         if (expected == 0ul) {
             return (null, hash, $"0x{hash:X16} (capture)");

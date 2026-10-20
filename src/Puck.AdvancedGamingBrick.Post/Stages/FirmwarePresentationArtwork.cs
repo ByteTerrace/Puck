@@ -39,13 +39,13 @@ internal static class FirmwarePresentationArtwork {
             var value = (rgb555 >> (channel * 5)) & 31;
 
             value -= ((value * dark) / 16);
-            rgba |= (((uint)((value * 8) + (value / 4))) << (channel * 8));
+            rgba |= (((uint)((value * 8) + (value / 4))) << ((2 - channel) * 8));
         }
         return rgba;
     }
     /// <summary>Builds the complete 240-by-160 expected image, with an optional hardware darkening coefficient.</summary>
     /// <param name="dark">The GBA brightness-decrease coefficient, from zero through sixteen.</param>
-    /// <returns>RGBA pixels in the framebuffer's native little-endian storage layout.</returns>
+    /// <returns>Pixels packed <c>0xAARRGGBB</c>, as the framebuffer holds them.</returns>
     public static uint[] Create(int dark = 0) {
         var pixels = new uint[(240 * 160)];
 

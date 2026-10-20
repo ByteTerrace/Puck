@@ -72,6 +72,10 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 - **A `--cosim` run under about 60 frames proves nothing** (the boot logo scroll
   dominates it). Give a CPU-stream comparison at least 120 frames and check that the
   record count differs per ROM before believing a clean result.
+- **Every core's framebuffer is packed `0x00RRGGBB`** (`ITimeTravelMachineCore.Framebuffer`, red in bits 16-23;
+  the advanced brick sets the alpha byte), because the queued worker repacks it for the World's screens in that
+  order. A PNG or a hash of the image goes through `FramebufferRgba.Pack` (`Puck.Machines.Post`), never
+  `MemoryMarshal.AsBytes` of the words, which spells blue first.
 - **Snapshot layout is one list per component.** Every component lists its fields
   once in a `TransferState` (a Humble mapper's `TransferRegisters`). No file
   records the layout; a deliberate layout change raises `CurrentVersion` of

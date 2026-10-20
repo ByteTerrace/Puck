@@ -65,7 +65,7 @@ internal sealed class PpuTextRowStage : IPostStage<PostContext> {
         for (var channel = 0; (channel < 3); ++channel) {
             var intensity = (color >> (5 * channel)) & 31;
 
-            output |= (((uint)((intensity * 8) + (intensity / 4))) << (channel * 8));
+            output |= (((uint)((intensity * 8) + (intensity / 4))) << ((2 - channel) * 8));
         }
         return output;
     }

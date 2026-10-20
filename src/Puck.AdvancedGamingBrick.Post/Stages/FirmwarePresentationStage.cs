@@ -226,7 +226,7 @@ internal sealed class FirmwarePresentationStage : IPostStage<PostContext> {
                 path1: directory,
                 path2: name
             ),
-            rgba: MemoryMarshal.AsBytes(span: core.Framebuffer),
+            rgba: FramebufferRgba.Pack(pixels: core.Framebuffer),
             width: 240
         );
 

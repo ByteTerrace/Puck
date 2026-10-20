@@ -143,14 +143,14 @@ public sealed class CartridgeBitmapTests {
 
         // Both halves of one halfword of video memory, so a plot that clobbered its neighbour would show here.
         Assert.Equal(
-            expected: 0xFFFF0000u,
+            expected: 0xFF0000FFu,
             actual: machine.ReadPixel(
                 x: 40,
                 y: 60
             )
         );
         Assert.Equal(
-            expected: 0xFF0000FFu,
+            expected: 0xFFFF0000u,
             actual: machine.ReadPixel(
                 x: 41,
                 y: 60
@@ -171,7 +171,7 @@ public sealed class CartridgeBitmapTests {
         using var machine = Run(plots: [(101, 20, 1)]);
 
         Assert.Equal(
-            expected: 0xFFFF0000u,
+            expected: 0xFF0000FFu,
             actual: machine.ReadPixel(
                 x: 101,
                 y: 20
@@ -231,7 +231,7 @@ public sealed class CartridgeBitmapTests {
             keys: AgbKeys.None
         );
         Assert.Equal(
-            expected: 0xFFFF0000u,
+            expected: 0xFF0000FFu,
             actual: machine.ReadPixel(
                 x: 70,
                 y: 70

@@ -145,7 +145,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
                 value = effect switch { 2 => 31, 3 => 0, _ => value };
             }
 
-            result |= (((uint)((value * 8) + (value / 4))) << (channel * 8));
+            result |= (((uint)((value * 8) + (value / 4))) << ((2 - channel) * 8));
         }
 
         return result;

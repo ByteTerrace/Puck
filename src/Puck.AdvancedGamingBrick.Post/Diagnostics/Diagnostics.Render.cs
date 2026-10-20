@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Assets;
 
 namespace Puck.AdvancedGamingBrick.Post;
@@ -32,7 +31,7 @@ internal sealed partial class Diagnostics {
             PngEncoder.Write(
                 height: 160,
                 path: outputPath,
-                rgba: MemoryMarshal.AsBytes(span: machine.Framebuffer),
+                rgba: FramebufferRgba.Pack(pixels: machine.Framebuffer),
                 width: 240
             );
 

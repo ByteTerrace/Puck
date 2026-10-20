@@ -113,7 +113,8 @@ public sealed class CartridgeProbe : IDisposable {
     /// <summary>Reads one completed framebuffer pixel.</summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
-    /// <returns>The machine's packed pixel; the two machines pack colour differently, so compare within one target.</returns>
+    /// <returns>The machine's packed pixel, <c>0x00RRGGBB</c> on both machines (the advanced machine sets the alpha
+    /// byte).</returns>
     public uint Pixel(int x, int y) => Observe(
         advanced: agb => agb.ReadPixel(
             x: x,

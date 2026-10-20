@@ -82,7 +82,7 @@ internal static class SmokeTests {
         Check(
             detail: $"got 0x{pixel:X8}",
             name: "affine BG renders (identity transform)",
-            ok: (pixel == 0xFF0000FFu)
+            ok: (pixel == 0xFFFF0000u)
         );
     }
     private static void ApuPulseOutput() {
@@ -578,10 +578,10 @@ internal static class SmokeTests {
     private static void GreenSwap() {
         const int ColorA = 0x0C41; // r=1, g=2, b=3
         const int ColorB = 0x18A4; // r=4, g=5, b=6
-        const uint ColorAUnswapped = 0xFF181008u;
-        const uint ColorBUnswapped = 0xFF312921u;
-        const uint ColorASwapped = 0xFF182908u;   // colour A's r/b, colour B's g
-        const uint ColorBSwapped = 0xFF311021u;   // colour B's r/b, colour A's g
+        const uint ColorAUnswapped = 0xFF081018u;
+        const uint ColorBUnswapped = 0xFF212931u;
+        const uint ColorASwapped = 0xFF082918u;   // colour A's r/b, colour B's g
+        const uint ColorBSwapped = 0xFF211031u;   // colour B's r/b, colour A's g
 
         var offScheduler = new AgbScheduler();
         var offPpu = new AgbPpu(
@@ -1007,8 +1007,8 @@ internal static class SmokeTests {
 
         scheduler.Advance(cycles: 1232); // render scanline 0
 
-        const uint SpriteRed = 0xFF0000FFu;
-        const uint BackdropBlue = 0xFFFF0000u;
+        const uint SpriteRed = 0xFFFF0000u;
+        const uint BackdropBlue = 0xFF0000FFu;
         var burnerPixel = ppu.Framebuffer[0];
         var targetEarly = ppu.Framebuffer[50];
         var targetLate = ppu.Framebuffer[55];
@@ -1090,7 +1090,7 @@ internal static class SmokeTests {
         Check(
             detail: $"got 0x{pixel:X8}",
             name: "sprite pixel is red",
-            ok: (pixel == 0xFF0000FFu)
+            ok: (pixel == 0xFFFF0000u)
         );
         Check(
             detail: $"got 0x{backdrop:X8}",
