@@ -465,6 +465,40 @@ and the debug world's device row (`worlds/debug/devices.puck`, `devices.md`) lis
 each device's shipped folder, then its `roms/` folder. Provider operations, a
 swap among them, are refused while `replay.record` runs (`WhileRecording`).
 
+**A local boot default lives in the folder, never the document (the owner's
+ruling: ROM names never enter the repository, a build, a package, a log line
+or a commit).** A folder may hold `folder.json`
+(`WorldMachineContentFolder.SettingsFile`, schema `puck.content-folder.v1`,
+one optional `default` naming a bare file in that folder; strict, refused by
+name otherwise) and is never listed as content. A machine row with
+`preferFolderDefault: true` (validated: it needs `contentFolders`) boots the
+default of the first folder, in authored order, whose settings name one or
+cannot be read (`WorldMachineContentFolder.TryDefault`), when the folder holds
+it and the engine can mount it; otherwise it boots its authored content, and
+the refusal is narrated on stderr by folder and settings file, never by the
+default's name. `WorldMachineHost.TryPrepareInstances` resolves it on every
+preparation (boot, `world.reload`, a machine-affecting mutation) through
+`WithFolderDefault`, which swaps the configuration's `content.path`
+(`MachineOperationValidation.ReplaceContent`). The host keeps the effective
+declaration, so `machine.content` marks the default mounted and a reset
+recreates it, while the document side never sees it: `CaptureInstances` and an
+operation plan's `Current`/`Candidate` report the authored configuration
+whenever the machine runs its folder boot (`Documented`), so the server's
+candidate check, `world.save`'s capture and a replay tape's embedded definition
+name the shipped cartridge. A replay re-boots from that definition and resolves
+the folder default again; machine cores are outside the hash, so the tape
+verifies the same with or without the local folders. A machine whose row the
+candidate document shares by reference with the current one keeps what it
+runs, so a swap the document adopted survives a later machine-affecting
+mutation, while a reload, which re-reads every row, decides the folder default
+again.
+`machine.default <instance> <name>|none` (a local console or seat only) writes
+the named file's folder's `folder.json` and names none in the machine's other
+folders; `machine.content` echoes `preferDefault=`, `default=`,
+`defaultRefused=` and each folder's `default=`/`settingsRefused=`.
+`MachineContentFolderLawTests` holds the boot, reload, capture, swap and every
+refusal.
+
 ## Read-backs
 
 `screen.state`/`world.screens` tag a mirrored participant `p<n>(mirror)` (both

@@ -96,9 +96,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   Implementing it flips that stage; update the stage and the reference together,
   and derive the bits from the modeled `AgbLinkCable` partner, never from ambient
   state.
-- **No licensed image is ever a default or a bundled payload.** Retail ROMs and BIOS
-  images are named per run (`--link-rom`, `--bios`, `--ags`) and stay out of the
-  repository.
+- **No licensed image is ever a committed default or a bundled payload.** Retail
+  ROMs and BIOS images are named per run (`--link-rom`, `--bios`, `--ags`) and
+  stay out of the repository, its builds, packages, logs and commit messages. A
+  world device boots one only as the owner's local default: the git-ignored
+  folder's own `folder.json`, written by `machine.default` (`puck-world`,
+  [engagement](../puck-world/references/engagement.md)), so nothing committed
+  names it.
 
 ## Workflow
 
