@@ -64,7 +64,6 @@ public sealed class AffectedPostPackageReachLawTests {
             canariesReaching: path => (reachedBy.TryGetValue(key: path, value: out var reaching)
                 ? reaching
                 : new HashSet<string>()),
-            catalogInputs: static (_, _) => false,
             changed: [changed],
             consumersOf: static _ => [],
             coverage: coverage,

@@ -1,7 +1,7 @@
 // The debug world: a flat 256 m ground under a clear day, with axis markers beside the spawn, reference cubes and
 // the Moth avatar to walk it, an open-fronted coloured room beside them for judging indirect light, and a picture
 // frame ahead of the spawn whose glass is a portal onto the garden (garden.puck). It is the plain starting point the
-// island is built up from, in engine: boot it with `--world src/Puck.World/Assets/worlds/debug.puck`, edit this
+// island is built up from, in engine: boot its package with `--world worlds/debug`, edit this
 // source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals. The
 // standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play wheel)
 // are imported documents.

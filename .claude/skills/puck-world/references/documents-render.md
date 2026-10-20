@@ -1,7 +1,7 @@
 # `render`, `dynamics`, `curves`, graph instances, flock, crowd-scale, render validation, `rigid`/`carry`/`tether`
 
 Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and ranges
-are generated (`puck schema`, or `Assets/worlds/schema/*.schema.json`); this
+are generated (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/*.schema.json`); this
 file is the decision/derivation prose the schema cannot state.
 
 ### `render` — the render defaults

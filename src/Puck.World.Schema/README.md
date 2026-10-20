@@ -579,7 +579,7 @@ bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
-under `../Puck.World/Assets/worlds/`. The boot default is
+in asset packages under `worlds/` (the debug world is `worlds/debug/`). The quarantined island is
 `experimental/src/Puck.World/Assets/worlds/puck.world.json` (the island), a `basis` delta over `standard.puck`;
 `pipeline.puck` and `moth-courtyard.puck` are diagnostic scenes a
 `--world` argument names. Its districts—`dive`, `kart`, `jump`, `studio`,
@@ -615,9 +615,10 @@ plus a `Medium` hold row; a program selecting `ShapeVelocity` against a kit
 authoring no shaping row refuses by the `Shaping` tuning facet's name. An
 omitted engage/release/reversalRate/lateral rate means exact convergence,
 while an explicit rate must be positive; drive-only reversalRate/backwardSpeed
-values are refused on a whole-vector row. The loader resolves an explicit `--world` file or the shipped default
-document and refuses a missing, unreadable, or invalid file by name;
-`WorldDefinitionLoader.cs` owns that boundary.
+values are refused on a whole-vector row. The loader resolves the `--world` document (a package's entry through
+`WorldPackageManifest.cs`; there is no default world) and refuses a missing,
+unreadable, or invalid file by name; `WorldDefinitionLoader.cs` owns that
+boundary.
 
 Creations carrying timeline frames or drivers render placements through the
 animated stamp pool. Driver-only scenery can read presentation time and shared
@@ -969,8 +970,8 @@ from the console.
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
 and an import refines or appends them—the debug world's Moth basis,
-`Assets/worlds/avatars/moth.puck`, carries the movement document, and the
-`Assets/worlds/controls.puck` the debug world imports adds the binding bar and the play wheel;
+`worlds/debug/avatars/moth.puck`, carries the movement document, and the
+`worlds/debug/controls.puck` the debug world imports adds the binding bar and the play wheel;
 the engine itself ships none, and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds—merged by
 `WorldBindingComposer.cs` with explicit keys (chord rows on the group plus

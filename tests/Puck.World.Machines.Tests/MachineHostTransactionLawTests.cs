@@ -21,7 +21,7 @@ public sealed class MachineHostTransactionLawTests {
     private const int MachineScreen = 8;
 
     private static string CartridgePath(string file) => Path.Combine(
-        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/cgb"),
+        path1: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb"),
         path2: file
     );
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {

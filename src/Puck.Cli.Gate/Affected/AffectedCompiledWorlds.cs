@@ -9,14 +9,13 @@ namespace Puck.Cli.Affected;
 /// same world, such as a hand-authored document moved to its <c>.puck</c> source, changes nothing a canary runs.
 /// <para>
 /// A changed <c>.puck</c> or <c>.world.json</c> under the shipped tree names the document its stem carries. That
-/// document is read at the head from the working tree and at the base from the shipped assets the base recorded
+/// document is read at the head from the working tree and at the base from the packages the base recorded
 /// (exported once, <see cref="AffectedRevisionExport"/>), each through <see cref="PuckDocumentComposer"/>, which compiles a source
 /// or reads a document exactly as a load does. The two are compared as values (<see cref="ValueEqual"/>). A file whose
 /// source is a module library or a composition is not judged here and keeps the ordinary selection.
 /// </para>
 /// </summary>
 public static class AffectedCompiledWorlds {
-    private const string AssetsTree = "src/Puck.World/Assets";
 
     private static readonly string[] DocumentSuffixes = [".world.json", ".puck"];
 
@@ -66,7 +65,7 @@ public static class AffectedCompiledWorlds {
     /// <param name="since">The base revision.</param>
     /// <param name="changed">The changed paths, repository-relative with forward slashes, deleted ones included.</param>
     /// <returns>The paths judged unchanged in value; empty when no shipped world file changed.</returns>
-    /// <exception cref="AffectedRevisionExportRefusedException">The base's shipped assets could not be exported.</exception>
+    /// <exception cref="AffectedRevisionExportRefusedException">The base's packages could not be exported.</exception>
     public static IReadOnlySet<string> Unchanged(string repositoryRoot, string since, IReadOnlyList<string> changed) {
         var candidates = changed.Select(selector: static path => (Path: path, Name: DocumentName(path: path)))
             .Where(predicate: static candidate => (candidate.Name is not null))
@@ -77,7 +76,7 @@ public static class AffectedCompiledWorlds {
             return unchanged;
         }
 
-        using var export = AffectedRevisionExport.Create(paths: [AssetsTree], repository: repositoryRoot, revision: since);
+        using var export = AffectedRevisionExport.Create(paths: [AffectedCommand.ShippedTree], repository: repositoryRoot, revision: since);
 
         foreach (var name in candidates.Select(selector: static candidate => candidate.Name!).Distinct(comparer: StringComparer.Ordinal)) {
             using var head = Read(name: name, root: repositoryRoot);

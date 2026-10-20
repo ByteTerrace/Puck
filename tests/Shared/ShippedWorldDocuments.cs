@@ -12,8 +12,8 @@ internal static class ShippedWorldDocuments {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance);
 
-    /// <summary>The repository-relative directory of the game's shipped worlds.</summary>
-    public const string WorldDirectory = "src/Puck.World/Assets/worlds";
+    /// <summary>The repository-relative directory of the world packages.</summary>
+    public const string WorldDirectory = "worlds";
 
     /// <summary>Returns the file that carries each document under <paramref name="directory"/>, once however many
     /// names it carries, and every module library there, which carries no document name but is a source all the same

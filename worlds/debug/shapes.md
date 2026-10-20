@@ -177,7 +177,7 @@ Every inspection the debug world offers works on an exhibit:
   alone (`view.isolate motion-smooth-blend visitor`); `view.isolate off`
   restores them.
 - `world.slice <placement> <x|y|z> <path.png>` cuts the live field through an
-  exhibit, and `puck creation shape --world src/Puck.World/Assets/worlds/debug.puck
+  exhibit, and `puck creation shape --world worlds/debug/debug.puck
   --prototype <id>` says which of its shapes are exact distances.
 - `world.wait bakes 60` waits for the bake after a `world.reload` or a state
   write that rebakes, so a capture shows the baked mesh and not the bake in

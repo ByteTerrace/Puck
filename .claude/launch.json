@@ -2,6 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "debug-world",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/Puck.World",
+        "-c",
+        "Release",
+        "--",
+        "--world",
+        "worlds/debug",
+        "--control"
+      ]
+    },
+    {
       "name": "dashboard-portal-preview",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

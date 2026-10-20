@@ -21,7 +21,7 @@ RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,r
     dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app \
     && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
-    && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds/debug.puck --output /app/worlds \
+    && dotnet /puck-cli/Puck.Cli.dll world prepare worlds/debug --output /app/worlds \
     && dotnet publish src/Puck.World.Azure -c Release -o /app/worlds/extensions/Puck.World.Azure \
     && dotnet publish src/Puck.HumbleGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.HumbleGamingBrick.Forge \
     && dotnet publish src/Puck.AdvancedGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.AdvancedGamingBrick.Forge \
@@ -44,9 +44,9 @@ RUN echo 'b2e7c6b9328e0c6a68bfe5d0045be90ceb192b32e0ca906c6c529b9012726f39  /tmp
     && apt-get install -y --no-install-recommends libmsquic \
     && rm -rf /var/lib/apt/lists/* /tmp/packages-microsoft-prod.deb
 WORKDIR /app
-# Keep the authored asset layout beside the composed worlds. Machine content paths are relative to that world
-# directory; the exact image digest retains the cartridges and other dependencies with the runtime.
-COPY --from=build /source/src/Puck.World/Assets .
+# The debug world's asset package is the world directory the composed worlds join. Machine content paths are relative
+# to it; the exact image digest retains the cartridges and other dependencies with the runtime.
+COPY --from=build /source/worlds/debug ./worlds
 COPY --from=build /app .
 # Each extension is published with its dependency manifest into a matching directory, so the loader discovers
 # only its entry assembly. Both entry points scan ./extensions from /app/worlds; the silo stays provider-neutral.

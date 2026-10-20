@@ -20,7 +20,5 @@ It references `Puck.Input` (the physical source vocabulary), `Puck.Shaders`
 `build/Architecture.props` keeps out `Puck.World.Client` and
 `Puck.World.Server`.
 
-The world compile the game's build runs (`Puck.Cli.Worlds`, see
-`build/WorldAssets.targets`) validates through this project and never loads
-the client, so an edit to `Puck.World.Client` does not rerun it
-([edit to running](../../docs/development/contributing.md#edit-to-running)).
+The world compile (`puck compile`, in `Puck.Cli.Worlds`) validates through this
+project and never loads the client.

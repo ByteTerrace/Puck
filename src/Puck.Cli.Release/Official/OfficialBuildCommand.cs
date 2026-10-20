@@ -26,12 +26,12 @@ public static class OfficialBuildCommand {
         what: "refused",
         why: why
     );
-    private static int Run(bool allowDirty, string channel, string engineDirectory, string treeRoot, string? worlds) {
+    private static int Run(bool allowDirty, string channel, string engineDirectory, string treeRoot, string worlds) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
-        var worldsDirectory = Path.GetFullPath(path: (worlds ?? Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds"])));
+        var worldsDirectory = Path.GetFullPath(path: worlds);
 
         if (!Directory.Exists(path: worldsDirectory)) {
             return CliExit.Refuse(
@@ -272,7 +272,7 @@ public static class OfficialBuildCommand {
         var channelOption = new Option<string>(name: "--channel") { Description = "The channel this build belongs to (e.g. dev, stable, next).", Required = true };
         var engineOption = new Option<string>(name: "--engine") { Description = "A browser-wasm AppBundle directory (main.mjs + _framework/).", Required = true };
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root, created if missing.", Required = true };
-        var worldsOption = new Option<string?>(name: "--worlds") { Description = "The worlds directory. Absent, src/Puck.World/Assets/worlds under the repository root." };
+        var worldsOption = new Option<string>(name: "--worlds") { Description = "The asset package whose worlds the tree publishes (the hosted one is worlds/debug).", Required = true };
         var command = new Command(
             description: "Write a puck.official.manifest.v1 tree from the shipped engine, the authoring workspace, world documents, and their assets.",
             name: "build"
@@ -302,7 +302,7 @@ public static class OfficialBuildCommand {
             channel: parseResult.GetRequiredValue(option: channelOption),
             engineDirectory: parseResult.GetRequiredValue(option: engineOption),
             treeRoot: parseResult.GetRequiredValue(option: treeOption),
-            worlds: parseResult.GetValue(option: worldsOption)
+            worlds: parseResult.GetRequiredValue(option: worldsOption)
         ));
 
         return command;

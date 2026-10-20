@@ -352,7 +352,7 @@ public static class DocsCitationsCommand {
     // one vocabulary that cannot drift from the shape.
     private static HashSet<string> SweepDocumentFields(string root) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var directory = Path.Combine(paths: [root, "src", "Puck.World", "Assets", "worlds", "schema"]);
+        var directory = Path.Combine(paths: [root, "src", "Puck.World.Schema", "Schemas", "schema"]);
 
         if (!Directory.Exists(path: directory)) {
             return names;
@@ -395,7 +395,7 @@ public static class DocsCitationsCommand {
     }
     // One boot leg: `--headless true` or `--headless false`, piping `help` then the runner-owned `wire.errors`
     // terminal observation over stdin, and folding every reported verb name into the shared set.
-    private static bool TryBootLeg(string artifact, bool headless, string runDirectory, HashSet<string> enumerated, out string error) {
+    private static bool TryBootLeg(string artifact, string world, bool headless, string runDirectory, HashSet<string> enumerated, out string error) {
         error = string.Empty;
 
         var shape = (headless
@@ -417,6 +417,7 @@ public static class DocsCitationsCommand {
                 fileName: "dotnet",
                 arguments: [
                     artifact,
+                    "--world", world,
                     "--exit-after-seconds", "20",
                     "--state-dir", stateDirectory,
                     "--headless", (headless
@@ -505,6 +506,7 @@ public static class DocsCitationsCommand {
             foreach (var headless in ((bool[])[true, false])) {
                 if (!TryBootLeg(
                     artifact: world.Path,
+                    world: Path.Combine(paths: [root, "worlds", "debug"]),
                     enumerated: enumerated,
                     error: out error,
                     headless: headless,

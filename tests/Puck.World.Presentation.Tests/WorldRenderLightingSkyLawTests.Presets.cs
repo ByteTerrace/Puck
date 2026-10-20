@@ -10,7 +10,7 @@ namespace Puck.World.Presentation.Tests;
 // ordinary render.sky or render.atmosphere rows, and those rows resolve to the stack or the air the template spells, layer
 // by layer under its own labels, with the argument it was given reaching its layer.
 public sealed partial class WorldRenderLightingSkyLawTests {
-    private const string SkiesSource = $"{ShippedWorldDocuments.WorldDirectory}/skies.puck";
+    private const string SkiesSource = $"{ShippedWorldDocuments.WorldDirectory}/debug/skies.puck";
 
     // The sky a world importing skies.puck resolves when its sky block (or the given section's) expands the given preset
     // call.

@@ -28,31 +28,15 @@ Packing with `--no-build` compiles nothing: it checks each output against the
 sidecar its current closure and options would publish, refuses a missing or
 stale one, and collects the rest.
 
-`WorldAssets.targets`, imported by the game, hands every `.puck` source and
-`.world.json` document under `src/Puck.World/Assets/worlds` to one
-`puck compile --tree` run into the game's `obj/` directory. The run writes the
-documents the game ships and their compiled worlds there, and reports what it
-wrote (`--written`); the build copies exactly the reported files into the
-output's `Assets/worlds`. The run's one incremental output is the
-report, which every run writes last; a reported file that is gone removes the
-report, so the next build runs again. Only a compile knows which sources emit documents: a
-module library emits none, so a `.world.json` named like it ships, while a
-`.world.json` beside a world source of its name does not. The sources themselves
-are not copied. No build step writes a world document into `src/` or `worlds/`,
-so there is nothing to ignore there: an untracked `*.world.json` in either tree
-is an error that `WorldDocumentOutputLawTests` names. The tree run also removes any
-document in its output that no source compiles to any more, so a renamed or
-deleted source leaves nothing behind. A copy never deletes, so after copying,
-the build also removes every file in the output's `Assets/worlds/packages`
-store that it no longer deploys, with the directories that leaves empty
-(the `remove-stale-world-packages` operation of `PuckBuildTasks.cs`), and prints one line per file. The CLI is a build-time tool of the game,
-never an assembly or runtime dependency.
+The engine's build compiles no world. A world is an asset package
+(`worlds/<id>/`) that `Puck.World --world <folder>` boots from its sources, and
+a release publish compiles it beside the published engine with
+`puck compile --tree <package> --output <publish>/worlds/<id>`, which writes its
+documents, compiled worlds and shader package store and copies every other file
+of the package ([asset packages](../docs/architecture/worlds.md#asset-packages)).
+No build step writes a world document into `src/` or `worlds/`, so there is
+nothing to ignore there: an untracked `*.world.json` in either tree is an error
+that `WorldDocumentOutputLawTests` names.
 
-A new world needs no build edit: add its `.puck` source under
-`Assets/worlds`. A document reference names the document (`games/go`), and
-resolves to the `.puck` source that emits that name and to the `.world.json`
-document otherwise, so the source tree and the built output resolve the same
-names.
-
-Publish from a normal build: the resulting game content includes precompiled
-worlds and shaders. A `--no-build` publish or test requires prior generation.
+Publish from a normal build: the resulting engine includes precompiled shaders.
+A `--no-build` publish or test requires prior generation.

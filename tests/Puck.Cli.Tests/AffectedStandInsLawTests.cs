@@ -67,9 +67,9 @@ public sealed class AffectedStandInsLawTests {
             expected: ["src/Engine/Model.cs"]
         );
         Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json"), expected: [typeof(RenderGraphDefinition)]);
-        Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json"), expected: [typeof(WorldProjectionDocument)]);
-        Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World/Assets/worlds/schema/prototypes.schema.json"), expected: [typeof(WorldPrototype)]);
-        Assert.Empty(collection: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World/Assets/worlds/puck.world.json"));
+        Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World.Schema/Schemas/puck.world.projection.v1.schema.json"), expected: [typeof(WorldProjectionDocument)]);
+        Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World.Schema/Schemas/schema/prototypes.schema.json"), expected: [typeof(WorldPrototype)]);
+        Assert.Empty(collection: SchemaCommand.SourceTypesOf(relativePath: "worlds/debug/manifest.json"));
     }
     /// <summary>A kernel is named by a constant in a project its project's build references: the conversion pass's
     /// loader. A project the kernel's project does not reference names nothing, even with the same literal.</summary>

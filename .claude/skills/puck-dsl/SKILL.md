@@ -23,7 +23,7 @@ file is corrected in the same change.
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
 | Expression vocabulary (operators, named functions) | `Puck.State.ExpressionOperators`, `Puck.State.ExpressionVocabulary` |
 | CLI verbs | `src/Puck.Cli.Worlds` (`Transpiler/`: compile, decompile, lint, lsp, migrate, embed; `Test/`; `Vocabulary/`), `src/Puck.Cli.Format` (format) |
-| Shipped sources | `src/Puck.World/Assets/worlds/**/*.puck`, `src/Puck.World/Assets/cartridges/*/*.puck`, `src/Puck.World.Transpiler/Samples/`; the quarantined worlds under `experimental/` are prior art |
+| Shipped sources | the world packages, `worlds/<id>/` (the debug world: `worlds/debug/**/*.puck`, cartridges under `worlds/debug/cartridges/`), `src/Puck.World.Transpiler/Samples/`; the quarantined worlds under `experimental/` are prior art |
 
 A document's `schema:` field selects its vocabulary, never the filename.
 
@@ -129,7 +129,7 @@ document: the build compiles it. `--world foo.puck` boots straight from source,
 printer (generated rows refuse by name).
 
 After editing a world, run it (`dotnet run --project src/Puck.World -c Release
--- --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
+-- --world worlds/debug --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
 
 ## Route adjacent work
 

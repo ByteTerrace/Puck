@@ -431,7 +431,7 @@ operation naming absent content is refused. A folder that empties or vanishes
 while the World runs shows in the next listing, and the cartridge mounted from
 it keeps running from memory. No verb lists a hard-coded set or scans outside
 the authored folders. The shipped cartridges sit one folder per forge target
-(`Assets/cartridges/cgb/`, `Assets/cartridges/dmg/`, `Assets/cartridges/agb/`),
+(`worlds/debug/cartridges/cgb/`, `worlds/debug/cartridges/dmg/`, `worlds/debug/cartridges/agb/`),
 and the debug world's device row (`worlds/devices.puck`, `devices.md`) lists
 each device's shipped folder, then its `roms/` folder. Provider operations, a
 swap among them, are refused while `replay.record` runs (`WhileRecording`).

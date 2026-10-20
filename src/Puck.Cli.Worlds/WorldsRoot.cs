@@ -12,12 +12,11 @@ namespace Puck.Cli;
 
 /// <summary>
 /// The world-authoring verbs this assembly holds, and the startup every process that runs them shares. The <c>puck</c>
-/// root composes <see cref="Verbs"/> beside every other verb; the game's build runs this assembly on its own to compile
-/// the shipped worlds (<c>build/WorldAssets.targets</c>), so a change to any other verb assembly never reruns that
-/// compile.
+/// root composes <see cref="Verbs"/> beside every other verb, and the assembly also runs on its own as the world
+/// compiler a verb starts in a process of its own (<c>puck parity</c>'s tree compile).
 /// </summary>
 public static class WorldsRoot {
-    /// <summary>This assembly's file name: the world compiler the game's build writes beside <c>Puck.World.dll</c>.</summary>
+    /// <summary>This assembly's file name: the world compiler, beside the <c>puck</c> CLI that composes it.</summary>
     public const string CompilerAssembly = "Puck.Cli.Worlds.dll";
 
     /// <summary>Creates this assembly's verbs.</summary>

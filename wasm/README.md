@@ -166,8 +166,8 @@ way—see "Drop it into a world document" below.
 
 ### Refreshing the committed modules
 
-The modules Puck.World ships (`src/Puck.World/Assets/addons/puck-addon-default.wasm` and
-`puck-addon-hudbuilder.wasm`) and each verification guest's `dist/` builds are **committed
+Each guest crate's `dist/` builds (the default addon's
+`wasm/puck-addon-default/dist/puck-addon-default.wasm` among them) are **committed
 binaries**, not something a .NET build makes from this workspace. An `addons` row points at a
 committed module and pins its content hash in the row's own `hash` field.
 

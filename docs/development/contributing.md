@@ -62,7 +62,8 @@ macOS, and nothing here is verified there.
   `.claude/settings.json` turns auto memory off, selects the Concise output
   style, enables the `puck` server from `.mcp.json` and the Codex plugin, names
   the plugin's marketplace, and registers the hooks, and `.claude/launch.json`
-  holds the preview configurations. Trust the folder when Claude Code asks,
+  holds the debug world's launch (`debug-world`: `--world worlds/debug
+  --control`) and the preview configurations. Trust the folder when Claude Code asks,
   because the marketplace entry loads only in a trusted project. Settings are
   repository-wide: keep no per-machine settings file, and put a setting every
   machine should share in `.claude/settings.json`. There is no Claude-specific memory file, on purpose: Claude Code reads
@@ -260,13 +261,13 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 ### Edit to running
 
 The target is under 30 seconds from saving an engine C# or HLSL file to seeing
-it in the running debug world (`src/Puck.World/Assets/worlds/debug.puck`, the
-World's default), on Direct3D 12, the World's default backend on Windows.
+it in the running debug world (the package `worlds/debug/`, booted with
+`--world worlds/debug`), on Direct3D 12, the World's default backend on Windows.
 
 **C#**: build and boot in one command, restore skipped:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release --no-restore
+dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug
 ```
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
@@ -323,10 +324,9 @@ request settles. The reload writes into the build's shader cache, so the next
 build publishes those kernels without compiling them. A change to a C# struct,
 buffer layout or binding needs the C# loop instead.
 
-The world compile the build runs (`build/WorldAssets.targets`) reruns only when
-a world source, a pipeline source, or an assembly it loaded changes. It
-validates through `Puck.World.Vocabulary` and never loads `Puck.World.Client`,
-so a client edit compiles one project and skips it.
+The engine's build compiles no world: the debug world boots from its source
+package (`--world worlds/debug`), compiled in memory and cached per user, so a
+world edit is a `world.reload` and an engine edit rebuilds only the engine.
 
 Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
 the CPU at the stated load:
@@ -522,7 +522,7 @@ that runner.
 Run the application to check composed game behavior, alongside relevant World tests:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
 ```
 
 Use `Puck.World` for game verification. Do not add a `--validate-*` mode or

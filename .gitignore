@@ -72,16 +72,12 @@ __pycache__/
 *.gbc
 
 # Built images and the document each was compiled from, plus a licensed reference a comparison is run against.
-# Nothing here is repo content: the authored document lives under src/Puck.World/Assets/cartridges.
+# Nothing here is repo content: the authored cartridges live in the debug world's package, worlds/debug/cartridges.
 roms/
 
 # Runtime authoring saves (the player's own documents/store — never repo content; checked-in examples live under docs/examples/)
 /creations/
 /store/
-# The checked-in world documents are repo content, not runtime saves — exempt them from the bare worlds/ pattern.
-!/src/Puck.World/Assets/worlds/
-# A battery's own test world is repo content too, and without it the battery cannot run at all.
-!/wasm/puck-addon-channelwalk/worlds/
 forged-avatars/
 # Engine benchmark (puck.bench) reports — puck.bench.v1 JSON written under the cwd by --bench / bench.run
 # (plan §8). Machine-specific measurements, never a committed artifact.

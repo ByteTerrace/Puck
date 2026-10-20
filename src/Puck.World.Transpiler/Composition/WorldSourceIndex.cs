@@ -44,7 +44,8 @@ public static class WorldSourceIndex {
     /// file in ordinal order of its path. A source that cannot be read or does not parse cannot say what it emits, so
     /// it claims its stem, and the door that compiles it reports why.</summary>
     /// <param name="directory">The directory. One that does not exist carries nothing.</param>
-    /// <returns>The claims, one per <c>.puck</c> source and <c>.world.json</c> document there.</returns>
+    /// <returns>The claims, one per world source (<see cref="IsWorldSourceFile"/>) and <c>.world.json</c> document
+    /// there; a source of another vocabulary claims nothing.</returns>
     /// <exception cref="IOException">The directory could not be listed.</exception>
     /// <exception cref="UnauthorizedAccessException">The directory may not be listed.</exception>
     public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) {
@@ -63,7 +64,7 @@ public static class WorldSourceIndex {
                     Names: [WorldDocumentName.OfDocumentFile(path: System.IO.Path.GetFileName(path: path))],
                     Path: path
                 ));
-            } else if (WorldDocumentName.IsSourceFile(path: path)) {
+            } else if (WorldDocumentName.IsSourceFile(path: path) && IsWorldSourceFile(path: path)) {
                 claims.Add(item: new WorldDocumentClaims(
                     Names: (Declaration(path: path)?.Names(sourcePath: path) ?? WorldCompilation.EmittedNames(
                         declaredWorlds: [],
@@ -76,6 +77,41 @@ public static class WorldSourceIndex {
         }
 
         return claims;
+    }
+    /// <summary>Returns whether source text is a world source: its <c>schema:</c> names the world vocabulary
+    /// (<see cref="WorldDefinition.SchemaVersion"/>), or it names none, as a module library and an imported fragment
+    /// do. A source naming another vocabulary's schema (a cartridge's) is not, whatever its folder or file
+    /// name.</summary>
+    /// <param name="source">The <c>.puck</c> source text.</param>
+    /// <returns><see langword="true"/> when the source belongs to the world vocabulary.</returns>
+    public static bool IsWorldSource(string source) => (
+        !PuckParser.TryReadDocumentSchema(schema: out var schema, source: source) ||
+        string.IsNullOrEmpty(value: schema) ||
+        string.Equals(a: schema, b: WorldDefinition.SchemaVersion, comparisonType: StringComparison.Ordinal)
+    );
+    /// <summary>Returns whether the <c>.puck</c> file at <paramref name="path"/> is a world source
+    /// (<see cref="IsWorldSource"/>), read through <see cref="CompileInputs"/>. A file that cannot be read is held to be
+    /// one, so the door that compiles it reports why.</summary>
+    /// <param name="path">The <c>.puck</c> source.</param>
+    /// <returns><see langword="true"/> when the file is a world source or cannot be read.</returns>
+    public static bool IsWorldSourceFile(string path) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+
+        byte[] content;
+
+        try {
+            content = CompileInputs.ReadAllBytes(path: path);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return true;
+        }
+
+        using var reader = new StreamReader(
+            detectEncodingFromByteOrderMarks: true,
+            encoding: Encoding.UTF8,
+            stream: new MemoryStream(buffer: content)
+        );
+
+        return IsWorldSource(source: reader.ReadToEnd());
     }
     /// <summary>Reads what the source at <paramref name="path"/> declares, through <see cref="CompileInputs"/>.</summary>
     /// <param name="path">The <c>.puck</c> source.</param>

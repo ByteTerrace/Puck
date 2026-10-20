@@ -45,7 +45,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.definition.v1) to load: a .world.json document, or a .puck source compiled in memory. A .puck source that declares several worlds boots its entry world (see --entry). A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/debug.world.json (the debug world, compiled from debug.puck) beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world to boot (required): an asset package folder (or its manifest.json), whose puck.asset-package.v1 manifest names the entry document beside it; a .puck source compiled in memory; or a .world.json document (puck.world.definition.v1). A .puck source that declares several worlds boots its entry world (see --entry). A missing or invalid world FAILS the boot with a named reason and exit 1, and so does a boot without --world: the engine has no default world.",
 };
 var entryOption = new Option<string?>(name: "--entry") {
     DefaultValueFactory = static _ => null,
@@ -195,6 +195,12 @@ if (parseResult.Errors.Count > 0) {
 if (parseResult.Action is not null) {
     return await parseResult.InvokeAsync();
 }
+// The engine names no world of its own: a boot runs the world it is handed, so one without --world ends here.
+if (parseResult.GetValue(option: worldOption) is not { Length: > 0 } worldPath) {
+    Console.Error.WriteLine(value: "[world] definition refused: no --world. Puck.World boots the world it is handed: pass --world with an asset package folder (a folder whose manifest.json names its entry document), a .puck source, or a .world.json document.");
+
+    return 1;
+}
 var connectTarget = parseResult.GetValue(option: connectOption);
 Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
 if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPath) {
@@ -301,16 +307,15 @@ if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenti
         return 1;
     }
 }
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/debug.world.json beside
-// the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
-// window/launcher/presentation registrations because those now read their values from the resolved host section. Read
-// by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
-// registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
-// shipped document must never quietly run a different world.
+// The world definition (see WorldDefinition) — the --world package, source or document, loaded / schema-checked /
+// validated (see WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those
+// read their values from the resolved host section. Read by DI from the roster, population, frame source, render
+// settings, and the world.quality verb; the resolved source is registered so world.save knows its default target. Any
+// path that will not load ends the boot here — a typo must never quietly run a different world.
 if (!PuckWorldLoader.TryResolveWorld(
     caches: caches,
     entry: parseResult.GetValue(option: entryOption),
-    explicitPath: parseResult.GetValue(option: worldOption),
+    worldPath: worldPath,
     stateRoot: stateRoot,
     failure: out var worldFailure,
     source: out var worldSource,

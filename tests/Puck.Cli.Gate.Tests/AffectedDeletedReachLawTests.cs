@@ -53,7 +53,6 @@ public sealed class AffectedDeletedReachLawTests {
         return AffectedSelection.Select(
             canaries: [InkCanary, ResampleCanary],
             canariesReaching: static _ => throw new InvalidOperationException(message: "A deleted file is reached through the base's documents, never the working tree's."),
-            catalogInputs: static (_, _) => false,
             changed: [deleted],
             consumersOf: static _ => [],
             coverage: new Dictionary<string, IReadOnlySet<string>>(),

@@ -20,7 +20,6 @@ public sealed class AffectedRevisionExport : IDisposable {
     /// <summary>The trees a canary's world documents, the sources they lower from, and every file their compiles read
     /// are authored in: what a revision's document composer needs exported.</summary>
     public static IReadOnlyList<string> DocumentTrees { get; } = [
-        "src/Puck.World/Assets",
         "tests/Puck.World.Canaries",
         "tests/Puck.World.Verdicts",
         "tests/Puck.Counters",

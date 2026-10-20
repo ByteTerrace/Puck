@@ -63,7 +63,7 @@ agent works in that mode by default, without asking:
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
-    prepare` and the Azure release build from `debug.puck`.
+    prepare` and the Azure release build from its package, `worlds/debug`.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.
@@ -112,8 +112,9 @@ settles a question, decide by that principle and say why.
 3. **The game is greenfield.** `Puck.World` and everything under
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`
-   (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
-   0 or less runs until the window closes). `puck canary` checks game behavior
+   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2`;
+   0 or less runs until the window closes). `Puck.World` boots only the world
+   it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
    stderr. Never substitute a build-only check, add a `--validate-*` flag, or
    add a Post stage for a game feature.
@@ -191,8 +192,8 @@ It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 it once a parity world exists, and none does while the campaign runs
 ([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
 runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
-hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,
-the one live world and the World's default), each file at its old repository
+hold every world but the debug world (the package `worlds/debug/`,
+the one live world), each file at its old repository
 path, with the fixtures, laws, baselines and ledgers that only booted or tested
 them ([decision](docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),
 [quarantined gates](docs/plans/open-items.md#quarantined-gates)). Anything there

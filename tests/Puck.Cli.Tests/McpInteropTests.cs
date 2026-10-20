@@ -428,12 +428,12 @@ public sealed class McpInteropTests {
         provider: System.Globalization.CultureInfo.InvariantCulture,
         s: System.Text.RegularExpressions.Regex.Match(input: status, pattern: @" placements (\d+) ").Groups[1].Value
     );
-    // Copies the debug world's source tree into the directory and returns the world document's path.
+    // Copies the debug world's package into the directory and returns its entry source's path.
     private static string StageWorld(TemporaryDirectory directory, string name) {
         var worlds = directory.PathOf(name: name);
 
         CopyTree(
-            source: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "src/Puck.World/Assets/worlds"),
+            source: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "worlds/debug"),
             target: worlds
         );
 

@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.Cli.Worlds.Tests;
 
 /// <summary>CONTRACT UNDER TEST: a <c>puck compile --tree</c> run reports, in its <c>--written</c> file, exactly the
-/// files it left under its output, and the game's build ships that report (<c>build/WorldAssets.targets</c>), since only
+/// files it left under its output, and a caller reads that report rather than deriving it, since only
 /// a compile knows which sources emit documents. A module library writes and reports nothing; a hand-authored
 /// <c>.world.json</c> beside a library of its name ships as it stands, since the library carries no document name; and a
 /// <c>.world.json</c> beside the world source of its name never ships, since the source wins.</summary>
@@ -167,9 +167,37 @@ public sealed class TreeCompileReportLawTests {
         Assert.False(condition: Directory.Exists(path: Path.GetDirectoryName(path: stale)!));
         Assert.Equal(actual: File.ReadAllText(path: report), expected: "field.puckb\nfield.world.json\n");
     }
-    /// <summary>The tree the targets hand the run, in the order they hand it (every source, then every document) and
-    /// in the reverse order: a module library alone, a library beside a hand-authored document of its name, and a
-    /// world beside a stale document of its name.</summary>
+    /// <summary>A package compiles into a bootable copy of itself: a source is a world source by its <c>schema:</c>,
+    /// so a cartridge source in the package is copied as it stands rather than compiled as a world, beside the
+    /// package's other files; and a world source validated without <c>--output</c> writes nothing into its
+    /// tree.</summary>
+    [Fact]
+    public void APackageTreeCopiesItsCartridgeSourcesAndAValidationWritesNothing() {
+        using var directory = new TemporaryDirectory();
+        const string Cartridge = "schema: \"puck.cartridge.v1\"\n";
+        var world = directory.WriteText(name: "package/field.puck", text: World);
+
+        _ = directory.WriteText(name: "package/cartridges/cgb/game.cgb.puck", text: Cartridge);
+        _ = directory.WriteText(name: "package/manifest.json", text: "{}");
+
+        var output = directory.PathOf(name: "out");
+        var (exitCode, log) = ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: ["compile", "--tree", directory.PathOf(name: "package"), "--output", output]));
+
+        Assert.True(condition: (exitCode == 0), userMessage: log);
+        Assert.Equal(expected: ["cartridges/cgb/game.cgb.puck", "field.puckb", "field.world.json", "manifest.json"], actual: FilesUnder(directory: output));
+        Assert.Equal(expected: Cartridge, actual: File.ReadAllText(path: Path.Combine(path1: output, path2: "cartridges/cgb/game.cgb.puck")));
+        Assert.False(condition: Puck.World.Transpiler.Composition.WorldSourceIndex.IsWorldSource(source: Cartridge));
+        Assert.True(condition: Puck.World.Transpiler.Composition.WorldSourceIndex.IsWorldSourceFile(path: directory.PathOf(name: "package/absent.puck")));
+
+        var validated = ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: ["compile", world, "--validate"]));
+
+        Assert.True(condition: (validated.ExitCode == 0), userMessage: validated.Output);
+        Assert.Contains(expectedSubstring: "nothing written without --output", actualString: validated.Output);
+        Assert.Equal(expected: ["cartridges/cgb/game.cgb.puck", "field.puck", "manifest.json"], actual: FilesUnder(directory: directory.PathOf(name: "package")));
+    }
+    /// <summary>The tree a caller hands the run, in the order every source then every document and in the reverse
+    /// order: a module library alone, a library beside a hand-authored document of its name, and a world beside a
+    /// stale document of its name.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

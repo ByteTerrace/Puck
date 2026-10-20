@@ -80,7 +80,7 @@ public sealed class WorldInspectorLawTests {
     // lines, so neither refuses the panel. Optional lines past the last line are counted, never refused.
     [Fact]
     public void LongDiagnosticsAndNamesFitTheReservationWithTheirFileAndLocationFirst() {
-        const string Root = "D:/Source/ByteTerrace/Puck/src/Puck.World/Assets/worlds/avatars";
+        const string Root = "D:/Source/ByteTerrace/Puck/worlds/debug/avatars";
         var placement = (("courtyard-lantern-" + string.Concat(values: Enumerable.Repeat(count: 12, element: "west-arcade-"))) + "north");
         var prototype = ("lantern-" + new string(c: 'p', count: 180));
         var maps = new WorldPickMapBuilder();

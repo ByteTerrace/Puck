@@ -46,7 +46,7 @@ shader's winning frame ([surface](references/surface.md#inset)).
 ## Authoring in `.puck`
 
 `.puck` is the checked-in source for shipped creations:
-`src/Puck.World/Assets/worlds/avatars/moth.puck` sculpts the whole Moth as
+`worlds/debug/avatars/moth.puck` sculpts the whole Moth as
 `shape` rows inside `prototypes { prototype "moth" { document { } } }`. A shape
 row is `shape Type "name" { field: value ... }`: array-valued fields take
 brackets with no colon (`position [0, 1.02, 0]`, `scale [x, y, z]`), scalar

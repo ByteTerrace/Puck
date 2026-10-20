@@ -31,7 +31,7 @@ public sealed class MachineMemoryLawTests {
     // same reason: 76 and 68 were pip's authored initials, and every one of them had to be chased by hand the moment
     // the cabinet's game changed. A law about the HOST asserts the host's contract and derives everything that is a
     // fact about content.
-    private static string CartridgePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/cgb/hgb-mirror.cgb.cartridge.json");
+    private static string CartridgePath() => RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/hgb-mirror.cgb.cartridge.json");
     // The compiled image's own bus address for a named variable — read the same way the machine host reads the
     // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
     private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));

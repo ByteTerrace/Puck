@@ -52,7 +52,6 @@ public sealed class AffectedDocumentsLawTests {
         var plan = AffectedSelection.Select(
             canaries: [new AffectedCanary(Directory: "tests/Canaries/ink", Files: ["tests/Canaries/ink/fixture.world.json"], Id: "ink", RequiresGpu: true)],
             canariesReaching: static path => ((path == "src/World/Assets/ink.hlsl") ? new HashSet<string>(collection: ["ink"]) : new HashSet<string>()),
-            catalogInputs: static (_, _) => false,
             changed: ["src/World/Assets/ink.hlsl"],
             consumersOf: static _ => [],
             coverage: new Dictionary<string, IReadOnlySet<string>>(),

@@ -247,7 +247,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   build or with `-p:PuckShaderSpirvEnabled=true`. A build of one suite under
   `tests/` builds SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
   from the per-user shader cache; never copy bytecode between trees.
-- Run it and look: `dotnet run --project src/Puck.World -c Release --
+- Run it and look: `dotnet run --project src/Puck.World -c Release -- --world worlds/debug
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
   looked at. A boot bakes the groups the mesh store does not hold (the whole

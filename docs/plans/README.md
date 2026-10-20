@@ -13,7 +13,7 @@ The state system, its ceilings and costs, the authoring language, and the games 
 
 ## [Runtime and delivery](runtime-and-delivery.md)
 
-How a world is composed, compiled, packaged, released, and rolled back, and what a client may observe of it, as one page of packages: the product tree, the ROM ledger, compiled worlds, the presentation view, release pairs, and one evidence package. Forcing artifact: the quilt built as a product, shipped as compiled worlds inside it, deployed, rolled back, and restored. Its decisions are in [the register](../decisions/runtime-and-delivery.md).
+How a world is composed, compiled, packaged, released, and rolled back, and what a client may observe of it, as one page of packages: asset packages, the ROM ledger, compiled worlds, the presentation view, release pairs, and one evidence package. Forcing artifact: the quilt built as an asset package, shipped as compiled worlds inside it, deployed, rolled back, and restored. Its decisions are in [the register](../decisions/runtime-and-delivery.md).
 
 ## [Machines and cartridges](machines-and-cartridges.md)
 

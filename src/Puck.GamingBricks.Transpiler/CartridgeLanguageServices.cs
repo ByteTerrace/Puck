@@ -98,7 +98,7 @@ public static class CartridgeLanguageServices {
                 sourcePath: sourcePath
             ));
 
-        if (lowered.Success) {
+        if (lowered.Success && !IsModule(document: lowered.Value!)) {
             Validate(
             lowered.Value!,
             sourceMap,
@@ -108,6 +108,12 @@ public static class CartridgeLanguageServices {
         }
         return true;
     }
+    /// <summary>Returns whether a lowered cartridge source is a module: it lowers to its schema and nothing else, its
+    /// templates and constants contributed to the targets that import it, so it has no document of its own to
+    /// validate.</summary>
+    /// <param name="document">The lowered cartridge source.</param>
+    /// <returns><see langword="true"/> when the document holds no member but <c>schema</c>.</returns>
+    public static bool IsModule(JsonObject document) => document.All(predicate: static member => (member.Key == "schema"));
     /// <summary>Validates lowered JSON and maps forge paths back to authored rows and properties.</summary>
     /// <param name="document">The lowered cartridge.</param>
     /// <param name="sourceMap">The emitter's JSON pointer map.</param>

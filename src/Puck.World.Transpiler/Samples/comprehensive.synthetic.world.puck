@@ -71,7 +71,6 @@ views {
   seatRigPreset("pilot", turnAngle, 2.5m)
 
   graph "ink" {
-    camera: null
     source: "../pipelines/ink.graph.json"
     timeScale: 1
   }

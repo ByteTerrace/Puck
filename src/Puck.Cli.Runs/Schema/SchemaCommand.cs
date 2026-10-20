@@ -8,9 +8,9 @@ using Puck.World;
 namespace Puck.Cli.Schema;
 
 // The `puck schema` verb: the report-and-write surface for the checked-in JSON Schema of puck.world.definition.v1 — a
-// small root (src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json) plus one file per top-level document
+// small root (src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json) plus one file per top-level document
 // section and a common.schema.json for shapes shared by more than one section, both under
-// src/Puck.World/Assets/worlds/schema/ — and of the TypeScript the dashboard portal types a world document with
+// src/Puck.World.Schema/Schemas/schema/ — and of the TypeScript the dashboard portal types a world document with
 // (src/Puck.Dashboard/src/portal/src/document/worldDefinition.generated.ts, WorldSchema.ToTypeScript over the bundle),
 // and of the model shape the engine's model walks read instead of describing a type at run time
 // (src/Puck.World.Schema/WorldModelShape.generated.cs, WorldModelShapeSource). It also writes the unsplit schemas of
@@ -26,11 +26,11 @@ namespace Puck.Cli.Schema;
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 public static class SchemaCommand {
     private const string CountersReportRelativePath = "tests/Puck.Counters/puck.counters.report.v1.schema.json";
-    private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
+    private const string ProjectionRelativePath = "src/Puck.World.Schema/Schemas/puck.world.projection.v1.schema.json";
     private const string ReleaseProfileRelativePath = "tests/Puck.Qualification/puck.release.profile.v1.schema.json";
     private const string RenderGraphRelativePath = "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json";
-    private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json";
-    private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
+    private const string RootRelativePath = "src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json";
+    private const string SectionsRelativeDirectory = "src/Puck.World.Schema/Schemas/schema";
     private const string SiloRelativePath = "src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json";
     private const string TypeScriptRelativePath = "src/Puck.Dashboard/src/portal/src/document/worldDefinition.generated.ts";
 
@@ -444,10 +444,10 @@ public static class SchemaCommand {
             post-process packages of the engine's render graph catalog.
 
             Written to:
-              src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json (the root)
-              src/Puck.World/Assets/worlds/schema/*.schema.json (one per document section, plus
+              src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json (the root)
+              src/Puck.World.Schema/Schemas/schema/*.schema.json (one per document section, plus
                 common.schema.json for shapes more than one section references)
-              src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress document)
+              src/Puck.World.Schema/Schemas/puck.world.projection.v1.schema.json (the egress document)
               src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json (the silo document)
               tests/Puck.Counters/puck.counters.report.v1.schema.json (the report puck counters writes)
               tests/Puck.Qualification/puck.release.profile.v1.schema.json (the profile puck qualify reads)

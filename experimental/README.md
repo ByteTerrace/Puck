@@ -50,7 +50,7 @@ capability today, so the claim is mechanical rather than an impression:
 |---|---|
 | `Overworld/` | The authoritative fold and its tape: `Puck.World.Server.WorldServer`, `Puck.World.Server.WorldReplayTape`. |
 | `Forge/` | The shared cartridge/audio document model and the two brick compilers: `Puck.GamingBricks.Forge.CartridgeDocument`, `Puck.HumbleGamingBrick.Forge.HgbCartridgeCompiler`, `Puck.AdvancedGamingBrick.Forge.AgbCartridgeCompiler`. |
-| `Town/` | The shipped world document itself, authored rather than built in code: `src/Puck.World/Assets/worlds/puck.world.json`. |
+| `Town/` | The shipped world document itself, authored rather than built in code: `experimental/src/Puck.World/Assets/worlds/puck.world.json`. |
 | `Camera/` | `Puck.Platform.Probes.ProbeKernel` (`src/Puck.Platform/Probes/ProbeKernel.cs`). |
 | `Audio/` | `Puck.Audio` (`Puck.Audio.Mixing.AudioMixer` and the rest of `Mixing/`/`Simulation/`). |
 | `BindingBar/`, `DevConsole/` | `Puck.Overlays` — `Puck.Overlays.BindingBarLayout` and `Puck.Overlays.ConsolePanelWriter`. |

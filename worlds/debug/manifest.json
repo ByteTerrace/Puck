@@ -1,0 +1,6 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "debug",
+  "name": "Puck Debug World",
+  "entry": "debug"
+}

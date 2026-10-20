@@ -40,8 +40,8 @@ A world names its score, tunes and patches by rows (`music`, `tunes`,
 referenced document's canonical bytes. `WorldAssetRowLoader` reads the source
 beside the world document that authored the row
 ([paths a document names](../architecture/worlds.md#paths-a-document-names)),
-so a fixture outside `src/Puck.World/Assets` names a shipped tune as
-`../../../src/Puck.World/Assets/worlds/tunes/ambient-tune.audio.json`, and a
+so a fixture three directories below the repository root names the debug world's tune as
+`../../../worlds/debug/tunes/ambient-tune.audio.json`, and a
 fixture-only score sits beside the fixture.
 
 `VoiceBabbler` is the same tier's third primitive: `ComputeTriggerTicks`

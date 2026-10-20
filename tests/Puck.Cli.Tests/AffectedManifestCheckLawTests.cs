@@ -23,7 +23,7 @@ public sealed class AffectedManifestCheckLawTests {
             canaries: [new(Directory: "tests/Puck.World.Canaries/example", Files: [], Id: "example", RequiresGpu: true)],
             coverage: new Dictionary<string, IReadOnlySet<string>> { [Source] = new HashSet<string>(collection: ["example"]), [Manifest] = new HashSet<string>(collection: ["example"]) },
             consumersOf: _ => ["World"], worldClosure: new HashSet<string>(collection: ["World"]), declaresTests: _ => false,
-            catalogInputs: (_, _) => true, standInsFor: _ => [], canariesReaching: _ => new HashSet<string>(collection: ["example"]), worldInput: _ => true,
+            standInsFor: _ => [], canariesReaching: _ => new HashSet<string>(collection: ["example"]), worldInput: _ => true,
             triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: after, before: before, path: path),
             proseOnly: path => AffectedManifestProse.IsUnchanged(after: after, before: before, path: path));
     }

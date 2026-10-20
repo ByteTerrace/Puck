@@ -246,9 +246,9 @@ interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders w
 binding by member name. A binding's
 Direct3D 12 register is its binding number in its group's space, as for every
 pass, and `ShaderRegisterBindingLawTests` holds every register the build
-compiles, and every pipeline source the World's package store is built from
-(`PuckWorldPipelineSource` in `build/WorldAssets.targets`, and the sources a
-shipped `*.graph.json` names), to its binding number and set, with no
+compiles, and every pipeline source a world package or a test fixture carries
+(each `*.hlsl` and `*.graph.json` under `worlds/` and `tests/Shared/Pipelines/`,
+and the sources a `*.graph.json` names), to its binding number and set, with no
 exception. A buffer one pass writes and a later pass reads is two members over
 the one buffer, the writer's with an `RW` suffix: shared code reaches the
 visibility records through `sdfVisibilityRecordBuffer`, which resolves to its

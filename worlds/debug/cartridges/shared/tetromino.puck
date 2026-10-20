@@ -1,3 +1,5 @@
+schema: "puck.cartridge.v1"
+
 // The tetromino game every humble brick target shares. A target's own source imports this module, declares its
 // target and palettes, and calls tetromino(); the game itself (art, map, state, sound and rules) lives only here.
 template tetromino() {

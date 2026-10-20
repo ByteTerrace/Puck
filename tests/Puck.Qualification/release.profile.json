@@ -27,7 +27,7 @@
   "workloads": [
     {
       "name": "debug",
-      "world": "Assets/worlds/debug.world.json",
+      "world": "worlds/debug/debug.world.json",
       "warmupTicks": 900,
       "soakTicks": 1800,
       "worldReloads": 2,

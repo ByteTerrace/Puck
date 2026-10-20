@@ -13,7 +13,7 @@ loaded as a world: `puck.world.projection.v1` (`WorldProjection.cs`) and
 **Field names, enums, defaults, and validation ranges are generated, not
 restated here.** `puck schema` derives `puck.world.definition.v1.schema.json` (root),
 `puck.world.projection.v1.schema.json`, and one file per document section
-under `Assets/worlds/schema/*.schema.json` directly from `WorldDefinition.cs`
+under `src/Puck.World.Schema/Schemas/schema/*.schema.json` directly from `WorldDefinition.cs`
 over the same source-generated `WorldJsonContext` the engine parses a world
 through (`System.Text.Json`'s `JsonSchemaExporter` — never hand-maintained);
 the same run writes the dashboard portal's `worldDefinition.generated.ts`
@@ -31,7 +31,7 @@ shape is what it is, an ordering rule, a refusal condition, a worked trap.
 **`.puck` is the authoring surface; JSON is the compiled wire form.** Every
 JSON block in this reference and its split files is what a `.puck` source
 compiles to, not the recommended way to type it; every live world under
-`src/Puck.World/Assets/worlds/` is `.puck` source. The `.puck`
+`worlds/` is `.puck` source. The `.puck`
 language itself — grammar, `let`/`template`/`import`/`export`, units, the
 compile-time collection builtins, string/indexing forms, and the
 `compile`/`decompile`/`lint`/`format`/`lsp` CLI verbs and `PUCKnnn` diagnostics —

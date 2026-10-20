@@ -111,7 +111,7 @@ derivation and the per-tick neighbour tape, ghost records.
    - Region-conditioned music: a conditional layer and a region-entry
      embellishment fire as a driven body crosses an island region, locally
      and over `--connect`. The island binds no music today
-     (`Assets/worlds/music/nexus-ambient.music.json` authors region conditions
+     (the deleted orphan `nexus-ambient.music.json` authored region conditions
      that no world references), and
      `music-conditional-layer-and-embellishment` proves the mechanism only on
      a minimal fixture's seat-join edge.
@@ -546,7 +546,7 @@ beyond the provisional targets.
 ## Verification summary
 
 ```bash
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
 ```
 
 ```bash

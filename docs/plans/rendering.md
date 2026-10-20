@@ -421,7 +421,7 @@ imports the Direct3D HLSL compiler.
 
 The game's build packages every pipeline source a shipped world's row names:
 the tree run that writes the compiled worlds writes one package per source and
-name into the package store beside them (`Assets/worlds/packages`), keyed by the
+name into the package store beside the package's root document (`packages/`), keyed by the
 source's closure, its passes' interfaces and its plan's names
 (`ShaderPackager.KeyOf`). The World's packager loads a source row from the
 stored package with its key and compiles nothing, wherever the booted document
@@ -5369,7 +5369,7 @@ with a build, so that a boot need not bake them, is a new path
   `sky-clock` and `sky-coverage` canaries and the four counted sky workloads
   (`tests/Puck.Counters/sky-*.world.json`) author and draw the current layers,
   the clocks and a keyed blend. `moth-courtyard.puck`, `avatars/moth.puck` and
-  `tools/hgb-mirror.puck` (under `src/Puck.World/Assets/worlds/`) author
+  `tools/hgb-mirror.puck` (under `worlds/debug/`) author
   `render.sky` among the shipped worlds, and only the courtyard keys it.
 
 A portal session or window already draws its destination under the

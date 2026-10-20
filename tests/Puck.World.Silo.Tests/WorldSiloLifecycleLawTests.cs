@@ -892,7 +892,7 @@ public sealed class WorldSiloLifecycleLawTests {
             destFileName: pipelinePath,
             sourceFileName: Path.Combine(
                 path1: RepositoryPaths.RequireRoot(),
-                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
+                path2: "tests/Shared/Pipelines/ink/ink.graph.json"
             )
         );
 

@@ -91,10 +91,10 @@ subject names them:
 ## Worlds have no in-code definition
 
 Every world is an authored document; the engine ships no content default. A
-boot with no `--world` loads the debug world
-(`src/Puck.World/Assets/worlds/debug.puck`), and an explicit path or the
-default that cannot be loaded refuses the boot by name
-(`src/Puck.World.Schema/WorldDefinitionLoader.cs`). The island
+boot with no `--world` refuses and names what it needs; `--world worlds/debug`
+boots the debug world's package (`worlds/debug/manifest.json` names its entry,
+`debug.puck`), and a path that cannot be loaded refuses the boot by name
+(`src/Puck.World/PuckWorldLoader.cs`, `src/Puck.World.Schema/WorldPackageManifest.cs`). The island
 (`experimental/src/Puck.World/Assets/worlds/puck.world.json`), its district
 modules and the game packages are quarantined prior art: read them for worked
 examples, never boot or repair them.

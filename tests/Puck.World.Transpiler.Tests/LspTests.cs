@@ -99,7 +99,7 @@ public class LspTests {
     public async Task FileUrisResolveCanonicalBasis(bool escapeDriveColon) {
         var sourcePath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
-            path2: "moth-courtyard.puck"
+            path2: "debug/moth-courtyard.puck"
         );
         var uri = new Uri(uriString: sourcePath).AbsoluteUri;
 

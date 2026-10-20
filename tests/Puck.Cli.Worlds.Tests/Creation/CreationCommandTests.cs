@@ -16,7 +16,7 @@ public sealed class CreationCommandTests {
     // The moth world composed where it ships, through its basis and imports, written as one standalone document: the
     // file both `creation --world` and a direct deserialize read, with nothing left to resolve beside it.
     private static string TempWorldCopy(TemporaryDirectory directory) => directory.WriteBytes(
-        bytes: ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/avatars/moth.puck")),
+        bytes: ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/debug/avatars/moth.puck")),
         name: "moth.world.json"
     );
 

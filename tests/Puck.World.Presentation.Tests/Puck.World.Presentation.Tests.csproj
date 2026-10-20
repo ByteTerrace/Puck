@@ -76,10 +76,4 @@
         <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
         <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
-    <ItemGroup>
-        <!-- A world's patch rows resolve their source against the executable's own directory, where the game ships
-             Assets/worlds (WorldAssetRowLoader). CompiledWorldFixtures copies the shipped patch beside the worlds it
-             compiles, so the suite carries the same files at the same relative paths. -->
-        <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
 </Project>

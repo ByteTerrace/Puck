@@ -1,7 +1,7 @@
 using Puck.Cli;
 
-// The game's build runs this assembly alone to compile the shipped worlds (build/WorldAssets.targets); `puck` composes
-// the same verbs beside every other.
+// A verb that compiles a tree in a process of its own runs this assembly alone; `puck` composes the same verbs beside
+// every other.
 WorldsRoot.Start();
 return await CliRoot.InvokeAsync(
     args: args,

@@ -10,10 +10,9 @@ namespace Puck.Cli;
 /// <para>
 /// Each build is keyed by <see cref="WorldArtifactKey"/> and kept in a <see cref="WorldArtifactStore"/> under the
 /// user's local application data. A run whose key the store already holds builds nothing. A run that finds another
-/// run building the same key waits for it and takes its build. A build never goes into the checkout: <c>Puck.World</c>
-/// carries a build-time reference to <c>Puck.Cli.Worlds</c> (the world-authoring verbs' own executable compiles the
-/// shipped <c>.puck</c> worlds). With <c>--output</c>, every project in the World's closure, that compiler included,
-/// writes into the store instead, while compilation stays incremental through the checkout's <c>obj</c> directories.
+/// run building the same key waits for it and takes its build. A build never goes into the checkout: with
+/// <c>--output</c>, every project in the World's closure writes into the store instead, while compilation stays
+/// incremental through the checkout's <c>obj</c> directories.
 /// </para>
 /// <para>
 /// Every build restores. NuGet's no-op check compares each closure project's restore inputs with the hash its last

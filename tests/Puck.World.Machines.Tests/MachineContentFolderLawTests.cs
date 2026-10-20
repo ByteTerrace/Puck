@@ -45,7 +45,7 @@ public sealed class MachineContentFolderLawTests {
 
     private const string Mirror = "../carts/mirror.cgb.cartridge.json";
 
-    private static string Shipped(string relativePath) => RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/{relativePath}");
+    private static string Shipped(string relativePath) => RepositoryPaths.Resolve(relativePath: $"worlds/debug/{relativePath}");
     // A brick image of the given cartridge type whose header checksum holds.
     private static byte[] BrickImage(byte type) {
         var rom = new byte[0x8000];
@@ -321,7 +321,7 @@ public sealed class MachineContentFolderLawTests {
         Assert.True(
             condition: WorldMachineContentFolder.TryList(
                 catalog: TestMachines.Catalog(),
-                documentDirectory: Shipped(relativePath: "worlds"),
+                documentDirectory: RepositoryPaths.Resolve(relativePath: "worlds/debug"),
                 entries: out var entries,
                 folders: out var folders,
                 machine: tunes,
@@ -330,7 +330,7 @@ public sealed class MachineContentFolderLawTests {
             userMessage: reason
         );
         Assert.Equal(
-            expected: Directory.EnumerateFiles(path: Shipped(relativePath: "worlds/tunes")).Select(selector: Path.GetFileName).Order(comparer: StringComparer.Ordinal),
+            expected: Directory.EnumerateFiles(path: Shipped(relativePath: "tunes")).Select(selector: Path.GetFileName).Order(comparer: StringComparer.Ordinal),
             actual: entries.Select(selector: static entry => entry.Name)
         );
         Assert.All(collection: entries, action: static entry => Assert.Null(@object: entry.Refusal));

@@ -131,9 +131,9 @@ public static partial class CompileCommand {
         var jsonObject = (loweredJson ?? new JsonObject());
         var jsonBytes = CanonicalJsonDocument.Serialize(node: jsonObject);
 
-        // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
+        // A module is a fragment whichever root imports it supplies fields for, so validating one as a cartridge
         // reports refusals that belong to that root, not to this file. `lint` applies the same rule.
-        if (validate && !diagnostics.HasErrors) {
+        if (validate && !diagnostics.HasErrors && !CartridgeLanguageServices.IsModule(document: jsonObject)) {
             CartridgeLanguageServices.Validate(
                 jsonObject,
                 sourceMap,
@@ -367,9 +367,9 @@ public static partial class CompileCommand {
             aliases: ["-w"]
         ) { Description = "Watch the source file and its imported dependencies for changes and recompile automatically." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
-        var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
+        var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
-        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory. With no source paths, select every .puck and .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb and stored package under --output is removed, so the output holds exactly this run's worlds." };
+        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory outside it. With no source paths, select every world .puck source (one whose schema: is the world vocabulary's, or absent) and every .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, every other file of the tree (a package manifest, fonts, tunes, cartridges and their sources, pipeline sources) is copied to the same place, and every other *.world.json, *.puckb and stored package under --output is removed, so the output is the tree as a bootable package." };
         var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world or stored package --output holds that the run does not write. Writes nothing under --output." };
         var writtenOption = new Option<string?>(name: "--written") { Description = "With --tree, write the files the run left under --output to this file once it succeeds, one output-relative path with forward slashes per line, and remove it before the run starts, so it exists only for a whole run." };
 
@@ -413,7 +413,7 @@ public static partial class CompileCommand {
 
             if ((paths.Length == 0) && (parseResult.GetValue(option: treeOption) is { } sourceTree)) {
                 paths = [.. Directory.EnumerateFiles(path: sourceTree, searchOption: SearchOption.AllDirectories, searchPattern: "*")
-                    .Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") || file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".world.json")))
+                    .Where(predicate: IsTreeSource)
                     .Order(comparer: StringComparer.Ordinal)];
             }
 

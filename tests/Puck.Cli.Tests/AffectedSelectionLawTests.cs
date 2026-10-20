@@ -29,7 +29,6 @@ public sealed class AffectedSelectionLawTests {
         consumersOf: (consumersOf ?? (static _ => [])),
         coverage: (coverage ?? []),
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
-        catalogInputs: static (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/World/Assets/worlds/") || (owner == "Core")),
         projects: Projects,
         canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
         standInsFor: (standInsFor ?? (static _ => [])),
@@ -56,7 +55,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -67,19 +66,12 @@ public sealed class AffectedSelectionLawTests {
         Assert.Equal(actual: plan.Worlds, expected: ["worlds/garden/tested.puck"]);
         Assert.Empty(collection: plan.Suites);
     }
-    [Fact]
-    public void TheCatalogIsCheckedWhenAShippedWorldOrTheCompileThatWritesItChanges() {
-        Assert.True(condition: Select(changed: ["src/World/Assets/worlds/puck.puck"]).Catalog);
-        Assert.True(condition: Select(changed: ["src/Core/Thing.cs"]).Catalog);
-        Assert.True(condition: Select(changed: ["build/Shaders.targets"]).Catalog);
-        Assert.False(condition: Select(changed: ["src/Maths/Field.cs"]).Catalog);
-    }
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
     [Theory]
-    public void AnUnchangedCompiledValueKeepsSuitesAndCatalogButNoCanaryOrUnplacedPath(bool mapped, bool isDeleted) {
+    public void AnUnchangedCompiledValueKeepsSuitesButNoCanaryOrUnplacedPath(bool mapped, bool isDeleted) {
         const string Path = "src/World/Assets/worlds/sample.world.json";
         var plan = Select(
             changed: [Path],
@@ -90,7 +82,6 @@ public sealed class AffectedSelectionLawTests {
         );
 
         Assert.Equal(expected: ["Cli.Tests", "World.Tests"], actual: plan.Suites);
-        Assert.True(condition: plan.Catalog);
         Assert.Empty(collection: plan.Canaries);
         Assert.False(condition: plan.Parity);
         Assert.Empty(collection: plan.Unmapped);
@@ -238,28 +229,9 @@ public sealed class AffectedSelectionLawTests {
 
         Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests"]);
     }
-    // The printed plan names what --run does with each line: a test line is a source for puck test, and the catalog line
-    // names the compile check that runs over it, so the catalog, which holds no test worlds, never reads as a test target.
-    [Fact]
-    public void ThePrintedPlanNamesTheCatalogCheckBesideTheCatalog() {
-        var plan = Select(changed: ["src/World/Assets/worlds/tested.puck"]);
-        var text = new StringWriter();
-
-        AffectedCommand.Describe(
-            into: text,
-            plan: plan
-        );
-
-        var lines = text.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Environment.NewLine);
-
-        Assert.Contains(collection: lines, expected: "test src/World/Assets/worlds/tested.puck");
-        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog}");
-        Assert.Contains(collection: lines, expected: $"puck compile --tree {AffectedCommand.ShippedTree} --output {AffectedCommand.ShippedCatalog} --check");
-        Assert.DoesNotContain(collection: lines, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"test {AffectedCommand.ShippedCatalog}"));
-    }
     [Fact]
     public void EveryPuckCommandInThePrintedPlanParses() {
-        var plan = Select(changed: ["build/WorldAssets.targets", "src/World/Assets/worlds/tested.puck", "src/World/Assets/ink.hlsl"]);
+        var plan = Select(changed: ["build/Shaders.targets", "src/World/Assets/worlds/tested.puck", "src/World/Assets/ink.hlsl"]);
         using var text = new StringWriter();
 
         AffectedCommand.Describe(into: text, plan: plan);
@@ -269,12 +241,11 @@ public sealed class AffectedSelectionLawTests {
         Assert.NotEmpty(collection: plan.Suites);
         Assert.NotEmpty(collection: plan.Worlds);
         Assert.NotEmpty(collection: plan.Canaries);
-        Assert.True(condition: plan.Catalog);
         Assert.True(condition: plan.Parity);
 
         var commands = lines.Select(selector: PuckArguments).OfType<string[]>().ToArray();
 
-        Assert.Equal(expected: ((plan.Worlds.Count + plan.Canaries.Count) + 2), actual: commands.Length);
+        Assert.Equal(expected: ((plan.Worlds.Count + plan.Canaries.Count) + 1), actual: commands.Length);
 
         foreach (var args in commands) {
             var parsed = PuckRootCommand.Create(clock: TimeProvider.System).Parse(args: args);
@@ -283,40 +254,10 @@ public sealed class AffectedSelectionLawTests {
                 userMessage: $"puck {string.Join(separator: ' ', value: args)}: {string.Join(separator: "; ", values: parsed.Errors.Select(selector: static error => error.Message))}");
         }
     }
-    [Fact]
-    public void TheCatalogRunInvokesExactlyThePrintedArgumentsAfterThePrintedBuild() {
-        using var text = new StringWriter();
-
-        AffectedCommand.Describe(plan: Select(changed: ["src/World/Assets/worlds/tested.puck"]), into: text);
-        var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
-        var printed = Assert.Single(collection: lines.Select(selector: PuckArguments).OfType<string[]>(), predicate: static args => (args[0] == "compile"));
-        var root = PuckRootCommand.Create(clock: TimeProvider.System);
-        var calls = new List<string[]>();
-
-        root.Subcommands.Single(predicate: static command => (command.Name == "compile")).SetAction(action: parsed => {
-            calls.Add(item: [.. parsed.Tokens.Select(selector: static token => token.Value)]);
-            return 37;
-        });
-
-        var exit = AffectedCommand.CheckCatalog(
-            build: arguments => { calls.Add(item: arguments); return 0; },
-            root: root
-        );
-
-        Assert.Equal(actual: exit, expected: 37);
-        Assert.Equal(expected: 2, actual: calls.Count);
-        Assert.Equal(expected: printed, actual: calls[1]);
-        Assert.Contains(collection: lines, expected: $"dotnet {string.Join(separator: ' ', value: calls[0])}");
-        Assert.All(collection: calls[1], action: static argument => Assert.DoesNotContain(actualString: argument, expectedSubstring: "\\"));
-    }
 
     private static string[]? PuckArguments(string line) {
-        var start = ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "catalog ") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "puck "))
-            ? line.IndexOf(comparisonType: StringComparison.Ordinal, value: "puck ")
-            : -1);
-
-        if (start >= 0) {
-            return [.. CommandLineParser.SplitCommandLine(commandLine: line[(start + "puck ".Length)..].TrimEnd(trimChar: ')'))];
+        if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "puck ")) {
+            return [.. CommandLineParser.SplitCommandLine(commandLine: line["puck ".Length..])];
         }
 
         return ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "test ") ||
@@ -331,7 +272,6 @@ public sealed class AffectedSelectionLawTests {
             x.Baselines.SequenceEqual(second: y.Baselines) &&
             x.Canaries.SequenceEqual(second: y.Canaries) &&
             x.CanaryChecks.SequenceEqual(second: y.CanaryChecks) &&
-            (x.Catalog == y.Catalog) &&
             (x.Everything == y.Everything) &&
             (x.Parity == y.Parity) &&
             x.Suites.SequenceEqual(second: y.Suites) &&

@@ -2,8 +2,7 @@
     <!--
         The repository's one inline task, PuckBuildTask (build/PuckBuildTasks.cs), which runs every build operation the
         tree implements in its own code: the architecture gates (Puck.Architecture.targets), the shader build and the
-        Direct3D 11 kernels (Shaders.targets), and the World's stale package sweep (WorldAssets.targets). Each call names
-        its Operation.
+        Direct3D 11 kernels (Shaders.targets). Each call names its Operation.
 
         RoslynCodeTaskFactory compiles a task's source once per task name in each build node, by starting the C# compiler,
         a second or more each time, and a build that reuses no node starts every node cold. Separate task names over these
@@ -36,7 +35,6 @@
             <CacheDirectory ParameterType="System.String" />
             <DeclaredReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <DeniedApis ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <Deployed ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <DxcCommand ParameterType="System.String" />
             <Host ParameterType="System.String" />
             <InputsFile ParameterType="System.String" />
@@ -46,9 +44,7 @@
             <Layers ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <LockFile ParameterType="System.String" />
             <Mode ParameterType="System.String" />
-            <OutputDirectory ParameterType="System.String" />
             <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <PackageDirectory ParameterType="System.String" />
             <Profiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <ProjectDirectory ParameterType="System.String" />
             <ProjectFile ParameterType="System.String" />

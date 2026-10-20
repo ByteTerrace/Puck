@@ -1,7 +1,7 @@
 # Binding composition (`WorldBindingComposer.cs`)
 
 Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
-generated (`puck schema`, or `Assets/worlds/schema/bindingOverlays.schema.json`);
+generated (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/bindingOverlays.schema.json`);
 this file is the decision/derivation prose the schema cannot state.
 
 The composer is N-ary (`Compose(params ReadOnlySpan<BindingProfileDocument?>)`,
@@ -69,7 +69,7 @@ authors it today.
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
-bar draws. The live example is `Assets/worlds/controls.puck`, which the debug world
+bar draws. The live example is `worlds/debug/controls.puck`, which the debug world
 and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
 right stick's press; `modifiers: false` and `pageLabel: false` drop the modifier row and the page name, and an
@@ -211,7 +211,7 @@ a row overrides it — a matching row that lost to an earlier row is reported,
 never silent. No shipped world authors `seatModes` today — the mechanism above
 (a `{layout, <name>, <name>}` context row flipping the seat onto a
 wheel-restricted group while a matching layout is active) is the shape to
-follow; check `Assets/worlds/schema/seatModes.schema.json` for the current
+follow; check `src/Puck.World.Schema/Schemas/schema/seatModes.schema.json` for the current
 field names before authoring one. Every group needs a resting (empty-chord)
 page — a blank-slate group authors one with an empty `entries` list.
 
@@ -289,7 +289,7 @@ The newest mouse or axis selection wins; axis switch hysteresis never locks
 out a later mouse selection. Losing the pointer ends its hover.
 
 Axis selection, ring navigation, commit, and cancel sources are ordinary entries
-on each hold page. `Assets/worlds/controls.puck`'s `play-primary` is the live
+on each hold page. `worlds/debug/controls.puck`'s `play-primary` is the live
 example: two hold pages (Tab, LB) that inherit the resting page, and one ring
 whose labels and icons read `state.wheelLabels`/`state.wheelIcons`.
 `WorldWheelFeed` owns presentation;

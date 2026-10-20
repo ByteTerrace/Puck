@@ -86,7 +86,7 @@ and the compiled bytes boot exactly as an exported ROM does. `screen.state
 hash>`. A document this package's validator or a compiler refuses faults the
 slot with the same message `forge.check` would print; an engine with no
 compiler refuses the path when the world document validates. The shipped
-cartridges under `src/Puck.World/Assets/cartridges/` are the worked examples.
+cartridges under `worlds/debug/cartridges/` are the worked examples.
 
 A source may `import` a module library, named without its `.puck` suffix, for
 the templates and constants it declares; nothing else in the module becomes part

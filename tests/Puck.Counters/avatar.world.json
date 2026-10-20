@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.definition.v1",
-  "basis": "../../src/Puck.World/Assets/worlds/debug",
+  "basis": "../../worlds/debug/debug",
   "documentId": "counters-avatar",
   "host": {
     "backend": "auto",

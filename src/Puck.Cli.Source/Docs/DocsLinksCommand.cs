@@ -16,7 +16,7 @@ namespace Puck.Cli.Docs;
 /// slugged the way GitHub renders them (<see cref="HeadingAnchors"/>); (b) every backticked rooted repository path
 /// (<c>src/...</c>, <c>docs/...</c>, <c>tests/...</c>, <c>build/...</c>) with a file extension, resolved the same
 /// way; (c) every backticked bare filename with a source-ish extension, looked up in an index of every filename
-/// under <c>src/</c>, <c>docs/</c>, <c>tests/</c>, <c>build/</c>, and <c>.claude/skills/</c> — enforced for
+/// under <c>src/</c>, <c>docs/</c>, <c>tests/</c>, <c>build/</c>, <c>worlds/</c>, and <c>.claude/skills/</c> — enforced for
 /// documents under <c>src/</c> (a project README cites its neighbors), advisory for documents under <c>docs/</c>,
 /// which legitimately name out-of-repo files. Two controls — a deliberately nonexistent path must fail resolution,
 /// and a deliberately absent fragment must miss a heading's anchors — run before any document, so a green run
@@ -50,7 +50,7 @@ public static class DocsLinksCommand {
     private static readonly string[] HistoricalCitations = ["src/Puck", "src/Puck.Avatars"];
     // A file a build writes into its own output rather than one the checkout holds: cited by name, never tracked.
     private static readonly string[] ProducedFileNames = ["dotnet.native.wasm"];
-    private static readonly string[] IndexedTrees = ["src", "docs", "tests", "build", ".claude/skills"];
+    private static readonly string[] IndexedTrees = ["src", "docs", "tests", "build", "worlds", ".claude/skills"];
     private static readonly Regex MarkdownLink = new(
         options: RegexOptions.Compiled,
         pattern: @"\[[^\]]*\]\(([^)\s]+)\)"
@@ -399,7 +399,7 @@ public static class DocsLinksCommand {
                             continue;
                         }
 
-                        var message = $"{document}:{lineNumber}: cited filename '{citation.Target}' exists nowhere under src/, docs/, tests/, build/, or .claude/skills/";
+                        var message = $"{document}:{lineNumber}: cited filename '{citation.Target}' exists nowhere under src/, docs/, tests/, build/, worlds/, or .claude/skills/";
 
                         (enforceBareFileNames
                             ? failures
@@ -492,7 +492,7 @@ public static class DocsLinksCommand {
             heading suffixed -1, -2, ... in document order.
 
             Also checks every backticked bare filename against an index swept from src/, docs/,
-            tests/, build/, and .claude/skills/: enforced for a document under src/, advisory
+            tests/, build/, worlds/, and .claude/skills/: enforced for a document under src/, advisory
             elsewhere. Two controls run before any document (a deliberately nonexistent path must
             fail resolution, and a deliberately absent fragment must miss), so a green run proves
             the checker can turn red.

@@ -13,15 +13,8 @@ namespace Puck.Cli.Affected;
 public static class AffectedCommand {
     /// <summary>The coverage index, repository-relative: each World source file with the canaries that executed it.</summary>
     public const string CoveragePath = "tests/Puck.Affected/canary-coverage.json";
-    /// <summary>The shipped world tree, repository-relative, and the catalog its tree compile writes into the game's
-    /// Release output.</summary>
-    public const string ShippedTree = "src/Puck.World/Assets/worlds";
-    /// <summary>The game's Release catalog of shipped worlds, repository-relative.</summary>
-    public const string ShippedCatalog = "src/Puck.World/bin/Release/net11.0/Assets/worlds";
-
-    // The projects whose code decides the bytes the tree compile writes: the world composer, the field model, the
-    // shader packager and the asset codecs. Everything they reference decides them too.
-    private static readonly string[] CatalogSeeds = ["Puck.World.Transpiler", "Puck.SignedDistance", "Puck.Shaders", "Puck.Assets"];
+    /// <summary>The tree of the repository's world asset packages, repository-relative.</summary>
+    public const string ShippedTree = "worlds";
 
     private const string Verb = "affected";
 
@@ -172,7 +165,6 @@ public static class AffectedCommand {
         }
 
         var closure = Closure(model: model, seeds: ["Puck.World"]);
-        var catalogProjects = Closure(model: model, seeds: CatalogSeeds);
 
         var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
         var recorded = ((deleted.Count > 0)
@@ -214,10 +206,6 @@ public static class AffectedCommand {
                 consumersOf: AffectedConsumers.Search(projects: projects, repositoryRoot: repositoryRoot),
                 linkedBy: AffectedConsumers.Linking(projects: projects, repositoryRoot: repositoryRoot),
                 coverage: coverage,
-                catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
-                    (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
-                    path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli.Worlds/Transpiler/") ||
-                    ((owner is not null) && catalogProjects.Contains(item: owner))),
                 declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
                 projects: projects,
                 canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
@@ -264,45 +252,11 @@ public static class AffectedCommand {
         return true;
     }
 
-    // The game's build writes the catalog from the sources build/WorldAssets.targets passes.
-    private static int BuildCatalog(string repositoryRoot, string[] arguments) {
-        var build = CliProcess.RunCaptured(
-            arguments: arguments,
-            fileName: "dotnet",
-            input: string.Empty,
-            timeout: TimeSpan.FromMinutes(minutes: 30),
-            workingDirectory: repositoryRoot
-        );
-
-        if (build.ExitCode != 0) {
-            Console.Error.WriteLine(value: $"affected: Puck.World did not build, so its catalog cannot be checked:{Environment.NewLine}{build.Stdout}");
-
-            return CliExit.Failed;
-        }
-
-        return CliExit.Success;
-    }
-    private static string[] CatalogBuildArguments() => ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo"];
-
-    /// <summary>Returns the shipped catalog check's arguments, with repository-relative, forward-slashed paths.</summary>
-    /// <returns>The arguments both the printed plan and the in-process check use from the repository root.</returns>
-    public static string[] CatalogCheckArguments() => ["compile", "--tree", ShippedTree, "--output", ShippedCatalog, "--check"];
     /// <summary>The strict manifest check's shared printed and executed arguments.</summary>
     public static string[] CanaryCheckArguments(IReadOnlyList<string> ids) => ["canary", "--list", .. ids];
     /// <summary>Strictly loads and lists every prose-edited manifest through the root command, without a World.</summary>
     public static int CheckCanaries(IReadOnlyList<string> ids, RootCommand root) => ((ids.Count == 0) ? CliExit.Success :
         CliRoot.Invoke(args: CanaryCheckArguments(ids: ids), root: root));
-    /// <summary>Builds the shipped catalog and dispatches its check through the root command.</summary>
-    /// <param name="build">Runs the prerequisite build with the supplied dotnet arguments.</param>
-    /// <param name="root">The command tree that runs the catalog check.</param>
-    /// <returns>The build's failure, or the check's exit code when the build succeeds.</returns>
-    public static int CheckCatalog(Func<string[], int> build, RootCommand root) {
-        var exit = build(CatalogBuildArguments());
-
-        return ((exit == 0)
-            ? CliRoot.Invoke(args: CatalogCheckArguments(), root: root)
-            : exit);
-    }
     /// <summary>Resolves the base a plan compares against: <paramref name="since"/> as given, or with
     /// <paramref name="mergeBase"/> the merge base of <c>HEAD</c> and that revision, so commits the target gained after
     /// the branch left it never count as the branch's change.</summary>
@@ -386,13 +340,6 @@ public static class AffectedCommand {
             }
         }
 
-        if (plan.Catalog && (CheckCatalog(
-            build: arguments => BuildCatalog(arguments: arguments, repositoryRoot: repositoryRoot),
-            root: root
-        ) != 0)) {
-            failed.Add(item: "catalog");
-        }
-
         // The canaries boot real Worlds, so they run only when asked for, after every CPU check, their legs side by side
         // up to --gpu-jobs on the GPU. Parity takes the parity world it compares, and no live world is one, so a run
         // that chooses parity names it without running it.
@@ -418,7 +365,7 @@ public static class AffectedCommand {
     }
 
     /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
-    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, followed by the build and check <c>--run</c> makes of it; parity; then
+    /// <c>puck test</c>) and canary (<c>canary</c>); parity; then
     /// each unmapped and deleted source with the note that explains it.</summary>
     /// <param name="plan">The plan.</param>
     /// <param name="into">The writer.</param>
@@ -444,12 +391,6 @@ public static class AffectedCommand {
         }
         if (plan.CanaryChecks.Count > 0) {
             into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CanaryCheckArguments(ids: plan.CanaryChecks))}");
-        }
-
-        if (plan.Catalog) {
-            into.WriteLine(value: $"catalog {ShippedCatalog}");
-            into.WriteLine(value: $"dotnet {string.Join(separator: ' ', value: CatalogBuildArguments())}");
-            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CatalogCheckArguments())}");
         }
 
         if (plan.Parity) {
@@ -547,7 +488,7 @@ public static class AffectedCommand {
     public static Command Create(GateComposition composition) {
         var sinceOption = new Option<string>(name: "--since") { Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes)." };
         var mergeBaseOption = MergeBase(description: "Compare the working tree against the merge base of HEAD and this revision, so what the target gained after the branch left it is not the branch's change. Excludes --since.");
-        var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run their CPU tests side by side, then puck test on the chosen worlds, then the catalog check." };
+        var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run their CPU tests side by side, then puck test on the chosen worlds." };
         var gpuOption = Gpu();
         var gpuJobsOption = CanaryGpuJobs.Create();
         var suiteJobsOption = AffectedSuites.Jobs();
@@ -585,7 +526,7 @@ public static class AffectedCommand {
               A changed .puck or .world.json under {ShippedTree} reaches no canary when its stem's
               document compiles to the same value at the base and in the working tree: object member
               order and number spelling do not matter; array order does. Both paths of a JSON-to-source
-              replacement are judged. Its owner's suites, catalog check and changed test blocks still
+              replacement are judged. Its owner's suites and changed test blocks still
               run, and the path is neither unmapped nor unplaced deleted. Libraries, compositions,
               missing documents and failed compilations keep ordinary selection.
               A C# edit with equivalent syntax after stripping trivia reaches no suite or canary.
@@ -597,9 +538,7 @@ public static class AffectedCommand {
               docs citations in the GPU gate.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
-              prints as a test line. A catalog line names the game's Release catalog, followed by the
-              dotnet build and puck compile --check commands --run uses, runnable from the repository root;
-              it holds no test worlds. A change under .github/ chooses only the suites whose project files
+              prints as a test line. A change under .github/ chooses only the suites whose project files
               declare it (PuckAffectedInput). Prose, .claude/, editors/ and experimental/ choose nothing.
 
               A baseline is chosen when its owning test project is reached or a changed or deleted
@@ -609,7 +548,7 @@ public static class AffectedCommand {
               --run runs manifest checks, then builds the chosen suites in one build and runs the CPU
               tests of up to --suite-jobs of them at once; a heavy suite starts first and waits on the
               machine-wide heavy-suite admission before its run. Each suite prints its verdict and wall
-              time as it ends. It then runs the worlds and the catalog check. --run --gpu then runs the chosen canaries, up to
+              time as it ends. It then runs the worlds. --run --gpu then runs the chosen canaries, up to
               --gpu-jobs legs on the GPU at once, and names parity when it is chosen without running it:
               puck parity takes the parity world it compares. Baseline checks run only through puck gate.
 

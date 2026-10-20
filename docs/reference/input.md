@@ -91,7 +91,7 @@ Build the platform-neutral project, then run the live Windows host:
 
 ```sh
 dotnet build src/Puck.Input/Puck.Input.csproj -c Release
-dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 30
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 30
 ```
 
 While the host runs, `world.devices` and `world.players` show the connected set

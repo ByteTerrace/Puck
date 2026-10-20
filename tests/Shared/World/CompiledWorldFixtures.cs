@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.Testing;
 
 namespace Puck.World.Testing;
@@ -82,5 +81,6 @@ internal static partial class CompiledWorldFixtures {
     // The patch file every world here names beside itself: a row's source resolves beside its document.
     internal const string PatchBeside = "patches/stinger.synth.json";
 
-    internal static string ShippedPatch() => PuckPaths.Shipped(relativePath: "Assets/worlds/patches/stinger.synth.json");
+    // The one patch fixture, shared by every suite that boots a world naming a patch.
+    internal static string ShippedPatch() => RepositoryPaths.Resolve(relativePath: "tests/Shared/World/Assets/patches/stinger.synth.json");
 }

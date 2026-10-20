@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.World.Server;
 using Puck.World.Transpiler;
@@ -93,8 +92,9 @@ internal static class PuckWorldLoader {
         return true;
     }
 
-    /// <summary>Resolves a world definition from a .puck or .world.json file, transparently compiling .puck sources in-memory.</summary>
-    /// <param name="explicitPath">The authored world path, or null for the shipped default.</param>
+    /// <summary>Resolves a world definition from an asset package folder (its <see cref="WorldPackageManifest"/>'s entry),
+    /// a .puck source compiled in memory, or a .world.json document.</summary>
+    /// <param name="worldPath">The <c>--world</c> path.</param>
     /// <param name="source">The loaded definition and source path.</param>
     /// <param name="failure">The named refusal reason, or empty on success.</param>
     /// <param name="stateRoot">The run's state root, under which a composition source stages its declared
@@ -106,20 +106,32 @@ internal static class PuckWorldLoader {
     /// overrides nothing the document carries.</param>
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
-    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
+    public static bool TryResolveWorld(string worldPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
         Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null) {
-        var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
         string path;
 
         try {
-            path = (explicitly
-                ? Path.GetFullPath(path: explicitPath!)
-                : PuckPaths.Shipped(relativePath: WorldDefinitionLoader.DefaultRelativePath)
-            );
+            path = Path.GetFullPath(path: worldPath);
         } catch (Exception ex) when ((ex is ArgumentException or NotSupportedException or PathTooLongException)) {
             source = null!;
-            failure = $"[world] definition refused: cannot resolve path '{explicitPath}' ({ex.Message})";
+            failure = $"[world] definition refused: cannot resolve path '{worldPath}' ({ex.Message})";
             return false;
+        }
+
+        if (WorldPackageManifest.IsPackagePath(path: path)) {
+            if (!WorldPackageManifest.TryResolveEntry(
+                entryPath: out var entryPath,
+                manifest: out var package,
+                path: path,
+                reason: out var packageReason
+            )) {
+                source = null!;
+                failure = $"[world] definition refused: {packageReason}";
+                return false;
+            }
+
+            Console.Error.WriteLine(value: $"[world] package: '{package.Id}' ({package.Name}) at {path}; entry '{package.Entry}'");
+            path = entryPath;
         }
 
         if (!path.EndsWith(
@@ -137,8 +149,8 @@ internal static class PuckWorldLoader {
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 compiledWorlds: CompiledWorlds(caches: caches),
-                explicitPath: explicitPath,
                 failure: out failure,
+                path: path,
                 overrides: overrides,
                 source: out source
             );
@@ -220,9 +232,7 @@ internal static class PuckWorldLoader {
 
         // The origin reads as a JSON boot's does: the path already says the source is `.puck`, and one spelling is
         // what a transcript reader (the canary runner's origin check) matches for either.
-        Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly
-            ? "--world"
-            : "shipped default")})");
+        Console.Error.WriteLine(value: $"[world] definition: {path} (--world)");
         if (compiledWorld.Resolution is { } resolution) {
             Console.Error.WriteLine(value: resolution.Describe());
         }

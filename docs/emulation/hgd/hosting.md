@@ -47,7 +47,7 @@ machines [
 
 No world runs a downloaded ROM. `DeckTestCartridges` builds the shipped images
 with `DeckProgram`, the forge's 6502 assembler, and
-`puck cartridges deck --output src/Puck.World/Assets/cartridges/deck` writes
+`puck cartridges deck --output worlds/debug/cartridges/deck` writes
 them (`--check` compares without writing):
 
 | Cartridge | Picture | Input |

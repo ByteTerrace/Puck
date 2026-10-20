@@ -42,7 +42,7 @@ public sealed class MachineCartridgeLawTests {
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
     // A shipped cartridge sits in the folder its target names: <name>.<target>.cartridge.json under cartridges/<target>.
     private static string CartridgePath(string file) => Path.Combine(
-        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
+        path1: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges"),
         path2: file.Split(separator: '.')[1],
         path3: file
     );

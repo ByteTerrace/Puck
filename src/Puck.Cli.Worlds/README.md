@@ -1,6 +1,6 @@
 # Puck.Cli.Worlds
 
-Puck.Cli.Worlds holds the world-authoring verbs: `compile`, `decompile`, `lint`, `lsp`, `migrate`, `embed`, `test`, `creation`, `registry` and `vocabulary`, with the machine vocabulary they compose (`CliWorldVocabulary`). It is also an executable of its own: the game build runs it to compile the shipped worlds (`build/WorldAssets.targets`), so a change to another verb assembly never reruns that compile or changes the World artifact's key.
+Puck.Cli.Worlds holds the world-authoring verbs: `compile`, `decompile`, `lint`, `lsp`, `migrate`, `embed`, `test`, `creation`, `registry` and `vocabulary`, with the machine vocabulary they compose (`CliWorldVocabulary`). It is also an executable of its own, which `puck parity` runs to compile its tree in a process of its own.
 
 ## Documentation
 

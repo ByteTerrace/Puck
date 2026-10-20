@@ -34,7 +34,7 @@ public sealed class ShaderFrameBlockLawTests {
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
-        "src/Puck.World/Assets/pipelines/ink.graph.json",
+        "tests/Shared/Pipelines/ink/ink.graph.json",
     ]);
 
     private static uint Bits(float value) => BitConverter.SingleToUInt32Bits(value: value);

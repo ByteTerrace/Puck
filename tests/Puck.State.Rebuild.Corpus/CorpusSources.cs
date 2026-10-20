@@ -3,13 +3,13 @@ using Xunit;
 namespace Puck.State.Rebuild.Corpus;
 
 /// <summary>The one enumeration of the author-expression corpus: every <c>.puck</c> world this repository ships under
-/// <c>src/Puck.World/Assets/worlds</c>, and every <c>.puck</c> fixture the transpiler owns.</summary>
+/// the world packages under <c>worlds/</c>, and every <c>.puck</c> fixture the transpiler owns.</summary>
 /// <remarks>A corpus member is addressed by its repository-relative forward-slashed path, which is also the theory
 /// name a failure reports. Sources are read where they live, so one added to any tree joins the gate with no edit
 /// here.</remarks>
 public static class CorpusSources {
     private const string FixtureDirectory = "src/Puck.World.Transpiler/Samples";
-    private const string WorldDirectory = "src/Puck.World/Assets/worlds";
+    private const string WorldDirectory = "worlds";
 
     /// <summary>The sources the round trip does not close on, each with the reason it cannot. The ledger only shrinks: a
     /// source that newly fails the round trip is a defect to fix, not a row to add.</summary>
@@ -26,6 +26,8 @@ public static class CorpusSources {
             searchOption: option,
             searchPattern: "*.puck"
         )
+            // A source is a world source by its schema: line, never its folder: a cartridge source in a package is not.
+            .Where(predicate: static path => Puck.World.Transpiler.Composition.WorldSourceIndex.IsWorldSourceFile(path: path))
             .Select(selector: path => Path.GetRelativePath(
                 path: path,
                 relativeTo: root

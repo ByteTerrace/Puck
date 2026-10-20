@@ -8,8 +8,22 @@ namespace Puck.Cli.Automation;
 public static class WorldPrepareCommand {
     // Hosted storage addresses worlds by document name (WorldDocumentName), independently of repository directories.
     // Composition reads each basis and import from its .puck source where one exists, so the authored worlds
-    // directory prepares without a prior build. The primary world's directory is the root no reference may leave.
+    // directory prepares without a prior build. The primary world's directory is the root no reference may leave; a
+    // package's primary is its manifest's entry.
     private static int Run(string output, string primary) {
+        if (WorldPackageManifest.IsPackagePath(path: primary)) {
+            if (!WorldPackageManifest.TryResolveEntry(
+                entryPath: out var entryPath,
+                manifest: out _,
+                path: primary,
+                reason: out var packageReason
+            )) {
+                return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: packageReason);
+            }
+
+            primary = entryPath;
+        }
+
         if (!WorldDocumentName.IsSourceFile(path: primary) && !WorldDocumentName.IsDocumentFile(path: primary)) {
             return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: $"names no world: the primary world is a {WorldDocumentName.SourceSuffix} source or a {WorldDocumentName.DocumentSuffix} document.");
         }
@@ -124,7 +138,7 @@ public static class WorldPrepareCommand {
     }
 
     public static Command Create() {
-        var primaryArgument = new Argument<string>(name: "primary-world") { Description = "The primary world's .puck source or .world.json document. Its directory holds the neighbours it references and the sources and documents they compose; no reference may leave it." };
+        var primaryArgument = new Argument<string>(name: "primary-world") { Description = "The primary world: an asset package folder (its manifest names the entry), or a .puck source or .world.json document. Its directory holds the neighbours it references and the sources and documents they compose; no reference may leave it." };
         var outputOption = CliOptions.Output(
             description: "The directory the composed hosted documents are written to, one per canonical world name.",
             required: true

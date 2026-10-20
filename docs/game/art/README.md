@@ -16,7 +16,7 @@ documents remain the implementation sources.
 
 Live avatar implementations, authored SDF primitives, and in-game controls live directly alongside the world assets:
 
-- [Moth flight studio](../../../src/Puck.World/Assets/worlds/avatars/moth.md)—Authored body geometry, vanity slots, controls, and live iteration recipes.
+- [Moth flight studio](../../../worlds/debug/avatars/moth.md)—Authored body geometry, vanity slots, controls, and live iteration recipes.
 
 - [Moth courtyard](../../../experimental/src/Puck.World/Assets/worlds/moth-courtyard.md)—Quarantined prior art: a playable environment combining authored terrain, lighting, and avatar locomotion.
 

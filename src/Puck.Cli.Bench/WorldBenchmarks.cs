@@ -14,8 +14,8 @@ namespace Puck.Cli.Bench;
 // and the steady-state tick are far past what an iteration-based BenchmarkDotNet job could amortize honestly, so the
 // lane builds once, measures the steady state, and prints one row per number.
 internal static class WorldBenchmarks {
-    /// <summary>The world measured when none is named: the debug world, repository-relative.</summary>
-    public const string DefaultWorldRelativePath = "src/Puck.World/Assets/worlds/debug.puck";
+    /// <summary>The world measured when none is named: the debug world's asset package, repository-relative.</summary>
+    public const string DefaultWorldRelativePath = "worlds/debug";
 
     private const int MachineSampleTicks = 60;
     private const int PacedSampleTicks = 60;
@@ -186,10 +186,10 @@ internal static class WorldBenchmarks {
     }
 
     /// <summary>Measures one world's server tick path and prints one row per number.</summary>
-    /// <param name="world">The world's <c>.puck</c> source or <c>.world.json</c> document, or <see langword="null"/>
-    /// for <see cref="DefaultWorldRelativePath"/> under the repository root.</param>
+    /// <param name="world">The world's asset package folder, <c>.puck</c> source or <c>.world.json</c> document, or
+    /// <see langword="null"/> for <see cref="DefaultWorldRelativePath"/> under the repository root.</param>
     /// <returns>0 when every row was measured, 1 when the world could not load or run, 2 when no repository root was
-    /// found for the default world.</returns>
+    /// found for the default world or a package names no entry.</returns>
     public static int Run(string? world) {
         string path;
 
@@ -202,6 +202,21 @@ internal static class WorldBenchmarks {
             );
         } else {
             return 2;
+        }
+
+        if (Puck.World.WorldPackageManifest.IsPackagePath(path: path)) {
+            if (!Puck.World.WorldPackageManifest.TryResolveEntry(
+                entryPath: out var entryPath,
+                manifest: out _,
+                path: path,
+                reason: out var reason
+            )) {
+                Console.Error.WriteLine(value: $"ERROR: {reason}");
+
+                return 2;
+            }
+
+            path = entryPath;
         }
 
         var rows = new List<(string Name, string Value)>();

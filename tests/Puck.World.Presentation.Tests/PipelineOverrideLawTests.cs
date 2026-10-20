@@ -30,7 +30,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             destFileName: SourcePath,
             sourceFileName: Path.Combine(
                 path1: AuthoredGameFixtures.Root,
-                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
+                path2: "tests/Shared/Pipelines/ink/ink.graph.json"
             )
         );
     }

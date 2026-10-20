@@ -842,7 +842,7 @@ through the deleted per-pixel interpreter, and is deleted; it is prior art in
 git history (`src/Puck.SdfVm/Debug`).
 
 **Delivers:** a shipped tool world, `sdf-gallery.puck`, beside the other tool
-worlds in `src/Puck.World/Assets/worlds/tools/`, with a companion `.md` as
+worlds in `worlds/debug/tools/`, with a companion `.md` as
 `shader-compare.puck` has. It is browsed with build mode, selection, the debug
 views, the editor camera and `world.explain`, and `world.isolate on|off` stamps
 only the selection, in presentation, in place of the takeover's single subject.
@@ -852,7 +852,7 @@ a dense carve cluster for E13, and its tour's exhibits, each with an authored
 camera and its plaque as a text screen or HUD panel, stepped through
 `view.override camera`.
 
-**Touches:** `src/Puck.World/Assets/worlds/tools`, `Puck.World.Client` (the isolate filter),
+**Touches:** `worlds/debug/tools`, `Puck.World.Client` (the isolate filter),
 the rendering handbook pages that describe the debug scene.
 
 **Check:** each row demonstrated in the gallery world. The gallery source passes `ShippedSourceLintLawTests`; an
