@@ -51,7 +51,16 @@ subject names them:
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default
   a placement face's own `WorldPlacementPortal` facet falls back to when it
-  authors no `Travel`; a null section resolves every facet to `Body`.
+  authors no `Travel`; a null section resolves every facet to `Body`. A door
+  may lie at any orientation (a shape turned a quarter about +X lays it flat;
+  `WorldFaceCatalog` snaps such a quarter-turn frame to exact axes); a mapped
+  pair is refused at the crossing, by name, unless it maps world up onto itself
+  (`WorldFrameIsometry.PreservesWorldUp`: two walls, or a floor and a ceiling).
+  A destination whose reference names the world's own document resolves to the
+  running world itself, and a mapped crossing there moves the body in place
+  (`WorldInstanceHost.ApplyInPlaceCrossing`, `WorldServer.CrossInPlace`, taped
+  as a `Crossing` replay entry) instead of transferring it: the debug world's
+  loop shaft (`worlds/debug/loop.puck`) is the live example.
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
   field, `RateHz` (required in an authored section), the authoritative
   server's fixed step rate in Hz. Read through

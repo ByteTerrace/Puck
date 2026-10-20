@@ -172,7 +172,10 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Composition(composition, actor)` (13), `Query(query, actor)` (14),
 `LinkDelivery(adjacencyName)` (15), the session events (16–18),
 `Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
-`FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21), and
+`FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21),
+`Crossing(slot, position, yaw, planarVelocity, verticalVelocity, travelTurn)`
+(23: a portal pair standing in one world moving its body in place, taped by
+`WorldServer.CrossingTap` and re-applied through `WorldServer.ApplyInPlaceCrossing`), and
 `SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
 of the tick it is recorded on). Every switch and every home adoption a re-drive binds under one identity id binds the
 escrow's one detached identity for that id (`WorldTransferEscrow.TryBindDetached`), for the whole re-drive and cleared

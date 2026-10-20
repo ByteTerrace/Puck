@@ -5,7 +5,8 @@
 // source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals. The
 // standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play wheel)
 // are imported documents, as are the device row (devices.puck), the Claude desktop app's window as a pane and a screen
-// (desktop.puck) and the chess table (chess.puck), each with notes beside it.
+// (desktop.puck), the chess table (chess.puck) and the loop shaft's floor and ceiling portals (loop.puck), each with
+// notes beside it.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -19,6 +20,7 @@ import "controls"
 import "devices"
 import "desktop"
 import "chess"
+import "loop"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA
@@ -94,13 +96,13 @@ spawnPoints [
 ]
 
 placements {
-  // One derived face screen: the portal frame's glass.
+  // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 1
+    derivedFaceScreens: 3
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
