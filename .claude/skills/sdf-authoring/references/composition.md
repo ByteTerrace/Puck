@@ -26,15 +26,17 @@ clamped to [0, 0.5].
 | `GrooveSubtraction` | `max(a, −b, r − √(a²+b²))` | `smooth` |
 | `PipeSubtraction` | `min(max(a,−b), √(a²+b²) − r)` | `smooth` |
 
-`Morph`, `StairsUnion`, and `StairsSubtraction` exist in the blend enum but
-compose **only** at a field-scope pop. The document accepts them on a shape
-because they are defined enum values. Static shape emission, and pooled
-group emission that forwards the blend, throws
-`Blend operation '<blend>' is supported only as a PopField composition.`
-Use the shape-level families listed above. Text-free `creation stats` catches
-these failures when its selected emission path forwards the blend. An animated
-ungrouped shape can still exit 0 because pooled emission silently uses Union;
-the histogram records the authored enum and does not prove it was emitted.
+`StairsUnion`, `StairsSubtraction` and `Morph` compose only at a field-scope
+pop, so a shape carrying one opens a scope of its own, inside its creation's
+or group's scope too (`ShapeScope`), and composes at that pop: a stairs blend
+climbs `steps` (1 to 64, default 4) over its `smooth` radius, which must be
+above zero, and a morph blend takes a `morph { lane, from, to }` facet and
+interpolates the field before the shape with the shape as the riding slot's
+lane runs from `from` to `to` (a static placement reads the lane as zero). The
+VM holds two scope levels, so a grouped shape of a text-bearing animated
+creation, whose groups already sit in an outer scope, is refused one. The
+gallery's `shape-stairs-union`, `shape-stairs-subtraction` and `shape-morph`
+show them.
 
 A groove follows the two fields' intersection and can replace a separate cutter.
 It does **not** restore panels, trims, or cells: groove and pipe blends require
@@ -69,6 +71,8 @@ form.
 | `repeat` | `spacing`, `limit`, `origin` | only when `limit` is a whole number inside the copy budget; an absent limit is unbounded and does not expand |
 | `polar` | `count`, `axis`, `mirror`, `materialStride`, `origin` | expands, one rigid copy per sector |
 | `wallpaper` | `group` (a mirror group: PMM, P4M, P3M1 or P6M), `cell`, `limit`, `plane`, `materialStride` | **never — render only**; a solid row carrying one is refused by name |
+| `jitter` | `spacing`, `amount` (peak-to-peak hashed displacement, under the least spacing), `seed`, `tumble` (0..1 of a half turn), `materialVariants`, `flavor` (White, Blue, Gaussian), `origin` | **never — render only**; a hashed copy per cell. Keep `amount / 2 + the shape's reach` under half the least spacing or the program refuses it at build |
+| `logSphere` | `shellRatio` (above 1.05), `twist` (radians per shell about Z), `origin` | **never — render only**; a scaled copy per shell. Author the prototype a radius inside the shell `[1/√ratio, √ratio)` of the origin and clip the lattice with an intersection |
 
 A wallpaper fold builds only through a group whose every cell wall and in-cell
 seam is a mirror, so its field never reads past the nearest copy; the program
