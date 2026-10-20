@@ -14,6 +14,11 @@ documentId: "garden"
 import "theme"
 import "controls"
 
+// The garden draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
 // The garden's palette slots.
 let frameGold = 0 // #C9A43A
 

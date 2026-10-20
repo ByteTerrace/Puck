@@ -3,8 +3,8 @@
 [desktop.puck](desktop.puck) captures the Claude desktop app's window: the
 first visible top-level window whose title contains `Claude`, compared without
 regard to case. It shows the window in two places: the `views.graphs` row
-`claude`, which the `desktop` layout places as a pane over the right third of
-the display beside the play view, and screen 16, a glass slab beside the
+`claude`, which the `desktop` layout places as a pane over the bottom two
+fifths of the display below the play view, and screen 16, a 4 m by 1 m glass slab beside the
 portal frame, eight metres ahead of the spawn and eight to the right. Every
 line below is typed at the World's console, or sent through the local operator
 attachment (`world.control`, the `puck` MCP server), which is the same console.
@@ -16,12 +16,13 @@ view.override layout desktop
 view.override layout play
 ```
 
-`view.override layout auto` also returns to the play view. `world.view.panes`
-lists the shown panes; with the desktop layout active it lists `claude` at the
-right third, with its mapping.
+The play wheel's Desktop and Play sectors (hold Tab or LB) run the same two
+lines. `view.override layout auto` also returns to the play view. `world.view.panes`
+lists the shown panes; with the desktop layout active it lists `claude` over
+the bottom two fifths, with its mapping.
 
-To move or resize the pane, change `paneWidth` in `desktop.puck` (the pane's
-share of the display, measured from the right edge) or the layout's slots. A
+To move or resize the pane, change `paneHeight` in `desktop.puck` (the pane's
+share of the display, measured from the bottom edge) or the layout's slots. A
 slot's `x`, `y`, `width` and `height` are fractions of the display, origin top
 left. To capture another window, change `claudeTitle`. The capture scales the
 window into its `profile` extent and the pane stretches that extent over its

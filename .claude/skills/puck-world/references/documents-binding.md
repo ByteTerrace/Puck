@@ -157,7 +157,8 @@ over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
 `recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
 routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
 `SeatCameraApplication` (the seat's camera control application is active —
-`WorldSeatBindings.IsCameraModeActive`).
+`WorldSeatBindings.IsCameraModeActive`), `ScreenEngaged` (the seat is captured
+on a screen and its camera frames it — `WorldPerceptionAnchor.EngagedScreen`).
 Absent = always visible. `{ "$type": "recently", "fact":
 "SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
 seat's last input and shows it on the next; a world-scope panel reads a fact as

@@ -11,7 +11,9 @@ namespace Puck.World.Client;
 /// another BODY — possession means possession: the entire perceived world follows the possessed body as ONE swap.
 /// A set that retains the own-body application (mirroring) does not swap: the seat is still driving a target AND
 /// walking its own avatar, so it still perceives from that avatar. A screen application (classic engage) does not
-/// swap either. <c>WorldSeatContextSync.Publish</c> is the sole writer — it already reads the application set per
+/// swap the body; a captured one (no own-body application beside it) publishes the screen the seat engages
+/// (<see cref="EngagedScreen"/>), which the seat camera frames as its emulator view and the <c>ScreenEngaged</c>
+/// overlay fact reads. <c>WorldSeatContextSync.Publish</c> is the sole writer — it already reads the application set per
 /// seat every tick over the loopback view for the engagement context family, so the anchor resolution rides that
 /// SAME read rather than opening a second one. Swapped in ONE place,
 /// never per-system retargets, else a seat would see through one body and hear from another. Presentation-side
@@ -19,17 +21,30 @@ namespace Puck.World.Client;
 /// (<c>anchor=body:&lt;n&gt;</c>) so the resolution is observable and live.
 /// </summary>
 public sealed class WorldPerceptionAnchor {
+    private readonly int[] m_engagedScreen;
     private readonly int[] m_perceivedBody;
 
-    /// <summary>Constructs the anchor with every seat perceiving from its own bound body — the pre-first-publish
-    /// default, matching <c>WorldSeatContextSync.Publish</c>'s boot seed.</summary>
+    /// <summary>Constructs the anchor with every seat perceiving from its own bound body and engaging no screen — the
+    /// pre-first-publish default, matching <c>WorldSeatContextSync.Publish</c>'s boot seed.</summary>
     public WorldPerceptionAnchor() {
         m_perceivedBody = new int[WorldSeatBindings.SeatCount];
+        m_engagedScreen = new int[WorldSeatBindings.SeatCount];
 
         for (var slot = 0; (slot < m_perceivedBody.Length); slot++) {
             m_perceivedBody[slot] = slot;
+            m_engagedScreen[slot] = -1;
         }
     }
+
+    /// <summary>The screen seat <paramref name="slot"/> is captured on: the first screen application in its set while
+    /// the set holds no own-body application, or -1 when the seat walks its own avatar (unengaged or mirrored),
+    /// possesses a body, or is out of range.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <returns>The engaged screen's index, or -1.</returns>
+    public int EngagedScreen(int slot) => ((((uint)slot) < ((uint)m_engagedScreen.Length))
+        ? m_engagedScreen[slot]
+        : -1
+    );
 
     /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
     /// <param name="slot">The 0-based local seat slot.</param>
@@ -47,6 +62,15 @@ public sealed class WorldPerceptionAnchor {
     public void Publish(int slot, int bodyIndex) {
         if (((uint)slot) < ((uint)m_perceivedBody.Length)) {
             m_perceivedBody[slot] = bodyIndex;
+        }
+    }
+    /// <summary>Publishes the screen seat <paramref name="slot"/> is captured on. Called only from
+    /// <c>WorldSeatContextSync.Publish</c>, beside <see cref="Publish"/>.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <param name="screenIndex">The engaged screen's index, or -1 for none.</param>
+    public void PublishEngagedScreen(int slot, int screenIndex) {
+        if (((uint)slot) < ((uint)m_engagedScreen.Length)) {
+            m_engagedScreen[slot] = screenIndex;
         }
     }
 }

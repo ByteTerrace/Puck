@@ -1740,11 +1740,14 @@ public static partial class WorldDefinitionValidator {
         var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);
         // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,
         // so a route naming any other kit would compile to an empty pad and silently press nothing.
-        var padKits = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var padKits = new Dictionary<string, IReadOnlyDictionary<string, WorldPadElement>>(comparer: StringComparer.Ordinal);
 
         foreach (var padKit in definition.Kits) {
-            if (padKit is { Name: { Length: > 0 } padKitName, PadRaw: { Count: > 0 } }) {
-                _ = padKits.Add(item: padKitName);
+            if (padKit is { Name: { Length: > 0 } padKitName, PadRaw: { Count: > 0 } pad }) {
+                _ = padKits.TryAdd(
+                    key: padKitName,
+                    value: pad
+                );
             }
         }
 

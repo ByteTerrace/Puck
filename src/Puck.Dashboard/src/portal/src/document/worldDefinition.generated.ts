@@ -1560,7 +1560,7 @@ export type MutationKindMask = string;
 /**
  * A presentation fact an overlay element's OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.
  */
-export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication";
+export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication" | "ScreenEngaged";
 
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.

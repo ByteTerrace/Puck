@@ -1,4 +1,4 @@
-// The desktop pane: a live capture of the Claude desktop app's window, shown as a pane beside the play view and on a
+// The desktop pane: a live capture of the Claude desktop app's window, shown as a pane below the play view and on a
 // screen standing in the world. The debug world imports this file whole. desktop.md beside it gives the console lines
 // that show the pane, hand the window the keyboard and mouse, take them back, and reload this file while it runs.
 //
@@ -8,15 +8,15 @@
 
 let claudeTitle = "Claude"
 
-// The capture's output extent and cadence. The window is scaled into this extent and the extent into the pane, so a
-// window shaped like the pane (tall, about 5 by 9 on a 16 by 9 display) reads undistorted.
+// The capture's output extent and cadence. The window is scaled into this extent and the extent into the pane, so the
+// extent matches the pane's shape on a 16 by 10 display (full width, two fifths of the height).
 let claudeCapture = {
   windowTitle: claudeTitle
-  profile { width: 1280, height: 1440, refreshRateHz: 30 }
+  profile { width: 1920, height: 480, refreshRateHz: 30 }
 }
 
-// The pane's share of the display, from the right edge. A third leaves the play view the left two thirds.
-let paneWidth = 0.3333
+// The pane's share of the display, from the bottom edge. Two fifths leave the play view the top three fifths.
+let paneHeight = 0.4
 
 views {
   graph "claude" {
@@ -28,15 +28,15 @@ views {
   layout "desktop" {
     seatCount: 0
     slots [
-      { x: 0, y: 0, width: (1 - paneWidth), height: 1 }
-      { x: (1 - paneWidth), y: 0, width: paneWidth, height: 1, instance: "claude" }
+      { x: 0, y: 0, width: 1, height: (1 - paneHeight) }
+      { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "claude" }
     ]
     transitionRenderScale: 1
     transitionSeconds: 0
   }
 }
 
-// The same window on a 2 m by 2.25 m glass slab eight metres ahead of the spawn and eight to the right, facing +Z,
+// The same window on a 4 m by 1 m glass slab eight metres ahead of the spawn and eight to the right, facing +Z,
 // beside the portal frame. It is its own capture of the window, at the same settings.
 screens [
   {
@@ -44,8 +44,8 @@ screens [
     origin [8, 1.4, -8]
     right [1, 0, 0]
     up [0, 1, 0]
-    halfWidth: 1
-    halfHeight: 1.125
+    halfWidth: 2
+    halfHeight: 0.5
     halfDepth: 0.02
     round: 0
     source: producer(id: "capture", settings: claudeCapture)

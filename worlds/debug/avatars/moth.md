@@ -42,6 +42,7 @@ does not render overlapping camera transitions.
 | F | North | Switch flight mode on or off |
 | Space | South | Jump, twice before landing; in flight mode, rise |
 | Ctrl | East | In flight mode, descend and land |
+| E | West | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
 | 1 | | Native three-quarter inspection |
 | 2 | | Native front inspection |
 | 3 | | Native rear inspection |
@@ -63,9 +64,11 @@ edge (the d-pad diamond with LB and the left stick's press, the face diamond
 with RB and the right stick's press, each plate showing its action) and the
 play wheel. Hold Tab and point with the mouse, or hold LB and aim the right
 stick, then release over a sector: Console, Build, Where (`body.where`),
-Channels (`body.channels`), Annotate, Respawn (back to the stage) and
-Disengage. Releasing at the hub cancels. The bar fades after six seconds
-without input.
+Channels (`body.channels`), Annotate, Respawn (back to the stage), Desktop
+(the desktop pane, `view.override layout desktop`) and Play (the play view
+alone, `view.override layout play`). Releasing at the hub cancels. The bar
+fades after six seconds without input, and the bar and the cursor step aside
+while the seat is engaged on a device.
 
 ## Edit the native character live
 
