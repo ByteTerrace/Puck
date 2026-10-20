@@ -14,7 +14,7 @@ internal static class LauncherHostLoop {
     /// registered (a composition root that drives no fixed-step sim at all, so nothing declares a rate via
     /// <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/>), AND as the fixed-step pump's own calling
     /// cadence when a registered simulation's <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/> reports
-    /// 0 (a world whose authored <c>simulation.rateHz</c> is the durable stop) — <see cref="Puck.Hosting.EngineTicks.PerRate"/>
+    /// 0 (a world whose authored <c>simulation.rateHz</c> is the durable stop) — <see cref="Puck.Maths.FixedTickConversion.PerRate"/>
     /// refuses zero outright (there is no step period for a simulation that never steps), so the PUMP'S OWN cadence,
     /// which is presentation-adjacent host pacing and never simulation state, must never be derived from a rate that
     /// can legitimately be zero. <c>Puck.Launcher</c> is a domain-agnostic generic host and owns no notion of "the"

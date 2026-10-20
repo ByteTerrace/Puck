@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Hosting;
 
 /// <summary>
@@ -50,7 +52,7 @@ public readonly struct OsTimeCorrelator {
         // floor(osDelta × PerSecond ÷ osFrequency), overflow-safe (split whole/fraction), exact.
         var whole = (osDelta / m_osFrequency);
         var fraction = (osDelta % m_osFrequency);
-        var engineDelta = ((whole * EngineTicks.PerSecond) + ((fraction * EngineTicks.PerSecond) / m_osFrequency));
+        var engineDelta = ((whole * FixedTickConversion.TicksPerSecond) + ((fraction * FixedTickConversion.TicksPerSecond) / m_osFrequency));
         var engineTick = (m_engineReference + engineDelta);
 
         if (engineTick < m_engineReference) {

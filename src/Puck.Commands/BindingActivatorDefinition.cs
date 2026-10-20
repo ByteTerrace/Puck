@@ -40,7 +40,7 @@ namespace Puck.Commands;
 /// <see cref="BindingActivatorMode.Held"/>.</param>
 /// <param name="TimeoutTicks">For <see cref="BindingActivatorMode.Tapped"/> only: the maximum engine ticks
 /// between two accepted steps before the partial sequence resets, or <see langword="null"/> for no timeout.
-/// Engine ticks, the same base <see cref="InputSignal.CaptureTick"/> is stamped in (<c>Puck.Hosting.EngineTicks</c>
+/// Engine ticks, the same base <see cref="InputSignal.CaptureTick"/> is stamped in (<c>Puck.Maths.FixedTickConversion</c>
 /// — <c>50400</c> per second) — not simulation steps (240 Hz, i.e. 210 engine ticks apart): a "half-second window"
 /// is authored as roughly <c>25200</c>, not <c>120</c>. Meaningless (and refused) on a
 /// <see cref="BindingActivatorMode.Held"/> activator.</param>

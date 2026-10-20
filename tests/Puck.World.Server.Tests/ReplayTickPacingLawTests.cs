@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Testing;
 using Puck.World.Protocol;
 using Xunit;
@@ -48,7 +49,7 @@ public sealed class ReplayTickPacingLawTests {
         Assert.True(condition: tape.WantsFastForwardStep);
 
         var published = new List<ulong>();
-        var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)fixture.Server.Definition.SimulationRateHz));
+        var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)fixture.Server.Definition.SimulationRateHz));
         var context = new FixedStepContext(ElapsedTicks: stepTicks, StepTicks: stepTicks, Tick: 0UL);
         var actual = WorldServerStepShell.Step(
             pacing: pacing,

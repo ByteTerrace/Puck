@@ -1,8 +1,8 @@
 using Puck.Abstractions.Machines;
 using Puck.Machines;
-using Puck.Hosting;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -11,7 +11,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
     private const ushort CounterAddress = 0xC100;
     private const byte CounterSeed = 0x28;
     private const int DotsPerFrame = 70_224;
-    private const ulong HostStepTicks = (EngineTicks.PerSecond / 32UL);
+    private const ulong HostStepTicks = (FixedTickConversion.TicksPerSecond / 32UL);
 
     /// <inheritdoc/>
     public bool IsConcurrent => true;

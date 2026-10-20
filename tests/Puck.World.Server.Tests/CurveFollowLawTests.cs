@@ -127,8 +127,8 @@ public sealed class CurveFollowLawTests {
         return body;
     }
     // A closed, genuinely curved path — three knots evenly spaced around a radius-5 circle: curvature exactly
-    // 1/radius and a tangent perpendicular to the radius are exact by this construction (the same one
-    // Puck.SdfVm.Tests.SdfCurvePathTests' ClosedCurve uses), so unlike StraightPath this exercises real curvature
+    // 1/radius and a tangent perpendicular to the radius are exact by this construction (the same circle
+    // construction the CompiledCurvatureSpline Maths subjects use), so unlike StraightPath this exercises real curvature
     // and the closed wrap. TangentYaw is wrapped to the schema's canonical [-pi, pi] interval before authoring —
     // WorldDefinitionValidator.Curves refuses a knot outside it by name. The circle is centered at (-LoopRadius, 0)
     // rather than the origin so knot 0 sits exactly at Fixtures' own seat-1 spawn point (0, 0, 0) — the same

@@ -1,7 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Assets.Documents;
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Xunit;
@@ -79,7 +79,7 @@ public sealed class WorldCameraOperandDomainLawTests {
     private static (Vector3 Eye, Vector3 Target, float FovRadians) Present(WorldDefinition definition) {
         var mirror = ClientFixtures.StateMirror(
             definition: definition,
-            engineTick: (25UL * EngineTicks.PerSecond)
+            engineTick: (25UL * FixedTickConversion.TicksPerSecond)
         );
 
         return WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),

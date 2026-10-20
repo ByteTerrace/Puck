@@ -1,7 +1,6 @@
 using Puck.Commands;
 using Xunit;
 
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -305,7 +304,7 @@ public sealed class MappedArrivalApplicationLawTests {
             WorldProtocol.WireProtocolKey
         )).Accepted);
         var body = fixture.Server.Body(index: actor.Index)!;
-        var consumedThrough = EngineTicks.PerRate(ratePerSecond: 60);
+        var consumedThrough = FixedTickConversion.PerRate(ratePerSecond: 60);
         var position = new FixedVector3(
             X: FixedQ4816.Zero,
             Y: FixedQ4816.FromInteger(value: 20),
@@ -381,8 +380,8 @@ public sealed class MappedArrivalApplicationLawTests {
         )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
-        var sourceWidth = EngineTicks.PerRate(ratePerSecond: 60);
-        var destinationWidth = EngineTicks.PerRate(ratePerSecond: destinationRateHz);
+        var sourceWidth = FixedTickConversion.PerRate(ratePerSecond: 60);
+        var destinationWidth = FixedTickConversion.PerRate(ratePerSecond: destinationRateHz);
         var position = new FixedVector3(
             X: FixedQ4816.Zero,
             Y: FixedQ4816.FromInteger(value: 20),
@@ -438,7 +437,7 @@ public sealed class MappedArrivalApplicationLawTests {
             null,
             WorldProtocol.WireProtocolKey
         )).Accepted);
-        var width = EngineTicks.PerRate(ratePerSecond: 60);
+        var width = FixedTickConversion.PerRate(ratePerSecond: 60);
 
         fixture.Step(stepTicks: width);
 

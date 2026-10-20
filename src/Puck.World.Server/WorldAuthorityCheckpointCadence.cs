@@ -4,7 +4,7 @@ namespace Puck.World.Server;
 /// feel value: one minute of engine time, independent of any row's own simulation rate.</summary>
 public static class WorldAuthorityCheckpointCadence {
     /// <summary>The number of engine ticks between cadence-armed capture requests (one minute).</summary>
-    public const ulong EngineTicks = (60UL * Puck.Hosting.EngineTicks.PerSecond);
+    public const ulong EngineTicks = (60UL * Puck.Maths.FixedTickConversion.TicksPerSecond);
 }
 /// <summary>Counts master steps toward <see cref="WorldAuthorityCheckpointCadence.EngineTicks"/> and arms a capture
 /// request the tick thread honours at the next boundary. Counted on the tick thread from master steps, independent

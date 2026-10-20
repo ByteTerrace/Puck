@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Machines;
 
@@ -49,8 +49,8 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         if (
             string.IsNullOrWhiteSpace(value: identity) ||
             (identity.Length > 256) ||
-            (scale is 0UL or > (((ulong)long.MaxValue) / EngineTicks.PerSecond)) ||
-            (remainder >= (EngineTicks.PerSecond * scale)) ||
+            (scale is 0UL or > (((ulong)long.MaxValue) / FixedTickConversion.TicksPerSecond)) ||
+            (remainder >= (FixedTickConversion.TicksPerSecond * scale)) ||
             (completed < 0) ||
             (factor is < 1 or > MachineTimeTravel<MachinePads>.MaxFastForwardFactor) ||
             (runahead is < 0 or > MachineTimeTravel<MachinePads>.MaxRunaheadFrames) ||

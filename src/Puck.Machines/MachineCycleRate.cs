@@ -7,7 +7,7 @@ namespace Puck.Machines;
 /// against the engine's tick base forever.
 /// <para>
 /// <see cref="Seconds"/> also sets the scale of the host's tick-to-cycle phase: one cycle is
-/// <c><see cref="Puck.Hosting.EngineTicks.PerSecond"/> × <see cref="Seconds"/></c> phase units. A core may change
+/// <c><see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> × <see cref="Seconds"/></c> phase units. A core may change
 /// <see cref="Cycles"/> while it runs (a clock-multiplier latch), but it keeps <see cref="Seconds"/> for its whole
 /// lifetime, so the carried phase never changes scale mid-stream. The rate is therefore never reduced: doubling
 /// 53,203,425 cycles every 2 seconds is 106,406,850 cycles every 2 seconds, not 53,203,425 every 1.

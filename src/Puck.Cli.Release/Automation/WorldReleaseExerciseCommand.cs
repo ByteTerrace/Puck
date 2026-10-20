@@ -6,6 +6,7 @@ using Puck.Assets;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
+using Puck.Maths;
 using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
@@ -198,7 +199,7 @@ public static class WorldReleaseExerciseCommand {
         var rate = host.MasterRateHz;
 
         if (rate == 0) { throw new InvalidDataException(message: "qualification fixture has no advancing world"); }
-        var delta = EngineTicks.PerRate(ratePerSecond: rate);
+        var delta = FixedTickConversion.PerRate(ratePerSecond: rate);
         var simulation = new WorldSiloSimulation(host: host);
 
         for (var index = 0; (index < steps); index++) {

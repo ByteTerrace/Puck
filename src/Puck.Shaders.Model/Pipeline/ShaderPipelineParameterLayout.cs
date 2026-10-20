@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -408,7 +408,7 @@ public sealed class ShaderPipelineParameterLayout {
             sizeBytes: FrameBlockSizeBytes
         );
 
-        var tick = (values.Tick / EngineTicks.PerRate(ratePerSecond: tickRate));
+        var tick = (values.Tick / FixedTickConversion.PerRate(ratePerSecond: tickRate));
 
         WriteSingle(block: block, offset: m_pointer, value: values.Pointer.X);
         WriteSingle(block: block, offset: (m_pointer + 4), value: values.Pointer.Y);

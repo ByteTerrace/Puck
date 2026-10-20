@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.World.Protocol;
 
@@ -99,7 +100,7 @@ public sealed class WorldPresentedFrameLawTests {
     [Fact]
     public void TheFrameGroupTimeIsTheMirrorsPresentedEngineTickInSeconds() {
         var mirror = Mirror();
-        var previousSeconds = (((double)Previous) / EngineTicks.PerSecond);
+        var previousSeconds = (((double)Previous) / FixedTickConversion.TicksPerSecond);
 
         foreach (var (fraction, expected) in (((float Fraction, double Ticks)[])[
             (0f, Previous),
@@ -119,7 +120,7 @@ public sealed class WorldPresentedFrameLawTests {
 
             Assert.Equal(
                 actual: values.Time,
-                expected: (expected / EngineTicks.PerSecond)
+                expected: (expected / FixedTickConversion.TicksPerSecond)
             );
             Assert.Equal(
                 actual: values.TimeDelta,
@@ -139,7 +140,7 @@ public sealed class WorldPresentedFrameLawTests {
             actual: WorldViewGraphHost.PresentedFrame(
                 fraction: 0f,
                 mirror: mirror,
-                previousSeconds: (((double)Delivered) / EngineTicks.PerSecond)
+                previousSeconds: (((double)Delivered) / FixedTickConversion.TicksPerSecond)
             ).TimeDelta,
             expected: 0d
         );

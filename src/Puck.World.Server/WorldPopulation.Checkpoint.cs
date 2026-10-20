@@ -555,7 +555,7 @@ public sealed partial class WorldPopulation {
     }
 
     private static void ValidateAutonomyCheckpoint(WorldPopulationAutonomyCheckpoint state, in FixedWorldKit kit) {
-        var maximum = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.One);
+        var maximum = FixedTickConversion.TicksPerSecond;
 
         static bool ValidCadence(ulong period, ulong elapsed, ulong remaining, ulong maximum) => ((period == 0UL)
             ? ((elapsed == 0UL) && (remaining == 0UL))

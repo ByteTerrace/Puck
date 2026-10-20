@@ -5,7 +5,6 @@ using System.Text.Json.Nodes;
 
 
 using Puck.Assets.Documents;
-using Puck.Hosting;
 using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -883,13 +882,13 @@ internal static partial class Fixtures {
 
     /// <summary>The engine-tick duration one simulation tick spans at the default <see cref="SimulationRateHz"/>,
     /// computed once and reused.</summary>
-    public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+    public static ulong StepTicks { get; } = FixedTickConversion.PerRate(ratePerSecond: SimulationRateHz);
 
     /// <summary>Returns the engine-tick duration one simulation tick spans at <paramref name="rateHz"/>, or the
     /// default <see cref="StepTicks"/> for the resident, non-stepping rate 0 (which has no tick duration).</summary>
     /// <param name="rateHz">The authored simulation rate.</param>
     public static ulong StepTicksAt(int rateHz) => ((rateHz > 0)
-        ? EngineTicks.PerRate(ratePerSecond: ((uint)rateHz))
+        ? FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz))
         : StepTicks
     );
 

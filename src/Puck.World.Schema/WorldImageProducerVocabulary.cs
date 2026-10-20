@@ -104,7 +104,7 @@ public static class WorldImageProducerVocabulary {
         }
 
         try {
-            _ = Puck.Hosting.EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz);
+            _ = Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: profile.RefreshRateHz);
         } catch (ArgumentException exception) {
             errors.Add(item: $"{path}.refreshRateHz is invalid: {exception.Message}");
         }

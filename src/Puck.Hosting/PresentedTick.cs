@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Hosting;
 
 /// <summary>
@@ -69,15 +71,15 @@ public readonly record struct PresentedTick(ulong Whole, double Fraction) {
     public double Integrate(double ratePerSecond, double modulus) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: modulus);
 
-        var seconds = (Whole / EngineTicks.PerSecond);
-        var remainder = ((Whole % EngineTicks.PerSecond) + Fraction);
+        var seconds = (Whole / FixedTickConversion.TicksPerSecond);
+        var remainder = ((Whole % FixedTickConversion.TicksPerSecond) + Fraction);
         var wholePart = Math.IEEERemainder(
             x: (ratePerSecond * seconds),
             y: modulus
         );
 
         return Math.IEEERemainder(
-            x: (wholePart + ((ratePerSecond * remainder) / EngineTicks.PerSecond)),
+            x: (wholePart + ((ratePerSecond * remainder) / FixedTickConversion.TicksPerSecond)),
             y: modulus
         );
     }

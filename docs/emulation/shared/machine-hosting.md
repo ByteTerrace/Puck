@@ -145,7 +145,7 @@ nor prevents an authorized program from executing arbitrary instructions.
 
 ## Tick-to-cycle translation
 
-Queued hosts consume the integer time domain defined by `Puck.Hosting.EngineTicks`.
+Queued hosts consume the integer time domain defined by `Puck.Maths.FixedTickConversion`.
 For a constant reported core frequency, their remainder accumulator computes:
 
 $\text{cycles} = \left\lfloor \frac{\text{stepTicks} \times \text{CoreFrequency} + \text{remainder}}{\text{EngineTicksPerSecond}} \right\rfloor$
@@ -213,7 +213,7 @@ The worker applies these policies:
   hertz (the NTSC NES master clock is 236,250,000 cycles every 11 seconds) is
   exact. Engine ticks become core cycles through
   `RationalRateAccumulator.TakeCycleBudget`, a remainder-carrying integer
-  conversion against `Puck.Hosting.EngineTicks.PerSecond`. A core may change its
+  conversion against `Puck.Maths.FixedTickConversion.TicksPerSecond`. A core may change its
   rate's cycles while it runs, but keeps its seconds, which set the
   scale of the carried phase; the conversion carries phase rather than
   accumulating drift. A rewind restores that phase with the core, and a durable

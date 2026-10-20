@@ -148,7 +148,7 @@ give each type its full contract.
 | `FixedSaturate` | `static` | Saturating faces over the Q48.16 raw: `Add` for scalars and vectors, `Multiply` for the one-rounding product, and `ToInt64` for a widened accumulator. |
 | `FixedDirectedRounding` | `static` | Directed-up products, quotients, roots and norms for conservative bounds, the signed `FloorQuotient`/`CeilingQuotient` over `Int128`, and the directed double seams `TryFloorFromDouble`/`TryCeilingFromDouble`, exact enclosures of a float's real value. |
 | `SecondOrderDynamics` (with `SecondOrderStep`, `SecondOrderState`/`SecondOrderState3`, `SecondOrderSample`) | `readonly record struct` | A pole-matched second-order response—`Create(f, ζ, r)` derives the coefficients from an authored frequency, damping ratio, and initial response; `Compile`+`Step` advance per tick/frame, `Evaluate`+`Retarget` read a closed form from initial conditions; `SecondOrderState.WithPosition`/`WithVelocity` replace one lane exactly and keep the other's raw. Q32 authoritative state; a `MathF` float twin lives in `Puck.SdfVm.Views` for presentation-only followers. |
-| `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points—`Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; a float twin (`Puck.SdfVm.Views.SdfCurvePath`) converts the compiled raws once for presentation. |
+| `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points—`Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; presentation (the camera program's `path` op) samples the `CompiledCurvatureSpline` and converts the sample to floats. |
 | `FixedVectorMath` | `static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
 | `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider, beside the wrapping `MixedScaleProduct` and the `RawMagnitude` sign-magnitude primitive. The remaining sign-plus-`UInt128` accumulation and wrapping siblings are internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. Every apply, solve and invert kernel is public: `TryApplySymmetric2`/`3`, `TrySolveSymmetric2`/`3` and `TryInvertSymmetric2`/`3`. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
@@ -957,17 +957,12 @@ whole domain: a closed curve wraps the arc-length argument modulo
 member remarks on `CurvatureSpline` state what each one bounds (a Q32
 rounding's perturbation of reconstructed curvature, the arc-table's increment
 floor, the solve's sensitivity to declared curvature, the quartic
-root-search interval—respectively). A presentation twin
-(`src/Puck.SdfVm/Views/SdfCurvePath.cs`, `Puck.SdfVm` project) converts an
-already-compiled spline's Q32 raws once at construction—it carries no
-solver of its own, so it cannot diverge from the fixed-point primitive's
-tangent-length branch pick or refusal ladder, only from its own
-de Casteljau/table-inversion arithmetic. It carries every intermediate
-(converted control points, arc table, wrap/clamp/lookup) in `double`, never
-`float`—a legal curve can accumulate arc well past `2^24` units, where a
-`float` ULP already exceeds a legal short segment and would collapse distinct
-Q32 stations onto the same value; `float` appears only at the two public
-seams, `TotalLength` and `Sample`'s returned position/yaw.
+root-search interval—respectively). Presentation has no solver and no second
+evaluator: the camera program's `path` op
+(`SamplePath` in `src/Puck.SdfVm/Views/SdfCameraProgram.cs`) wraps or clamps
+the fraction in `double` and calls `CompiledCurvatureSpline.Evaluate`, so it
+cannot diverge from the fixed-point primitive; `float` appears only on the
+converted position and yaw it returns.
 
 ---
 

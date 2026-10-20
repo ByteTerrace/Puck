@@ -1,4 +1,3 @@
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics;
@@ -34,7 +33,7 @@ public sealed partial class WorldBody {
     // exists only at the ordinals a kit's Actions map resolves; every other ordinal's entry stays null/zero and is
     // never touched by ProcessLaneActions, so a role ordinal is naturally always inert here.
     private const int ActionLaneCount = ChannelLimits.MaxChannels;
-    private const long EngineTicksPerSecond = ((long)EngineTicks.PerSecond);
+    private const long EngineTicksPerSecond = ((long)FixedTickConversion.TicksPerSecond);
     // The tape ring's initial slot count — the no-growth floor. It doubles on demand, never dropping a segment.
     private const int InitialTapeCapacity = 8;
 

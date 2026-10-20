@@ -161,7 +161,7 @@ using Puck.Commands;
 using Puck.Hosting;
 
 sealed class GameSimulation : IFixedStepSimulation {
-    // Must divide EngineTicks.PerSecond exactly; the host reads it to size a step.
+    // Must divide FixedTickConversion.TicksPerSecond exactly; the host reads it to size a step.
     public uint RatePerSecond => 60U;
 
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {

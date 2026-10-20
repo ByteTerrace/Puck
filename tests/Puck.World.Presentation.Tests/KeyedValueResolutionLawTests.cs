@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Client;
 using Xunit;
@@ -39,8 +39,8 @@ public sealed class KeyedValueResolutionLawTests {
         Assert.DoesNotContain(actualString: (reason ?? string.Empty), expectedSubstring: "theme.color.surfaceBase");
 
         var theme = new WorldThemeResolve(domains: new WorldValueDomainGuard());
-        var dark = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: EngineTicks.PerSecond), revision: 0);
-        var light = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (EngineTicks.PerSecond / 2UL)), revision: 0);
+        var dark = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: FixedTickConversion.TicksPerSecond), revision: 0);
+        var light = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (FixedTickConversion.TicksPerSecond / 2UL)), revision: 0);
 
         Assert.Equal(expected: 0f, actual: dark.Color.SurfaceBase.R);
         Assert.Equal(expected: 1f, actual: light.Color.SurfaceBase.R);
@@ -67,7 +67,7 @@ public sealed class KeyedValueResolutionLawTests {
 
         Assert.Equal(expected: 1, actual: environment.Resolutions);
 
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
 
         Assert.Equal(expected: 0.05f, actual: environment.Resolve(definition: keyed, mirror: mirror, revision: 0).Sky.Atmosphere.FogDensity, precision: 6);
@@ -110,7 +110,7 @@ public sealed class KeyedValueResolutionLawTests {
         foreach (var (first, second, rate, modulus) in lanes) {
             var step = Math.IEEERemainder(x: (second - ((double)first)), y: modulus);
 
-            Assert.InRange(actual: Math.Abs(value: (step - (((double)((float)rate)) / EngineTicks.PerSecond))), high: 1e-3d, low: 0d);
+            Assert.InRange(actual: Math.Abs(value: (step - (((double)((float)rate)) / FixedTickConversion.TicksPerSecond))), high: 1e-3d, low: 0d);
         }
 
         // Red leg: with no star brightness nothing twinkles, and the phase holds zero so a still sky can stand.

@@ -1,4 +1,3 @@
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -456,7 +455,7 @@ public sealed partial class WorldInstanceHost {
             Paused: instance.IsPaused,
             StepWidthTicks: (stopped
             ? (ulong?)null
-            : EngineTicks.PerRate(ratePerSecond: ((uint)rateHz))),
+            : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz))),
             CompletedTicks: instance.CompletedTicks
         );
         reason = string.Empty;

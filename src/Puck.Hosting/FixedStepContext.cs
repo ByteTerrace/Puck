@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 
 namespace Puck.Hosting;
 
@@ -7,13 +8,13 @@ namespace Puck.Hosting;
 /// reconstruct steps from floating-point seconds.</summary>
 /// <param name="Tick">The zero-based simulation tick being advanced.</param>
 /// <param name="ElapsedTicks">The exact simulation time after this step completes.</param>
-/// <param name="StepTicks">The exact duration of one step in <see cref="EngineTicks"/>.</param>
+/// <param name="StepTicks">The exact duration of one step in <see cref="FixedTickConversion"/>.</param>
 public readonly record struct FixedStepContext(ulong Tick, ulong ElapsedTicks, ulong StepTicks);
 /// <summary>The optional deterministic simulation seam driven by a Puck host. For each due fixed tick the launcher
 /// builds one <see cref="CommandSnapshot"/>, applies it to the command registry, then calls <see cref="Step"/> once.</summary>
 public interface IFixedStepSimulation {
-    /// <summary>The fixed rate, in Hz, this simulation steps at — MUST divide <see cref="EngineTicks.PerSecond"/>
-    /// exactly (<see cref="EngineTicks.PerRate"/> is how the host turns it into a step width). <c>Puck.Hosting</c> is
+    /// <summary>The fixed rate, in Hz, this simulation steps at — MUST divide <see cref="FixedTickConversion.TicksPerSecond"/>
+    /// exactly (<see cref="FixedTickConversion.PerRate"/> is how the host turns it into a step width). <c>Puck.Hosting</c> is
     /// domain-agnostic and owns no notion of "the" simulation rate — a genre-specific host (e.g. a loaded world
     /// document) is what actually declares one, so the launcher reads it here rather than assuming a fixed constant
     /// of its own. Read once per pacing-loop iteration, and again after each console drain between steps: a change
@@ -35,7 +36,7 @@ public interface IFixedStepSimulation {
     /// must show runs while that frame is owed. <see langword="false"/> lets the step run. The simulation bounds the
     /// hold itself: once it will wait no longer, it settles what the frame owed (a capture refused by name) and
     /// answers <see langword="false"/>. A headless host never asks.</summary>
-    /// <param name="withheldTicks">The host time, in <see cref="EngineTicks"/>, the host withholds when the answer is
+    /// <param name="withheldTicks">The host time, in <see cref="FixedTickConversion"/>, the host withholds when the answer is
     /// <see langword="true"/>. It is spent, never stepped later, so serving the frame releases no burst.</param>
     /// <returns><see langword="true"/> to withhold the step.</returns>
     bool HoldsClock(ulong withheldTicks);

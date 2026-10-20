@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Launcher;
 
@@ -241,7 +242,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
                 var intervalTicks = clock.Sample();
                 var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
-                var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
+                var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ratePerSecond);
                 var period = (frequency / ((long)ratePerSecond));
 
                 // One step at most, whatever the iteration's interval was: the interval only rebases the input pin and

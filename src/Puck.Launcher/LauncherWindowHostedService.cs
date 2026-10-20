@@ -7,6 +7,7 @@ using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
+using Puck.Maths;
 
 namespace Puck.Launcher;
 
@@ -258,7 +259,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 );
                 var hostFrame = 0UL;
                 var frequency = m_time.TimestampFrequency;
-                var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
+                var maxFrameTicks = (FixedTickConversion.TicksPerSecond / 4UL);
                 // Display-aware presentation pacing. Active signal timing and explicit VRR capabilities are independent
                 // facts; the host never turns selectable fixed modes into a fictional VRR range. Re-resolve only when the
                 // window reports a display/topology change.
@@ -356,7 +357,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
                 // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
                 // simulation.rateHz durable stop) — the pump's own calling cadence is presentation-adjacent host
-                // pacing, never sim state, and EngineTicks.PerRate refuses zero outright. The registered simulation
+                // pacing, never sim state, and FixedTickConversion.PerRate refuses zero outright. The registered simulation
                 // still gates whether it actually steps internally (WorldSimulation.ShouldStepBoot); this value only
                 // decides how often it is called, so a stopped world's window keeps rendering and its console keeps
                 // answering.
@@ -371,7 +372,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         : simRatePerSecond
                     );
 
-                    return EngineTicks.PerRate(ratePerSecond: pumpRatePerSecond);
+                    return FixedTickConversion.PerRate(ratePerSecond: pumpRatePerSecond);
                 }
 
                 while (

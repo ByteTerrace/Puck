@@ -15,7 +15,7 @@ namespace Puck.World.Server.Tests;
 /// rebase the cell's clock identically.</summary>
 public sealed class EngineTimeClockSequenceLawTests {
     private static readonly Principal Actor = Principal.Seat(slot: 0);
-    private static readonly ulong OtherRateStepTicks = Puck.Hosting.EngineTicks.PerRate(ratePerSecond: 60U);
+    private static readonly ulong OtherRateStepTicks = Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: 60U);
 
     private static WorldStateRow ClockRow(long value = 0) => new(
         Name: CellName.Parse(candidate: "clock"),

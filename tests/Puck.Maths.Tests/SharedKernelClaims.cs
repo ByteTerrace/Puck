@@ -855,10 +855,10 @@ internal static class SharedKernelClaims {
         } catch (ArgumentException exception) when (exception.ParamName == "ratePerSecond") {
         }
 
-        if (FixedTickConversion.ToSeconds(engineTicks: 50400UL) != 1d) { return "ToSeconds(50400) is not one"; }
-        if (FixedTickConversion.ToSeconds(engineTicks: 25200UL) != 0.5d) { return "ToSeconds(25200) is not a half"; }
-        if (FixedTickConversion.ToSeconds(engineTicks: 0UL) != 0d) { return "ToSeconds(0) is not zero"; }
-        if (BitConverter.DoubleToInt64Bits(value: FixedTickConversion.ToSeconds(engineTicks: 7UL)) != BitConverter.DoubleToInt64Bits(value: (7d / 50400d))) { return "ToSeconds(7) is not the double quotient"; }
+        if (FixedTickConversion.ToSeconds(ticks: 50400UL) != 1d) { return "ToSeconds(50400) is not one"; }
+        if (FixedTickConversion.ToSeconds(ticks: 25200UL) != 0.5d) { return "ToSeconds(25200) is not a half"; }
+        if (FixedTickConversion.ToSeconds(ticks: 0UL) != 0d) { return "ToSeconds(0) is not zero"; }
+        if (BitConverter.DoubleToInt64Bits(value: FixedTickConversion.ToSeconds(ticks: 7UL)) != BitConverter.DoubleToInt64Bits(value: (7d / 50400d))) { return "ToSeconds(7) is not the double quotient"; }
 
         return null;
     }

@@ -1,6 +1,7 @@
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 
 namespace Puck.Hosting.Tests;
 
@@ -149,7 +150,7 @@ public sealed class HostingContractTests {
         );
 
         for (var frame = 0; (frame < 60); ++frame) {
-            var context = FrameContext(elapsedTicks: (((ulong)frame) * EngineTicks.PerRate(ratePerSecond: 60U)));
+            var context = FrameContext(elapsedTicks: (((ulong)frame) * FixedTickConversion.PerRate(ratePerSecond: 60U)));
 
             controller.Capture(
                 context: in context,

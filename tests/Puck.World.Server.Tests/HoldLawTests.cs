@@ -391,7 +391,7 @@ public sealed class HoldLawTests {
             return ((double)(body.FixedPosition.Y - start));
         }
 
-        var seconds = (((double)(24UL * Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz))) / EngineTicks.PerSecond);
+        var seconds = (((double)(24UL * Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz))) / FixedTickConversion.TicksPerSecond);
         var fast = Rise(speed: 2f);
         var slow = Rise(speed: 1f);
 

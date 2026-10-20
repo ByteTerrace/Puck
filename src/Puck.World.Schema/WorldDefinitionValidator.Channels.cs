@@ -831,10 +831,8 @@ public static partial class WorldDefinitionValidator {
 
         return (AllNames: names, CompositionNames: compositionNames);
     }
-    // Validated in the AUTHORED unit (seconds), not the compiled tick count: DurationTicks' rounding-up guarantee
-    // only holds once its FixedQ4816 conversion sees a nonzero value, so a positive value below half a Q48.16 LSB
-    // quantizes to zero ticks at any rate — LowerAfterSeconds must be checked as "positive AND does not quantize to
-    // FixedQ4816.Zero", not merely positive. `defaultSeconds > ceilingSeconds` is also not exactly equivalent to the
+    // Validated in the AUTHORED unit (seconds), not the compiled tick count: DurationTicks rounds the exact decimal
+    // up, so any positive value compiles to at least one tick at every positive rate. `defaultSeconds > ceilingSeconds` is also not exactly equivalent to the
     // ticks-domain `defaultTicks > ceilingTicks` comparison it replaces (DurationTicks' ceiling-rounding is
     // monotonic non-decreasing, so two seconds values under one tick apart can compile to the same count) — this
     // refuses strictly more, never less, which is the safe direction. Every seconds field is also checked finite
@@ -857,8 +855,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} must be a finite number.");
         } else if (!(settings.LowerAfterSeconds > 0f)) {
             errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} must be positive.");
-        } else if (FixedQ4816.FromDouble(value: settings.LowerAfterSeconds) == FixedQ4816.Zero) {
-            errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} is positive but quantizes to zero in fixed point (Q48.16) — too small to represent as a duration at ANY rate; author a larger value.");
         } else if (!FitsCompiledRange(
             seconds: settings.LowerAfterSeconds,
             ratePerSecond: ratePerSecond

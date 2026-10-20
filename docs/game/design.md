@@ -124,8 +124,8 @@ law family in `tests/Puck.Maths.Tests`.
 CurvatureSpline.Compile` derives the cubic-Bézier tangent lengths that reproduce them exactly (Steven
 Wittens' curvature-continuous construction) — no control-point document shape ever ships, so there is
 nothing to migrate off later. The same two-homes pattern as `dynamics`: `Puck.Maths` (fixed-point,
-exact `BigInteger`/`Rational` compile, Q32 runtime) and `Puck.SdfVm.Views.SdfCurvePath` (a float twin
-converted once from the compiled raws, never re-solving). Two consumers land with it: a camera
+exact `BigInteger`/`Rational` compile, Q32 runtime) and the camera program's `path` op (which samples the
+`CompiledCurvatureSpline` and converts the sample for presentation, never re-solving). Two consumers land with it: a camera
 program's `path` op dollies the eye/pivot along a curve by arc-length fraction, and a body-motion
 program's `curve` target source (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`) feeds a body's
 planar target from a curve at an authored arc-rate — the seed the kart-track charter inherits.

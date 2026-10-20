@@ -1,20 +1,16 @@
 namespace Puck.Maths;
 
 /// <summary>
-/// Converts a fixed-point duration in seconds to a whole count of engine ticks, rounding UP so a positive duration
-/// is never rounded away to zero ticks. Single-sourced here (rather than beside either caller) because both
-/// <c>Puck.World.Server.WorldBody</c> (the per-tick effect-duration consumer) and the world-document's kit-effect
-/// compile path (<c>Puck.World.WorldKit</c>'s <c>ActionEffect</c> compilation, in <c>Puck.World.Schema</c>) need the
-/// IDENTICAL rounding rule, and Puck.World.Schema must not reference Puck.World.Server — the two projects calling the
-/// same Puck.Maths member is what dissolves that cycle, rather than one project reaching into the other for it.
+/// The engine's deterministic time base and every conversion into and out of it: rate periods, authored and runtime
+/// durations rounded up to whole ticks, and ticks back to seconds. Every project that counts time in engine ticks
+/// reads it here, so the base has one definition.
 /// </summary>
 public static class FixedTickConversion {
-    /// <summary>The number of engine ticks in one second (<c>50400 = 2⁵·3²·5²·7</c>), matching
-    /// <c>Puck.Hosting.EngineTicks.PerSecond</c> exactly. Puck.Maths sits on the Leaf contracts and data row and
-    /// cannot reference Puck.Hosting (a Shared-substrate project would be an upward dependency), so this pinned
-    /// duplicate is the seam — both constants must be changed together, and neither has changed since either was
-    /// introduced. The count is divisible by every common animation/display rate, including the 240 Hz rate
-    /// <c>Puck.World</c>'s fixed simulation step runs at.</summary>
+    /// <summary>The number of engine ticks in one second (<c>50400 = 2⁵·3²·5²·7</c>). Its divisors include every
+    /// common animation and display rate (24, 25, 30, 48, 50, 60, 72, 90, 120, 144, 240, 288 and 480 Hz, and animating
+    /// on 2s, 3s and 4s), so a frame or update period at any of them is a whole number of ticks and never has to be
+    /// mapped or repeated. Keeping the <c>5²</c> factor keeps the 25-based rates exact, which the larger highly
+    /// composite counts that trade it for the unused prime 11 do not.</summary>
     public const ulong TicksPerSecond = 50400UL;
 
     /// <summary>Converts an authored duration to the smallest whole engine-tick count no less than its exact decimal
@@ -128,11 +124,11 @@ public static class FixedTickConversion {
         return FixedQ4816.FromRawBits(value: checked((long)quotient));
     }
     /// <summary>Converts a count of engine ticks to seconds, for presentation.</summary>
-    /// <param name="engineTicks">The number of engine ticks to convert.</param>
-    /// <returns>The duration of <paramref name="engineTicks"/> ticks in seconds, as a double; a presentation-out
-    /// value that never re-enters simulation state.</returns>
-    public static double ToSeconds(ulong engineTicks) =>
-        (((double)engineTicks) / TicksPerSecond);
+    /// <param name="ticks">The number of engine ticks to convert.</param>
+    /// <returns>The duration of <paramref name="ticks"/> ticks in seconds, as a double; a presentation-out value that
+    /// never re-enters simulation state.</returns>
+    public static double ToSeconds(ulong ticks) =>
+        (((double)ticks) / TicksPerSecond);
     /// <summary>Converts a duration to an EXACT whole engine-tick count — the non-rounding sibling of
     /// <see cref="DurationEngineTicks(FixedQ4816)"/>, for a caller that must REFUSE an inexact duration rather than
     /// silently round it. <paramref name="seconds"/> is <see cref="decimal"/> — base-10, exact for any terminating

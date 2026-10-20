@@ -163,7 +163,7 @@ public enum WorldBackendPreference : byte {
 /// <summary>
 /// The world's simulation rate — how many fixed steps the authoritative server advances per second. It is simulation
 /// state, unlike <see cref="WorldHostDefaults"/> (presentation-only, never simulation state): the rate is
-/// simulation input (rule 4) — it is what <c>Puck.Hosting.EngineTicks.PerRate</c> turns into the exact fixed-point
+/// simulation input (rule 4) — it is what <c>Puck.Maths.FixedTickConversion.PerRate</c> turns into the exact fixed-point
 /// step width every kit tuning, motion program, and physics constant is authored against, so two worlds authoring
 /// different rates are two different, equally deterministic simulations, never a presentation preference.
 /// </summary>
@@ -174,7 +174,7 @@ public enum WorldBackendPreference : byte {
 /// positive value means never — not zero and not "already expired" — since there is no tick mapping for a world
 /// that never advances (see <see cref="CompiledTickDuration"/>, <see cref="WorldDefinition.PopulationReconnectGraceTicks"/>).
 /// A positive rate must be a divisor of <see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> (50400)
-/// exactly, so <c>Puck.Hosting.EngineTicks.PerRate</c> always derives a whole engine-tick step width — never
+/// exactly, so <c>Puck.Maths.FixedTickConversion.PerRate</c> always derives a whole engine-tick step width — never
 /// truncated, never remainder-carried (<see cref="WorldDefinitionValidator"/> refuses a non-divisor, naming the
 /// nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's
 /// two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of

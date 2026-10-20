@@ -1,3 +1,4 @@
+using System.Globalization;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -82,11 +83,22 @@ internal sealed partial class PlayerCommandModule {
         if (!playerWritable) {
             return CommandResult.Error(output: $"[body.state-load: state '{name}' is not player-writable]");
         }
-        // A timer's authored seconds round up to engine ticks from their decimal value, the rule every compiled
-        // duration takes; the bound keeps the tick count inside its 64-bit carrier.
+        // A timer's typed seconds are read as the decimal they spell and round up to engine ticks, the rule every
+        // compiled duration takes; the bound keeps the tick count inside its 64-bit carrier.
+        var timerSeconds = 0m;
+
         if (
             (kind == ActionStateKind.Timer) &&
-            ((authored < 0f) || (authored > (ulong.MaxValue / FixedTickConversion.TicksPerSecond)))
+            (
+                !decimal.TryParse(
+                    provider: CultureInfo.InvariantCulture,
+                    result: out timerSeconds,
+                    s: args[1].ToString(),
+                    style: NumberStyles.Float
+                ) ||
+                (timerSeconds < 0m) ||
+                (timerSeconds > (ulong.MaxValue / FixedTickConversion.TicksPerSecond))
+            )
         ) {
             return CommandResult.Error(output: $"[body.state-load: timer seconds must be non-negative and at most {(ulong.MaxValue / FixedTickConversion.TicksPerSecond)}]");
         }
@@ -100,7 +112,7 @@ internal sealed partial class PlayerCommandModule {
             : new DurableStateValue(
                 Name: name,
                 Value: FixedQ4816.Zero,
-                TimerTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)authored))
+                TimerTicks: FixedTickConversion.DurationEngineTicks(seconds: timerSeconds)
             )
         );
         var tick = m_server.NextInputTick;

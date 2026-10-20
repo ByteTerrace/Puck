@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.Launcher.Tests;
@@ -21,7 +22,7 @@ namespace Puck.Launcher.Tests;
 /// </summary>
 public sealed class OffscreenTickPacingLawTests {
     private const uint Rate = 30U;
-    private const ulong StepTicks = (EngineTicks.PerSecond / Rate);
+    private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / Rate);
     // A capture armed at this tick, two ticks after a slow frame.
     private const ulong CaptureTick = 10UL;
     private const int Frames = 12;
@@ -223,7 +224,7 @@ public sealed class OffscreenTickPacingLawTests {
         for (var iteration = 0; ((iteration < 10_000) && (root.Frames.Count < frames)); iteration++) {
             var steps = pump.Advance(
                 deltaTicks: interval,
-                maxFrameTicks: (EngineTicks.PerSecond / 4UL),
+                maxFrameTicks: (FixedTickConversion.TicksPerSecond / 4UL),
                 stepTicks: StepTicks
             );
 
@@ -250,7 +251,7 @@ public sealed class OffscreenTickPacingLawTests {
             _ = root.ProduceFrame(context: in context);
             interval = Math.Max(
                 val1: StepTicks,
-                val2: ((ulong)(CostOf(tick: simulation.Completed).TotalSeconds * EngineTicks.PerSecond))
+                val2: ((ulong)(CostOf(tick: simulation.Completed).TotalSeconds * FixedTickConversion.TicksPerSecond))
             );
         }
 
