@@ -60,27 +60,96 @@ public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shap
 /// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
 /// </summary>
 public static class CreationStampEmitter {
-    private const float MinimumTransformExtent = 0.0001f;
+    // The degeneracy floor on a scale axis, in the fixed domain. Q48.16 resolves 1/65536, so 0.0001 lands on the
+    // nearest representable value above it rather than exactly — this is a guard against a zero-scale axis collapsing
+    // the frame, never a value a result is read off, so the quantization is immaterial. A product of two floors still
+    // underflows to zero, which yields a zero-extent (inert) collider rather than a vanishingly thin one.
+    private static readonly FixedQ4816 MinimumTransformExtent = FixedQ4816.FromDouble(value: 0.0001);
 
-    private static FixedVector3 EffectiveFixedScale(Vector3 value) =>
+    // One stamp's transform constants, derived once in fixed point from either public transform record, so the render
+    // program and the contact program encode the same origin, rotation, scale and mirror alignment: the render path
+    // hands the builder ToVector3()/ToQuaternion() of these rather than a second, single-precision derivation.
+    // FacetScale is the authored stamp scale as the render-only facets (a blend radius, a dilation, a text em) read it;
+    // it is the same number the stamper laid the creation's text out with.
+    private readonly record struct StampFrame(FixedVector3 Origin, FixedQuaternion Rotation, FixedQ4816 Scale, float FacetScale, FixedVector3? ReflectionNormal, FixedQuaternion? ReflectionAlignment) {
+        public static StampFrame Of(CreationStampTransform transform) =>
+            Of(
+                facetScale: transform.Scale,
+                normal: ((transform.ReflectionNormal is { } normal)
+                ? FixedVector3.FromVector3(value: normal)
+                : (FixedVector3?)null),
+                origin: FixedVector3.FromVector3(value: transform.Origin),
+                rotation: FixedQuaternion.FromQuaternion(value: transform.Rotation),
+                scale: FixedQ4816.FromDouble(value: transform.Scale)
+            );
+        public static StampFrame Of(FixedCreationStampTransform transform) =>
+            Of(
+                facetScale: ((float)transform.Scale),
+                normal: transform.ReflectionNormal,
+                origin: transform.Origin,
+                rotation: transform.Rotation,
+                scale: transform.Scale
+            );
+        private static StampFrame Of(FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale, float facetScale, FixedVector3? normal) {
+            var unitNormal = normal?.Normalize();
+
+            return new StampFrame(
+                Origin: origin,
+                Rotation: rotation.Normalize(),
+                Scale: FixedQ4816.Max(
+                    x: FixedQ4816.Abs(value: scale),
+                    y: MinimumTransformExtent
+                ),
+                FacetScale: facetScale,
+                ReflectionNormal: unitNormal,
+                ReflectionAlignment: ((unitNormal is { } facing)
+                ? CreationStampEmitter.ReflectionAlignment(unitNormal: facing)
+                : (FixedQuaternion?)null)
+            );
+        }
+    }
+
+    // The contact program's per-axis shape scale: the authored magnitudes floored at the degeneracy guard, in fixed
+    // point. The render program hands SdfSolidGeometry the authored scale as is; its own MinimumScale floor is the
+    // same rule, applied once inside every primitive, reach and half-extent it answers.
+    private static FixedVector3 EffectiveScale(Vector3 value) =>
         new(
             X: FixedQ4816.Max(
                 x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: value.X)),
-                y: MinimumTransformExtentFixed
+                y: MinimumTransformExtent
             ),
             Y: FixedQ4816.Max(
                 x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: value.Y)),
-                y: MinimumTransformExtentFixed
+                y: MinimumTransformExtent
             ),
             Z: FixedQ4816.Max(
                 x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: value.Z)),
-                y: MinimumTransformExtentFixed
+                y: MinimumTransformExtent
             )
         );
-    private static Vector3 EffectiveScale(Vector3 value) => Vector3.Max(
-        value1: Vector3.Abs(value: value),
-        value2: new Vector3(value: MinimumTransformExtent)
-    );
+    // The one place a shape's authored primitive facets (taper, profile, lift, rounding, chamfer, exponent, curve)
+    // reach SdfSolidGeometry: every emission of a shape's primitive, plate copy, trim host and trim reference goes
+    // through here, so no two emissions can disagree on a default. A trim's reference re-reads only the primitive
+    // geometry, never its sweep curve (ShapeTrimDocument), which `curve: false` leaves out.
+    private static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 scale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false, bool curve = true) =>
+        SdfSolidGeometry.AppendScaledPrimitive(
+            chain: chain,
+            type: shape.Type,
+            taper: (shape.Taper ?? 0.5f),
+            profile: shape.Profile,
+            lift: (shape.Lift ?? SdfLift.Extrude),
+            rounding: (shape.Rounding ?? 0f),
+            chamfer: (shape.Chamfer ?? 0f),
+            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            curve: (curve
+            ? shape.Curve?.Parameters()
+            : null),
+            scale: scale,
+            material: material,
+            blend: blend,
+            smooth: smooth,
+            detail: detail
+        );
     // The panel copy: the same primitive re-emitted from a fresh transform chain (its own ResetPoint/Translate/
     // Rotate/Scale prefix, matching the plate's — chaining after the plate's shape would inherit whatever persistent
     // Scale op its emission left), placed by ShapePanelDocument.Resolve and composed against the plate's own
@@ -99,20 +168,12 @@ public static class CreationStampEmitter {
             type: shape.Type
         );
 
-        _ = SdfSolidGeometry.AppendScaledPrimitive(
+        _ = AppendPrimitive(
             chain: baseChain.Translate(offset: (placement.FaceAxis * placement.Offset)),
-            type: shape.Type,
-            taper: (shape.Taper ?? 0.5f),
-            profile: shape.Profile,
-            lift: lift,
-            rounding: (shape.Rounding ?? 0f),
-            chamfer: (shape.Chamfer ?? 0f),
-            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-            curve: shape.Curve?.Parameters(),
+            shape: shape,
             scale: placement.ErodedScale,
             material: material,
-            blend: placement.Blend,
-            smooth: 0f
+            blend: placement.Blend
         );
     }
     // panelMaterial is the panel copy's already-resolved program material id (null only when the shape has no panel;
@@ -120,14 +181,16 @@ public static class CreationStampEmitter {
     // (contactMargin null): the deterministic fixed-point contact evaluator (EmitFixed/VisitFixedPrimitiveCopies)
     // never calls this with a panelled shape's second material, so a solid placement's collider reads the plain
     // plate regardless of Panel.
-    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin, bool inScope = false, int? panelMaterial = null) {
-        var shapeScale = EffectiveScale(value: shape.Scale);
+    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, in StampFrame frame, int material, float? contactMargin, bool inScope = false, int? panelMaterial = null) {
+        var shapeScale = shape.Scale;
+        var stampScale = frame.FacetScale;
+        var stampFrame = frame;
 
         SdfProgramBuilder BuildTransformChain() {
             var prefix = ShapeDomainOps.Apply(
                 chain: StampPrefix(
                     builder: builder,
-                    transform: transform
+                    frame: stampFrame
                 ),
                 domain: shape.Domain,
                 subject: shape.Position
@@ -135,7 +198,7 @@ public static class CreationStampEmitter {
                 .Translate(offset: shape.Position)
                 .Rotate(rotation: shape.Rotation);
 
-            // Creation-unit lengths, like the rest of this chain past the Scale(transform.Scale) op above — no
+            // Creation-unit lengths, like the rest of this chain past the Scale(stamp scale) op above — no
             // explicit placement-scale multiply needed here (unlike WorldStampPool.EmitShape's twist/bend/flare
             // prefix, which has no such chain-level Scale and so must bake placementScale in by hand).
             var flared = ((shape.Flare is { } flare)
@@ -174,14 +237,14 @@ public static class CreationStampEmitter {
         var chain = BuildTransformChain();
         // Per-shape lane-driven erosion (KEEP IN SYNC with WorldStampPool.EmitShape's mirrored prefix): the reach is
         // this shape's own SdfSolidGeometry.Reach, taken in WORLD units like the rest of this chain past the Scale
-        // op above. Chained immediately before whichever AppendScaledPrimitive call emits this shape's ShapeBlend —
+        // op above. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
         // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
         var erodeReach = ((shape.Erode is not null)
             ? (SdfSolidGeometry.Reach(
                 lift: (shape.Lift ?? SdfLift.Extrude),
                 scale: shapeScale,
                 type: shape.Type
-            ) * transform.Scale)
+            ) * stampScale)
             : 0f
         );
 
@@ -199,11 +262,11 @@ public static class CreationStampEmitter {
 
         var blend = (shape.Blend ?? SdfBlendOp.Union);
         // The blend radius and the field ops below act on the running WORLD-space accumulator directly — never
-        // re-multiplied by the chain's own Scale(transform.Scale) op the way a primitive's baked-local rounding/
-        // chamfer is (AppendScaledPrimitive, above) — so they take the stamp scale explicitly here.
-        var smooth = ((shape.Smooth ?? 0f) * transform.Scale);
-        var dilate = ((shape.Dilate ?? 0f) * transform.Scale);
-        var onion = ((shape.Onion ?? 0f) * transform.Scale);
+        // re-multiplied by the chain's own Scale(stamp scale) op the way a primitive's baked-local rounding/
+        // chamfer is (AppendPrimitive, above) — so they take the stamp scale explicitly here.
+        var smooth = ((shape.Smooth ?? 0f) * stampScale);
+        var dilate = ((shape.Dilate ?? 0f) * stampScale);
+        var onion = ((shape.Onion ?? 0f) * stampScale);
         var wantsDilate = (dilate != 0f);
         var wantsOnion = (onion != 0f);
 
@@ -230,19 +293,12 @@ public static class CreationStampEmitter {
             );
 
             if (ownScope) {
-                var scoped = SdfSolidGeometry.AppendScaledPrimitive(
+                var scoped = AppendPrimitive(
                     chain: ApplyErode(target: chain.PushField(
                         compose: blend,
                         smooth: smooth
                     )),
-                    type: shape.Type,
-                    taper: (shape.Taper ?? 0.5f),
-                    profile: shape.Profile,
-                    lift: (shape.Lift ?? SdfLift.Extrude),
-                    rounding: (shape.Rounding ?? 0f),
-                    chamfer: (shape.Chamfer ?? 0f),
-                    exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                    curve: shape.Curve?.Parameters(),
+                    shape: shape,
                     scale: shapeScale,
                     material: material,
                     detail: (shape.Detail ?? false)
@@ -273,25 +329,25 @@ public static class CreationStampEmitter {
                     // scale or panel offset. Frequency and amplitude convert inversely, preserving its bound.
                     // A mirrored copy samples the relief through the stamp's reflection, like the shape it rides.
                     var cellOrigin = builder.ResetPoint()
-                        .Translate(offset: (transform.Origin + Vector3.Transform(
-                        (MirroredShapePosition(
-                            shape: shape,
-                            transform: transform
-                        ) * transform.Scale),
-                        transform.Rotation
-                    )));
-                    var cellChain = ((transform.ReflectionNormal is { } cellNormal)
+                        .Translate(offset: StampedPosition(
+                        frame: frame,
+                        local: MirroredShapePosition(
+                            frame: frame,
+                            shape: shape
+                        )
+                    ).ToVector3());
+                    var cellChain = ((frame.ReflectionAlignment is { } alignment)
                         ? Reflect(
-                            alignment: ReflectionAlignment(normal: cellNormal),
-                            chain: cellOrigin.Rotate(rotation: transform.Rotation)
+                            alignment: alignment,
+                            chain: cellOrigin.Rotate(rotation: frame.Rotation)
                         ).Rotate(rotation: shape.Rotation)
-                        : cellOrigin.Rotate(rotation: Quaternion.Normalize(value: (transform.Rotation * shape.Rotation)))
+                        : cellOrigin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize())
                     );
 
                     _ = cellChain
                         .CellDisplace(
-                        (cells.Frequency / transform.Scale),
-                        (cells.Amplitude * transform.Scale),
+                        (cells.Frequency / stampScale),
+                        (cells.Amplitude * stampScale),
                         cells.Seed,
                         cells.Mode,
                         cells.Randomness
@@ -302,16 +358,9 @@ public static class CreationStampEmitter {
                 return;
             }
 
-            var afterShape = SdfSolidGeometry.AppendScaledPrimitive(
+            var afterShape = AppendPrimitive(
                 chain: ApplyErode(target: chain),
-                type: shape.Type,
-                taper: (shape.Taper ?? 0.5f),
-                profile: shape.Profile,
-                lift: (shape.Lift ?? SdfLift.Extrude),
-                rounding: (shape.Rounding ?? 0f),
-                chamfer: (shape.Chamfer ?? 0f),
-                exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                curve: shape.Curve?.Parameters(),
+                shape: shape,
                 scale: shapeScale,
                 material: material,
                 blend: blend,
@@ -330,25 +379,30 @@ public static class CreationStampEmitter {
             return;
         }
 
-        chain = SdfSolidGeometry.AppendScaledPrimitive(
+        EmitMarginedPrimitive(
             chain: ApplyErode(target: chain.PushField(
                 compose: blend,
                 smooth: smooth
             )),
-            type: shape.Type,
-            taper: (shape.Taper ?? 0.5f),
-            profile: shape.Profile,
-            lift: (shape.Lift ?? SdfLift.Extrude),
-            rounding: (shape.Rounding ?? 0f),
-            chamfer: (shape.Chamfer ?? 0f),
-            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-            curve: shape.Curve?.Parameters(),
+            detail: (shape.Detail ?? false),
+            margin: margin,
+            material: material,
+            shape: shape,
+            shapeScale: shapeScale
+        );
+    }
+    // A primitive dilated by its contact margin inside the field scope the caller just opened, so the dilation applies
+    // before the authored blend; pops that scope.
+    private static void EmitMarginedPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 shapeScale, int material, float margin, bool detail) =>
+        _ = AppendPrimitive(
+            chain: chain,
+            shape: shape,
             scale: shapeScale,
             material: material,
-            detail: (shape.Detail ?? false)
-        ).Dilate(radius: margin);
-        _ = chain.PopField();
-    }
+            detail: detail
+        )
+            .Dilate(radius: margin)
+            .PopField();
     // The trim's own scope pops via Union into the SAME accumulator the host's own (unmodified) real shape already
     // folded into moments earlier in program order — so the scope's own candidate wins only where it undercuts that
     // already-present value. A genuine erosion (Dilate at a negative radius) can never do that: max(a, b) >= a, so
@@ -362,53 +416,38 @@ public static class CreationStampEmitter {
     // host's geometry, which stays imperceptibly proud (its whole purpose is avoiding a coincident-surface z-fight,
     // not a visible step). Both copies ride a fresh ResetPoint/Translate/Rotate prefix rather than chaining off the
     // host's own shape instruction, whose emission may leave a persistent Scale op behind.
-    private static void EmitTrim(SdfProgramBuilder builder, ShapeDocument shape, ShapeDocument reference, CreationStampTransform transform, ShapeTrimDocument trim, int material) {
+    private static void EmitTrim(SdfProgramBuilder builder, ShapeDocument shape, ShapeDocument reference, in StampFrame frame, ShapeTrimDocument trim, int material) {
         var hostChain = StampPrefix(
             builder: builder,
-            transform: transform
+            frame: frame
         )
             .Translate(offset: shape.Position)
             .Rotate(rotation: shape.Rotation);
 
-        var eroded = SdfSolidGeometry.AppendScaledPrimitive(
+        var eroded = AppendPrimitive(
             chain: hostChain.PushField(compose: SdfBlendOp.Union),
-            type: shape.Type,
-            taper: (shape.Taper ?? 0.5f),
-            profile: shape.Profile,
-            lift: (shape.Lift ?? SdfLift.Extrude),
-            rounding: (shape.Rounding ?? 0f),
-            chamfer: (shape.Chamfer ?? 0f),
-            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-            curve: shape.Curve?.Parameters(),
-            scale: EffectiveScale(value: shape.Scale),
-            material: material,
-            blend: SdfBlendOp.Union,
-            smooth: 0f
-        ).Dilate(radius: (trim.Inset * transform.Scale));
+            shape: shape,
+            scale: shape.Scale,
+            material: material
+        ).Dilate(radius: (trim.Inset * frame.FacetScale));
 
         var referenceChain = StampPrefix(
             builder: eroded,
-            transform: transform
+            frame: frame
         )
             .Translate(offset: reference.Position)
             .Rotate(rotation: reference.Rotation);
 
-        _ = SdfSolidGeometry.AppendScaledPrimitive(
+        _ = AppendPrimitive(
             chain: referenceChain,
-            type: reference.Type,
-            taper: (reference.Taper ?? 0.5f),
-            profile: reference.Profile,
-            lift: (reference.Lift ?? SdfLift.Extrude),
-            rounding: (reference.Rounding ?? 0f),
-            chamfer: (reference.Chamfer ?? 0f),
-            exponent: (reference.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            shape: reference,
             scale: ShapeTrimDocument.DilatedScale(
-                scale: EffectiveScale(value: reference.Scale),
+                scale: reference.Scale,
                 width: trim.Width
             ),
             material: material,
             blend: SdfBlendOp.Intersection,
-            smooth: 0f
+            curve: false
         );
 
         _ = builder.PopField();
@@ -419,7 +458,7 @@ public static class CreationStampEmitter {
     // PushField/PopField pair is sequential with that scope, never nested inside it. inScope true means the CALLER
     // already holds the whole-creation scope RequiresScope forces — ValidateTrims refuses Trims on that document, so
     // this is a defensive no-op, never reached by a validated document.
-    private static void EmitTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin, bool inScope) {
+    private static void EmitTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, in StampFrame frame, Func<ShapeDocument, int> materialFor, float? contactMargin, bool inScope) {
         if (
             inScope ||
             ((contactMargin is { } margin) && (margin != 0f)) ||
@@ -451,98 +490,73 @@ public static class CreationStampEmitter {
 
             EmitTrim(
                 builder: builder,
+                frame: frame,
                 material: materialFor(arg: shape with { Material = trim.Material }),
                 reference: reference,
                 shape: shape,
-                transform: transform,
                 trim: trim
             );
         }
     }
-    private static FixedVector3 ReflectFixed(FixedVector3 value, FixedVector3 normal) {
+    // The point's mirror image across the plane through the origin with the given unit normal.
+    private static FixedVector3 Reflect(FixedVector3 value, FixedVector3 unitNormal) {
         var projection = FixedVector3.Dot(
             left: value,
-            right: normal
+            right: unitNormal
         );
 
-        return (value - (normal * (projection + projection)));
+        return (value - (unitNormal * (projection + projection)));
     }
-    private static Vector3 ReflectVector(Vector3 value, Vector3 normal) => (value - ((2f * Vector3.Dot(
-        vector1: value,
-        vector2: normal
-    )) * normal));
     // A mirrored stamp reflects the point once, across the plane through its origin with its normal, after the stamp's
     // own scale and before anything the creation authors: every domain op, shape pose, shape-local op and primitive of
     // the copy then reads the original's field at the mirrored point, so the copy is the original's true mirror image
     // whatever its shapes' symmetry. The reflection is H(n) = A H(x) A^-1 with A the shortest rotation carrying local X
     // onto the normal, spelled as that rotation, SdfProgramBuilder.MirrorX, and the rotation back. A mesh placement
     // applies the same H(n) in the same place: after the stamp's scale, before the stamp's rotation.
-    private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, CreationStampTransform transform) {
+    private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, in StampFrame frame) {
         var chain = builder
             .ResetPoint()
-            .Translate(offset: transform.Origin)
-            .Rotate(rotation: transform.Rotation)
-            .Scale(scale: new Vector3(value: transform.Scale));
+            .Translate(offset: frame.Origin.ToVector3())
+            .Rotate(rotation: frame.Rotation)
+            .Scale(scale: new Vector3(value: ((float)frame.Scale)));
 
-        return ((transform.ReflectionNormal is { } normal)
+        return ((frame.ReflectionAlignment is { } alignment)
             ? Reflect(
-                alignment: ReflectionAlignment(normal: normal),
+                alignment: alignment,
                 chain: chain
             )
             : chain
         );
     }
     // Where a shape's origin lands in the stamp's scaled frame: its authored position, reflected on a mirrored stamp.
-    private static Vector3 MirroredShapePosition(ShapeDocument shape, CreationStampTransform transform) {
-        Vector3 position = shape.Position;
+    private static FixedVector3 MirroredShapePosition(ShapeDocument shape, in StampFrame frame) {
+        var position = FixedVector3.FromVector3(value: shape.Position);
 
-        return ((transform.ReflectionNormal is { } normal)
-            ? ReflectVector(
-                normal: Vector3.Normalize(value: normal),
+        return ((frame.ReflectionNormal is { } normal)
+            ? Reflect(
+                unitNormal: normal,
                 value: position
             )
             : position
         );
     }
-    private static SdfProgramBuilder Reflect(SdfProgramBuilder chain, Quaternion alignment) => chain
-        .Rotate(rotation: alignment)
-        .MirrorX()
-        .Rotate(rotation: Quaternion.Conjugate(value: alignment));
+    // A creation-local point carried into world space by the stamp: scaled, rotated and offset to the stamp origin.
+    private static FixedVector3 StampedPosition(in StampFrame frame, FixedVector3 local) =>
+        (frame.Origin + frame.Rotation.Rotate(vector: (local * frame.Scale)));
     private static SdfProgramBuilder Reflect(SdfProgramBuilder chain, FixedQuaternion alignment) => chain
         .Rotate(rotation: alignment)
         .MirrorX()
         .Rotate(rotation: alignment.Conjugate());
-    // The shortest rotation carrying local X onto the plane's normal, (X x n, 1 + X . n) normalized. The plane's two
-    // normals name one reflection, so the one facing +X is taken and 1 + X . n never falls below one.
-    private static Quaternion ReflectionAlignment(Vector3 normal) {
-        var unitNormal = Vector3.Normalize(value: normal);
-
-        if (unitNormal.X < 0f) {
-            unitNormal = -unitNormal;
-        }
-
-        return Quaternion.Normalize(value: new Quaternion(
-            w: (1f + unitNormal.X),
-            x: 0f,
-            y: -unitNormal.Z,
-            z: unitNormal.Y
-        ));
-    }
-    // The contact field's alignment, in fixed point so a collider's program does not depend on the platform's float
-    // arithmetic.
-    private static FixedQuaternion ReflectionAlignmentFixed(FixedVector3 unitNormal) {
-        var facing = ((unitNormal.X < FixedQ4816.Zero)
+    // The shortest rotation carrying local X onto the plane's normal. The plane's two normals name one reflection, so
+    // the one facing +X is taken and the rotor never exceeds a quarter turn. Fixed point, so a collider's program
+    // does not depend on the platform's float arithmetic.
+    private static FixedQuaternion ReflectionAlignment(FixedVector3 unitNormal) =>
+        FixedQuaternion.FromTo(
+            from: FixedVector3.UnitX,
+            to: ((unitNormal.X < FixedQ4816.Zero)
             ? -unitNormal
-            : unitNormal
+            : unitNormal)
         );
-
-        return new FixedQuaternion(
-            W: (FixedQ4816.One + facing.X),
-            X: FixedQ4816.Zero,
-            Y: -facing.Z,
-            Z: facing.Y
-        ).Normalize();
-    }
     private static (FixedVector3 Position, FixedQuaternion Rotation) ReflectedShapeTransformFixed(ShapeDocument shape, FixedVector3? normal) {
         var position = FixedVector3.FromVector3(value: shape.Position);
         var rotation = FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize();
@@ -552,30 +566,19 @@ public static class CreationStampEmitter {
         }
 
         // Let H(n) be reflection across the plane with normal n. Negating the reflected X axis turns the improper
-        // reflected basis back into the proper frame the float emitter has always authored. If b = R*x, that frame is
-        // H(n) R H(x) = H(n) H(b) R. The product of the two reflections H(n)H(b) is the unit quaternion
-        // (b x n, b . n), so no matrix-to-quaternion reconstruction (and therefore no platform sqrt/libm) is needed.
+        // reflected basis back into the proper frame the render emitter authors. If b = R*x, that frame is
+        // H(n) R H(x) = H(n) H(b) R, and the product of the two reflections is SdfDomainExpansion.MirrorRemainder.
         var reflectedXAxis = rotation.Rotate(vector: FixedVector3.UnitX).Normalize();
-        var reflectionPairVector = FixedVector3.Cross(
-            left: reflectedXAxis,
-            right: unitNormal
-        );
-        var reflectionPair = new FixedQuaternion(
-            X: reflectionPairVector.X,
-            Y: reflectionPairVector.Y,
-            Z: reflectionPairVector.Z,
-            W: FixedVector3.Dot(
-                left: reflectedXAxis,
-                right: unitNormal
-            )
-        ).Normalize();
 
         return (
-            Position: ReflectFixed(
-            normal: unitNormal,
+            Position: Reflect(
+            unitNormal: unitNormal,
             value: position
         ),
-            Rotation: (reflectionPair * rotation).Normalize()
+            Rotation: (SdfDomainExpansion.MirrorRemainder(
+                axis: reflectedXAxis,
+                unitNormal: unitNormal
+            ) * rotation).Normalize()
         );
     }
     // A run's creation-space frame: authored directly, or a riding run's unit-local frame carried by its shape.
@@ -591,7 +594,7 @@ public static class CreationStampEmitter {
 
             return (
                 (shape.Position + Vector3.Transform(
-                value: (run.Position * EffectiveScale(value: shape.Scale)),
+                value: (run.Position * EffectiveScale(value: shape.Scale).ToVector3()),
                 rotation: shape.Rotation
             )),
                 Quaternion.Normalize(value: (shape.Rotation.Value * run.Rotation.Value))
@@ -677,6 +680,7 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
 
+        var frame = StampFrame.Of(transform: transform);
         var shapes = (document.Shapes ?? []);
 
         for (var index = 0; (index < shapes.Count); index++) {
@@ -689,22 +693,22 @@ public static class CreationStampEmitter {
             EmitShapeChain(
                 builder: builder,
                 contactMargin: contactMargin,
+                frame: frame,
                 inScope: inScope,
                 material: materialFor(arg: shape),
                 panelMaterial: ((shape.Panel is { } panel)
                 ? materialFor(arg: shape with { Material = panel.Material })
                 : (int?)null),
-                shape: shape,
-                transform: transform
+                shape: shape
             );
             EmitTrims(
                 builder: builder,
                 contactMargin: contactMargin,
                 document: document,
+                frame: frame,
                 inScope: inScope,
                 materialFor: materialFor,
-                shape: shape,
-                transform: transform
+                shape: shape
             );
         }
     }
@@ -716,23 +720,17 @@ public static class CreationStampEmitter {
     /// <param name="materialFor">Resolves each shape's material id.</param>
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
-    /// <remarks>This is the collision-field sibling of <see cref="Emit"/>. In particular, a mirrored shape's
-    /// orientation is composed from its two reflection planes as a fixed quaternion; it never visits
-    /// <see cref="Matrix4x4"/>, <see cref="Quaternion.CreateFromRotationMatrix"/>, or a floating-point normalize.</remarks>
+    /// <remarks>This is the collision-field sibling of <see cref="Emit"/>: the same stamp prefix and mirror alignment,
+    /// with every domain fold expanded to its rigid copies and the render-only facets (panels, trims, warps, relief,
+    /// text, detail shapes, sweeps) left out. A mirrored shape's orientation is composed from its two reflection
+    /// planes as a fixed quaternion; it never visits <see cref="Matrix4x4"/>,
+    /// <see cref="Quaternion.CreateFromRotationMatrix"/>, or a floating-point normalize.</remarks>
     public static void EmitFixed(SdfProgramBuilder builder, CreationDocument document, FixedCreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        var stampRotation = transform.Rotation.Normalize();
-        var stampScale = FixedQ4816.Max(
-            x: FixedQ4816.Abs(value: transform.Scale),
-            y: MinimumTransformExtentFixed
-        );
-        var reflectionAlignment = ((transform.ReflectionNormal is { } normal)
-            ? ReflectionAlignmentFixed(unitNormal: normal.Normalize())
-            : (FixedQuaternion?)null
-        );
+        var frame = StampFrame.Of(transform: transform);
 
         foreach (var shape in (document.Shapes ?? [])) {
             // A detail shape never reaches this contact compiler at all, so it neither carves
@@ -769,23 +767,15 @@ public static class CreationStampEmitter {
                 Position: shapePosition,
                 Rotation: shapeRotation
             );
-            var shapeScale = EffectiveFixedScale(value: shape.Scale).ToVector3();
+            var shapeScale = EffectiveScale(value: shape.Scale).ToVector3();
             var blend = (shape.Blend ?? SdfBlendOp.Union);
             var smooth = (shape.Smooth ?? 0f);
 
-            foreach (var frame in frames) {
-                var placed = frame.Compose(inner: local);
-                var stamped = builder
-                    .ResetPoint()
-                    .Translate(offset: transform.Origin.ToVector3())
-                    .Rotate(rotation: stampRotation)
-                    .Scale(scale: new Vector3(value: ((float)((double)stampScale))));
-                var posed = ((reflectionAlignment is { } alignment)
-                    ? Reflect(
-                        alignment: alignment,
-                        chain: stamped
-                    )
-                    : stamped
+            foreach (var copy in frames) {
+                var placed = copy.Compose(inner: local);
+                var posed = StampPrefix(
+                    builder: builder,
+                    frame: frame
                 )
                     .Translate(offset: placed.Position.ToVector3())
                     .Rotate(rotation: placed.Rotation.ToQuaternion());
@@ -800,16 +790,9 @@ public static class CreationStampEmitter {
                     (contactMargin is not { } margin) ||
                     (margin == 0f)
                 ) {
-                    _ = SdfSolidGeometry.AppendScaledPrimitive(
+                    _ = AppendPrimitive(
                         chain: chain,
-                        type: shape.Type,
-                        taper: (shape.Taper ?? 0.5f),
-                        profile: shape.Profile,
-                        lift: (shape.Lift ?? SdfLift.Extrude),
-                        rounding: (shape.Rounding ?? 0f),
-                        chamfer: (shape.Chamfer ?? 0f),
-                        exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                        curve: shape.Curve?.Parameters(),
+                        shape: shape,
                         scale: shapeScale,
                         material: materialFor(arg: shape),
                         blend: blend,
@@ -819,23 +802,17 @@ public static class CreationStampEmitter {
                     continue;
                 }
 
-                chain = SdfSolidGeometry.AppendScaledPrimitive(
+                EmitMarginedPrimitive(
                     chain: chain.PushField(
                         compose: blend,
                         smooth: smooth
                     ),
-                    type: shape.Type,
-                    taper: (shape.Taper ?? 0.5f),
-                    profile: shape.Profile,
-                    lift: (shape.Lift ?? SdfLift.Extrude),
-                    rounding: (shape.Rounding ?? 0f),
-                    chamfer: (shape.Chamfer ?? 0f),
-                    exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                    curve: shape.Curve?.Parameters(),
-                    scale: shapeScale,
-                    material: materialFor(arg: shape)
-                ).Dilate(radius: margin);
-                _ = chain.PopField();
+                    detail: false,
+                    margin: margin,
+                    material: materialFor(arg: shape),
+                    shape: shape,
+                    shapeScale: shapeScale
+                );
             }
         }
     }
@@ -854,7 +831,7 @@ public static class CreationStampEmitter {
 
         _ = StampPrefix(
             builder: builder,
-            transform: transform
+            frame: StampFrame.Of(transform: transform)
         )
             .NoiseDisplace(
             amplitude: noise.Amplitude,
@@ -886,10 +863,12 @@ public static class CreationStampEmitter {
         );
 
         var shape = document.Shapes![shapeIndex];
+        var frame = StampFrame.Of(transform: transform);
 
         EmitShapeChain(
             builder: builder,
             contactMargin: null,
+            frame: frame,
             material: material,
             panelMaterial: ((shape.Panel is { } panel)
             ? paletteIds[Math.Clamp(
@@ -898,35 +877,34 @@ public static class CreationStampEmitter {
                     min: 0
                 )]
             : (int?)null),
-            shape: shape,
-            transform: transform
+            shape: shape
         );
         if (shape.Trims is { Count: > 0 }) {
             EmitPaletteTrims(
                 builder: builder,
                 document: document,
+                frame: frame,
                 paletteIds: paletteIds,
-                shape: shape,
-                transform: transform
+                shape: shape
             );
         }
     }
 
     // A shape's trims against its creation's palette. The material delegate captures the palette, so it lives here, where
     // only a shape that carries trims pays for it, rather than in EmitShapeStamp, whose every call would.
-    private static void EmitPaletteTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, CreationStampTransform transform, int[] paletteIds) =>
+    private static void EmitPaletteTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, in StampFrame frame, int[] paletteIds) =>
         EmitTrims(
             builder: builder,
             contactMargin: null,
             document: document,
+            frame: frame,
             inScope: false,
             materialFor: candidate => paletteIds[Math.Clamp(
                 value: (candidate.Material ?? 0),
                 max: (paletteIds.Length - 1),
                 min: 0
             )],
-            shape: shape,
-            transform: transform
+            shape: shape
         );
 
     /// <summary>Emits every authored text run under the same stamp transform as <see cref="Emit"/>.</summary>
@@ -945,37 +923,39 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(fontFor);
         ArgumentNullException.ThrowIfNull(materialFor);
 
+        var frame = StampFrame.Of(transform: transform);
         var runs = (document.TextRuns ?? []);
 
         for (var index = 0; (index < runs.Count); index++) {
             var run = runs[index];
 
-            var (position, rotation) = RunFrame(
+            var (authoredPosition, rotation) = RunFrame(
                 document: document,
                 run: run
             );
-            var localRight = Vector3.Transform(
+            // The run's frame rides the stamp like a shape's: reflected on a mirrored stamp, then scaled, rotated and
+            // offset in fixed point, the same arithmetic the shapes' prefix encodes.
+            var position = FixedVector3.FromVector3(value: authoredPosition);
+            var localRight = FixedVector3.FromVector3(value: Vector3.Transform(
                 value: Vector3.UnitX,
                 rotation: rotation
-            );
-            var localUp = Vector3.Transform(
+            ));
+            var localUp = FixedVector3.FromVector3(value: Vector3.Transform(
                 value: Vector3.UnitY,
                 rotation: rotation
-            );
+            ));
 
-            if (transform.ReflectionNormal is { } authoredNormal) {
-                var normal = Vector3.Normalize(value: authoredNormal);
-
-                position = ReflectVector(
-                    normal: normal,
+            if (frame.ReflectionNormal is { } normal) {
+                position = Reflect(
+                    unitNormal: normal,
                     value: position
                 );
-                localRight = ReflectVector(
-                    normal: normal,
+                localRight = Reflect(
+                    unitNormal: normal,
                     value: localRight
                 );
-                localUp = ReflectVector(
-                    normal: normal,
+                localUp = Reflect(
+                    unitNormal: normal,
                     value: localUp
                 );
             }
@@ -983,18 +963,12 @@ public static class CreationStampEmitter {
             _ = builder.Text(
                 atlas: fontFor(arg: run.Font),
                 text: run.Text,
-                origin: (transform.Origin + Vector3.Transform(
-                    value: (position * transform.Scale),
-                    rotation: transform.Rotation
-                )),
-                right: Vector3.Transform(
-                    value: localRight,
-                    rotation: transform.Rotation
-                ),
-                up: Vector3.Transform(
-                    value: localUp,
-                    rotation: transform.Rotation
-                ),
+                origin: StampedPosition(
+                    frame: frame,
+                    local: position
+                ).ToVector3(),
+                right: frame.Rotation.Rotate(vector: localRight).ToVector3(),
+                up: frame.Rotation.Rotate(vector: localUp).ToVector3(),
                 worldEmHeight: (run.EmHeight * transform.Scale),
                 material: materialFor(arg: run),
                 blend: (string.Equals(
@@ -1086,6 +1060,40 @@ public static class CreationStampEmitter {
             (scale.X == scale.Y) &&
             (scale.Y == scale.Z)
         );
+    }
+    /// <summary>Measures one shape's worst-case reach from the creation's origin, in creation units: its position,
+    /// its primitive's reach grown by its cells padding, warps (flare, shear, bumps), domain fold, dilation and
+    /// onion. The one per-shape reach every creation bound is built from (<see cref="RenderReach"/>,
+    /// <see cref="CreationGeometry.Reach"/>); a Sweep carries no <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3, SdfLift)"/>
+    /// unit-scale law (its own control points already carry creation-unit dimensions — see
+    /// <see cref="SdfSolidPrimitive.Sweep"/>'s remarks), so its own uniform scale bakes on directly.</summary>
+    /// <param name="shape">The authored shape.</param>
+    /// <returns>The reach in creation units.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public static float ShapeReach(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(shape);
+
+        var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
+            ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
+            : SdfSolidGeometry.Reach(
+                type: shape.Type,
+                scale: shape.Scale,
+                lift: (shape.Lift ?? SdfLift.Extrude)
+            )
+        );
+        var warpedReach = ShapeWarpReach.Expand(
+            (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
+                shape.Scale,
+                shape.Flare
+            ) ?? 0f)),
+            shape.Flare,
+            shape.Shear,
+            ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
+        );
+
+        // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged beside the
+        // shape's own position; Dilate/Onion move the outer surface outward by their own value.
+        return ((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f));
     }
     /// <summary>Lays out every one of a creation's authored text runs once, in document order — the same input
     /// <see cref="RenderReach"/> and <see cref="EmitText"/>/<see cref="EmitTextDynamic"/> each independently derive
@@ -1195,31 +1203,8 @@ public static class CreationStampEmitter {
 
         for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
             var shape = shapes[shapeIndex];
-            // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged
-            // beside the shape's own position; Dilate/Onion move the outer surface outward by their own value — all
-            // in creation units, scaled with them.
-            // A flare grows the primitive's own reach by up to max(s) (ShapeFlareDocument.ReachFactor). A Sweep
-            // carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry creation-unit
-            // dimensions — see SdfSolidPrimitive.Sweep's remarks); its own uniform scale bakes on directly.
-            var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
-                ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
-                : SdfSolidGeometry.Reach(
-                    type: shape.Type,
-                    scale: shape.Scale,
-                    lift: (shape.Lift ?? SdfLift.Extrude)
-                )
-            );
-            var warpedReach = ShapeWarpReach.Expand(
-                (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
-                    shape.Scale,
-                    shape.Flare
-                ) ?? 0f)),
-                shape.Flare,
-                shape.Shear,
-                ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
-            );
-
-            var shapeReach = ((((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f));
+            // The shape's creation-unit reach, scaled with the stamp; the noise amplitude is world units, un-scaled.
+            var shapeReach = ((ShapeReach(shape: shape) * scale) + (document.Noise?.Amplitude ?? 0f));
 
             reach = ((composeBlends && any)
                 ? SdfBoundAlgebra.Compose(
@@ -1348,11 +1333,7 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(document);
 
         var shape = document.Shapes![shapeIndex];
-
-        var shapePosition = MirroredShapePosition(
-            shape: shape,
-            transform: transform
-        );
+        var frame = StampFrame.Of(transform: transform);
         var panelRaise = ((shape.Panel is { Depth: < 0f } panel)
             ? -panel.Depth
             : 0f
@@ -1381,10 +1362,13 @@ public static class CreationStampEmitter {
         );
 
         return (
-            (transform.Origin + Vector3.Transform(
-            value: (shapePosition * transform.Scale),
-            rotation: transform.Rotation
-        )),
+            StampedPosition(
+                frame: frame,
+                local: MirroredShapePosition(
+                    frame: frame,
+                    shape: shape
+                )
+            ).ToVector3(),
             (((warpedReach + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale)
         );
     }
@@ -1405,12 +1389,10 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(visitor);
 
-        var stampRotation = transform.Rotation.Normalize();
-        var stampScale = FixedQ4816.Max(
-            x: FixedQ4816.Abs(value: transform.Scale),
-            y: MinimumTransformExtentFixed
-        );
-        var reflectionNormal = transform.ReflectionNormal?.Normalize();
+        var stampFrame = StampFrame.Of(transform: transform);
+        var stampRotation = stampFrame.Rotation;
+        var stampScale = stampFrame.Scale;
+        var reflectionNormal = stampFrame.ReflectionNormal;
 
         foreach (var shape in (document.Shapes ?? [])) {
             // A detail shape never reaches this contact compiler at all, so it neither carves
@@ -1441,7 +1423,7 @@ public static class CreationStampEmitter {
             var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
             var boundsCenter = FixedVector3.FromVector3(value: bounds.Center);
             var boundsHalfExtents = FixedVector3.FromVector3(value: bounds.HalfExtents);
-            var shapeScale = EffectiveFixedScale(value: shape.Scale);
+            var shapeScale = EffectiveScale(value: shape.Scale);
 
             var (shapePosition, shapeRotation) = ReflectedShapeTransformFixed(
                 normal: reflectionNormal,
@@ -1495,12 +1477,6 @@ public static class CreationStampEmitter {
             }
         }
     }
-
-    // The degeneracy floor in the fixed domain. Q48.16 resolves 1/65536, so 0.0001 lands on the nearest representable
-    // value above it rather than exactly — this is a guard against a zero-scale axis collapsing the frame, never a
-    // value a result is read off, so the quantization is immaterial. A product of two floors still underflows to zero,
-    // which yields a zero-extent (inert) collider rather than the float path's vanishingly thin one.
-    private static readonly FixedQ4816 MinimumTransformExtentFixed = FixedQ4816.FromDouble(value: MinimumTransformExtent);
 }
 /// <summary>Receives each materialized instance of a lattice walk as a struct, so a walk
 /// (<see cref="CreationStampLattice.ForEachInstance{TVisitor}"/>) allocates no delegate and no closure.</summary>
@@ -1509,15 +1485,51 @@ public interface ICreationStampVisitor {
     /// <param name="instance">The instance.</param>
     void Visit(CreationStampInstance instance);
 }
-/// <summary>Materializes the same placement pattern and reflected copies consumed by creation stamp emission.</summary>
+/// <summary>Receives each materialized instance of a fixed-point lattice walk as a struct, so a walk
+/// (<see cref="CreationStampLattice.ForEachFixedInstance{TVisitor}"/>) allocates no delegate and no closure.</summary>
+public interface IFixedCreationStampVisitor {
+    /// <summary>Receives one materialized instance.</summary>
+    /// <param name="instance">The instance.</param>
+    void Visit(FixedCreationStampInstance instance);
+}
+/// <summary>Materializes the same placement pattern and reflected copies consumed by creation stamp emission: one
+/// fixed-point walk, which the render path reads through <see cref="ForEachInstance"/> as single-precision
+/// conversions of the same instances.</summary>
 public static class CreationStampLattice {
-    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy —
-    /// the deterministic counterpart to <see cref="ForEachInstance"/>, in the same order. When
-    /// <paramref name="sampledOffsets"/> is supplied (a resolved <see cref="CreationStampSampling"/> Noise/Scatter
-    /// offset set), those offsets replace the regular pattern grid entirely — <paramref name="pattern"/> is ignored —
-    /// while mirroring composes identically either way.</summary>
+    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy.
+    /// When <paramref name="sampledOffsets"/> is supplied (a resolved <see cref="CreationStampSampling"/>
+    /// Noise/Scatter offset set), those offsets replace the regular pattern grid entirely — <paramref name="pattern"/>
+    /// is ignored — while mirroring composes identically either way.</summary>
     /// <param name="origin">The placement origin.</param>
-    /// <param name="rotation">The placement rotation.</param>
+    /// <param name="rotation">The placement rotation; a unit quaternion.</param>
+    /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
+    /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region, or
+    /// <see langword="null"/> to use <paramref name="pattern"/>.</param>
+    /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
+    /// <param name="visitor">Receives each materialized instance.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="visitor"/> is <see langword="null"/>.</exception>
+    public static void ForEachFixedInstance(FixedVector3 origin, FixedQuaternion rotation, CreationStampPattern? pattern, IReadOnlyList<FixedVector3>? sampledOffsets, CreationStampPlane? mirror, Action<FixedCreationStampInstance> visitor) {
+        ArgumentNullException.ThrowIfNull(visitor);
+
+        var adapter = new FixedActionVisitor(action: visitor);
+
+        ForEachFixedInstance(
+            mirror: mirror,
+            origin: origin,
+            pattern: pattern,
+            rotation: rotation,
+            sampledOffsets: sampledOffsets,
+            visitor: ref adapter
+        );
+    }
+    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy,
+    /// through a struct visitor, so the walk allocates nothing. When <paramref name="sampledOffsets"/> is supplied (a
+    /// resolved <see cref="CreationStampSampling"/> Noise/Scatter offset set), those offsets replace the regular
+    /// pattern grid entirely — <paramref name="pattern"/> is ignored — while mirroring composes identically either
+    /// way.</summary>
+    /// <typeparam name="TVisitor">The visitor's type.</typeparam>
+    /// <param name="origin">The placement origin.</param>
+    /// <param name="rotation">The placement rotation; a unit quaternion.</param>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
     /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region, or
     /// <see langword="null"/> to use <paramref name="pattern"/>.</param>
@@ -1525,11 +1537,8 @@ public static class CreationStampLattice {
     /// <param name="visitor">Receives each materialized instance.</param>
     /// <remarks>The pattern and mirror are AUTHORED single-precision records, so they enter the contract through
     /// <see cref="FixedVector3.FromVector3"/> here rather than at each caller. The step accumulation is a scaled
-    /// index rather than a running sum, exactly as the single-precision body computes it, so copy <c>n</c> does not
-    /// inherit <c>n−1</c> roundings.</remarks>
-    public static void ForEachFixedInstance(FixedVector3 origin, FixedQuaternion rotation, CreationStampPattern? pattern, IReadOnlyList<FixedVector3>? sampledOffsets, CreationStampPlane? mirror, Action<FixedCreationStampInstance> visitor) {
-        ArgumentNullException.ThrowIfNull(visitor);
-
+    /// index rather than a running sum, so copy <c>n</c> does not inherit <c>n−1</c> roundings.</remarks>
+    public static void ForEachFixedInstance<TVisitor>(FixedVector3 origin, FixedQuaternion rotation, CreationStampPattern? pattern, IReadOnlyList<FixedVector3>? sampledOffsets, CreationStampPlane? mirror, ref TVisitor visitor) where TVisitor : struct, IFixedCreationStampVisitor, allows ref struct {
         var planeNormal = ((mirror is { } authoredPlane)
             ? FixedVector3.FromVector3(value: authoredPlane.Normal).Normalize()
             : (FixedVector3?)null
@@ -1538,7 +1547,14 @@ public static class CreationStampLattice {
 
         if (sampledOffsets is { Count: > 0 } offsets) {
             for (var index = 0; (index < offsets.Count); index++) {
-                VisitLocal(local: offsets[index]);
+                VisitLocal(
+                    local: offsets[index],
+                    origin: origin,
+                    planeNormal: planeNormal,
+                    planeOffset: planeOffset,
+                    rotation: rotation,
+                    visitor: ref visitor
+                );
             }
         } else {
             var countA = Math.Max(
@@ -1554,15 +1570,25 @@ public static class CreationStampLattice {
 
             for (var indexA = 0; (indexA < countA); indexA++) {
                 for (var indexB = 0; (indexB < countB); indexB++) {
-                    VisitLocal(local: ((stepA * FixedQ4816.FromInteger(value: indexA)) + (stepB * FixedQ4816.FromInteger(value: indexB))));
+                    VisitLocal(
+                        local: ((stepA * FixedQ4816.FromInteger(value: indexA)) + (stepB * FixedQ4816.FromInteger(value: indexB))),
+                        origin: origin,
+                        planeNormal: planeNormal,
+                        planeOffset: planeOffset,
+                        rotation: rotation,
+                        visitor: ref visitor
+                    );
                 }
             }
         }
 
-        void VisitLocal(FixedVector3 local) {
+        static void VisitLocal(ref TVisitor visitor, FixedVector3 origin, FixedQuaternion rotation, FixedVector3? planeNormal, FixedQ4816 planeOffset, FixedVector3 local) {
             Visit(
                 local: local,
-                reflectionNormal: null
+                origin: origin,
+                reflectionNormal: null,
+                rotation: rotation,
+                visitor: ref visitor
             );
 
             if (planeNormal is { } reflectionNormal) {
@@ -1573,25 +1599,31 @@ public static class CreationStampLattice {
 
                 Visit(
                     local: (local - (reflectionNormal * (signedDistance + signedDistance))),
-                    reflectionNormal: reflectionNormal
+                    origin: origin,
+                    reflectionNormal: reflectionNormal,
+                    rotation: rotation,
+                    visitor: ref visitor
                 );
             }
         }
-        void Visit(FixedVector3 local, FixedVector3? reflectionNormal) {
-            visitor(obj: new FixedCreationStampInstance(
+        static void Visit(ref TVisitor visitor, FixedVector3 origin, FixedQuaternion rotation, FixedVector3 local, FixedVector3? reflectionNormal) {
+            visitor.Visit(instance: new FixedCreationStampInstance(
                 Origin: (origin + rotation.Rotate(vector: local)),
                 ReflectionNormal: reflectionNormal
             ));
         }
     }
-    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy.</summary>
+    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy:
+    /// the single-precision reading of <see cref="ForEachFixedInstance(FixedVector3, FixedQuaternion, CreationStampPattern?, IReadOnlyList{FixedVector3}?, CreationStampPlane?, Action{FixedCreationStampInstance})"/>,
+    /// whose instances it converts for the render path.</summary>
     /// <param name="origin">The placement origin.</param>
     /// <param name="rotation">The placement rotation.</param>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
     /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region
-    /// (see <see cref="ForEachFixedInstance"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
+    /// (see <see cref="ForEachFixedInstance(FixedVector3, FixedQuaternion, CreationStampPattern?, IReadOnlyList{FixedVector3}?, CreationStampPlane?, Action{FixedCreationStampInstance})"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="visitor">Receives each materialized instance.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="visitor"/> is <see langword="null"/>.</exception>
     public static void ForEachInstance(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, IReadOnlyList<Vector3>? sampledOffsets, CreationStampPlane? mirror, Action<CreationStampInstance> visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
 
@@ -1607,92 +1639,37 @@ public static class CreationStampLattice {
         );
     }
     /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy,
-    /// through a struct visitor, so the walk allocates nothing.</summary>
+    /// through a struct visitor, so the walk allocates nothing beyond the fixed copy of
+    /// <paramref name="sampledOffsets"/>: the single-precision reading of
+    /// <see cref="ForEachFixedInstance{TVisitor}"/>, whose instances it converts for the render path.</summary>
     /// <typeparam name="TVisitor">The visitor's type.</typeparam>
     /// <param name="origin">The placement origin.</param>
     /// <param name="rotation">The placement rotation.</param>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
     /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region
-    /// (see <see cref="ForEachFixedInstance"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
+    /// (see <see cref="ForEachFixedInstance{TVisitor}"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="visitor">Receives each materialized instance.</param>
     public static void ForEachInstance<TVisitor>(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, IReadOnlyList<Vector3>? sampledOffsets, CreationStampPlane? mirror, ref TVisitor visitor) where TVisitor : struct, ICreationStampVisitor {
-        var plane = ((mirror is { } authoredPlane)
-            ? new CreationStampPlane(
-                Normal: Vector3.Normalize(value: authoredPlane.Normal),
-                Offset: authoredPlane.Offset
-            )
-            : (CreationStampPlane?)null
-        );
+        var converting = new ConvertingVisitor<TVisitor>(inner: ref visitor);
+        FixedVector3[]? fixedOffsets = null;
 
         if (sampledOffsets is { Count: > 0 } offsets) {
-            for (var index = 0; (index < offsets.Count); index++) {
-                VisitLocal(
-                    local: offsets[index],
-                    origin: origin,
-                    plane: plane,
-                    rotation: rotation,
-                    visitor: ref visitor
-                );
-            }
-        } else {
-            var countA = Math.Max(
-                val1: (pattern?.CountA ?? 1),
-                val2: 1
-            );
-            var countB = Math.Max(
-                val1: (pattern?.CountB ?? 1),
-                val2: 1
-            );
-            var stepA = (pattern?.StepA ?? Vector3.Zero);
-            var stepB = (pattern?.StepB ?? Vector3.Zero);
+            fixedOffsets = new FixedVector3[offsets.Count];
 
-            for (var indexA = 0; (indexA < countA); indexA++) {
-                for (var indexB = 0; (indexB < countB); indexB++) {
-                    VisitLocal(
-                        local: ((stepA * indexA) + (stepB * indexB)),
-                        origin: origin,
-                        plane: plane,
-                        rotation: rotation,
-                        visitor: ref visitor
-                    );
-                }
+            for (var index = 0; (index < fixedOffsets.Length); index++) {
+                fixedOffsets[index] = FixedVector3.FromVector3(value: offsets[index]);
             }
         }
 
-        static void VisitLocal(ref TVisitor visitor, Vector3 origin, Quaternion rotation, CreationStampPlane? plane, Vector3 local) {
-            Visit(
-                local: local,
-                origin: origin,
-                reflectionNormal: null,
-                rotation: rotation,
-                visitor: ref visitor
-            );
-
-            if (plane is { } reflection) {
-                var reflectedOrigin = (local - ((2f * (Vector3.Dot(
-                    vector1: local,
-                    vector2: reflection.Normal
-                ) - reflection.Offset)) * reflection.Normal));
-
-                Visit(
-                    local: reflectedOrigin,
-                    origin: origin,
-                    reflectionNormal: reflection.Normal,
-                    rotation: rotation,
-                    visitor: ref visitor
-                );
-            }
-        }
-        static void Visit(ref TVisitor visitor, Vector3 origin, Quaternion rotation, Vector3 local, Vector3? reflectionNormal) {
-            visitor.Visit(instance: new CreationStampInstance(
-                Origin: (origin + Vector3.Transform(
-                    rotation: rotation,
-                    value: local
-                )),
-                ReflectionNormal: reflectionNormal
-            ));
-        }
+        ForEachFixedInstance(
+            mirror: mirror,
+            origin: FixedVector3.FromVector3(value: origin),
+            pattern: pattern,
+            rotation: FixedQuaternion.FromQuaternion(value: rotation).Normalize(),
+            sampledOffsets: fixedOffsets,
+            visitor: ref converting
+        );
     }
     /// <summary>Returns the number of materialized render instances.</summary>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/>.</param>
@@ -1748,6 +1725,11 @@ public static class CreationStampLattice {
         );
     }
     /// <summary>Multiplies non-negative counts and saturates at <paramref name="ceiling"/>.</summary>
+    /// <param name="left">The first count.</param>
+    /// <param name="right">The second count.</param>
+    /// <param name="ceiling">The largest returned value.</param>
+    /// <returns>The product, <paramref name="ceiling"/> when the product exceeds it, and zero when either count is
+    /// not positive.</returns>
     public static long MultiplySaturated(long left, long right, long ceiling) {
         if (
             (left <= 0L) ||
@@ -1756,17 +1738,32 @@ public static class CreationStampLattice {
             return 0L;
         }
 
-        return ((left > (ceiling / right))
-            ? ceiling
-            : Math.Min(
-                val1: (left * right),
-                val2: ceiling
-            )
+        return Math.Min(
+            val1: left.MultiplySaturating(right: right),
+            val2: ceiling
         );
     }
 
     // Adapts a delegate visitor to the struct walk, so the delegate overload and the struct one share one walk.
     private readonly struct ActionVisitor(Action<CreationStampInstance> action) : ICreationStampVisitor {
         public void Visit(CreationStampInstance instance) => action(obj: instance);
+    }
+    private readonly struct FixedActionVisitor(Action<FixedCreationStampInstance> action) : IFixedCreationStampVisitor {
+        public void Visit(FixedCreationStampInstance instance) => action(obj: instance);
+    }
+    // Hands a render visitor the fixed walk's instances as single precision, holding the caller's visitor by
+    // reference so its state advances in place.
+    private ref struct ConvertingVisitor<TInner> : IFixedCreationStampVisitor where TInner : struct, ICreationStampVisitor {
+        private readonly ref TInner m_inner;
+
+        public ConvertingVisitor(ref TInner inner) {
+            m_inner = ref inner;
+        }
+
+        public void Visit(FixedCreationStampInstance instance) =>
+            m_inner.Visit(instance: new CreationStampInstance(
+                Origin: instance.Origin.ToVector3(),
+                ReflectionNormal: instance.ReflectionNormal?.ToVector3()
+            ));
     }
 }

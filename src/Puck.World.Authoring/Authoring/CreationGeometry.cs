@@ -1,11 +1,9 @@
-using Puck.SignedDistance;
-
 namespace Puck.World.Authoring;
 
 /// <summary>
-/// The whole-document geometry a <see cref="CreationDocument"/> implies — the reach a stamp of it needs. Per-primitive
-/// dimensions live in <see cref="SdfSolidGeometry"/>; this is the document-shaped half that folds text runs in beside
-/// the shapes.
+/// The whole-document geometry a <see cref="CreationDocument"/> implies — the reach a stamp of it needs. Per-shape
+/// reach is <see cref="CreationStampEmitter.ShapeReach"/>; this is the document-shaped half that folds a catalog-free
+/// text estimate in beside the shapes.
 /// </summary>
 public static class CreationGeometry {
     // The authored line structure of a run's text: line-feed-separated line count, the largest per-line scalar count,
@@ -47,9 +45,10 @@ public static class CreationGeometry {
         ), ScalarCount: scalarCount);
     }
 
-    /// <summary>A whole creation's worst-case reach from its own local origin — the largest per-shape reach across
-    /// every authored shape and text run, the instance bound a stamp of it needs (a masked-out tile must never clip a
-    /// glyph that reaches past the boxes).</summary>
+    /// <summary>A whole creation's worst-case reach from its own local origin — the largest
+    /// <see cref="CreationStampEmitter.ShapeReach"/> across every authored shape (folds, warps, cells, dilation and
+    /// onion charged) and a catalog-free estimate of every text run, the instance bound a stamp of it needs (a
+    /// masked-out tile must never clip a glyph that reaches past the boxes).</summary>
     /// <param name="document">The creation (normalized or not; absent lists read as empty).</param>
     /// <returns>The reach in creation-local units (a small floor for an empty document).</returns>
     public static float Reach(CreationDocument document) {
@@ -59,20 +58,9 @@ public static class CreationGeometry {
         var any = false;
 
         foreach (var shape in (document.Shapes ?? [])) {
-            // A Sweep carries no SdfSolidGeometry.Reach unit-scale law — its own control points already carry
-            // creation-unit dimensions (see SdfSolidPrimitive.Sweep's remarks); its own uniform scale bakes on
-            // directly, matching CreationStampEmitter.RenderReach's identical branch.
-            var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
-                ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
-                : SdfSolidGeometry.Reach(
-                    scale: shape.Scale,
-                    type: shape.Type
-                )
-            );
-
             reach = MathF.Max(
                 x: reach,
-                y: (shape.Position.Length() + primitiveReach)
+                y: CreationStampEmitter.ShapeReach(shape: shape)
             );
             any = true;
         }

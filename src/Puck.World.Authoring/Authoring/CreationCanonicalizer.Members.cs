@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.World.Authoring;
 
@@ -21,8 +22,6 @@ public static partial class CreationCanonicalizer {
 
         return absent;
     }
-    private static bool IsFinite(Quaternion quaternion) =>
-        (float.IsFinite(f: quaternion.X) && float.IsFinite(f: quaternion.Y) && float.IsFinite(f: quaternion.Z) && float.IsFinite(f: quaternion.W));
     // A zero quaternion is finite but carries no rotation to normalize into: Quaternion.Normalize divides by its
     // zero magnitude and returns (NaN, NaN, NaN, NaN), so the emitter that trusts a validated rotation reads NaN
     // silently unless this is refused here, before normalization ever runs.
@@ -30,7 +29,7 @@ public static partial class CreationCanonicalizer {
         ((quaternion.X == 0f) && (quaternion.Y == 0f) && (quaternion.Z == 0f) && (quaternion.W == 0f));
     // Shared by every authored rotation a shape, text run, or animation frame transform carries.
     private static void ValidateRotation(Quaternion rotation, string path, List<DocumentValidationError> errors) {
-        if (!IsFinite(quaternion: rotation)) {
+        if (!VectorFunctions.IsFinite(rotation: rotation)) {
             errors.Add(item: new(
                 Message: "rotation is non-finite.",
                 Path: path

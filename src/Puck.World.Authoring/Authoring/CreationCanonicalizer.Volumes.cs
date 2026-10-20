@@ -60,10 +60,7 @@ public static partial class CreationCanonicalizer {
             var rotation = volume.Rotation.Value;
 
             if (
-                !float.IsFinite(f: rotation.X) ||
-                !float.IsFinite(f: rotation.Y) ||
-                !float.IsFinite(f: rotation.Z) ||
-                !float.IsFinite(f: rotation.W) ||
+                !VectorFunctions.IsFinite(rotation: rotation) ||
                 !float.IsFinite(f: rotation.LengthSquared()) ||
                 (rotation.LengthSquared() < 1e-12f)
             ) {
