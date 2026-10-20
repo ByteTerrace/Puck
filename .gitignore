@@ -99,5 +99,5 @@ docs/.obsidian
 # Compiled worlds are derived products; the build and the runtime write them.
 *.puckb
 scratch
-# The gallery.flag and gallery.slice captures (worlds/debug/shapes.md): local, read back by agents, never committed.
+# The captures that go with gallery.flag (worlds/debug/shapes.md): local, read back by agents, never committed.
 worlds/debug/flags/
