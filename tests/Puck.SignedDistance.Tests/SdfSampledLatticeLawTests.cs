@@ -71,6 +71,10 @@ public sealed class SdfSampledLatticeLawTests {
             lattice.AnswerRefinement(first: 0, materials: [.. fine.Select(selector: point => (material?.Invoke(arg: point) ?? 0))], values: [.. fine.Select(selector: field)]);
         }
 
+        for (var crossings = lattice.CrossingPoints(); (crossings.Length > 0); crossings = lattice.CrossingPoints()) {
+            lattice.AnswerCrossings(first: 0, values: [.. crossings.Select(selector: field)]);
+        }
+
         var points = lattice.GradientPoints();
         var gradients = new float[(3 * points.Length)];
 

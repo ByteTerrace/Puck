@@ -24,6 +24,14 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   whole cell next to measured fine samples cracks (`SdfSampledLatticeLawTests`).
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
   in 20 s.
+- **Crossings stay on their lattice edges.** Before measuring crossing normals,
+  `SdfSampledLattice.CrossingPoints` and `AnswerCrossings` bracket each zero along
+  its sign-changing edge through the bake's existing point batches. Both the
+  contour and its gradient requests use that root. Projecting a linear estimate
+  along its nearest normal can land on another face of a corner, supplying the
+  wrong tangent plane and serrating the rim. Synthetic transition-ring edges
+  and samples displaced by `CloseSheets` keep their lattice interpolation:
+  their intentional surface differs from the original field.
 - **Features are placed and shaded as features.** A vertex whose crossings'
   planes all meet and turn by over 30 degrees is a feature: it lies on the
   crease, inside its cell (a point past the cell folds the quads around it into
@@ -34,12 +42,17 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   its crossings' side of the crease (`BesideCrease`), or the quads it shares
   with the crease vertex fold. A feature takes its crossings' normals, each quad
   splits along the diagonal that turns least from its non-crease corners'
-  normals, and `SdfContour.SplitAtCreases` splits it per side at 32 degrees,
-  just past the feature test's 30 (at 45, a chamfer's own turn, the split
-  flipped vertex by vertex and dented flat faces). Every vertex no crossing pins
+  normals, chosen again after the final field correction moves vertices, and
+  `SdfContour.SplitAtCreases` splits it per side at 25 degrees. Incident faces
+  identify shading creases independently of the placement's feature flag:
+  correcting a vertex must not erase its sharp edge. A lifted chamfer's corner
+  meets its neighboring bevel at only 31.4 degrees, so a 32-degree threshold
+  blends that corner into a jagged band. Every vertex no crossing pins
   to the surface (`SdfContour.Solved`) is checked against the field before the
-  split and moved onto the surface where a rounding near the cell's size left it
-  proud; one the contour kept beside a sharp convex crease (`SdfContour.Beside`)
+  split and moved toward the surface where a rounding near the cell's size left
+  it proud. `SdfMeshPathBake.ContourProjection` bounds that movement before any
+  incident triangle reverses its original facing; an incomplete move keeps its
+  original normal and feature flag. One the contour kept beside a sharp convex crease (`SdfContour.Beside`)
   that lies inside the solid stays a crease vertex when moved, or its face's
   normal shades the other face's quads beside the edge. A gradient shorter than
   a tenth of the field's typical slope straddles a crease and moves nothing
@@ -59,7 +72,7 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   under the cell) they smudge flat faces, so other vertices keep the
   interpolated gradients. Such a vertex on a fillet under the cell carries the
   fillet's normal, so `SdfContour.SplitAtCreases` gives the corners of its quads
-  that face more than 32 degrees from that normal a copy with their face's
+  that face more than 25 degrees from that normal a copy with their face's
   normal (a plinth's 6 mm BoxRound fillet at 21 mm cells otherwise shades a
   band a cell wide along every edge). The material cut samples and searches by
   place, not by copy (`SdfMeshMaterialCut`), so the pieces either side of a
@@ -67,6 +80,13 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 
 ## Groups, poses and materials
 
+- **Edge weathering reads the baked normal field.** `sdfMeshSurfaceNormal`
+  supplies the visibility record's curvature through `sdfMeshMeanCurvature`:
+  half the surface divergence of interpolated unit normals in world units.
+  Reuse the triangle's normal reads, keep its sign independent of the camera,
+  and return zero for degenerate triangles or meshes without normals. A broad
+  plate and a narrow bevel must read different curvature; a constant zero
+  silently disables every material's `weathering.edge`.
 - **Groups are planned in one place.** `SdfMeshBakeGroup.Plan` forms a
   program's groups, geometry and pose rows; the bake and the mesh audit both
   call it, so a change to grouping changes both.
@@ -75,6 +95,17 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
   serial contour of about a million samples is the bake's long pole on the
   debug world, so unions take each frame's first lattices.
+- **Static features declare their spacing.** `WorldPlacementStamper.ShapeDetail`
+  feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
+  geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
+  thickness or a rounded profile's radius, a thirty-second of a warped shape's
+  smallest half-extent, or a thirty-second of a cellular relief's wavelength. The tightest applies, at
+  placement scale; a scoped creation keeps its tightest shape's spacing.
+  A bound alone misses thin strands and leaves warped corners under-resolved.
+  Convex rounding reads the scaled polygon's inradius and extrusion clamp;
+  warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
+  an offset and may be zero while its radial extent remains positive.
+  The bake caps declared-detail refinement at eight cells per coarse axis.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as

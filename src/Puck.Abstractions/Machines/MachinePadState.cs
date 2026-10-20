@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Machines;
 
@@ -69,22 +70,9 @@ public readonly record struct MachinePadState {
     /// <summary>Gets the recorded tilt sample, normalized per axis to -1..1.</summary>
     public Vector2 Tilt { get; }
 
-    private static Vector2 ClampAxes(Vector2 value) => new(
-        x: Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: value.X
-        ),
-        y: Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: value.Y
-        )
-    );
     private static void ValidateAxes(Vector2 value, string paramName) {
         if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
+            !VectorFunctions.IsFinite(vector: value) ||
             (value.X < -1f) ||
             (value.X > 1f) ||
             (value.Y < -1f) ||
@@ -119,8 +107,8 @@ public readonly record struct MachinePadState {
     /// <returns>The merged image.</returns>
     public static MachinePadState Merge(in MachinePadState first, in MachinePadState second) => new(
         Buttons: first.Buttons | second.Buttons,
-        LeftStick: ClampAxes(value: (first.LeftStick + second.LeftStick)),
-        RightStick: ClampAxes(value: (first.RightStick + second.RightStick)),
+        LeftStick: Vector2.Clamp(max: Vector2.One, min: -Vector2.One, value1: (first.LeftStick + second.LeftStick)),
+        RightStick: Vector2.Clamp(max: Vector2.One, min: -Vector2.One, value1: (first.RightStick + second.RightStick)),
         LeftTrigger: Math.Clamp(
             (first.LeftTrigger + second.LeftTrigger),
             0f,
@@ -131,7 +119,7 @@ public readonly record struct MachinePadState {
             0f,
             1f
         ),
-        Tilt: ClampAxes(value: (first.Tilt + second.Tilt)),
+        Tilt: Vector2.Clamp(max: Vector2.One, min: -Vector2.One, value1: (first.Tilt + second.Tilt)),
         LightLevel: Math.Max(
             val1: first.LightLevel,
             val2: second.LightLevel

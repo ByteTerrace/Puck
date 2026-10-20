@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick;
@@ -384,8 +385,8 @@ public sealed partial class AgbApu : IAgbApu {
             // PSG amplitude centred (each channel idles near 8, so subtract the enabled-channel midpoint),
             // scaled to 16-bit. Direct Sound A/B are 8-bit signed, panned by SOUNDCNT_H L/R enable bits, with
             // an optional half-volume (bits 2/3). Direct Sound is not affected by the PSG master volume.
-            var psgMixRight = ((((psgRight * 2) - (CountBits(nibble: rightEnable) * 15)) * psgScale) * volRight);
-            var psgMixLeft = ((((psgLeft * 2) - (CountBits(nibble: leftEnable) * 15)) * psgScale) * volLeft);
+            var psgMixRight = ((((psgRight * 2) - (BitOperations.PopCount(value: ((uint)rightEnable)) * 15)) * psgScale) * volRight);
+            var psgMixLeft = ((((psgLeft * 2) - (BitOperations.PopCount(value: ((uint)leftEnable)) * 15)) * psgScale) * volLeft);
 
             var dsaShift = (((m_soundControlHigh & 0x4) != 0)
                 ? 3
@@ -432,8 +433,6 @@ public sealed partial class AgbApu : IAgbApu {
             right: right
         );
     }
-    private static int CountBits(int nibble) =>
-        ((((nibble & 1) + ((nibble >> 1) & 1)) + ((nibble >> 2) & 1)) + ((nibble >> 3) & 1));
 
     /// <summary>The number of filled 32-bit words in a Direct Sound FIFO's ring (0-7) — a diagnostic peek that does
     /// not disturb state; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>

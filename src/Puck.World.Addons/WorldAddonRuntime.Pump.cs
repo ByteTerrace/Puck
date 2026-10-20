@@ -344,10 +344,7 @@ public sealed partial class WorldAddonRuntime {
             }
 
             if (droppedGroupCount > 0) {
-                addon.TotalAnswersDropped = ((addon.TotalAnswersDropped > (ulong.MaxValue - ((ulong)droppedGroupCount)))
-                    ? ulong.MaxValue
-                    : (addon.TotalAnswersDropped + ((ulong)droppedGroupCount))
-                );
+                addon.TotalAnswersDropped = addon.TotalAnswersDropped.AddSaturating(right: ((ulong)droppedGroupCount));
 
                 if (!addon.QuotaDropReported) {
                     addon.QuotaDropReported = true;
@@ -680,10 +677,7 @@ public sealed partial class WorldAddonRuntime {
             var fuelConsumedThisTick = addon.Pump.FuelConsumed;
 
             addon.LastTickFuelConsumed = fuelConsumedThisTick;
-            addon.TotalFuelConsumed = ((addon.TotalFuelConsumed > (ulong.MaxValue - fuelConsumedThisTick))
-                ? ulong.MaxValue
-                : (addon.TotalFuelConsumed + fuelConsumedThisTick)
-            );
+            addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(right: fuelConsumedThisTick);
 
             if (!pumped) {
                 // The pump returns false only when the instance faulted (a trap, or a whole-batch vocabulary refusal);

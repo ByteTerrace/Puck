@@ -93,6 +93,15 @@ search and filter disks) by its cell of a 4×4 ordered-dither tile
 (`sdfMeshPattern`), stepped within the tile's strata by a temporal view's sample
 index, and views filters them.
 
+The surface record also carries mean curvature for edge weathering. Half the
+surface divergence of the interpolated unit vertex normals estimates it in
+inverse world units, using the triangle's world-space barycentric gradients.
+This reuses the three normal reads, with no field query or adjacent pixel
+sample. Its sign follows the authored outward normal, independent of the
+camera-facing shading normal. Flat normals give zero; collapsed and nearly
+collinear triangles also return zero. It describes the baked normal field,
+so a bevel missing from those normals cannot contribute curvature.
+
 **views** (`sdf-world-views.comp.hlsl`) calls no field query either. It reads
 each record and computes materials (the draw's palette entry), lighting, the irradiance volume's
 indirect light and the bounded volumes. Before shading, each 8×8 group gathers
@@ -685,6 +694,15 @@ kernel divides out the program-wide step scale another instance's warps lower
 instance alone, on Vulkan and Direct3D 12). A shape under a non-uniform `Scale`
 still samples a lower bound of its distance.
 
+Static shapes also declare feature spacing through `SdfInstanceRange.Detail`:
+an eighth of the smaller sweep radius, a quarter of shell thickness or rounded
+profile radius, a thirty-second of the smallest half-extent for a warped shape, or a thirty-second of
+the wavelength for cellular relief. `WorldPlacementStamper` takes the tightest
+of these at placement scale; a scoped creation takes its tightest shape's
+spacing. These regions refine surface cells even when their corner signs need
+no topological repair, up to eight subdivisions per coarse axis. This gives thin
+strands smooth surfaces and warped corners enough samples to meet cleanly.
+
 A 1.5 cm cell cannot hold what the Moth's armour is made of: shells that thin to
 a knife edge (the top of a shin, the helmet's rim), paint layers a millimetre
 proud of the plate beneath, and shells resting on the joints under them. Its
@@ -738,11 +756,15 @@ and the measured corners of every crossed fine cell. On the debug world about
 8,000 cells refine, and the bake makes about 700,000 triangles from about
 21 M field evaluations.
 
-A cell's vertex is the point its crossings' tangent planes meet at. Each plane
-passes through its crossing moved back onto the surface by the field's value
-there over the gradient's magnitude, the distance to first order, which a field
-that is no true distance misstates as the value alone (the bake kernel writes
-the gradient in field units per world unit for this). Where every
+A cell's vertex is the point its crossings' tangent planes meet at. Before
+measuring those planes, the bake brackets each zero along its sign-changing
+lattice edge, using value-only point batches. The contour and the gradient
+requests use the same refined crossing (`SdfSampledLattice.CrossingPoints` and
+`AnswerCrossings`). A linear estimate projected along its nearest normal can
+land on a different face at a corner, giving the contour the wrong plane.
+Synthetic edges in a refinement's transition ring and samples displaced to
+close a thin sheet keep their lattice interpolation, because their surface
+intentionally differs from the original field. Where every
 plane passes through one point and two of them turn apart by more than thirty
 degrees, the point is a crease or corner (a feature): it is solved again with a
 bias only the planes' common null space feels, so it lies on the crease rather
@@ -775,7 +797,8 @@ measured nothing is placed the same way from its fine crossings' planes, solved
 in its coarse cell (`MergedFeature`), so an edge keeps its line through the
 cells around a refined run (a seam between two materials). Each quad splits
 along the diagonal whose triangles turn least from their corners' normals,
-leaving crease vertices out (`SdfSampledLattice`), so a quad beside a crease
+leaving crease vertices out (`SdfContour`), and chooses again after the final
+field correction moves vertices, so a quad beside a crease
 puts its crease vertex in both triangles rather than joining the two faces'
 vertices across the crease. A feature vertex takes its
 normal from the crossings whose planes pass through it, as does a vertex whose
@@ -795,7 +818,11 @@ value and gradient there, and a vertex more than a fiftieth of the contour's
 finest cell off the surface moves onto it along the gradient, takes the gradient
 for its normal and is no crease (`SdfMeshPathBake`, `softened=` on its line; on
 the debug world about 100,000 vertices, 190 more dispatches and 0.8 M more
-taps). A vertex the contour kept inside its cell beside a sharp convex crease
+taps). The movement is bounded before any incident triangle reverses its
+original facing (`ContourProjection`), including a check of the rounded float
+position. An incomplete correction retains its original shading normal and
+feature flag. Degenerate triangles have no original orientation to constrain.
+A vertex the contour kept inside its cell beside a sharp convex crease
 past it (`SdfContour.Beside`), which the field puts inside the solid rather than
 proud of a rounding, moves onto the surface but stays a crease vertex: its quads
 turn across the crease, and with its own face's normal the other face's quads
@@ -804,13 +831,14 @@ shorter than a tenth of the field's typical slope across its surface stays where
 the contour put it
 (`KinkGradient`): the gradient's taps straddle a crease the vertex lies on, and
 the value over that length puts the surface a centimetre or more off, at a
-shell window's rim. The contour then splits each feature vertex whose quads face apart by
-more than 32 degrees, just past the thirty that make it a feature, into one
+shell window's rim. The contour then splits each vertex whose quads face apart by
+more than 25 degrees into one
 vertex per side, each with the area-weighted facing of its side
-(`SdfContour.SplitAtCreases`); at 45 degrees, the very turn of a chamfer, the
-quads' noise split a chamfer's vertices or not from one to the next and dented
-the flat faces beside it (the Moth's heel blocks and heel lugs). A quad at a
-crease folded across it, its two triangles facing apart past the split angle,
+(`SdfContour.SplitAtCreases`). Incident geometry determines this split even
+when the field correction cleared a vertex's placement feature flag. A lifted
+chamfer's corner meets its neighboring bevel at 31.4 degrees; the threshold
+stays below that smaller turn so the corner does not blend across its rim.
+A quad whose two triangles face apart past the split angle
 splits into its triangles first, so each takes its own side's normal rather
 than the whole quad taking one side's and its other triangle shading as a spike
 of that side (the star points round the Moth's ankle bezels). A sharp edge

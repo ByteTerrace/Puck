@@ -363,10 +363,10 @@ public abstract record WorldRenderLight {
         public override string? LightName => Name;
     }
 }
-/// <summary>The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures
-/// at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three
-/// gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature
-/// normal needs, so an unauthored world pays nothing.</summary>
+/// <summary>The stylized curvature enrichment, keyed on mean curvature estimated from the baked triangle's
+/// interpolated vertex normals in world units. Every field is optional individually — absent resolves to the
+/// engine's default. The three gains share one shading gate: while all are zero their enrichment is skipped.
+/// The surface pass supplies the same curvature for edge weathering without querying the field.</summary>
 /// <param name="Cavity">How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches
 /// <paramref name="InkLow"/>. Zero darkens none.</param>
 /// <param name="Rim">How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches

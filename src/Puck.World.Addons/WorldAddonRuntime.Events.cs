@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -86,10 +87,7 @@ public sealed partial class WorldAddonRuntime {
         );
 
         if (dropped > 0) {
-            addon.EventGapCount = ((addon.EventGapCount > (ulong.MaxValue - ((ulong)dropped)))
-                ? ulong.MaxValue
-                : (addon.EventGapCount + ((ulong)dropped))
-            );
+            addon.EventGapCount = addon.EventGapCount.AddSaturating(right: ((ulong)dropped));
         }
 
         if (
