@@ -9,7 +9,7 @@ it running, and each lists the folders its swappable content comes from in
 `contentFolders`: its shipped folders, then the owner's local folder under the
 git-ignored `roms/` at the repository root.
 
-| x | Device | Instance | Engine and model | Screen | Boots | `contentFolders` |
+| x | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
 |---|---|---|---|---|---|---|
 | -10 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
 | -13 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
@@ -22,7 +22,44 @@ not exist (CI, the Azure deploy, a compiled copy of the package, any machine
 without the owner's ROMs)
 `machine.content` lists it `present=false` and the world boots and validates the
 same: every device boots a shipped cartridge. The files in it are the owner's
-and never enter the repository, a build output or a package.
+and never enter the repository, a build output, a package or a log line.
+
+## A local default
+
+Every device row sets `preferFolderDefault: true`, so a device boots the
+default its folders name in place of its shipped cartridge. A folder names its
+default in its own `folder.json`, beside the files:
+
+```json
+{
+  "schema": "puck.content-folder.v1",
+  "default": "<file name in this folder>"
+}
+```
+
+The owner writes it once per local folder, and nothing committed names the
+file: the `roms/` folders are git-ignored, so the default lives only on the
+machine that holds the images. Set it from the console rather than by hand:
+
+| To | Console line |
+|---|---|
+| Make a file a device's default | `machine.default <instance> <name>`, where `<name>` is any name `machine.swap` takes; it writes the file's folder's `folder.json` and names none in the device's other folders |
+| Clear a device's default | `machine.default <instance> none` |
+| See it | `machine.content <instance>` (`default=` the file it boots, `defaultRefused=` why it cannot; each folder segment carries its own `default=`) |
+| Boot it now | `world.reload`, or `machine.swap <instance> <name>` for the running session |
+
+The boot and every `world.reload` read the folders' `folder.json` files: the
+first folder, in `contentFolders` order, whose file names a default decides.
+A default the folder does not hold, one the device cannot mount, or a
+`folder.json` that is not this shape (strict: the schema tag is required, and
+any other member is refused) is refused on stderr by its folder, never by the
+file's name, and the device boots its shipped cartridge. Wherever the `roms/`
+folders are absent the devices boot their shipped cartridges as before. The
+world document, a session capture and a replay tape name the shipped
+cartridge either way; a replay records and verifies the same hash with or
+without the local defaults, since a machine's core is outside the hash.
+`machine.default` writes local files, so it needs the local console or a local
+seat. The `folder.json` is never listed as content.
 
 The Humble Gaming Brick runs the Color model, which plays the forge's `cgb` and
 `dmg` cartridges alike; `device.model` switches a running brick to another
@@ -68,7 +105,7 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Engage it (within 3 m), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
-| Put every device back on its authored cartridge (and pick up an edit to `devices.puck`) | `world.reload` |
+| Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
 | Frame the whole row | `view.override camera look -13 2.2 -1.5 -13 0.6 -6`, then `view.override camera auto` |
 | Frame one device | `view.override camera look <x> 1.1 -4.4 <x> 0.75 -6` |
 

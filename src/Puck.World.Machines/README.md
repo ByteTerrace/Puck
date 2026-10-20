@@ -119,6 +119,18 @@ name. A declaration whose content file
 is absent boots its machine with no cartridge rather than refusing the world;
 an operation naming absent content is refused.
 
+A folder may name a default in its own `folder.json`
+(`WorldMachineContentFolder.SettingsFile`, schema `puck.content-folder.v1`),
+which `machine.default <instance> <name>|none` writes and the listing never
+shows as content. A declaration setting `preferFolderDefault` boots the first
+folder's default, in authored order, when the folder holds it and the engine
+mounts it, and its authored content otherwise; each preparation (boot, reload,
+a machine-affecting mutation) decides it afresh, refusing a bad default on
+stderr by folder rather than by file name. The host runs the default while the
+document, `CaptureInstances` and an operation plan's `Current` and `Candidate`
+keep the authored configuration, so a default's name never reaches a saved
+document or a replay tape.
+
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;
 a restricted host supplies its own immutable policy at construction.

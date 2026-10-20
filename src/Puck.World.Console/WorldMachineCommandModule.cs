@@ -183,6 +183,79 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             description: "Mounts a file from a named machine's contentFolders: machine.swap <instance> <name>, where <name> is a file name machine.content lists, its folder and file name (<folder>/<file>) when two folders hold the name, or the part of a mountable file's name before its first '.' when only one has it. A name no file answers, one several answer, or one naming a file the engine cannot mount is refused by name. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
             handler: Swap
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "machine.default",
+            description: $"Sets the content a named machine boots from its contentFolders: machine.default <instance> <name>|none, where <name> names a mountable file as machine.swap takes it. Writes the {WorldMachineContentFolder.SettingsFile} of the file's folder naming it, and names none in the machine's other folders that name one; none names none in every folder. A machine whose row sets preferFolderDefault boots the default at the next boot or world.reload, and its authored content when no default is set or the default is absent or unmountable; machine.swap mounts a file now. Changes local files only, so it needs a local console or seat; the settings live beside the content and no document names the default.",
+            handler: Default
+        );
+    }
+    private CommandResult Default(CommandContext context, WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[machine.default: expected <instance> <name>|none]");
+        }
+        if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
+            return CommandResult.Error(output: "[machine.default: writing a folder's settings requires a local console or seat]");
+        }
+        if (!authority.TryResolveServer(
+            context: context,
+            error: out var error,
+            server: out var server,
+            verb: "machine.default"
+        )) {
+            return error;
+        }
+        if (!TryListContent(
+            entries: out var entries,
+            failure: out var failure,
+            folders: out var folders,
+            instance: args[0].ToString(),
+            machine: out var machine,
+            server: server,
+            verb: "machine.default"
+        )) {
+            return failure;
+        }
+
+        var name = args[1].ToString();
+        WorldMachineContentFolder.Entry? chosen = null;
+
+        if (!string.Equals(a: name, b: "none", comparisonType: StringComparison.Ordinal)) {
+            if (!WorldMachineContentFolder.TryFind(
+                entries: entries,
+                entry: out var entry,
+                name: name,
+                reason: out var reason
+            )) {
+                return CommandResult.Error(output: $"[machine.default: {machine.Name} {reason}]");
+            }
+            chosen = entry;
+        }
+
+        try {
+            foreach (var folder in folders) {
+                if (chosen is { } named && string.Equals(a: folder.Path, b: named.Folder, comparisonType: StringComparison.Ordinal)) {
+                    WorldMachineContentFolder.WriteSettings(folder: folder.Resolved, name: named.Name);
+                } else if ((folder.Default is not null) || (folder.SettingsRefusal is not null)) {
+                    WorldMachineContentFolder.WriteSettings(folder: folder.Resolved, name: null);
+                }
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return CommandResult.Error(output: $"[machine.default: {machine.Name} cannot write {WorldMachineContentFolder.SettingsFile}: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+        }
+        return new CommandResult(Output: CommandEcho.Open(verb: "machine.default").Head(head: machine.Name)
+            .Field(
+            key: "default",
+            value: ((chosen is { } set) ? set.ContentPath : "none")
+        )
+            .Field(
+            key: "preferDefault",
+            value: machine.PreferFolderDefault
+        )
+            .Field(
+            key: "applies",
+            value: "next boot or world.reload"
+        ).Close());
     }
     private CommandResult Content(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
@@ -209,6 +282,12 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         }
 
         var mounted = server.Machines.InstanceState(name: machine.Name)?.Content;
+        var hasDefault = WorldMachineContentFolder.TryDefault(
+            entries: entries,
+            entry: out var folderDefault,
+            folders: folders,
+            refusal: out var defaultRefusal
+        );
         var echo = CommandEcho.Open(verb: "machine.content").Head(head: machine.Name)
             .Field(
             key: "engine",
@@ -225,8 +304,22 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             .Field(
             key: "refused",
             value: entries.Count(predicate: static entry => (entry.Refusal is not null))
+        )
+            .Field(
+            key: "preferDefault",
+            value: machine.PreferFolderDefault
+        )
+            .Field(
+            key: "default",
+            value: (hasDefault ? folderDefault.ContentPath : "none")
         );
 
+        if (defaultRefusal is not null) {
+            echo = echo.Field(
+                key: "defaultRefused",
+                value: defaultRefusal
+            );
+        }
         foreach (var folder in folders) {
             echo = echo.Segment().Head(head: "folder").Field(
                 key: "path",
@@ -244,6 +337,18 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                 key: "files",
                 value: entries.Count(predicate: entry => string.Equals(a: entry.Folder, b: folder.Path, comparisonType: StringComparison.Ordinal))
             );
+            if (folder.Default is { } named) {
+                echo = echo.Field(
+                    key: "default",
+                    value: named
+                );
+            }
+            if (folder.SettingsRefusal is { } unreadable) {
+                echo = echo.Field(
+                    key: "settingsRefused",
+                    value: unreadable
+                );
+            }
         }
         foreach (var entry in entries) {
             echo = echo.Segment().Head(head: entry.Name).Field(

@@ -314,7 +314,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | HUD schema, overlay reservation, bindings, HUD verbs | [hud.md](references/hud.md) |
 | Camera rigs, seat control and seat camera feel, layouts, `world.view.*` and `view.override` | [views.md](references/views.md) |
 | Boundaries, federation, handoff, crossing logs | [adjacency-and-federation.md](references/adjacency-and-federation.md) |
-| `body.engage`, control applications, machines, a machine's `contentFolders` (shipped and local, which may be absent) and `machine.swap`, the debug world's device row | [engagement.md](references/engagement.md) |
+| `body.engage`, control applications, machines, a machine's `contentFolders` (shipped and local, which may be absent), `machine.swap`, a folder's local boot default (`folder.json`, `machine.default`, `preferFolderDefault`), the debug world's device row | [engagement.md](references/engagement.md) |
 | Join, leave, park, resume | [session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape, verify semantics, `world.history` | [replay.md](references/replay.md) |
 | Addon rows, mount transaction, channels, fuel | [addons.md](references/addons.md) |

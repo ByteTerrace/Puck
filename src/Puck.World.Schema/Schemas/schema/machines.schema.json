@@ -153,6 +153,11 @@
           ]
         },
         "default": null
+      },
+      "preferFolderDefault": {
+        "description": "Whether the device boots the default its ContentFolders name, when one names a file it can mount, in place of its configuration\u0027s authored content. A folder names its default in its own folder.json (SettingsFile), which the folder\u0027s owner writes (machine.default) and the boot and every world.reload read, so the default lives beside the content and no document names it. A device with no default set, or whose default is absent or unmountable, boots its authored content. Omitted from the wire when false.",
+        "type": "boolean",
+        "default": false
       }
     },
     "required": [
