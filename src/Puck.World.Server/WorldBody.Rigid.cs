@@ -867,17 +867,14 @@ public sealed partial class WorldBody {
             left: m_angularVelocity,
             right: contactAnchor
         ));
-        var tangential = (contactVelocity - (normal * FixedVector3.Dot(
-            left: contactVelocity,
-            right: normal
-        )));
 
-        if (tangential == FixedVector3.Zero) {
+        if (!contactVelocity.TryRejectNormalized(
+            length: out var tangentSpeed,
+            unit: out var tangentDirection,
+            unitAxis: normal
+        )) {
             return;
         }
-
-        var tangentSpeed = tangential.Length;
-        var tangentDirection = (tangential / tangentSpeed);
 
         var ballHandle = TwoBodyHandle();
         var groundHandle = GroundPhantomHandle();
@@ -1089,17 +1086,14 @@ public sealed partial class WorldBody {
                 left: ballHandle.AngularVelocity,
                 right: anchor
             ));
-            var tangential = (contactVelocity - (normal * FixedVector3.Dot(
-                left: contactVelocity,
-                right: normal
-            )));
 
-            if (tangential == FixedVector3.Zero) {
+            if (!contactVelocity.TryRejectNormalized(
+                length: out var tangentSpeed,
+                unit: out var tangentDirection,
+                unitAxis: normal
+            )) {
                 continue;
             }
-
-            var tangentSpeed = tangential.Length;
-            var tangentDirection = (tangential / tangentSpeed);
 
             if (!FixedTwoBodyKernel.TryEffectiveMass(
                 bodyA: groundHandle,

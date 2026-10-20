@@ -294,15 +294,9 @@ public static class FixedSurfaceQuery {
         return (Point: (center + rotation.Rotate(vector: point)), Normal: rotation.Rotate(vector: normal));
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnHalfSpace(FixedVector3 boundaryPoint, FixedVector3 normal, FixedVector3 probe) {
-        // A plane projection: exact by construction, the same single-rounded dot/multiply/subtract every other
-        // fixed-point vector operation already carries — no iteration, no square root.
-        var signedDistance = FixedVector3.Dot(
-            left: (probe - boundaryPoint),
-            right: normal
-        );
-        var point = (probe - (normal * signedDistance));
-
-        return (Point: point, Normal: normal);
+        // A plane projection: the probe's offset from the boundary point rejected from the normal, the same
+        // single-rounded dot/multiply/subtract every other fixed-point vector operation already carries.
+        return (Point: (boundaryPoint + (probe - boundaryPoint).RejectFrom(unitAxis: normal)), Normal: normal);
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnSphere(FixedVector3 center, FixedQ4816 radius, FixedVector3 probe) {
         var delta = (probe - center);

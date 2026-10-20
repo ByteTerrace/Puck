@@ -223,16 +223,13 @@ public sealed partial class WorldPopulation {
             left: aHandle.AngularVelocity,
             right: anchorA
         )));
-        var tangential = (relativeVelocity - (normal * FixedVector3.Dot(
-            left: relativeVelocity,
-            right: normal
-        )));
-
-        if (tangential == FixedVector3.Zero) {
+        if (!relativeVelocity.TryRejectNormalized(
+            length: out var tangentSpeed,
+            unit: out var tangentDirection,
+            unitAxis: normal
+        )) {
             return;
         }
-
-        var tangentDirection = tangential.Normalize();
 
         if (
             !FixedTwoBodyKernel.TryEffectiveMass(
@@ -251,7 +248,7 @@ public sealed partial class WorldPopulation {
 
         if (
             !FusedArithmetic.TryMixedScaleProduct(
-            a: (-tangential.Length).Value,
+            a: (-tangentSpeed).Value,
             fractionBitsA: FixedQ4816.FractionBitCount,
             b: tangentMassRaw,
             fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,

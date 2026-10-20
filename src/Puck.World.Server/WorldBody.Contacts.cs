@@ -268,7 +268,7 @@ public sealed partial class WorldBody {
             right: m_up
         );
 
-        m_planarVelocity = (velocity - (m_up * vertical));
+        m_planarVelocity = velocity.RejectFrom(unitAxis: m_up);
 
         if (m_verticalVelocity != vertical) {
             m_verticalVelocity = vertical;

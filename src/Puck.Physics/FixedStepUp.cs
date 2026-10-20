@@ -79,7 +79,7 @@ public static class FixedStepUp {
             left: delta,
             right: up
         );
-        var planar = (delta - (up * vertical));
+        var planar = delta.RejectFrom(unitAxis: up);
 
         if (
             (stepHeight <= FixedQ4816.Zero) ||

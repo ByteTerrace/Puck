@@ -83,15 +83,17 @@ public static class FixedFlockSteering {
         // Normalize before projection: even full-width positions/velocities cannot overflow the dot or subtraction.
         var unit = direction.Normalize();
 
-        return ((normal == FixedVector3.Zero)
-            ? unit
-            : FixedVector3.Cross(
-                left: normal,
-                right: FixedVector3.Cross(
-                    left: unit,
-                    right: normal
-                )
-            ).Normalize()
+        if (normal == FixedVector3.Zero) {
+            return unit;
+        }
+
+        return (unit.TryRejectNormalized(
+            length: out _,
+            unit: out var planar,
+            unitAxis: normal
+        )
+            ? planar
+            : FixedVector3.Zero
         );
     }
     private static void Unit(FixedQ4816 value) {
@@ -121,13 +123,7 @@ public static class FixedFlockSteering {
         var normal = planeNormal.Normalize();
         var local = ((normal == FixedVector3.Zero)
             ? neighborPreference
-            : FixedVector3.Cross(
-                left: normal,
-                right: FixedVector3.Cross(
-                    left: neighborPreference,
-                    right: normal
-                )
-            )
+            : neighborPreference.RejectFrom(unitAxis: normal)
         );
         var desired = ((local + (PlanarDirection(
             direction: goalDirection,
