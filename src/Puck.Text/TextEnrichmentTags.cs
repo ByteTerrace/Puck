@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Globalization;
 using Puck.Maths;
 using System.Numerics;
@@ -418,12 +419,8 @@ public static class TextEnrichmentTags {
             packed = (packed << 8) | 0xFFu;
         }
 
-        color = new Vector4(
-            w: ((packed & 0xFFu) / 255.0f),
-            x: (((packed >> 24) & 0xFFu) / 255.0f),
-            y: (((packed >> 16) & 0xFFu) / 255.0f),
-            z: (((packed >> 8) & 0xFFu) / 255.0f)
-        );
+        // The authored word is RRGGBBAA; the unpacker reads red in the low byte.
+        color = VectorFunctions.UnpackRgba8(packed: BinaryPrimitives.ReverseEndianness(value: packed));
 
         return true;
     }

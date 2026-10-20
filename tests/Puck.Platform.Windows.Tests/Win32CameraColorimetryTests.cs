@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.Abstractions.Sources;
 using Xunit;
 
 namespace Puck.Platform.Windows.Tests;
@@ -29,11 +30,11 @@ public sealed class Win32CameraColorimetryTests {
         ).Resolve();
 
         Assert.Equal(
-            expected: Win32YuvMatrix.Bt601,
+            expected: ImageYuvMatrix.Bt601,
             actual: conversion.Matrix
         );
         Assert.Equal(
-            expected: Win32YuvRange.Full,
+            expected: ImageYuvRange.Full,
             actual: conversion.Range
         );
         Assert.True(condition: conversion.ChromaHorizontallyCosited);
@@ -43,7 +44,7 @@ public sealed class Win32CameraColorimetryTests {
     [SupportedOSPlatform("windows10.0.19041")]
     public void Conversion_constants_honor_colorimetry_and_chroma_siting() {
         // BT.601, full range, chroma cosited on both axes.
-        Assert.Equal(
+        AssertConstants(
             actual: Win32D3D11CameraFrameConverter.ConversionConstants(colorimetry: new Win32CameraColorimetry(
                 ChromaSiting: 0x6u,
                 Matrix: 2u,
@@ -52,21 +53,37 @@ public sealed class Win32CameraColorimetryTests {
             expected: [0f, 255f, 255f, 0f, 1.402f, 0.344136f, 0.714136f, 1.772f, 0f, 0f, 0f, 0f]
         );
         // The Media Foundation defaults: BT.709, limited range, chroma centered.
-        Assert.Equal(
+        AssertConstants(
             actual: Win32D3D11CameraFrameConverter.ConversionConstants(colorimetry: new Win32CameraColorimetry()),
             expected: [16f, 219f, 224f, 0f, 1.5748f, 0.187324f, 0.468124f, 1.8556f, 0.5f, 0.5f, 0f, 0f]
         );
+    }
+    // The matrix coefficients are derived from Kr and Kb, so they agree with the published six-digit values to within
+    // the digits those carry; every other constant is exact.
+    private static void AssertConstants(float[] actual, float[] expected) {
+        Assert.Equal(
+            actual: actual.Length,
+            expected: expected.Length
+        );
+
+        for (var index = 0; (index < expected.Length); index++) {
+            Assert.InRange(
+                actual: actual[index],
+                high: (expected[index] + (((index >= 4) && (index <= 7)) ? 1e-6f : 0f)),
+                low: (expected[index] - (((index >= 4) && (index <= 7)) ? 1e-6f : 0f))
+            );
+        }
     }
     [Fact]
     public void Unknown_metadata_uses_media_foundation_defaults() {
         var conversion = new Win32CameraColorimetry().Resolve();
 
         Assert.Equal(
-            expected: Win32YuvMatrix.Bt709,
+            expected: ImageYuvMatrix.Bt709,
             actual: conversion.Matrix
         );
         Assert.Equal(
-            expected: Win32YuvRange.Limited,
+            expected: ImageYuvRange.Limited,
             actual: conversion.Range
         );
         Assert.False(condition: conversion.ChromaHorizontallyCosited);

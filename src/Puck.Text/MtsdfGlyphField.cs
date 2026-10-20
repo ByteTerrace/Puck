@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Text;
 
@@ -336,15 +337,8 @@ public static class MtsdfGlyphField {
     private static float Cross(Vector2 a, Vector2 b) {
         return ((a.X * b.Y) - (a.Y * b.X));
     }
-    private static byte Encode(float distance, float distanceRange) {
-        var normalized = (0.5f + (distance / distanceRange));
-
-        return ((byte)Math.Clamp(
-            value: ((int)MathF.Round(x: (normalized * 255f))),
-            min: 0,
-            max: 255
-        ));
-    }
+    private static byte Encode(float distance, float distanceRange) =>
+        VectorFunctions.ToUnorm8(value: (0.5f + (distance / distanceRange)));
     private static bool IsCloser(in SegmentDistance candidate, in SegmentDistance best) {
         var candidateMagnitude = MathF.Abs(x: candidate.Distance);
         var bestMagnitude = MathF.Abs(x: best.Distance);

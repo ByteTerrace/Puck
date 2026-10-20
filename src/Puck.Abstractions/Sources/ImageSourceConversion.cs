@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Sources;
 
@@ -60,16 +61,6 @@ public static class ImageSourceConversion {
         -0.0181508, -0.1005789, 1.1187297,
     ];
 
-    private static (double Kr, double Kb) Coefficients(ImageYuvMatrix matrix) => matrix switch {
-        ImageYuvMatrix.Bt601 => (0.299, 0.114),
-        ImageYuvMatrix.Bt709 => (0.2126, 0.0722),
-        ImageYuvMatrix.Bt2020 => (0.2627, 0.0593),
-        _ => throw new ArgumentOutOfRangeException(
-            actualValue: matrix,
-            message: "The Y'CbCr matrix is not defined.",
-            paramName: nameof(matrix)
-        ),
-    };
     private static void RequireLength(int length, uint width, uint height, int channels, string paramName) {
         var required = ((((long)width) * height) * channels);
 
@@ -191,32 +182,46 @@ public static class ImageSourceConversion {
     /// <see cref="SrgbToLinear"/>.</summary>
     /// <param name="value">The linear value, 0 to 1; a value outside it is clamped.</param>
     /// <returns>The encoded value, 0 to 1.</returns>
-    public static double LinearToSrgb(double value) {
-        var clamped = Math.Clamp(
-            max: 1.0,
-            min: 0.0,
-            value: value
-        );
+    public static double LinearToSrgb(double value) => LinearToWorking(linear: Math.Clamp(
+        max: 1.0,
+        min: 0.0,
+        value: value
+    ));
+    /// <summary>Returns the luma weights of a Y'CbCr matrix: the red and blue shares of luma, green taking the rest.
+    /// <c>imageSourceYuvToRgb</c> in <c>image-source.hlsli</c> holds the same literals.</summary>
+    /// <param name="matrix">The matrix.</param>
+    /// <returns><c>Kr</c> and <c>Kb</c>: BT.601 0.299 and 0.114, BT.709 0.2126 and 0.0722, BT.2020 0.2627 and
+    /// 0.0593.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="matrix"/> is not defined.</exception>
+    public static (double Kr, double Kb) Coefficients(ImageYuvMatrix matrix) => matrix switch {
+        ImageYuvMatrix.Bt601 => (0.299, 0.114),
+        ImageYuvMatrix.Bt709 => (0.2126, 0.0722),
+        ImageYuvMatrix.Bt2020 => (0.2627, 0.0593),
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: matrix,
+            message: "The Y'CbCr matrix is not defined.",
+            paramName: nameof(matrix)
+        ),
+    };
+    /// <summary>Derives the four inverse coefficients of a Y'CbCr matrix from its <see cref="Coefficients"/>, for luma
+    /// and chroma normalized to their code range's span: the code range sets the offset and span the caller
+    /// normalizes by, so the coefficients are the same for limited and full range.</summary>
+    /// <param name="matrix">The matrix.</param>
+    /// <returns><c>R = Y + RedFromV · Cr</c>, <c>G = Y - GreenFromU · Cb - GreenFromV · Cr</c> and
+    /// <c>B = Y + BlueFromU · Cb</c>, with the weights <c>2 - 2Kr</c>, <c>2Kb(1 - Kb) / Kg</c>,
+    /// <c>2Kr(1 - Kr) / Kg</c> and <c>2 - 2Kb</c> for <c>Kg = 1 - Kr - Kb</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="matrix"/> is not defined.</exception>
+    public static (double RedFromV, double GreenFromU, double GreenFromV, double BlueFromU) YuvToRgbCoefficients(ImageYuvMatrix matrix) {
+        var (kr, kb) = Coefficients(matrix: matrix);
+        var kg = ((1.0 - kr) - kb);
 
-        return ((clamped <= 0.0031308)
-            ? (clamped * 12.92)
-            : ((1.055 * Math.Pow(
-                x: clamped,
-                y: (1.0 / 2.4)
-            )) - 0.055)
+        return (
+            (2.0 - (2.0 * kr)),
+            (((2.0 * kb) * (1.0 - kb)) / kg),
+            (((2.0 * kr) * (1.0 - kr)) / kg),
+            (2.0 - (2.0 * kb))
         );
     }
-    /// <summary>Returns the 8-bit code a normalized value stores as: clamped to 0–1 and rounded to the nearest code.</summary>
-    /// <param name="value">The normalized value.</param>
-    /// <returns>The code.</returns>
-    public static byte ToUnorm8(double value) => ((byte)Math.Round(
-        value: (Math.Clamp(
-            max: 1.0,
-            min: 0.0,
-            value: value
-        ) * 255.0),
-        mode: MidpointRounding.ToEven
-    ));
     /// <summary>Converts one Y'CbCr sample to R'G'B' under a matrix and code range, unclamped.</summary>
     /// <param name="y">The luma code.</param>
     /// <param name="cb">The blue-difference code.</param>
@@ -300,9 +305,9 @@ public static class ImageSourceConversion {
                                 y: region[((int)((header.Plane0Offset + (y * header.Plane0Stride)) + x))]
                             );
 
-                            target[0] = ToUnorm8(value: r);
-                            target[1] = ToUnorm8(value: g);
-                            target[2] = ToUnorm8(value: b);
+                            target[0] = VectorFunctions.ToUnorm8(value: r);
+                            target[1] = VectorFunctions.ToUnorm8(value: g);
+                            target[2] = VectorFunctions.ToUnorm8(value: b);
                             target[3] = 0xFF;
 
                             break;
@@ -484,8 +489,12 @@ public static class ImageSourceConversion {
 
         var word = BinaryPrimitives.ReadUInt32LittleEndian(source: row[((int)(x * 4U))..]);
 
-        return ((format == ImagePixelFormat.R10G10B10A2Unorm)
-            ? (((word & 0x3FFU) / 1023.0), (((word >> 10) & 0x3FFU) / 1023.0), (((word >> 20) & 0x3FFU) / 1023.0), ((word >> 30) / 3.0))
-            : (((word & 0xFFU) / 255.0), (((word >> 8) & 0xFFU) / 255.0), (((word >> 16) & 0xFFU) / 255.0), ((word >> 24) / 255.0)));
+        if (format == ImagePixelFormat.R10G10B10A2Unorm) {
+            return (((word & 0x3FFU) / 1023.0), (((word >> 10) & 0x3FFU) / 1023.0), (((word >> 20) & 0x3FFU) / 1023.0), ((word >> 30) / 3.0));
+        }
+
+        var rgba = VectorFunctions.UnpackRgba8(packed: word);
+
+        return (rgba.X, rgba.Y, rgba.Z, rgba.W);
     }
 }
