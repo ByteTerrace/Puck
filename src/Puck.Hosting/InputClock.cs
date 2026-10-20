@@ -1,16 +1,17 @@
 using Puck.Commands;
+using Puck.Maths;
 
 namespace Puck.Hosting;
 
 /// <summary>
-/// The process-wide monotonic capture clock, in <see cref="EngineTicks"/>, shared by every input backend so
+/// The process-wide monotonic capture clock, in <see cref="FixedTickConversion"/>, shared by every input backend so
 /// all <see cref="InputSignal.CaptureTick"/> stamps share one base. TimeProvider-derived; measures real arrival
 /// time (never clamped or stepped), unlike the fixed-step simulation clock (<see cref="TickClock"/>).
 /// </summary>
 /// <remarks>
 /// <see cref="NowTicks"/> is a pure function of elapsed provider timestamps, so it is inherently monotonic and
 /// lock-free — safe to read from device I/O threads. The conversion is the exact floor of
-/// <c>elapsed × <see cref="EngineTicks.PerSecond"/> ÷ frequency</c>, computed without overflow by splitting
+/// <c>elapsed × <see cref="FixedTickConversion.TicksPerSecond"/> ÷ frequency</c>, computed without overflow by splitting
 /// whole seconds from the sub-second remainder.
 /// </remarks>
 public sealed class InputClock : IInputClock {
@@ -46,7 +47,7 @@ public sealed class InputClock : IInputClock {
             var whole = (elapsed / m_frequency);
             var fraction = (elapsed % m_frequency);
 
-            return ((whole * EngineTicks.PerSecond) + ((fraction * EngineTicks.PerSecond) / m_frequency));
+            return ((whole * FixedTickConversion.TicksPerSecond) + ((fraction * FixedTickConversion.TicksPerSecond) / m_frequency));
         }
     }
 }

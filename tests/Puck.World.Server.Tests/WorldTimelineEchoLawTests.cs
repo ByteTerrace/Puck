@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -14,7 +14,7 @@ public sealed class WorldTimelineEchoLawTests {
                 new WorldClock(Name: "tide", State: "tide"),
             ]),
         };
-        var period = (1200UL * EngineTicks.PerSecond);
+        var period = (1200UL * FixedTickConversion.TicksPerSecond);
         var echo = WorldTimelineCommandModule.Describe(
             definition: definition,
             engineTick: (period / 4UL)

@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 
@@ -129,7 +130,7 @@ public sealed partial class WorldStateMirror {
         ref readonly var entry = ref m_slots[slot];
 
         m_reads.Increment();
-        var simulationTick = ((Manifest.SimulationRateHz > 0) ? (tick.Whole / EngineTicks.PerRate(ratePerSecond: ((uint)Manifest.SimulationRateHz))) : Tick);
+        var simulationTick = ((Manifest.SimulationRateHz > 0) ? (tick.Whole / FixedTickConversion.PerRate(ratePerSecond: ((uint)Manifest.SimulationRateHz))) : Tick);
 
         if (!m_view.TryRead(entry.Ordinal, binding.Key, binding.Target, simulationTick, tick.Whole, out var sample) || !sample.Value.HasValue) { return false; }
         phase = WorldClockAnchor.ToTurn(phase: WorldClockAnchor.PhaseOf(kind: sample.Value.Kind, raw: sample.Value.Raw));

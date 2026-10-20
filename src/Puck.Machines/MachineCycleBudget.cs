@@ -1,4 +1,3 @@
-using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.Machines;
@@ -15,11 +14,11 @@ public static class MachineCycleBudget {
     /// between budgets carries no drift. The phase is scaled by <see cref="MachineCycleRate.Seconds"/>, which a stream
     /// must keep constant.</summary>
     /// <param name="accumulator">The host pacer's phase.</param>
-    /// <param name="ticks">The engine ticks to convert, <see cref="EngineTicks.PerSecond"/> to the second.</param>
+    /// <param name="ticks">The engine ticks to convert, <see cref="FixedTickConversion.TicksPerSecond"/> to the second.</param>
     /// <param name="rate">The machine's current cycle rate.</param>
     /// <returns>The whole machine cycles the budget buys.</returns>
     /// <exception cref="OverflowException">The product of <paramref name="ticks"/> and
-    /// <see cref="MachineCycleRate.Cycles"/>, or of <see cref="EngineTicks.PerSecond"/> and
+    /// <see cref="MachineCycleRate.Cycles"/>, or of <see cref="FixedTickConversion.TicksPerSecond"/> and
     /// <see cref="MachineCycleRate.Seconds"/>, exceeds <see cref="long.MaxValue"/>.</exception>
     public static long TakeCycleBudget(this ref RationalRateAccumulator accumulator, ulong ticks, MachineCycleRate rate) =>
         accumulator.Advance(
@@ -29,10 +28,10 @@ public static class MachineCycleBudget {
     /// <summary>Gets the phase units in one machine cycle at <paramref name="rate"/>: a carried phase is always below
     /// it, which is how a restored phase is validated.</summary>
     /// <param name="rate">The rate whose phase scale to report.</param>
-    /// <returns><see cref="EngineTicks.PerSecond"/> × <see cref="MachineCycleRate.Seconds"/>.</returns>
+    /// <returns><see cref="FixedTickConversion.TicksPerSecond"/> × <see cref="MachineCycleRate.Seconds"/>.</returns>
     /// <exception cref="OverflowException">The product exceeds <see cref="long.MaxValue"/>.</exception>
     public static long PhasePeriod(MachineCycleRate rate) =>
-        checked((long)checked((EngineTicks.PerSecond * rate.Seconds)));
+        checked((long)checked((FixedTickConversion.TicksPerSecond * rate.Seconds)));
     /// <summary>Moves the phase, as one little-endian 64-bit integer, in the transfer's direction — the snapshot seam
     /// for a stage that captures its cadence.</summary>
     /// <typeparam name="TTransfer">The direction: <see cref="StateSaveTransfer"/> or <see cref="StateLoadTransfer"/>.</typeparam>

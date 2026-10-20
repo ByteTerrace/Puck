@@ -1,5 +1,6 @@
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 
 namespace Puck.Hosting;
 
@@ -81,11 +82,11 @@ public sealed class FrameCaptureController : IDisposable {
         session.LastRenderTicks = renderTicks;
         session.CadenceAccumulator += (((UInt128)deltaTicks) * ((uint)session.FrameRate));
 
-        if (session.CadenceAccumulator < EngineTicks.PerSecond) {
+        if (session.CadenceAccumulator < FixedTickConversion.TicksPerSecond) {
             return false;
         }
 
-        session.CadenceAccumulator %= EngineTicks.PerSecond;
+        session.CadenceAccumulator %= FixedTickConversion.TicksPerSecond;
 
         return true;
     }

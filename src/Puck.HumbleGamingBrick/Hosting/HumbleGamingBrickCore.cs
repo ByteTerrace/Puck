@@ -12,7 +12,7 @@ namespace Puck.HumbleGamingBrick;
 /// </summary>
 public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     // The LCD dot rate (2^22 per second), which double speed leaves unchanged: it doubles the processor, not the display.
-    // With EngineTicks.PerSecond it forms the exact rational the tick accumulator carries remainders in.
+    // With FixedTickConversion.TicksPerSecond it forms the exact rational the tick accumulator carries remainders in.
     private const ulong DotsPerSecond = 4_194_304UL;
     // One native ~59.7 Hz video frame in LCD dots (154 scanlines of 456 dots) — the PPU's frame period, independent of the
     // KEY1 double-speed CPU multiplier, so it keys the native-frame count in every model.

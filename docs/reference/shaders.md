@@ -2968,7 +2968,7 @@ without the recording's source reader refuses it.
 ## The NuGet package
 
 `ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`,
-`Puck.Hosting` (`IRenderRoot`, `FrameContext`, `EngineTicks`), and
+`Puck.Hosting` (`IRenderRoot`, `FrameContext`), and
 `ByteTerrace.Puck.Shaders.Model`, the model its declarations are generated from. It carries no
 GPU, windowing, or shader-compiler dependency of its own; `DxilInterfaceReader`
 loads the `dxcompiler.dll` of an installed DXC at run time. The shader

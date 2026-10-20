@@ -56,8 +56,8 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
         var bindings = new WorldSeatBindings(definition: document);
 
         // Independently derived crossing point: value(t) = floor(elapsed / EngineTicksPerSecond) at a 1/second
-        // rate from epoch 0, so it first reaches 5 at exactly 5 * EngineTicks.PerSecond engine ticks.
-        var crossingTick = (5UL * Puck.Hosting.EngineTicks.PerSecond);
+        // rate from epoch 0, so it first reaches 5 at exactly 5 * FixedTickConversion.TicksPerSecond engine ticks.
+        var crossingTick = (5UL * Puck.Maths.FixedTickConversion.TicksPerSecond);
 
         bindings.SyncSeat(
             definition: AtEngineTick(baseDocument: document),

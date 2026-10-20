@@ -1,8 +1,8 @@
+using Puck.Maths;
 using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
-using Puck.Hosting;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
@@ -10,7 +10,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// F7's law: <c>rateHz</c> 0 is legitimate <c>.puckreplay</c> tape metadata — a static/stopped world's recording has
 /// ZERO steps, and deriving a step width for one must reach an honest answer rather than throw
-/// <see cref="ArgumentOutOfRangeException"/> out of <c>EngineTicks.PerRate(ratePerSecond: 0)</c>, which
+/// <see cref="ArgumentOutOfRangeException"/> out of <c>FixedTickConversion.PerRate(ratePerSecond: 0)</c>, which
 /// <see cref="WorldReplaySnapshot.Drive"/> did unconditionally before this fix.
 /// </summary>
 /// <remarks>
@@ -30,17 +30,17 @@ namespace Puck.World.Server.Tests;
 public sealed class ReplayRateZeroLawTests {
     [Fact]
     public void NonZeroRate_IsUnaffectedAndStillDerivesTheOrdinaryStepWidth() {
-        // The control: an ordinary authored rate must resolve EXACTLY as EngineTicks.PerRate always has, ticks
+        // The control: an ordinary authored rate must resolve EXACTLY as FixedTickConversion.PerRate always has, ticks
         // present or not — the rate-0 guard must never shadow the ordinary path.
         Assert.Equal(
-            expected: EngineTicks.PerRate(ratePerSecond: 240U),
+            expected: FixedTickConversion.PerRate(ratePerSecond: 240U),
             actual: WorldReplaySnapshot.ResolveStepWidth(
                 recordedTickCount: 0,
                 simulationRate: 240U
             )
         );
         Assert.Equal(
-            expected: EngineTicks.PerRate(ratePerSecond: 240U),
+            expected: FixedTickConversion.PerRate(ratePerSecond: 240U),
             actual: WorldReplaySnapshot.ResolveStepWidth(
                 recordedTickCount: 5,
                 simulationRate: 240U
@@ -65,7 +65,7 @@ public sealed class ReplayRateZeroLawTests {
     }
     [Fact]
     public void RateZeroWithNoRecordedTicks_ResolvesToZeroWithoutThrowing() {
-        // Before this fix: WorldReplaySnapshot.Drive called EngineTicks.PerRate(ratePerSecond: 0) unconditionally,
+        // Before this fix: WorldReplaySnapshot.Drive called FixedTickConversion.PerRate(ratePerSecond: 0) unconditionally,
         // which throws ArgumentOutOfRangeException — this exact legitimate case (a static world's empty recording)
         // would have thrown instead of reaching a step width at all.
         var stepWidth = WorldReplaySnapshot.ResolveStepWidth(

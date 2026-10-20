@@ -6,6 +6,7 @@ using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
+using Puck.Maths;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.SdfVm;
@@ -603,7 +604,7 @@ public sealed class WorldScreenBinderLawTests {
         public const int GardenSession = 1;
         public const int GardenCamera = 2;
 
-        public static readonly ulong Step = EngineTicks.PerRate(ratePerSecond: 30u);
+        public static readonly ulong Step = FixedTickConversion.PerRate(ratePerSecond: 30u);
         public static readonly WorldCamera DeclaredCamera = new(
             Anchor: null,
             Name: "cam",

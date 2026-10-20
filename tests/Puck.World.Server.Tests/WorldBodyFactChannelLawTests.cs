@@ -141,7 +141,7 @@ public sealed class WorldBodyFactChannelLawTests {
         );
 
         for (var settle = 0; (settle < 8); settle++) {
-            fixture.Step(stepTicks: Puck.Hosting.EngineTicks.PerRate(ratePerSecond: 30));
+            fixture.Step(stepTicks: Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: 30));
         }
 
         Assert.True(

@@ -8,6 +8,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -188,7 +189,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 registry: registry,
                 simulation: Simulation
             );
-            m_stepTicks = EngineTicks.PerRate(ratePerSecond: Simulation.RatePerSecond);
+            m_stepTicks = FixedTickConversion.PerRate(ratePerSecond: Simulation.RatePerSecond);
             m_context = new FrameContext(
                 AccumulatorTicks: 0UL,
                 DeltaTicks: 0UL,
@@ -466,7 +467,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         // One second of host time per iteration: twice the capture hold budget, well inside the build budget.
         for (var iteration = 0; (iteration < (2 * WorldCaptureScheduler.HoldBudgetSeconds)); iteration++) {
-            run.Iterate(hostTicks: EngineTicks.PerSecond);
+            run.Iterate(hostTicks: FixedTickConversion.TicksPerSecond);
         }
 
         Assert.False(condition: run.View.IsReady);
@@ -503,7 +504,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         // seconds.
         run.IterateUntilDecided(
             captures: 2,
-            hostTicks: EngineTicks.PerSecond
+            hostTicks: FixedTickConversion.TicksPerSecond
         );
 
         Assert.False(condition: run.View.IsReady);

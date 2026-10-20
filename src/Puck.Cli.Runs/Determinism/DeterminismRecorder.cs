@@ -1,6 +1,5 @@
 using Puck.Assets.Documents;
 using Puck.Commands;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World;
 using Puck.World.Authoring;
@@ -294,7 +293,7 @@ public static class DeterminismRecorder {
             )));
         }
 
-        var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
+        var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
         var ticks = new List<ulong[]>(capacity: scenario.Ticks);
 
         for (var tick = 1; (tick <= scenario.Ticks); tick++) {

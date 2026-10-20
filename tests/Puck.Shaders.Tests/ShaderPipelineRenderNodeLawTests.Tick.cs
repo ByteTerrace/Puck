@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Abstractions.Presentation;
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders.Tests;
 
@@ -32,7 +32,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// same tick.</summary>
     [Fact]
     public void OneTickWritesIdenticalBytesAtThreePresentationClocks() {
-        var period = EngineTicks.PerRate(ratePerSecond: RequestedTickRate);
+        var period = FixedTickConversion.PerRate(ratePerSecond: RequestedTickRate);
         var engineTick = ((period * 7UL) + (period / 2UL));
         var gpu = new FakePipelineGpu { MemoryProfile = Aperture };
         using var node = Node(gpu: gpu);
@@ -61,7 +61,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 PointerDown: false,
                 PointerPresses: 0,
                 Tick: engineTick,
-                Time: (EngineTicks.ToSeconds(ticks: engineTick) + (0.5d / displayRate)),
+                Time: (FixedTickConversion.ToSeconds(ticks: engineTick) + (0.5d / displayRate)),
                 TimeDelta: (1d / displayRate)
             );
 
@@ -160,7 +160,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             Assert.Equal(expected: "SHADERPIPE_TICK_RATE", actual: diagnostic.Code);
             Assert.Equal(
                 actual: diagnostic.Message,
-                expected: $"Graph 'board' requests a tick rate of {rate} a second, which does not divide the engine's {EngineTicks.PerSecond} ticks a second exactly."
+                expected: $"Graph 'board' requests a tick rate of {rate} a second, which does not divide the engine's {FixedTickConversion.TicksPerSecond} ticks a second exactly."
             );
         }
 

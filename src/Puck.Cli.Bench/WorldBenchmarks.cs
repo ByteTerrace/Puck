@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
+using Puck.Maths;
 using Puck.Physics;
 using Puck.SignedDistance.Queries;
 using Puck.World;
@@ -55,7 +55,7 @@ internal static class WorldBenchmarks {
         rows.Add(item: ("world: server construction", $"{constructionTimer.Elapsed.TotalSeconds:F1} s"));
 
         var server = bench.Server;
-        var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
+        var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
 
         for (var tick = 0; (tick < WarmupTicks); tick++) {
             server.Advance(stepTicks: stepTicks);
@@ -119,7 +119,7 @@ internal static class WorldBenchmarks {
 
         var server = bench.Server;
         var waitsBefore = Backpressure();
-        var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / EngineTicks.PerSecond));
+        var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / FixedTickConversion.TicksPerSecond));
         var pacedSamples = new long[PacedSampleTicks];
         var due = Stopwatch.GetTimestamp();
 

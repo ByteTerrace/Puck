@@ -1,6 +1,5 @@
 using Puck.Commands;
 using System.Numerics;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
@@ -931,7 +930,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
 
         var peers = 0;
-        var stepSeconds = ((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks));
+        var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
         for (var index = 0; (index < EntityCapacity); index++) {
             if (!m_seen[index]) {

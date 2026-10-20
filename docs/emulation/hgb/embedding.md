@@ -149,7 +149,7 @@ using IMachineRuntime machine = engine.Create(
     savePath: null,           // in-memory battery saves for this example
     audioSampleRate: 48_000
 );
-machine.Advance(deltaTicks: Puck.Hosting.EngineTicks.PerSecond / 60UL);
+machine.Advance(deltaTicks: Puck.Maths.FixedTickConversion.TicksPerSecond / 60UL);
 ```
 
 Constructing a `MachineConfiguration` and calling `MachineFactory.Create`

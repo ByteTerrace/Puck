@@ -1,6 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Sources;
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Machines;
 
@@ -410,7 +410,7 @@ public static class QueuedHostContractProbe {
 
                 for (var step = 0; (step < WholeFrameSteps); step++) {
                     _ = host.Step(
-                        deltaTicks: (EngineTicks.PerSecond / 30UL),
+                        deltaTicks: (FixedTickConversion.TicksPerSecond / 30UL),
                         inputs: MachinePads.One(input: in input)
                     );
                 }
@@ -830,7 +830,7 @@ public static class QueuedHostContractProbe {
         }
 
         _ = silentHost.Step(
-            deltaTicks: EngineTicks.PerSecond,
+            deltaTicks: FixedTickConversion.TicksPerSecond,
             inputs: MachinePads.One(input: in input)
         );
 
@@ -851,7 +851,7 @@ public static class QueuedHostContractProbe {
         // a powered mixer emits recentered zero frames, and a powered-off one emits true-silence frames; either way
         // the ring is non-empty once configured, so this proves the drain path itself, not ROM content.
         _ = soundedHost.Step(
-            deltaTicks: EngineTicks.PerSecond,
+            deltaTicks: FixedTickConversion.TicksPerSecond,
             inputs: MachinePads.One(input: in input)
         );
 
@@ -885,7 +885,7 @@ public static class QueuedHostContractProbe {
 
         for (var index = 0; (index < submissionLimit); ++index) {
             var submission = host.Submit(
-                deltaTicks: EngineTicks.PerSecond,
+                deltaTicks: FixedTickConversion.TicksPerSecond,
                 inputs: MachinePads.One(input: in input)
             );
 
@@ -936,7 +936,7 @@ public static class QueuedHostContractProbe {
     public static QueuedHostProbeResult VerifyCheckpoint<THost>(Func<THost> withContent) where THost : QueuedMachineHost {
         using var source = withContent();
         using var target = withContent();
-        var budget = (EngineTicks.PerRate(ratePerSecond: 60) + 1);
+        var budget = (FixedTickConversion.PerRate(ratePerSecond: 60) + 1);
 
         source.SetFastForward(factor: 3);
         for (var index = 0; (index < 18); index++) {
@@ -1010,7 +1010,7 @@ public static class QueuedHostContractProbe {
         const int Steps = 90;
         const int Hammers = 400;
 
-        var budget = EngineTicks.PerRate(ratePerSecond: 60);
+        var budget = FixedTickConversion.PerRate(ratePerSecond: 60);
         var input = MachinePadState.Neutral;
         var lastPoke = ((byte)((Steps - 1) & 0xFF));
 
@@ -1081,7 +1081,7 @@ public static class QueuedHostContractProbe {
         // Memory marshaling needs running core work, not a complete video frame before every memory request.
         // Keep all 400 round-trips; the two replay legs above still exercise their full frame schedules.
         var stress = VerifyConcurrentPokeStress(
-            budget: EngineTicks.PerRate(ratePerSecond: 480),
+            budget: FixedTickConversion.PerRate(ratePerSecond: 480),
             hammers: Hammers,
             input: in input,
             scratchAddress: scratchAddress,
@@ -1132,7 +1132,7 @@ public static class QueuedHostContractProbe {
         // A remainder-bearing per-frame budget: 60 Hz submissions against a ~59.73 Hz native cadence leave a tick→cycle
         // remainder every frame, so both the accumulator restoration (rewind) and the mismatched-cadence lead (runahead)
         // are genuinely exercised rather than hidden behind a whole-cycle budget.
-        var budget = EngineTicks.PerRate(ratePerSecond: 60);
+        var budget = FixedTickConversion.PerRate(ratePerSecond: 60);
 
         var rewind = VerifyRewindDeterminism(
             budget: budget,

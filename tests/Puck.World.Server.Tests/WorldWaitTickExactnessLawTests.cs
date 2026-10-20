@@ -2,6 +2,7 @@ using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
 
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -11,7 +12,7 @@ namespace Puck.World.Server.Tests;
 /// releases it, even when every step arrives in one catch-up burst. Each law carries its control — the same script
 /// without the per-step drain, or through a session whose simulation lines are stamped with wall time, lands late.</summary>
 public sealed class WorldWaitTickExactnessLawTests {
-    private const ulong StepTicks = (EngineTicks.PerSecond / 30UL);
+    private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / 30UL);
 
     // Resolves every invocation to the fixture's one row, as the desktop's boot console authority does.
     private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {

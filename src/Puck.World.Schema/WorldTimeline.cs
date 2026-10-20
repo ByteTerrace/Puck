@@ -67,7 +67,7 @@ public static class WorldClocks {
     /// was authored as, exactly a whole number of engine ticks
     /// (<see cref="FixedTickConversion.TryDurationEngineTicksExact"/>).</returns>
     public static bool TryWholeTicks(double seconds, out ulong ticks) {
-        if (!double.IsFinite(d: seconds) || (seconds <= 0d) || ((seconds * EngineTicks.PerSecond) >= ulong.MaxValue)) {
+        if (!double.IsFinite(d: seconds) || (seconds <= 0d) || ((seconds * FixedTickConversion.TicksPerSecond) >= ulong.MaxValue)) {
             ticks = 0UL;
 
             return false;
@@ -82,7 +82,7 @@ public static class WorldClocks {
             return true;
         }
 
-        ticks = ((ulong)Math.Round(a: (seconds * EngineTicks.PerSecond)));
+        ticks = ((ulong)Math.Round(a: (seconds * FixedTickConversion.TicksPerSecond)));
 
         return false;
     }

@@ -2,7 +2,6 @@ using Puck.Commands;
 using System.Numerics;
 
 using Puck.World.Authoring;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -99,8 +98,8 @@ public sealed class HighSpeedGroundContactLawTests {
             ),
             SourceTick: 17,
             ContinuumStartEngineTick: 0,
-            ContinuumEndEngineTick: EngineTicks.PerRate(ratePerSecond: 30),
-            ConsumedThroughEngineTick: EngineTicks.PerRate(ratePerSecond: 30),
+            ContinuumEndEngineTick: FixedTickConversion.PerRate(ratePerSecond: 30),
+            ConsumedThroughEngineTick: FixedTickConversion.PerRate(ratePerSecond: 30),
             BoundaryEvents: 1
         );
 
@@ -224,7 +223,7 @@ public sealed class HighSpeedGroundContactLawTests {
             z: 0f
         );
         for (var tick = 0; (tick < 60); tick++) {
-            fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
+            fixture.Step(stepTicks: FixedTickConversion.PerRate(ratePerSecond: 60));
         }
         Assert.True(condition: standing.Grounded);
 
@@ -243,7 +242,7 @@ public sealed class HighSpeedGroundContactLawTests {
         }
 
         for (var tick = 0; (tick < 30); tick++) {
-            fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
+            fixture.Step(stepTicks: FixedTickConversion.PerRate(ratePerSecond: 60));
         }
 
         Assert.True(
@@ -305,7 +304,7 @@ public sealed class HighSpeedGroundContactLawTests {
     [InlineData(60U)]
     [Theory]
     public void TerminalFallLandsOnThinAuthoredFloor(uint rateHz) {
-        var stepTicks = EngineTicks.PerRate(ratePerSecond: rateHz);
+        var stepTicks = FixedTickConversion.PerRate(ratePerSecond: rateHz);
         var terminalStep = (40f / rateHz);
 
         // Sweep one complete terminal-step phase. A single convenient starting height can land one sample inside the

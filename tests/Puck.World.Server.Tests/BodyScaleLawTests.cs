@@ -16,7 +16,7 @@ namespace Puck.World.Server.Tests;
 public sealed class BodyScaleLawTests {
     private static readonly FixedQ4816 EnvelopeMin = FixedQ4816.FromDouble(value: 0.05);
     private static readonly FixedQ4816 EnvelopeMax = FixedQ4816.One;
-    private static readonly ulong StepWidth = Puck.Hosting.EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+    private static readonly ulong StepWidth = Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: SimulationRateHz);
 
     // The shipped world's own platform/walker/gravity recipe (see ConstantUpLipContactLawTests.PlatformDocument),
     // with a bodies.scaleRow cell layered on top so the contact resolve runs against a real collider-bearing

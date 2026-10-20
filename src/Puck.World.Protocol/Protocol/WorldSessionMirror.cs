@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
@@ -611,7 +610,7 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             Volatile.Write(
                 location: ref m_stepSecondsBits,
-                value: BitConverter.SingleToInt32Bits(value: ((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)))
+                value: BitConverter.SingleToInt32Bits(value: ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks)))
             );
             var arrival = Stopwatch.GetTimestamp();
 

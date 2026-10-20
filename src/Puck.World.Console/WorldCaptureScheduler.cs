@@ -7,7 +7,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.World.Client;
@@ -267,13 +266,13 @@ public sealed class WorldCaptureScheduler {
     /// <summary>The host time, in seconds, one capture may hold the clock while the engine is ready.</summary>
     public const int HoldBudgetSeconds = 60;
     /// <summary><see cref="HoldBudgetSeconds"/> in engine ticks, the unit a holding host withholds time in.</summary>
-    public const ulong HoldBudgetTicks = (HoldBudgetSeconds * EngineTicks.PerSecond);
+    public const ulong HoldBudgetTicks = (HoldBudgetSeconds * FixedTickConversion.TicksPerSecond);
     /// <summary>The host time, in seconds, one capture may hold the clock while the engine is not ready:
     /// the engine's pipeline set building on a cold driver cache, or rebuilding after a device loss.
     /// The calling gate separately bounds the whole run.</summary>
     public const int BuildHoldBudgetSeconds = 180;
     /// <summary><see cref="BuildHoldBudgetSeconds"/> in engine ticks.</summary>
-    public const ulong BuildHoldBudgetTicks = (BuildHoldBudgetSeconds * EngineTicks.PerSecond);
+    public const ulong BuildHoldBudgetTicks = (BuildHoldBudgetSeconds * FixedTickConversion.TicksPerSecond);
 
     /// <summary>Answers a host that holds its clock: whether to withhold its next step because a capture armed at the
     /// last published tick is still neither served nor refused. The render chain may not be able to serve it yet for

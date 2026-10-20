@@ -1,5 +1,5 @@
 using Puck.Abstractions.Sources;
-using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Client.Tests;
@@ -38,7 +38,7 @@ public sealed class KeyedDependencyGateLawTests {
         var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var theme = new WorldThemeResolve(domains: new WorldValueDomainGuard());
 
-        mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
+        mirror.Advance(engineTick: (FixedTickConversion.TicksPerSecond / 4UL), tick: 1UL);
 
         var resolutions = 0;
 

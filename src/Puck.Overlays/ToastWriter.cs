@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Overlays;
 
@@ -29,7 +29,7 @@ public sealed class ToastWriter {
 
     // Lifetime in DETERMINISTIC engine ticks (content tick, never wall clock); the fade window rides the live
     // theme's dur.med, so it recomputes from m_theme.Current per Emit rather than latching once.
-    private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
+    private static readonly ulong DurationTicks = (3UL * FixedTickConversion.TicksPerSecond);
 
     private readonly IOverlayToastSource m_source;
     private readonly OverlayThemeStore m_theme;
@@ -145,7 +145,7 @@ public sealed class ToastWriter {
         }
 
         var theme = m_theme.Current;
-        var fadeTicks = ((ulong)((theme.Motion.DurMed / 1000f) * EngineTicks.PerSecond));
+        var fadeTicks = ((ulong)((theme.Motion.DurMed / 1000f) * FixedTickConversion.TicksPerSecond));
 
         // Opacity-only exit: full until the trailing dur.med window, then a linear fade.
         var remaining = (DurationTicks - age);

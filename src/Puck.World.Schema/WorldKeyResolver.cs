@@ -455,7 +455,7 @@ public static class WorldKeyResolver {
 
         var period = WorldClocks.PeriodTicks(clock: clock);
         var start = WorldClocks.StartTicks(clock: clock);
-        var periodSeconds = (((double)period) / EngineTicks.PerSecond);
+        var periodSeconds = (((double)period) / FixedTickConversion.TicksPerSecond);
         var perPeriod = (periodSeconds * PhaseIntegral(
             phase: 1d,
             span: clock.Span,

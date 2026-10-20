@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -44,24 +45,24 @@ public sealed class WindIntegralLawTests {
 
     [Fact]
     public void A_keyed_rate_moves_one_ticks_worth_across_a_key() {
-        var key = (30UL * EngineTicks.PerSecond);
-        var perTick = (1d / EngineTicks.PerSecond);
+        var key = (30UL * FixedTickConversion.TicksPerSecond);
+        var perTick = (1d / FixedTickConversion.TicksPerSecond);
 
         // Just before the key the wind is 1 and at the key it steps to 3: each step is one tick's worth of its rate.
         Assert.Equal(expected: (1d * perTick), actual: Step(tick: (key - 1UL)), precision: 9);
         Assert.Equal(expected: (3d * perTick), actual: Step(tick: key), precision: 9);
-        Assert.InRange(actual: Step(tick: (key + (7UL * EngineTicks.PerSecond))), high: (3d * perTick), low: (2d * perTick));
+        Assert.InRange(actual: Step(tick: (key + (7UL * FixedTickConversion.TicksPerSecond))), high: (3d * perTick), low: (2d * perTick));
 
         // Red leg: the rate times the elapsed time at each key's own rate jumps by the whole difference in rate.
-        var naiveBefore = (RateAt(tick: (key - 1UL)) * ((key - 1UL) / ((double)EngineTicks.PerSecond)));
-        var naiveAfter = (RateAt(tick: (key + 1UL)) * ((key + 1UL) / ((double)EngineTicks.PerSecond)));
+        var naiveBefore = (RateAt(tick: (key - 1UL)) * ((key - 1UL) / ((double)FixedTickConversion.TicksPerSecond)));
+        var naiveAfter = (RateAt(tick: (key + 1UL)) * ((key + 1UL) / ((double)FixedTickConversion.TicksPerSecond)));
 
         Assert.True(condition: (Math.Abs(value: (naiveAfter - naiveBefore)) > 1e-3d));
     }
     [Fact]
     public void A_keyed_rate_is_continuous_where_its_period_ends_and_past_two_to_the_thirty_two() {
         var period = WorldClocks.PeriodTicks(clock: Clock);
-        var perTick = (1d / EngineTicks.PerSecond);
+        var perTick = (1d / FixedTickConversion.TicksPerSecond);
         // The last segment falls linearly from 2 to the first key's 1, which it reaches as the period ends.
         var wrapRate = 1d;
 
@@ -79,7 +80,7 @@ public sealed class WindIntegralLawTests {
         const ulong Stride = 100UL;
 
         for (var tick = 0UL; (tick < period); tick += Stride) {
-            total += (RateAt(tick: (tick + (Stride / 2UL))) * (Stride / ((double)EngineTicks.PerSecond)));
+            total += (RateAt(tick: (tick + (Stride / 2UL))) * (Stride / ((double)FixedTickConversion.TicksPerSecond)));
         }
 
         Assert.Equal(

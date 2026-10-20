@@ -12,6 +12,7 @@ using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
+using Puck.Maths;
 using Puck.Testing;
 
 using Xunit;
@@ -239,7 +240,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                     inputRouter: m_router,
                     registry: registry,
                     simulation: Simulation));
-            m_stepTicks = EngineTicks.PerRate(ratePerSecond: Simulation.RatePerSecond);
+            m_stepTicks = FixedTickConversion.PerRate(ratePerSecond: Simulation.RatePerSecond);
         }
 
         public WorldCaptureScheduler Scheduler { get; }

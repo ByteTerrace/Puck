@@ -5,6 +5,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.Launcher.Tests;
@@ -12,13 +13,13 @@ namespace Puck.Launcher.Tests;
 /// <summary>Device-free laws for the clock and recovery boundaries of the real offscreen host.</summary>
 public sealed class OffscreenBoundaryLawTests {
     private const uint Rate = 30U;
-    private const ulong StepTicks = (EngineTicks.PerSecond / Rate);
+    private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / Rate);
 
     private sealed class ManualClock : TimeProvider {
         private long m_now;
 
         public bool AdvancesOnRead { get; init; }
-        public override long TimestampFrequency => ((long)EngineTicks.PerSecond);
+        public override long TimestampFrequency => ((long)FixedTickConversion.TicksPerSecond);
 
         public void Advance(long ticks) => _ = Interlocked.Add(location1: ref m_now, value: ticks);
         public override long GetTimestamp() => (AdvancesOnRead
@@ -228,11 +229,11 @@ public sealed class OffscreenBoundaryLawTests {
         var interval = TickClock.Start(time: host.Services.GetRequiredService<TimeProvider>());
 
         time.Advance(ticks: (3L * time.TimestampFrequency));
-        Assert.Equal(expected: (3UL * EngineTicks.PerSecond), actual: input.NowTicks);
+        Assert.Equal(expected: (3UL * FixedTickConversion.TicksPerSecond), actual: input.NowTicks);
         Assert.Equal(expected: input.NowTicks, actual: interval.Sample());
         time.Advance(ticks: ((long)StepTicks));
         Assert.Equal(expected: StepTicks, actual: interval.Sample());
-        Assert.Equal(expected: ((3UL * EngineTicks.PerSecond) + StepTicks), actual: input.NowTicks);
+        Assert.Equal(expected: ((3UL * FixedTickConversion.TicksPerSecond) + StepTicks), actual: input.NowTicks);
     }
     /// <summary>Each launcher host registers its own pacing, the one property a replay drive stepping on its behalf
     /// reads: the offscreen host one tick per produced frame, the windowed and headless hosts the wall clock.</summary>

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.Shaders;
 using Puck.World;
@@ -138,7 +137,7 @@ public sealed class ParityBindingReference {
 
             if (
                 (rateHz <= 0) ||
-                ((EngineTicks.PerSecond % ((ulong)rateHz)) != 0UL)
+                ((FixedTickConversion.TicksPerSecond % ((ulong)rateHz)) != 0UL)
             ) {
                 throw new InvalidDataException(message: $"the world's simulation rate {rateHz} Hz does not step a whole number of engine ticks.");
             }
@@ -160,7 +159,7 @@ public sealed class ParityBindingReference {
                     keySelector: static pair => pair.Key
                 ),
                 seed: Default(field: "seed", graph: graph, pass: GrainPass).GetUInt32(),
-                stepTicks: (EngineTicks.PerSecond / ((ulong)rateHz)),
+                stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)rateHz)),
                 width: width
             );
 
@@ -188,7 +187,7 @@ public sealed class ParityBindingReference {
         var cell = Math.Max(val1: 1U, val2: At(fallback: m_cellSize, field: "cellSize", pass: PixelatePass, tick: tick));
         var flickerHz = At(fallback: m_flickerHz, field: "flickerHz", pass: GrainPass, tick: tick);
         var seed = At(fallback: m_seed, field: "seed", pass: GrainPass, tick: tick);
-        var tickRate = ((uint)EngineTicks.PerSecond);
+        var tickRate = ((uint)FixedTickConversion.TicksPerSecond);
         var grainFrame = unchecked((((uint)(tick * m_stepTicks)) / Math.Max(val1: 1U, val2: (tickRate / Math.Max(val1: 1U, val2: flickerHz)))));
         var grainKey = InvertibleBitMix.Mix(value: unchecked(seed ^ (grainFrame * 0x9E3779B9u)));
 
