@@ -145,7 +145,7 @@ public static class RuleReads {
             }
 
             admitted++;
-            sum = RuleWorkBudget.SaturatingAdd(
+            sum = BinaryIntegerFunctions.AddSaturating(
                 left: sum,
                 right: value
             );
