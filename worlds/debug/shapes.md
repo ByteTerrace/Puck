@@ -9,7 +9,8 @@ scrubbed. [`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports
 it, expands `galleryPrototypes()` in its `prototypes` block,
 `galleryPlacements()` in its `placements` block and `galleryState()` in its
 `state.world` block, and declares the font the labels emboss in. The gaming
-devices stand on their own row west of the spawn: [`devices.md`](devices.md).
+devices stand on their own row west of the spawn: [`devices.md`](devices.md),
+and the chess table ahead and left of it: [`chess.md`](chess.md).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, toward the
 origin. The plinth is the exhibit's last shape, so an exhibit's subtraction or

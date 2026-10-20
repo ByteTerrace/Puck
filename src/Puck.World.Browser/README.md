@@ -496,7 +496,6 @@ full depth adds the semantic tier as a following unit.
 | Root | Source tier | Semantic tier | Root compiles | Basis compiles |
 |---|---:|---:|---:|---:|
 | `genesis/card.puck` (3,862-line `.puck` basis) | 20 ms | 6,313 ms | 1 | 2 |
-| `parlor/chess.puck` (`.puck` basis) | 461 ms | 148 ms | 1 | 2 |
 | `rulepush/rulepush.puck` (4 worlds, module imports, no runtime basis) | 1,102 ms | 397 ms | 1 | 0 |
 
 The semantic tier composes the root's graph twice (validation and reference

@@ -152,7 +152,7 @@ For repeated launches, publish once for the target desktop and run that artifact
 
 ```powershell
 dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false -o artifacts/world
-dotnet artifacts/world/Puck.World.dll --world worlds/parlor/chess.puck
+dotnet artifacts/world/Puck.World.dll --world worlds/debug
 ```
 
 Use `linux-x64` for a Linux desktop. World publishes with
@@ -1352,10 +1352,10 @@ row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 `boneHolder` and `reporter` admit the garden's full body-index range. This
 identity data belongs to the garden rather than an imported game.
 
-Physical chess is not part of the shipped island: it is the Parlor package's
-[`chess.puck`](../../experimental/worlds/parlor/chess.puck), whose
-[README](../../experimental/worlds/parlor/README.md) covers play, its computer opponent, and
-verification. Its board uses the tabletop primitive (see the
+Physical chess stands in the debug world: its chess table,
+[`chess.puck`](../../worlds/debug/chess.puck), whose
+[notes](../../worlds/debug/chess.md) cover play, its computer opponent, and
+its scenarios. Its board uses the tabletop primitive (see the
 [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
 and `world.tabletop` reads the board's frame, observation, and bound rows.
 

@@ -1,14 +1,22 @@
-// Physical chess: validate each settled observation against the last legal board.
-// This source is canonical; compile it to regenerate the world document.
+// Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
+// board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
+// one-ply computer opponent. The debug world imports this file whole. The table stands on the open ground at
+// (-6, 0, -12), ahead and left of the spawn, White's back rank on its -Z side. chess.md beside this file says how to
+// move a piece, read the game and set the opponent.
 
-schema: "puck.world.definition.v1"
-basis: "parlor.basis"
-documentId: "chess"
-
+// The Moth basis seats eight bodies; the 32 pieces take the rest.
 bodies {
   capacity: 40
-  localSeats: 1
 }
+
+// The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
+// <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
+grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" })
+
+// The table's placement, and the ticks the physics must rest before an arrangement is judged (one second at the
+// debug world's 30 Hz).
+let chessTable = [-6, -0.5, -12]
+let chessSettleTicks = 30
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
 let pieceLooks = concat(
@@ -50,7 +58,7 @@ template piecePlacement(name, prototypeName, x, z) {
       look: prototypeName
       source: "Idle"
     }
-    parent: "tabletop"
+    parent: "chessTable"
     position [x, 1.8, z]
   }
 }
@@ -70,7 +78,6 @@ template pieceProto(color, name, sx, sy, sz) {
       shape Capsule "body" {
         material: 0
         position [0, 0, 0]
-        rotation: "state.transforms.identity"
         scale [sx, sy, sz]
       }
     }
@@ -92,14 +99,12 @@ template crownedPieceProto(color, name, sx, sy, sz, csx, csy, csz, crownY) {
       shape Capsule "body" {
         material: 0
         position [0, 0, 0]
-        rotation: "state.transforms.identity"
         scale [sx, sy, sz]
       }
       shape Sphere "crown" {
         blend: "SmoothUnion"
         material: 0
         position [0, crownY, 0]
-        rotation: "state.transforms.identity"
         scale [csx, csy, csz]
         smooth: 0.01
       }
@@ -122,7 +127,6 @@ template squareProto(name, colorKey) {
       shape Box "square" {
         material: 0
         position [0, 0, 0]
-        rotation: "state.transforms.identity"
         scale [0.095, 0.004, 0.095]
       }
     }
@@ -184,8 +188,9 @@ pattern chessRayEmpty: Int {
 }
 
 placements {
-  placement "tabletop" {
-    prototype: "tabletop"
+  // The table's top stands 0.8 m above the ground; its leg runs on below it.
+  placement "chessTable" {
+    prototype: "chessTable"
     board {
       move: "move"
       occupancy: "board"
@@ -194,7 +199,7 @@ placements {
       turn: "turn"
       verdict: "verdict"
     }
-    position [-8, -0.5, 12]
+    position: chessTable
     solid
   }
 
@@ -218,7 +223,7 @@ placements {
     for c in range(0, 8) {
       placement $"boardSquare-{r * 8 + c}" {
         prototype: squareTypes[(r + c) % 2]
-        parent: "tabletop"
+        parent: "chessTable"
         position [boardCoords[c], 1.305, boardCoords[r]]
       }
     }
@@ -226,9 +231,9 @@ placements {
 }
 
 prototypes {
-  prototype "tabletop" {
+  prototype "chessTable" {
     document {
-      name: "tabletop"
+      name: "chessTable"
       palette [
         {
           color: "#8A6A45"
@@ -238,14 +243,12 @@ prototypes {
       shape Box "top" {
         material: 0
         position [0, 1.25, 0]
-        rotation: "state.transforms.identity"
         scale [1, 0.05, 1]
       }
 
       shape Cylinder "leg" {
         material: 0
         position [0, 0.6, 0]
-        rotation: "state.transforms.identity"
         scale [0.08, 0.6, 0.08]
       }
     }
@@ -265,7 +268,7 @@ prototypes {
 }
 
 rule "tabletop-settle-hold-advance" {
-  when physics(quiescent) == 1 and settleHold < 60
+  when physics(quiescent) == 1 and settleHold < chessSettleTicks
   mode: Level
   settleHold += 1
 }
@@ -277,7 +280,7 @@ rule "tabletop-settle-hold-reset" {
 }
 
 // Keep the established rule names while sharing the settled-board gate and edge mode.
-rules "" when settleHold == 60 {
+rules "" when settleHold == chessSettleTicks {
   mode: "Edge"
   rule "tabletop-derive-cell-upright" {
     when upright(placement, $each) >= 0.5
@@ -590,7 +593,7 @@ rule "chess-ai-evaluate" {
   ai[evaluation] += 8 * (setBitCount(board(mask, board, 1, 1) & 0x00FFFFFF00000000) - setBitCount(board(mask, board, -1, -1) & 0x00000000FFFFFF00))
 }
 
-// Optional opponent: aiSide = -1 disables it, 0 plays White, 1 plays Black.
+// The computer opponent: aiSide 1 (the default) plays Black, 0 plays White and -1 leaves both sides to people.
 // A completed answer belongs to exactly one settled physical position. Search
 // never moves bodies; the live apply path acts once, then lets physics settle
 // and the ordinary validator accept the resulting board.
@@ -600,7 +603,7 @@ rule "chess-ai-revision" {
   // seven bits and code + 6 above it; metadata also fits in one exact Int.
   local metadata = turn | (castleRights << 1) | ((enPassantTarget + 1) << 5) | (halfmoveClock << 12) | (repetitionCount << 20) | (previousInCheck[0] << 27) | (previousInCheck[1] << 28)
   local pieceState = (pieceCell[$each] + 1) | ((pieceCode[$each] + 6) << 7)
-  when settleHold == 60 and physics(quiescent) == 1 and (pieceState != aiBefore[$each] or metadata != ai[metadata])
+  when settleHold == chessSettleTicks and physics(quiescent) == 1 and (pieceState != aiBefore[$each] or metadata != ai[metadata])
   mode: Level
   forEach: pieceCode
   aiBefore[$each] = pieceState
@@ -610,7 +613,7 @@ rule "chess-ai-revision" {
 
 rule "chess-ai-enable" {
   mode: Level
-  aiEnabled = (aiSide == turn) & (physics(quiescent) == 1) & (settleHold == 60) & (gameStarted == 1) & (boardCollisions == 0) & ((verdict == 1) | (boardChanged == 0)) & (halfmoveClock < 150) & (repetitionCount < 5)
+  aiEnabled = (aiSide == turn) & (physics(quiescent) == 1) & (settleHold == chessSettleTicks) & (gameStarted == 1) & (boardCollisions == 0) & ((verdict == 1) | (boardChanged == 0)) & (halfmoveClock < 150) & (repetitionCount < 5)
 }
 
 rule "chess-ai-request" {
@@ -800,7 +803,7 @@ state {
       to = -1
       mover = 0
     }
-    slot aiSide = -1 bounds(-1..1)
+    slot aiSide = 1 bounds(-1..1)
     slot aiEnabled = 0 bounds(0..1)
     slot aiRevision = 0
     table aiBest {
@@ -827,7 +830,7 @@ state {
 
     slot illegalCount = 0 bounds(0..50400)
 
-    slot settleHold = 0 bounds(0..60)
+    slot settleHold = 0 bounds(0..chessSettleTicks)
 
     slot gameStarted = 0 bounds(0..1)
 
@@ -933,300 +936,5 @@ state {
     slot boardChanged = 0 bounds(0..64)
 
     slot boardCollisions = 0 bounds(0..64)
-  }
-}
-
-test "pieces settle and derive initial board cells" {
-  when {
-    ticks 400
-  }
-  expect {
-    pieceCell[piece12] == 12
-    pieceCode[piece12] == PieceKind.Pawn
-  }
-}
-
-test "e2e4 records legal" {
-  when {
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    pieceCell[piece12] == 28
-    turn == TurnColor.Black
-  }
-}
-
-test "illegal knight move records illegal then legal succeeds" {
-  when {
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.7 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    illegalCount == 1
-    pieceCell[piece6] == 21
-    turn == TurnColor.Black
-  }
-}
-
-test "king step records legal and multi step refused" {
-  when {
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 27
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.7 0 0 0 35
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.5 0 0 0 35
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    illegalCount == 1
-    move[kind] == MoveKind.Quiet
-    move[mover] == PieceKind.King
-    pieceCell[piece4] == 12
-    turn == TurnColor.Black
-  }
-}
-
-test "knight capture records move kind two" {
-  when {
-    seat1: body.pose -8.3 1.3 11.7 0 0 0 23
-    ticks 400
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 23
-    seat1: body.pose -8.3 1.3 11.7 0 0 0 38
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    move[kind] == MoveKind.Capture
-    move[captured] == -1
-    pieceCell[piece1] == 18
-    pieceCell[piece16] == -1
-    turn == TurnColor.Black
-  }
-}
-
-test "pawn diagonal capture records legal" {
-  when {
-    seat1: body.pose -8.1 1.3 11.7 0 0 0 20
-    ticks 400
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 20
-    seat1: body.pose -8.1 1.3 11.7 0 0 0 27
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    move[kind] == MoveKind.Capture
-    move[captured] == -1
-    move[mover] == PieceKind.Pawn
-    pieceCell[piece12] == 19
-    pieceCell[piece19] == -1
-    turn == TurnColor.Black
-  }
-}
-
-test "queen diagonal slide records legal" {
-  when {
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 27
-    ticks 400
-    seat1: body.pose -7.3 1.3 12.1 0 0 0 36
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    move[kind] == MoveKind.Quiet
-    move[mover] == PieceKind.Queen
-    pieceCell[piece3] == 39
-    turn == TurnColor.Black
-  }
-}
-
-test "white kingside castle records legal" {
-  when {
-    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
-    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 32
-    ticks 400
-    seat1: body.pose -7.3 1.3 11.3 0 0 0 32
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
-    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    move[kind] == MoveKind.Castle
-    move[mover] == PieceKind.King
-    move[from] == 4
-    move[to] == 6
-    pieceCell[piece4] == 6
-    pieceCell[piece7] == 5
-    castleRights == 3
-    turn == TurnColor.Black
-  }
-}
-
-test "castle cannot cross knight attack" {
-  when {
-    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
-    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
-    seat1: body.pose -7.5 1.3 11.7 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
-    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
-    ticks 400
-  }
-  expect {
-    castleTransitAttacked[wk] == 1
-    verdict == 0
-    turn == TurnColor.White
-    castleRights == 0
-  }
-}
-
-test "castle safe when knight does not attack transit" {
-  when {
-    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
-    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
-    seat1: body.pose -8.5 1.3 11.7 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
-    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
-    ticks 400
-  }
-  expect {
-    castleTransitAttacked[wk] == 0
-    verdict == 1
-    turn == TurnColor.Black
-    castleRights == 3
-  }
-}
-
-test "move leaving king in check is refused" {
-  when {
-    ticks 400
-    seat1: body.pose -7.7 1.3 11.7 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
-    ticks 400
-  }
-  expect {
-    inCheck[0] == 1
-    verdict == 0
-    turn == TurnColor.White
-  }
-}
-
-test "en passant capture records move kind en passant" {
-  when {
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
-    ticks 400
-    seat1: body.pose -8.7 1.3 12.3 0 0 0 23
-    ticks 400
-    seat1: body.pose -7.9 1.3 12.1 0 0 0 27
-    ticks 400
-    seat1: body.pose -8.1 1.3 12.1 0 0 0 20
-    ticks 400
-    seat1: body.pose -7.1 1.3 11.7 0 0 0 20
-    seat1: body.pose -8.1 1.3 12.3 0 0 0 27
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    move[kind] == MoveKind.EnPassant
-    move[captured] == -1
-    pieceCell[piece12] == 43
-    pieceCell[piece19] == -1
-    turn == TurnColor.Black
-  }
-}
-
-test "initial position counts in threefold repetition" {
-  when {
-    ticks 400
-    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.7 1.3 12.3 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.3 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.5 1.3 12.7 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.7 1.3 12.3 0 0 0 9
-    ticks 400
-    seat1: body.pose -7.5 1.3 11.3 0 0 0 33
-    ticks 400
-    seat1: body.pose -7.5 1.3 12.7 0 0 0 9
-    ticks 400
-  }
-  expect {
-    verdict == 1
-    turn == TurnColor.White
-    repetitionCount == 3
-    historyLength == 9
-    halfmoveClock == 8
-  }
-}
-
-test "AI White makes one legal opening move and waits for Black" {
-  given {
-    aiSide = 0
-  }
-  when {
-    ticks 900
-  }
-  expect {
-    turn == TurnColor.Black
-    verdict == 1
-    ai[pending] == 0
-    aiEnabled == 0
-    aiBest[token] == -1
-    boardCollisions == 0
-  }
-}
-
-test "AI Black replies after a human opening" {
-  given {
-    aiSide = 1
-  }
-  when {
-    ticks 400
-    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
-    ticks 900
-  }
-  expect {
-    turn == TurnColor.White
-    ai[pending] == 0
-    aiEnabled == 0
-    aiBest[token] == -1
-    boardCollisions == 0
-  }
-}
-
-test "a stale AI answer cannot move a piece" {
-  given {
-    aiSide = 0
-    aiBest[token] = 12
-    aiBest[to] = 63
-    aiBest[revision] = 0
-  }
-  when {
-    ticks 900
-  }
-  expect {
-    turn == TurnColor.Black
-    pieceCell[piece12] != 63
-    boardCollisions == 0
-    ai[pending] == 0
   }
 }

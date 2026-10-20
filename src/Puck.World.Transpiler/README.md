@@ -409,7 +409,7 @@ since a bare identifier can't spell a number); a key that is not a whole number 
 PUCK064, and a repeated key is PUCK061. `positions(tokenRow)` sets `"valuesFrom"` on `tokenRow` — checked the same
 way `pile`'s `of` is, refusing an unknown row (PUCK059) or one that is not an integer `keysOf` row (PUCK060).
 `inverse(tokens:, codes:)` sets `"inverse": {"tokens":, "codes":}` on the grid's own row (see
-[`StateInverse`](../Puck.State/StateInverse.cs) — the derived-board shape the garden's `chessBoard` `board` row
+[`StateInverse`](../Puck.State/StateInverse.cs) — the derived-board shape the debug world's chess `board` row
 uses), refusing an authored cell body in the same declaration (PUCK065, since a derived board is never also
 authored) and, once both rows are known, an unknown tokens/codes row (PUCK059) or one of the wrong shape or whose
 keys disagree in count or order (PUCK060). `bounds(...)` behaves exactly as a table/slot's own, legal only when
@@ -755,7 +755,7 @@ An empty non-`Int` row also stays explicit because omitted-kind sugar has no aut
 `CanSugarPileRow` sugars an ordered `keysOf` row of boolean-`true` cells as `pile`, printing each cell's key as a
 bare `token`. A pile's body always lowers to a `cells` array (`{ }` to `"cells": []`), so a row with no `cells`
 member falls back to `row { }`. `CanSugarGridRow` sugars a `cellsOf` board as `grid` only when it is the SOLE `state.world` row lying
-over its topology (a topology two board rows share, such as the garden's `board`/`lastLegal`/`plan` over
+over its topology (a topology two board rows share, such as the debug world's chess `board`/`lastLegal`/`plan` over
 `chessBoard`, falls every one of those rows back to `row { }` — one `grid` statement mints one topology and one
 occupancy row) and that topology carries nothing outside `name`/`origin`/`cellSize`/`width`/`depth`/`wrap`/`band`
 (a topology authoring `directions`/`elementAliases` never sugars). `positions(...)` reprints the first OTHER row

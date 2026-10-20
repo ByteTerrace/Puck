@@ -38,7 +38,7 @@ World's publish target regenerates the runtime-specific dependency manifest in
 the publish directory; the portable build's manifest must remain unchanged.
 The target hooks the pinned SDK's dependency selection, so an SDK update must
 verify a real launch of this no-build artifact, including its runtime libraries.
-CI boots chess headlessly from the published artifact and requires a clean
+CI boots the debug world headlessly from the published artifact and requires a clean
 console verdict before uploading it. This checks host packaging, not GPU rendering.
 The download requires .NET 11 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.

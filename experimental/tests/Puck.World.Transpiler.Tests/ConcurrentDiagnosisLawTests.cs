@@ -12,7 +12,6 @@ namespace Puck.World.Transpiler.Tests;
 /// to ending a session only once the diagnosis it started has returned.</summary>
 public sealed class ConcurrentDiagnosisLawTests {
     private static readonly string[] Sources = [
-        "worlds/parlor/chess.puck",
         "worlds/parlor/hearts.puck",
         "src/Puck.World.Transpiler/Samples/state-declarations.synthetic.world.puck",
         "src/Puck.World.Transpiler/Samples/comprehensive.synthetic.world.puck",

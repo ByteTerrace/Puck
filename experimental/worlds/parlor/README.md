@@ -1,10 +1,10 @@
 # Puck Parlor
 
-Puck's first official asset package contains physical chess, Chinese checkers,
+Puck's first official asset package contains Chinese checkers,
 Hearts and Lineup, each with rules and AI authored in Puck DSL. The package is this
 folder and its [manifest](manifest.json); it needs no installer or NuGet package.
 
-All four games inherit [parlor.basis.puck](parlor.basis.puck). It owns the
+All three games inherit [parlor.basis.puck](parlor.basis.puck). It owns the
 window, 60 Hz simulation, controls, seat rig, motion program, collision defaults,
 ground, and presentation theme. Each game owns its board, pieces, rules and AI,
 its local seat, and refines its camera, body capacity and piece-specific physics.
@@ -17,13 +17,12 @@ Puck composes each source with the shared source basis directly. From this
 directory, run any entry point without generating an intermediate document:
 
 ```text
-Puck.World --world chess.puck
 Puck.World --world chinese-checkers.puck
 Puck.World --world hearts.puck
 Puck.World --world lineup.puck
 ```
 
-Copy this folder as-is. `manifest.json` lists the shared basis, the four source
+Copy this folder as-is. `manifest.json` lists the shared basis, the three source
 entry points, and every supporting file. Every path is relative to this folder.
 The manifest is an inventory, not an executable world; pass a game's `.puck`
 source to Puck.
@@ -36,11 +35,9 @@ ignored local output and are not part of this package.
 
 ```text
 puck format --check .
-puck lint chess.puck --strict
 puck lint chinese-checkers.puck --strict
 puck lint hearts.puck --strict
 puck lint lineup.puck --strict
-puck compile chess.puck --validate
 puck compile chinese-checkers.puck --validate
 puck compile hearts.puck --validate
 puck compile lineup.puck --validate
@@ -69,15 +66,13 @@ Move pieces on the table. A settled physical arrangement is checked against the
 last accepted game position; an illegal arrangement does not advance the game.
 The authored tests exercise physical observations and AI through the real World.
 
-Chess tracks captures, promotion, castling, en passant, check and game outcomes.
 Chinese checkers supports adjacent moves and connected jump chains. Hearts has
 four seats, deterministic deals, three-card passing, legal trick play, scoring,
 shooting the moon and a match to 100; its default is one human and three AI seats.
 Hearts is an open tabletop, and each AI reads only its own hand and public play.
 
-For chess, set the `aiSide` state slot to `0` for White, `1` for Black or `-1`
-for two humans. Chinese checkers uses the same slot with zero-based seat numbers
-and `-1` to disable AI. In Hearts, `heartsOptions[aiMask]` selects AI seats:
+Chinese checkers sets its computer seat with the `aiSide` state slot, a
+zero-based seat number, and `-1` to disable AI. In Hearts, `heartsOptions[aiMask]` selects AI seats:
 `0` gives four humans, `14` the default opponents and `15` four AI seats.
 
 ## Lineup
