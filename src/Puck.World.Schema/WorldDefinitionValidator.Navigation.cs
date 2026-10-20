@@ -80,11 +80,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{domain.Name}' is duplicated.");
             }
 
-            if (
-                !float.IsFinite(f: domain.Origin.X) ||
-                !float.IsFinite(f: domain.Origin.Y) ||
-                !float.IsFinite(f: domain.Origin.Z)
-            ) {
+            if (!VectorFunctions.IsFinite(vector: domain.Origin)) {
                 errors.Add(item: $"{path}.origin must be finite.");
             }
             RequirePositive(
@@ -102,17 +98,17 @@ public static partial class WorldDefinitionValidator {
                 name: $"{path}.arrivalDistance",
                 errors: errors
             );
-            RequireNavigationFixedPositive(
+            RequireQuantizesNonZero(
                 value: domain.CellSize,
                 name: $"{path}.cellSize",
                 errors: errors
             );
-            RequireNavigationFixedPositive(
+            RequireQuantizesNonZero(
                 value: domain.AgentRadius,
                 name: $"{path}.agentRadius",
                 errors: errors
             );
-            RequireNavigationFixedPositive(
+            RequireQuantizesNonZero(
                 value: domain.ArrivalDistance,
                 name: $"{path}.arrivalDistance",
                 errors: errors
@@ -147,17 +143,17 @@ public static partial class WorldDefinitionValidator {
                     name: $"{path}.agentHeight",
                     errors: errors
                 );
-                RequireNavigationFixedPositive(
+                RequireQuantizesNonZero(
                     value: domain.ProbeUp,
                     name: $"{path}.probeUp",
                     errors: errors
                 );
-                RequireNavigationFixedPositive(
+                RequireQuantizesNonZero(
                     value: domain.ProbeDown,
                     name: $"{path}.probeDown",
                     errors: errors
                 );
-                RequireNavigationFixedPositive(
+                RequireQuantizesNonZero(
                     value: domain.AgentHeight,
                     name: $"{path}.agentHeight",
                     errors: errors
@@ -323,14 +319,5 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"navigation shared trees declare {sharedWork} expansions per tick; the world maximum is {WorldNavigationCapacity.MaxSharedExpandedPerTick}.");
         }
         return names;
-    }
-    private static void RequireNavigationFixedPositive(float value, string name, List<string> errors) {
-        if (
-            float.IsFinite(f: value) &&
-            (value > 0f) &&
-            (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)
-        ) {
-            errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
-        }
     }
 }

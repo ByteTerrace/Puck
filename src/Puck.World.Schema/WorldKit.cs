@@ -162,7 +162,7 @@ public readonly record struct FixedWorldKit(
                     ? FixedQ4816.FromDouble(value: state.Initial)
                     : FixedQ4816.Zero),
                     InitialTicks: ((state.Kind == ActionStateKind.Timer)
-                    ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: state.Initial))
+                    ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)state.Initial))
                     : 0UL),
                     ResetFact: state.ResetFact,
                     Lifetime: lifetime,
@@ -187,7 +187,7 @@ public readonly record struct FixedWorldKit(
     private static CompiledActionStateEnvelope? CompileEnvelope(ActionStateSlot state) {
         long Compile(float value) => ((state.Kind == ActionStateKind.Counter)
             ? FixedQ4816.FromDouble(value: value).Value
-            : checked((long)FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: value)))
+            : checked((long)FixedTickConversion.DurationEngineTicks(seconds: ((decimal)value)))
         );
 
         return state.Envelope switch {
@@ -362,10 +362,10 @@ public readonly record struct FixedWorldKit(
             ),
             Tuning: tuning,
             AutonomousMotionTicks: ((kit.Autonomy.MotionSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.MotionSeconds))
+            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)kit.Autonomy.MotionSeconds))
             : 0UL),
             AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
+            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)kit.Autonomy.SteeringSeconds))
             : 0UL),
             Rigid: rigid,
             Carry: carry,

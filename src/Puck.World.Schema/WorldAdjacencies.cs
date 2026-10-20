@@ -78,7 +78,7 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
                 break;
             default: {
                     var rotation = FixedQuaternion.FromAxisAngle(
-                        angle: (yaw * WorldAngles.DegreesToRadians),
+                        angle: FixedQ4816.FromDegrees(degrees: yaw),
                         axis: Y
                     );
 
@@ -119,7 +119,7 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
                     // right-handed angle about the frame's own right axis. The cardinal arms above are this arm's
                     // exact quarter-turn values.
                     var rotation = FixedQuaternion.FromAxisAngle(
-                        angle: -(pitch * WorldAngles.DegreesToRadians),
+                        angle: -FixedQ4816.FromDegrees(degrees: pitch),
                         axis: right
                     );
 

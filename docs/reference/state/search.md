@@ -303,8 +303,9 @@ rarely it's been tried. Each of `iterations` rounds (a world job defaults to
    the integer square root of its visits (**progressive widening**), so a
    position with hundreds of candidates grows its children as it is visited.
 3. Plays out from the new child by drawing candidates from the job's own
-   **SplitMix64** stream (a small, fast, deterministic pseudo-random sequence)
-   until no candidate is accepted or the depth cap is reached.
+   `Pcg32XshRr` stream (the plan's draw seed, on the stream the job's ordinal
+   selects), each start an unbiased draw over the position's candidates, until
+   no candidate is accepted or the depth cap is reached.
 4. Reads the score from the side that just moved and folds it back along the
    path, flipping sign at each level.
 
@@ -339,9 +340,10 @@ six-sided dice bake 36 outcomes, and the limit is 256
 (`SearchCapacity.MaxChanceOutcomes`). The runtime reads that table as data and
 never calls a live generator.
 
-- Negamax computes the exact weighted average over every outcome, rounding
-  half away from zero. The sum is held in 128 bits, so it can't overflow.
-- Tree search samples one outcome per playout from the job's stream.
+- Negamax computes the exact weighted average over every outcome, rounding to
+  nearest with ties to even. The sum is held in 128 bits, so it can't overflow.
+- Tree search samples one outcome per playout from the job's stream, with a
+  one-shot alias pick (`WeightedSampler.SampleOnce`).
 
 > [!NOTE]
 > `atDepth` means two different things. For negamax it's the absolute ply,
@@ -569,8 +571,8 @@ The steps are:
 2. `ArenaSearchPlan.TryResolve` turns names into catalog ordinals and refuses a
    plan that names an undeclared row or a generated pool storage row. It also
    refuses `scores` beside a score, `scores` with the MonteCarlo method, and a jump or
-   tandem shape on a job with no board. Its optional `drawSeed` argument seeds a
-   MonteCarlo job's playout stream.
+   tandem shape on a job with no board. Its optional `drawSeed` argument is the
+   master seed a MonteCarlo job's playout stream starts from.
 3. `ArenaSearch.Rebuild` checks rows, judge arena, score availability, the
    `best` keys, admission, and the work minimum, then installs the job set.
 4. `Step` advances every job. When a job finishes, `apply` receives its writes.
@@ -608,9 +610,10 @@ whether it reads the clock, and `TryAdmit` decides admission.
   searches spend the same allowance over more ticks.
 - Any input change restarts a job. A board that keeps settling (a physical piece
   still rolling) restarts the job every tick until it rests.
-- Puck.World seeds every MonteCarlo job's playout stream with 0, so every MonteCarlo job
-  starts from the same draw sequence. A host calling the library directly can
-  pass its own seed to `ArenaSearchPlan.TryResolve`.
+- Puck.World passes the master seed 0. Each MonteCarlo job draws on the stream
+  its ordinal among the installed jobs selects, so no two jobs share a draw
+  sequence. A host calling the library directly can pass its own seed to
+  `ArenaSearchPlan.TryResolve`.
 - A job whose judge rules price past what the work sheet leaves can't be planned.
 
 For the numeric ceilings (`SearchCapacity`), see the table in

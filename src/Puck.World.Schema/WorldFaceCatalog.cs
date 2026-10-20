@@ -266,7 +266,7 @@ public sealed class WorldFaceCatalog {
         }
 
         var placementRotation = FixedQuaternion.FromAxisAngle(
-            angle: (yawDegrees * WorldAngles.DegreesToRadians),
+            angle: FixedQ4816.FromDegrees(degrees: yawDegrees),
             axis: FixedVector3.UnitY
         );
 

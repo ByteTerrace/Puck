@@ -28,9 +28,6 @@ public static class SdfDomainExpansion {
     private static readonly FixedQ4816 MinimumSpacing = FixedQ4816.FromDouble(value: 0.001);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
-    // The product of the two reflections H(a)H(b) as a unit quaternion (b × a, b · a) — the integer-only route from a
-    // mirror to the proper rotation left once H(x̂) is factored out, with no matrix-to-quaternion reconstruction and so
-    // no platform sqrt.
     // Conjugates a branch by a translation to origin — Translate(origin) ∘ branch ∘ Translate(-origin) — the
     // rigid-copy mirror of SdfDomainOps.ApplyOne's Translate(origin)/op/Translate(-origin) point-fold sandwich, so a
     // solid placement's colliders land at the physical positions the render's fold produces. Zero origin returns the
@@ -54,15 +51,27 @@ public static class SdfDomainExpansion {
 
         return toOrigin.Compose(inner: branch.Compose(inner: fromOrigin));
     }
-    private static FixedQuaternion MirrorRemainder(FixedVector3 unitNormal) {
+    private static FixedQuaternion MirrorRemainder(FixedVector3 unitNormal) =>
+        MirrorRemainder(
+            axis: FixedVector3.UnitX,
+            unitNormal: unitNormal
+        );
+    /// <summary>Returns the product of the two reflections <c>H(n)·H(a)</c>, across the planes with unit normals
+    /// <paramref name="unitNormal"/> and <paramref name="axis"/>, as a unit quaternion: the proper rotation left once
+    /// one mirror is factored out of another, built as <c>(a × n, a · n)</c> normalized, with no matrix-to-quaternion
+    /// reconstruction and so no platform square root.</summary>
+    /// <param name="axis">The unit normal of the reflection applied first.</param>
+    /// <param name="unitNormal">The unit normal of the reflection applied second.</param>
+    /// <returns>The unit rotation <c>H(n)·H(a)</c>; the identity when the normals coincide.</returns>
+    public static FixedQuaternion MirrorRemainder(FixedVector3 axis, FixedVector3 unitNormal) {
         var vector = FixedVector3.Cross(
-            left: FixedVector3.UnitX,
+            left: axis,
             right: unitNormal
         );
 
         return new FixedQuaternion(
             W: FixedVector3.Dot(
-                left: FixedVector3.UnitX,
+                left: axis,
                 right: unitNormal
             ),
             X: vector.X,

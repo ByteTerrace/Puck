@@ -48,7 +48,8 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
 /// <param name="ScoresOrdinal">The keyed row holding one score per seat, in the turn row's own ordinal order, or
 /// <c>-1</c>; a level maximizes the mover seat's own entry rather than negating the reply.</param>
-/// <param name="DrawSeed">The draw stream a <see cref="SearchMethod.MonteCarlo"/> job's playouts advance from.</param>
+/// <param name="DrawSeed">The master seed a <see cref="SearchMethod.MonteCarlo"/> job's draw stream starts from; each job
+/// draws on the <see cref="Puck.Maths.Pcg32XshRr"/> stream its ordinal among the installed jobs selects.</param>
 /// <param name="EnabledOrdinal">The enabling slot, or -1 for always enabled.</param>
 /// <param name="RevisionOrdinal">The position revision slot copied into the best output, or -1.</param>
 public sealed record ArenaSearchPlan(
@@ -114,7 +115,7 @@ public sealed record ArenaSearchPlan(
     /// <param name="catalog">The catalog whose ordinals address the arena.</param>
     /// <param name="resolved">The ordinal-addressed plan on success; otherwise <see langword="null"/>.</param>
     /// <param name="reason">Why the plan was refused, or empty on success.</param>
-    /// <param name="drawSeed">The draw stream a <see cref="SearchMethod.MonteCarlo"/> job's playouts advance from.</param>
+    /// <param name="drawSeed">The master seed a <see cref="SearchMethod.MonteCarlo"/> job's draw stream starts from.</param>
     /// <returns><see langword="true"/> when every named row resolved and the plan carries nothing the arena walk
     /// does not run.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="catalog"/> is

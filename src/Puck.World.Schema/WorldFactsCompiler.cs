@@ -400,7 +400,7 @@ public static partial class WorldFactsCompiler {
         var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
 
         if ((WorldTopologyCompilation.Find(definition: context.Definition, name: effect.Topology) is null) ||
-            !float.IsFinite(f: effect.Offset.X) || !float.IsFinite(f: effect.Offset.Y) || !float.IsFinite(f: effect.Offset.Z)) {
+            !VectorFunctions.IsFinite(vector: effect.Offset)) {
             throw new RuleException(detail: "poseCell requires a declared topology and a finite offset", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
@@ -469,9 +469,7 @@ public static partial class WorldFactsCompiler {
         }
         if (effect.Position is { } position) {
             if (
-                !float.IsFinite(f: position.X) ||
-                !float.IsFinite(f: position.Y) ||
-                !float.IsFinite(f: position.Z) ||
+                !VectorFunctions.IsFinite(vector: position) ||
                 !float.IsFinite(f: effect.YawDegrees) ||
                 !float.IsFinite(f: effect.PitchDegrees) ||
                 !float.IsFinite(f: effect.RollDegrees)
@@ -483,8 +481,6 @@ public static partial class WorldFactsCompiler {
                 );
             }
 
-            const double DegreesToRadians = (Math.PI / 180.0);
-
             return new WorldPoseEffect(
                 describe: string.Create(
                     provider: CultureInfo.InvariantCulture,
@@ -493,10 +489,10 @@ public static partial class WorldFactsCompiler {
                 index: index,
                 keyFrom: keyFrom,
                 pose: new CompiledWorldPose(
-                    PitchRadians: FixedQ4816.FromDouble(value: (effect.PitchDegrees * DegreesToRadians)),
+                    PitchRadians: FixedQ4816.FromDegrees(degrees: effect.PitchDegrees),
                     Position: FixedVector3.FromVector3(value: position),
-                    RollRadians: FixedQ4816.FromDouble(value: (effect.RollDegrees * DegreesToRadians)),
-                    YawRadians: FixedQ4816.FromDouble(value: (effect.YawDegrees * DegreesToRadians))
+                    RollRadians: FixedQ4816.FromDegrees(degrees: effect.RollDegrees),
+                    YawRadians: FixedQ4816.FromDegrees(degrees: effect.YawDegrees)
                 ),
                 spawnPoint: string.Empty
             );

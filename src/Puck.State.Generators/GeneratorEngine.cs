@@ -287,13 +287,15 @@ public static partial class GeneratorEngine {
         if (mask.IsEmpty) {
             picked = set.Full.Sample(generator: ref rng);
         } else {
-            Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[GeneratorCapacity.MaxEntriesPerSet];
+            Span<int> elements = stackalloc int[GeneratorCapacity.MaxEntriesPerSet];
+            Span<ulong> weights = stackalloc ulong[GeneratorCapacity.MaxEntriesPerSet];
             var pooled = 0;
             var anyWeight = false;
 
             for (var unit = 0; (unit < units); unit++) {
                 if (!mask.Contains(index: unit)) {
-                    buffer[pooled++] = (unit, set.UnitWeights[unit]);
+                    elements[pooled] = unit;
+                    weights[pooled++] = set.UnitWeights[unit];
                     anyWeight |= (set.UnitWeights[unit] != 0UL);
                 }
             }
@@ -316,10 +318,10 @@ public static partial class GeneratorEngine {
                 mask = default;
                 picked = set.Full.Sample(generator: ref rng);
             } else {
-                picked = SampleAlias(
-                    entries: buffer[..pooled],
-                    generator: ref rng
-                );
+                picked = elements[WeightedSampler.SampleOnce(
+                    generator: ref rng,
+                    weights: weights[..pooled]
+                )];
             }
         }
 
@@ -336,89 +338,6 @@ public static partial class GeneratorEngine {
         foreach (var ch in text) {
             hash.Add(value: ((uint)ch));
         }
-    }
-    // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived unit-index table backed
-    // entirely by stack storage. Entry order, LIFO partition order, UQ0.32 rounding, power-of-two padding, and the
-    // two random advances are deliberately identical, so every stream is a pure function of the entries and the seed.
-    private static int SampleAlias<TGenerator>(ReadOnlySpan<(int Element, ulong Weight)> entries, ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
-        var count = entries.Length;
-        var columnCount = ((int)((uint)count).NextPowerOfTwo());
-        Span<UInt128> scaled = stackalloc UInt128[columnCount];
-        Span<uint> thresholds = stackalloc uint[columnCount];
-        Span<int> aliases = stackalloc int[columnCount];
-        Span<int> small = stackalloc int[columnCount];
-        Span<int> large = stackalloc int[columnCount];
-        var totalWeight = UInt128.Zero;
-
-        // Padding columns are zero-weight entries. Stack storage is otherwise uninitialized, so make that semantic
-        // input explicit before filling the real entry prefix.
-        scaled.Clear();
-
-        for (var index = 0; (index < count); index++) {
-            totalWeight += entries[index].Weight;
-        }
-
-        for (var index = 0; (index < count); index++) {
-            scaled[index] = (((UInt128)entries[index].Weight) * ((uint)columnCount));
-        }
-
-        var smallCount = 0;
-        var largeCount = 0;
-
-        for (var index = 0; (index < columnCount); index++) {
-            if (scaled[index] < totalWeight) {
-                small[smallCount++] = index;
-            } else {
-                large[largeCount++] = index;
-            }
-        }
-
-        while (
-            (smallCount > 0) &&
-            (largeCount > 0)
-        ) {
-            var s = small[--smallCount];
-            var l = large[--largeCount];
-            var threshold = ((ulong)(((scaled[s] << 32) + (totalWeight >> 1)) / totalWeight));
-
-            if (threshold > uint.MaxValue) {
-                aliases[s] = s;
-                thresholds[s] = uint.MaxValue;
-            } else {
-                aliases[s] = l;
-                thresholds[s] = ((uint)threshold);
-            }
-
-            scaled[l] -= (totalWeight - scaled[s]);
-
-            if (scaled[l] < totalWeight) {
-                small[smallCount++] = l;
-            } else {
-                large[largeCount++] = l;
-            }
-        }
-
-        while (largeCount > 0) {
-            var index = large[--largeCount];
-
-            aliases[index] = index;
-            thresholds[index] = uint.MaxValue;
-        }
-
-        while (smallCount > 0) {
-            var index = small[--smallCount];
-
-            aliases[index] = index;
-            thresholds[index] = uint.MaxValue;
-        }
-
-        var column = ((int)(generator.NextUInt32() & ((uint)(columnCount - 1))));
-        var selected = ((generator.NextUInt32() < thresholds[column])
-            ? column
-            : aliases[column]
-        );
-
-        return entries[selected].Element;
     }
     // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
     // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share

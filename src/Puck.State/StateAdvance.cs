@@ -115,16 +115,7 @@ public sealed record StateAdvance(long PerSecondNumerator, long PerSecondDenomin
         // bound is itself a long, so saturation can only move a value that is already outside every bound, and it
         // moves it to the same side. Stating the envelope once (StateRow.ClampToEnvelope) is what keeps this read
         // clamp and the rule-effect write's "could this move the cell" test from drifting apart.
-        var raw = ((delta >= 0L)
-            ? ((baseValue > (long.MaxValue - delta))
-                ? long.MaxValue
-                : (baseValue + delta))
-            : ((baseValue < (long.MinValue - delta))
-                ? long.MinValue
-                : (baseValue + delta)
-        ));
-
-        return row.ClampToEnvelope(value: raw);
+        return row.ClampToEnvelope(value: baseValue.AddSaturating(right: delta));
     }
 
     // |rate| · scale allocated over the elapsed engine ticks, as ⌊elapsed · |rate| · scale / (denominator ·
