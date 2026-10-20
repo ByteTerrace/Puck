@@ -1,6 +1,7 @@
 #ifndef SHADE_SDF_SKY_COMMON_HLSLI
 #define SHADE_SDF_SKY_COMMON_HLSLI
 #include "../isa/sdf-sky-kinds.hlsli"
+#include "../field/sdf-quaternion.hlsli"
 // Where a layer is evaluated: the world direction (a disc sits where its light shines from), the layer-frame direction
 // (the sky frame, then the layer's rotation), and the sky's quality tier, below SDF_SKY_TIER_HIGH of which a kind takes
 // its reduced form, and the packed layer ordinal indexing this consumer's fitted infinity data.
@@ -16,10 +17,6 @@ float3 sdfSkyFrameDirection(float3 direction) {
     SdfSkyBlock sky = sdfSky[0];
 
     return float3(dot(direction, sky.FrameRight), dot(direction, sky.FrameUp), dot(direction, sky.FrameForward));
-}
-// A direction rotated by a unit quaternion: v + 2·q × (q × v + w·v) (SdfSkyEnvironment.Rotate).
-float3 sdfSkyRotate(float3 direction, float4 rotation) {
-    return (direction + (2.0 * cross(rotation.xyz, (cross(rotation.xyz, direction) + (rotation.w * direction)))));
 }
 // A step from zero below an edge to one at it, widened downward over a soft width; a hard step without one.
 float sdfSkyRise(float edge, float soft, float value) {

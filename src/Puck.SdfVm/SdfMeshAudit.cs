@@ -399,7 +399,7 @@ public static class SdfMeshAudit {
     }
     // The angle between two unit vectors, in degrees; a right angle where either is zero.
     private static float Angle(Vector3 first, Vector3 second) =>
-        (MathF.Acos(x: Math.Clamp(value: Vector3.Dot(vector1: first, vector2: second), min: -1f, max: 1f)) * (180f / MathF.PI));
+        float.RadiansToDegrees(radians: MathF.Acos(x: Math.Clamp(value: Vector3.Dot(vector1: first, vector2: second), min: -1f, max: 1f)));
     private static FixedPosition Fixed(Vector3 point) => FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point));
     // The field's magnitude at a point, flagged past the threshold; NaN where the field answers nothing.
     private static float Off(SdfFieldEvaluator field, List<Sample> flagged, float cell, Vector3 point, float threshold) {

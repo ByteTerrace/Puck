@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.SignedDistance;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -44,7 +45,7 @@ public sealed record SdfMesh {
         }
 
         foreach (var position in positions.Span) {
-            if (!IsFinite(value: position)) {
+            if (!VectorFunctions.IsFinite(vector: position)) {
                 throw new ArgumentException(
                     message: "Every mesh position must be finite.",
                     paramName: nameof(positions)
@@ -74,7 +75,7 @@ public sealed record SdfMesh {
         );
 
         foreach (var normal in normals.Span) {
-            if (!IsFinite(value: normal)) {
+            if (!VectorFunctions.IsFinite(vector: normal)) {
                 throw new ArgumentException(
                     message: "Every mesh normal must be finite.",
                     paramName: nameof(normals)
@@ -95,7 +96,7 @@ public sealed record SdfMesh {
             );
         }
         foreach (var member in members.Span) {
-            if (!IsFinite(value: member.Position) || !float.IsFinite(f: member.Orientation.X) || !float.IsFinite(f: member.Orientation.Y) || !float.IsFinite(f: member.Orientation.Z) || !float.IsFinite(f: member.Orientation.W)) {
+            if (!VectorFunctions.IsFinite(vector: member.Position) || !VectorFunctions.IsFinite(rotation: member.Orientation)) {
                 throw new ArgumentException(
                     message: "Every member's pose must be finite.",
                     paramName: nameof(members)
@@ -144,11 +145,6 @@ public sealed record SdfMesh {
     /// draw; none when every vertex rides its draw.</summary>
     public ReadOnlyMemory<byte> VertexMembers { get; }
 
-    private static bool IsFinite(Vector3 value) => (
-        float.IsFinite(f: value.X) &&
-        float.IsFinite(f: value.Y) &&
-        float.IsFinite(f: value.Z)
-    );
     private static void RequireAttribute(int count, int expected, string name, string per) {
         if ((count != 0) && (count != expected)) {
             throw new ArgumentException(

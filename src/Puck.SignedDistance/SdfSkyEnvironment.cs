@@ -262,7 +262,8 @@ public static partial class SdfSkyEnvironment {
         y: Vector3.Dot(vector1: direction, vector2: block.FrameUp),
         z: Vector3.Dot(vector1: direction, vector2: block.FrameForward)
     );
-    /// <summary>Returns a direction rotated by a layer's unit quaternion, v + 2·q × (q × v + w·v).</summary>
+    /// <summary>Returns a direction rotated by a layer's unit quaternion, v + 2·q × (q × v + w·v): the CPU reference of the
+    /// kernels' <c>rotatePointByQuaternion</c> (<c>field/sdf-quaternion.hlsli</c>), which the sky reads its layers through.</summary>
     /// <param name="direction">The direction.</param>
     /// <param name="rotation">The quaternion (x, y, z, w).</param>
     /// <returns>The rotated direction.</returns>

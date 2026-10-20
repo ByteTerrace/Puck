@@ -65,7 +65,7 @@ float4 sdfSkyCloudsLayer(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkySample sa
 
     // The light in the layer frame, then in the layer's turned frame (the rotation the layer point took), so the lighting
     // follows the wind.
-    float3 sun = sdfSkyRotate(sdfSkyFrameDirection(clouds.LightDirection), layer.Rotation);
+    float3 sun = rotatePointByQuaternion(sdfSkyFrameDirection(clouds.LightDirection), layer.Rotation);
     float2 sunTurned = float2(((sun.x * cosAngle) - (sun.z * sinAngle)), ((sun.x * sinAngle) + (sun.z * cosAngle)));
     float thicknessX = sdfSkyCloudThickness(clouds, layer, (p + float2(clouds.NormalTap, 0.0)), threshold, octaves);
     float thicknessY = sdfSkyCloudThickness(clouds, layer, (p + float2(0.0, clouds.NormalTap)), threshold, octaves);

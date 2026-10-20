@@ -4,6 +4,7 @@ using System.Numerics;
 
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -369,9 +370,9 @@ public sealed class SdfFieldSlice {
     private static void Write(byte[] rgba, int width, int column, int row, Vector3 colour) {
         var at = (((row * width) + column) * 4);
 
-        rgba[at] = (byte)Math.Clamp(value: (int)MathF.Round(x: (colour.X * 255f)), min: 0, max: 255);
-        rgba[(at + 1)] = (byte)Math.Clamp(value: (int)MathF.Round(x: (colour.Y * 255f)), min: 0, max: 255);
-        rgba[(at + 2)] = (byte)Math.Clamp(value: (int)MathF.Round(x: (colour.Z * 255f)), min: 0, max: 255);
+        rgba[at] = VectorFunctions.ToUnorm8(value: colour.X);
+        rgba[(at + 1)] = VectorFunctions.ToUnorm8(value: colour.Y);
+        rgba[(at + 2)] = VectorFunctions.ToUnorm8(value: colour.Z);
         rgba[(at + 3)] = 255;
     }
 
