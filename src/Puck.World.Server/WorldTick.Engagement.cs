@@ -203,21 +203,36 @@ public sealed partial class WorldTick {
     /// without an <c>engageChannel</c>-bearing screen takes, which is every shipped world today).</param>
     /// <param name="screens">Per-seat-slot output: the eligible screen's engine index paired with <paramref name="ordinals"/>'s
     /// entry, or <c>-1</c> alongside a <c>-1</c> ordinal.</param>
-    private void ResolveEngageProbes(Span<int> ordinals, Span<int> screens) {
+    /// <param name="leaving">Per-seat-slot output: whether the probe LEAVES its screen rather than engaging it. The
+    /// same button is the way out: a seat captured on a screen whose route names an engage channel probes that
+    /// channel, and its rising edge dissolves the seat's applications (see <see cref="ResolveLeaveProbe"/>).</param>
+    private void ResolveEngageProbes(Span<int> ordinals, Span<int> screens, Span<bool> leaving) {
         ordinals.Fill(value: -1);
         screens.Fill(value: -1);
+        leaving.Fill(value: false);
 
         var screenRows = Host.Document.Definition.Screens;
 
         for (var slot = 0; (slot < Host.Population.LocalSeatCount); slot++) {
-            if (
-                (Host.Body(index: slot) is not { } body) ||
-                body.Engaged
-            ) {
+            if (Host.Body(index: slot) is not { } body) {
                 continue;
             }
 
             var principal = Principal.Seat(slot: slot);
+
+            if (body.Engaged) {
+                if (ResolveLeaveProbe(
+                    ordinal: out var leaveOrdinal,
+                    principal: principal,
+                    screenIndex: out var leaveScreen
+                )) {
+                    ordinals[slot] = leaveOrdinal;
+                    screens[slot] = leaveScreen;
+                    leaving[slot] = true;
+                }
+
+                continue;
+            }
 
             // A seat that has composed anything beyond its own body keeps that set — composing off an unrelated
             // button press over an active possession/mirror is not this feature's job.
@@ -263,6 +278,40 @@ public sealed partial class WorldTick {
                 break;
             }
         }
+    }
+
+    // The leave half of the context button: a seat captured on a screen (its set holds a screen application and not
+    // its own body) whose route names an engage channel this world resolves probes that channel, and its rising edge
+    // dissolves the set back to the own-body default. The validator refuses an engage channel the route's kit plays
+    // as a pad button, so the press that leaves is never also a machine button.
+    private bool ResolveLeaveProbe(Principal principal, out int ordinal, out int screenIndex) {
+        ordinal = -1;
+        screenIndex = -1;
+
+        foreach (var application in Host.GrantTable.Applications(principal: principal)) {
+            if (application.Target.Kind != GrantSubjectKind.Screen) {
+                continue;
+            }
+
+            foreach (var screen in Host.Document.Definition.Screens) {
+                if (
+                    (screen.Index == application.Target.Value) &&
+                    (screen.Route.EngageChannel is { Length: > 0 } channelName) &&
+                    Host.Population.Channels.TryGetOrdinal(
+                        name: channelName,
+                        ordinal: out ordinal
+                    )
+                ) {
+                    screenIndex = screen.Index;
+
+                    return true;
+                }
+            }
+        }
+
+        ordinal = -1;
+
+        return false;
     }
 
     /// <summary>Determines whether <paramref name="bodyIndex"/> carries a nonzero cell on a state row declaring

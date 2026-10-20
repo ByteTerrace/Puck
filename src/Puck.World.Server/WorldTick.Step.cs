@@ -340,8 +340,10 @@ public sealed partial class WorldTick {
         Span<int> engageProbeOrdinals = stackalloc int[Host.Population.LocalSeatCount];
         Span<int> engageProbeScreens = stackalloc int[Host.Population.LocalSeatCount];
         Span<bool> engageEdges = stackalloc bool[Host.Population.LocalSeatCount];
+        Span<bool> engageProbeLeaving = stackalloc bool[Host.Population.LocalSeatCount];
 
         ResolveEngageProbes(
+            leaving: engageProbeLeaving,
             ordinals: engageProbeOrdinals,
             screens: engageProbeScreens
         );
@@ -437,6 +439,24 @@ public sealed partial class WorldTick {
 
             var principal = Principal.Seat(slot: slot);
             var target = GrantSubject.Screen(index: engageProbeScreens[slot]);
+
+            if (engageProbeLeaving[slot]) {
+                if (
+                    (Host.Engagement.Dissolve(
+                        actingPrincipal: principal,
+                        entityIndex: slot,
+                        targetPrincipal: principal
+                    ) == ControlOutcome.Dissolved) &&
+                    Host.Output.HasNarrationSink
+                ) {
+                    Host.Output.Narrate(
+                        channel: "world.engage",
+                        text: $"[world.engage: {principal.Describe()} left {target.Describe()} — context button]"
+                    );
+                }
+
+                continue;
+            }
 
             if (Host.Engagement.Compose(
                 actingPrincipal: principal,

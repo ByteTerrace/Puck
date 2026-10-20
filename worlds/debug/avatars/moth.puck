@@ -469,6 +469,15 @@ bindingOverlays [
                 ]
               }
               {
+                channel: "interact"
+                id: "interact"
+                scale: 1
+                sources [
+                  "keyboard.e"
+                  "gamepad.buttonWest"
+                ]
+              }
+              {
                 command: "view.override"
                 id: "camera1"
                 sources [
@@ -1720,6 +1729,13 @@ channels [
   {
     composition: true
     name: "start"
+    shape: Binary
+  }
+  // The context button, which the Moth herself ignores: beside an engageable screen naming it as its engage channel,
+  // a press engages that screen and the next press leaves it.
+  {
+    composition: true
+    name: "interact"
     shape: Binary
   }
 ]
