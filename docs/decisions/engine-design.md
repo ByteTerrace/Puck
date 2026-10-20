@@ -138,6 +138,21 @@ in-session operation is a planned integration task, not evidence that an
 underlying library is absent. The [reference-game design](../game/design.md)
 and the [play programme](../plans/play.md) own that experience.
 
+The owner's ruling: console commands are easy to author and compose for safe
+operations, and a new one does not need C# work. A world document authors
+them in its `commands` section from existing verbs: a namespaced name, help
+text, typed parameters with defaults, and the console lines they expand to
+([commands reference](../reference/commands.md#document-authored-commands)).
+The console answers them beside the engine's verbs, in `help`, from a binding
+row or wheel sector, and typed at any console, and `world.reload` changes them
+with the document. Their safety is data rather than trust: an authored command
+runs each line under its caller's own principal and session policy, calls only
+what a binding may name (never an operator verb, never `quit`, never an
+unbindable verb), never takes an engine verb's name, and runs on the
+simulation tick its line applies on, so replay sees what its lines submitted.
+A new C# verb is for an operation no composition of existing verbs can
+express.
+
 ## One live world while the campaign runs
 
 While the current engine campaign is in progress, the debug world

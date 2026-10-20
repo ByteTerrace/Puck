@@ -292,6 +292,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         WorldAffordances.Validate(
             document: probe,
             channels: m_seatBindings.Channels(slot: slot),
+            commands: null,
             seatModes: m_seatBindings.SeatModes(slot: slot),
             errors: vocabularyErrors
         );

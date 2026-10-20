@@ -34,6 +34,7 @@ public static partial class WorldDefinitionValidator {
                     WorldChannelTable.Compile(channels: definition.Channels), stateRows,
                     definition.SeatModes, iconNames, iconsAuthored, errors);
             }
+            ValidateCommands(definition: definition, errors: errors);
             if (definition.ProbesRaw is { Count: > 0 }) {
                 var cameras = new HashSet<string>(collection: definition.Cameras.Select(selector: camera => camera.Name), comparer: StringComparer.Ordinal);
 

@@ -72,6 +72,7 @@ export type WorldDefinition = {
   sets?: (CellSetRow | null)[] | null;
   editor?: WorldEditorDefaults | null;
   timeline?: WorldTimelineSection | null;
+  commands?: (WorldConsoleCommand | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -4548,6 +4549,46 @@ export type WorldCollisionEvents = {
    */
   beginBudget?: number;
 };
+
+export type WorldConsoleCommand = {
+  /**
+   * The command's namespaced name (debug.go), unique within the document and never a registered verb's.
+   */
+  name: string;
+  /**
+   * The help text the listing shows before the command's usage, or null.
+   */
+  help?: string | null;
+  /**
+   * The parameters, in argument order; a required one never follows an optional one.
+   */
+  parameters?: (WorldConsoleCommandParameter | null)[] | null;
+  /**
+   * The console lines the command submits, in order. A {name} placeholder takes a parameter's argument and {{/}} stand for literal braces; the first token, the verb, is literal.
+   */
+  lines?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameter = {
+  /**
+   * The parameter's name, which a line's {name} placeholder substitutes.
+   */
+  name: string;
+  /**
+   * What an argument for it must be.
+   */
+  kind?: WorldConsoleCommandParameterKind;
+  /**
+   * The argument a caller who omits it gets, written as it would be typed; null makes the argument required.
+   */
+  default?: string | null;
+  /**
+   * The admitted values of a Choice parameter, each one plain token; no other kind carries any.
+   */
+  values?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameterKind = "Text" | "Number" | "Integer" | "Choice" | "Body" | "Spawn";
 
 export type WorldContactRequirement = "SmoothUnionContact" | "GradientDerivedUp";
 
