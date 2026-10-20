@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Maths;
 using Puck.SdfVm;
 
 namespace Puck.Cli.Mesh;
@@ -105,8 +106,8 @@ internal static class MeshAuditImage {
     private static void Paint(Vector3 normal, byte[] rgba, int x, int y) {
         var at = (((y * (2 * Side)) + x) * 4);
 
-        rgba[at] = (byte)Math.Clamp(value: (int)(((normal.X * 0.5f) + 0.5f) * 255f), min: 0, max: 255);
-        rgba[at + 1] = (byte)Math.Clamp(value: (int)(((normal.Y * 0.5f) + 0.5f) * 255f), min: 0, max: 255);
-        rgba[at + 2] = (byte)Math.Clamp(value: (int)(((normal.Z * 0.5f) + 0.5f) * 255f), min: 0, max: 255);
+        rgba[at] = VectorFunctions.ToUnorm8(value: ((normal.X * 0.5f) + 0.5f));
+        rgba[at + 1] = VectorFunctions.ToUnorm8(value: ((normal.Y * 0.5f) + 0.5f));
+        rgba[at + 2] = VectorFunctions.ToUnorm8(value: ((normal.Z * 0.5f) + 0.5f));
     }
 }

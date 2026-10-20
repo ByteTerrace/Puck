@@ -94,9 +94,7 @@ float distanceToSegment(float2 p, float2 a, float2 b) {
 }
 
 float sdRoundedBox(float2 p, float2 halfSize, float radius) {
-    float2 q = ((abs(p) - halfSize) + radius);
-
-    return ((length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)) - radius);
+    return (puckBoxDistance2((abs(p) - halfSize) + radius) - radius);
 }
 
 // Coverage of a stroked distance: 1 inside the stroke, 0 outside, an aa-wide ramp between.
