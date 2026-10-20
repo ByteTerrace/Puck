@@ -302,7 +302,6 @@ public sealed partial class WorldPopulation {
     private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];
     private readonly WorldActionStateLane m_actionStateLane = new();
-    private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 LocalForward = new(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.Zero,

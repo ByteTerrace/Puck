@@ -886,11 +886,8 @@ public sealed partial class WorldBody {
                 Z: local.Z
             );
 
-            if (planar.LengthSquared > FixedQ4816.Zero) {
-                m_yaw = FixedQ4816.Atan2(
-                    x: -planar.Z,
-                    y: -planar.X
-                );
+            if (planar != FixedVector3.Zero) {
+                m_yaw = planar.Yaw();
             }
         }
 

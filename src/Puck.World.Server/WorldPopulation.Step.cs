@@ -18,7 +18,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
-            entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
+            entry.ProducerState.ActivityPhase = (phase + (FixedQ4816.Tau * activityUnit));
             entry.ProducerState.ActivityRate = (producer.Scalar(parameter: BodyProducerParameter.ActivityRateBase) + (producer.Scalar(parameter: BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
