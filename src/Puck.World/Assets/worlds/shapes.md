@@ -1,16 +1,27 @@
 # Debug world shape gallery
 
-The debug world lays every authored primitive, prism profile, lift and per-shape
-facet out on the open ground at +X/+Z, one prototype an exhibit, so a change to
-the field, the bake or the renderer shows on every shape at once.
-[`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports it, expands
-`galleryPrototypes()` in its `prototypes` block and `galleryPlacements()` in its
-`placements` block, and declares the font the labels emboss in.
+The debug world lays every authorable signed-distance construct out on the open
+ground at +X/+Z, one prototype an exhibit, so a change to the field, the bake,
+the stamp pool or the renderer shows on every construct at once. Two rows move:
+their exhibits run through the dynamic stamp path on one console-controlled
+clock, so motion, skinning and motion vectors can be inspected, paused and
+scrubbed. [`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports
+it, expands `galleryPrototypes()` in its `prototypes` block,
+`galleryPlacements()` in its `placements` block and `galleryState()` in its
+`state.world` block, and declares the font the labels emboss in.
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, toward the
 origin. The plinth is the exhibit's last shape, so an exhibit's subtraction or
 intersection never cuts it. A plinth that renders wrong shows the exhibit's
 scope or bound reaching its siblings. Exhibits stand 3 m apart from x = 14.
+Slot 0 is the exhibit's grey, slot 1 the plinth, slot 2 the label, and slot 3
+the exhibit's own second material: a blend's tool, the palette channel under
+test, or a moving part.
+
+## Rows
+
+Prototype names are `shape-<exhibit>` for the still rows and `motion-<exhibit>`
+for the moving ones; the rows' arrays in `shapes.puck` list them in order.
 
 | Row | z | Exhibits, from x = 14 |
 |---|---|---|
@@ -19,9 +30,121 @@ scope or bound reaching its siblings. Exhibits stand 3 m apart from x = 14.
 | Extruded profiles | 24 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
 | Revolved profiles | 29 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
 | Sweeps and facets | 34 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
+| Blends | 39 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
+| Folds | 44 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
+| Forms | 49 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
+| Surfaces | 54 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
+| Motion | 59 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
+| Motion II | 64 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
 
-Prototype names are `shape-<exhibit>` (`shape-torus-xz`, `shape-revolve-convex`);
-the rows' arrays in `shapes.puck` list them in order.
+## Coverage
+
+The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
+`SdfPrismProfile`, `SdfLift`, `SdfOp`, `SdfShapeType` and `SdfDomainOp` in
+`Puck.SignedDistance`, the creation document (`CreationDocument.cs`,
+`ShapeDomainOp.cs`, `PaletteLayersDocument.cs`, `VolumeDocument.cs`,
+`CreationEffector.cs`, `CreationAnimation.cs`) and the driver runtime
+(`WorldGaitDrivers`, `WorldStampPool`).
+
+### Primitives, profiles and lifts
+
+| Construct | Exhibit |
+|---|---|
+| Sphere, Box, Torus, Cylinder, Capsule, Ellipsoid, RoundCone, Cone, Superellipsoid | uniform row and stretched row |
+| Plane | `shape-plane` (a half-space intersected with a sphere) |
+| Prism, trapezoid profile and `taper` | `shape-trapezoid`, `shape-prism-triangle` (0), `shape-prism-rectangle` (1) |
+| RoundedRectangle, Polygon (3, 6, 12), Ellipse, ChamferedRectangle, Convex | extruded row, `shape-polygon-3` |
+| Path: line, quadratic and cubic Bezier, arcs both ways, even-odd holes | `shape-path-fill`, `shape-path-holes`, `shape-path-stroke-ramp` |
+| Path stroke: open, closed, smooth and linear radius ramps, `from`/`to` | `shape-path-stroke`, `shape-path-closed-stroke`, `shape-path-stroke-ramp` |
+| Path shear | `shape-path-shear` |
+| Extrude lift | extruded row |
+| Revolve lift, ring (radial offset) and solid (offset 0) | revolved row, `shape-revolve-solid` |
+| Superellipsoid `exponent` 2, 3, 4, 8 | `shape-superellipsoid-2`, `-xyz`, uniform, `-8` |
+| Sweep, tapered with bulge, three strands, four braided strands | facet row, `shape-sweep-braid` |
+| Non-uniform scale on every primitive that admits it | stretched row, `shape-polygon-12-xy`, `shape-path-stroke-xy` |
+| Path revolve | not exhibited: refused by name (a path extrudes only) |
+
+### Blends
+
+| Construct | Exhibit |
+|---|---|
+| Union, Subtraction, Intersection, Xor | `shape-blend-union`, `-subtraction`, `-intersection`, `-xor` |
+| SmoothUnion, SmoothSubtraction, SmoothIntersection | `shape-smooth-union`, `-subtraction`, `-intersection` |
+| ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
+| GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
+| Blends between moving shapes (pooled `group`) | `motion-smooth-blend`, `motion-carve`, `motion-pulse` |
+| Morph, StairsUnion, StairsSubtraction | not exhibited: they compose only at a field-scope pop, and a shape carrying one validates but fails at emission |
+
+### Per-shape facets
+
+| Construct | Exhibit |
+|---|---|
+| `rounding` (Cylinder, Prism) | `shape-rounding`, `shape-prism-rounding` |
+| `chamfer` (Box, Cylinder, extruded Prism) | `shape-chamfer`, `shape-cylinder-chamfer`, `shape-prism-chamfer` |
+| `onion`, `dilate` | `shape-onion`, `shape-dilate` |
+| `flare`, `shear`, `bumps` | `shape-flare`, `shape-shear`, `shape-bumps` |
+| `cells` F1 and F2 − F1 | `shape-cells-f1`, `shape-cells-f2`, `shape-wrap-soften`, `motion-cells` |
+| `erode` | `shape-erode`: a static placement's lane reads zero, halfway through its −1..1 window |
+| `twist`, `bend` | `motion-twist`, `motion-bend`: only the stamp-pool path emits them, so a static placement ignores both |
+| `panel` recessed and raised | `shape-panel-recess`, `shape-panel-raise` |
+| `trims` | `shape-trims` |
+| `detail` | not exhibited: it drops a shape from contact and colliders and renders identically |
+| Rounding on a Cone, rounding on a Box | not exhibited: a cone's ceiling is 0 and a box admits chamfer only |
+
+### Domain folds and creation-level fields
+
+| Construct | Exhibit |
+|---|---|
+| `symmetry` | `shape-symmetry`, `shape-repeat-even`, `motion-mirror` |
+| `repeat`, bounded on one and two axes, even counts, unbounded | `shape-repeat`, `shape-repeat-grid`, `shape-repeat-even`, `shape-repeat-clipped` |
+| `polar` about Y and about Z with an origin, mirrored, material stride | `shape-polar-fold`, `shape-polar-z`, `shape-polar-mirror`, `shape-polar-stride`, `motion-polar` |
+| `wallpaper` Pmm, P4M (bounded), P3M1, P6M (clipped), material stride | `shape-wallpaper-pmm`, `-p4m`, `-p3m1`, `-p6m`, `-stride` |
+| Folds riding a moving parent | `motion-mirror`, `motion-polar` |
+| Creation `noise` | `shape-noise` (it displaces the whole creation, plinth and label included) |
+| The other thirteen wallpaper groups | not exhibited: the program refuses every group whose walls are not all mirrors |
+| ISA ops Elongate, LogSphere, CellJitter, Displace, DomainWarp; shape types Vesica, Star | not exhibited: no creation document field emits them; they are builder-only |
+| ScreenSlab, SampledRegion | not exhibited: screens and world `fields` emit them, not creations |
+
+### Surfaces
+
+| Construct | Exhibit |
+|---|---|
+| `color`, `roughness`, `specular` | every exhibit |
+| `color` bound to state | `shape-state-color` |
+| `metal`, `coat`, `sheen`, `emissive` | `shape-metal`, `shape-coat`, `shape-sheen`, `shape-emissive` |
+| `wrap`, `soften` | `shape-wrap-soften` (beside `shape-cells-f1`, the same relief unsoftened) |
+| `fill`, `bleed`, `receive` | `shape-fill-bleed` |
+| `weathering` edge with two `under` stages, lines, settle with `deposit` (driven by `floor`) | `shape-weathering-edge`, `-lines`, `-settle`; lines on a moving surface on `motion-spin` |
+| `inset` (refracted radial paint) | `motion-inset` |
+| `paints`: unparented, in world space on a static placement | `shape-paint-world` |
+| `paints`: parented stroked plane, stroked ellipse prism, filled polygon prism, sweep | `motion-paint` |
+| Text runs: emboss | every label |
+| Text runs: engrave; riding a shape with `maxWidth`, `tracking`, `lineSpacing` | `shape-text-engrave`, `shape-text-ride` |
+| Volumes: flow with pulse, cloud, flow parented to a moving shape | `shape-volume-flow`, `shape-volume-cloud`, `motion-volume` |
+| `emissiveLane`, `weathering.lane`, `volumes[].intensityLane`, a lane-driven `erode` | not exhibited: render lanes reach only body registrations, and a placement reads them as zero; the Moth carries them |
+| Text `font` | not exhibited: the debug world declares one font |
+
+### Motion
+
+| Path | Exhibit |
+|---|---|
+| Swing, `linear` wave (rigid rotation) | `motion-spin`, `motion-polar` |
+| Swing, `sine` about a pivot | `motion-rock`, `motion-paint`, `motion-inset`, `motion-cells`, `motion-volume` |
+| Swing, `halfSine` and `constant` waves | `motion-chain` (lower arm), `motion-twist` (the lean) |
+| Slide (translation) | `motion-slide`, `motion-smooth-blend`, `motion-carve`, `motion-pulse` |
+| `parent` chains | `motion-chain`, `motion-mirror`, `motion-polar` |
+| A moving shape through a smooth blend with a still one | `motion-smooth-blend` |
+| A moving cutter | `motion-carve` |
+| Mirrored and folded shapes in motion | `motion-mirror`, `motion-polar` |
+| Paints and an inset on a moving surface | `motion-paint`, `motion-inset` |
+| Effector (IK) with a `state` target | `motion-ik` |
+| Timeline `frames` | `motion-frames` |
+| State-bound geometry (a write re-emits and rebakes) | `motion-state-blend` |
+| A `state.<row>` driver signal and `state.<row>.<key>` gate tokens | every motion exhibit |
+| A scale pulse | approximated by `motion-pulse`; a true one is not authorable, because a dynamic slot carries a rigid pose with no scale and a frame's `scale` is never read by the stamp pool |
+| A blend or op parameter animated over time (smooth radius, twist rate, fold spacing) | not authorable: every one is a program constant baked into the mesh. Change one through a write that rebakes (see below) |
+| `curve:<row>` waves, `cadenceBy`, `weightBy`, driver `dynamics`, `driver.<name>` signals, body signals | not exhibited: they need world `curves` or `dynamics` rows or a body; the Moth exercises them |
+| `surface` and `body` effector targets, plants and replants | not exhibited here; the Moth's feet exercise them |
 
 ## Looking at one exhibit
 
@@ -41,6 +164,109 @@ Every inspection the debug world offers works on an exhibit:
 
 - `world.debug-view normals` shows the baked mesh's shading normals, where a
   frayed edge, a crease cut short or a torn facet shows plainly; `world.debug-view
-  off` restores the image.
-- `world.wait bakes 60` waits for the bake after a `world.reload`, so a capture
-  shows the baked mesh and not the bake in progress.
+  off` restores the image. `material-id` shows which slot won each pixel, which
+  the blend row's two colours make readable at a seam.
+- `world.debug-view motion` shows each pixel's motion vector: a still exhibit
+  reads stationary, a moving one reads its own motion and nothing else.
+- `world.debug-view ao` and `world.debug-view shadow` show the filtered
+  occlusion and shadow terms under and around an exhibit.
+- `world.temporal off` drops reconstruction, so a moving exhibit's image is one
+  frame's samples rather than its history; `world.temporal on` restores it.
+- `view.isolate <prototype> <shape>...` draws the named shapes of one prototype
+  alone (`view.isolate motion-smooth-blend visitor`); `view.isolate off`
+  restores them.
+- `world.slice <placement> <x|y|z> <path.png>` cuts the live field through an
+  exhibit, and `puck creation shape --world src/Puck.World/Assets/worlds/debug.puck
+  --prototype <id>` says which of its shapes are exact distances.
+- `world.wait bakes 60` waits for the bake after a `world.reload` or a state
+  write that rebakes, so a capture shows the baked mesh and not the bake in
+  progress.
+
+## Motion controls
+
+Every driver in the motion rows reads `state.galleryClock`, a fixed slot of
+gallery seconds that advances by itself (an `advance` trait, so no rule writes
+it each tick), and is gated on `state.galleryMotion.all` and on its exhibit's
+own `state.galleryMotion.<key>`. All of it is ordinary world state, so it
+replicates, journals, undoes and reads back like any other row.
+
+| To | Console line |
+|---|---|
+| Read the clock and its rate | `world.state galleryClock` |
+| Pause every motion exhibit where it stands | `world.row.set state galleryClock advance {"perSecondNumerator":0,"perSecondDenominator":1}` |
+| Resume at full rate | `world.row.set state galleryClock advance {"perSecondNumerator":1,"perSecondDenominator":1}` |
+| Run at a quarter rate | `world.row.set state galleryClock advance {"perSecondNumerator":1,"perSecondDenominator":4}` |
+| Scrub to a gallery time (paused, it holds there) | `world.state.cell.set galleryClock $value 3.25` |
+| Ease one exhibit back to rest, or back into motion | `world.state.cell.set galleryMotion <key> 0` / `… 1` |
+| Ease every exhibit to rest | `world.state.cell.set galleryMotion all 0` |
+| Read the gates | `world.state galleryMotion` |
+
+A rate change re-bases the clock at the value it had reached, so the poses
+continue without a jump. The keys are `spin`, `rock`, `slide`, `chain`,
+`blend` (motion-smooth-blend), `carve`, `mirror`, `polar`, `paint`, `inset`,
+`twist`, `bend`, `pulse`, `cells`, `volume` and `ik`. `motion-spin` and
+`motion-polar` switch at once rather than easing, since easing the weight of a
+linear wave sweeps the whole accumulated angle. `motion-frames` replays on the
+render clock, eight 60 Hz frames a pose, and answers none of these controls;
+`motion-state-blend` has no driver at all.
+
+`galleryInputs` holds the text cells three exhibits read:
+
+| Cell | Read by | Console line |
+|---|---|---|
+| `probe` | `motion-state-blend`'s sphere position, author frame | `world.state.cell.set galleryInputs probe [0.1, 1.45, 0.05]` |
+| `reach` | `motion-ik`'s target, a world point | `world.state.cell.set galleryInputs reach [35.3, 1.55, 63.7]` |
+| `tint` | `shape-state-color`'s colour | `world.state.cell.set galleryInputs tint #3A7BD5` |
+
+A `probe` write re-emits the creation and rebakes its seam exactly, where
+`motion-smooth-blend` bakes its seam once and skins it: put the two side by side
+to tell a skinning stretch from a bake defect. A `reach` or `tint` write moves
+no geometry and rebakes nothing.
+
+A shape parameter that is a plain number (a `smooth` radius, a `twist` rate, an
+`onion` thickness) changes only by editing the creation, which rebakes the
+groups it touches:
+
+```text
+world.row.set creations motion-smooth-blend document.shapes[name=visitor].smooth 0.3
+world.wait bakes 60
+```
+
+A placement moves the same way, whole, still or moving:
+`world.row.set placements motion-spin position [26, 0.5, 59]`. `world.reload`
+discards every such edit.
+
+## Inspection recipes
+
+Each recipe frames a row's first three exhibits; move the x of both points by 3
+to step along it.
+
+- **Motion vectors.** `view.override camera look 17 2.3 54.6 17 1 59`, then
+  `world.debug-view motion`. The spin, rock and slide exhibits read their own
+  motion; their plinths read stationary. Pause the clock and every vector goes
+  still within a frame.
+- **Paused against running.** Capture the motion row running, pause the clock,
+  `world.wait 30`, capture again: the paused frame must match itself across
+  further captures, and the poses must hold where the pause found them.
+- **Moving blend seam.** `view.override camera look 26 1.9 56.2 26 1.2 59`,
+  `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
+  box and sphere stretches as the sphere slides away from the pose it baked in.
+  Scrub `galleryClock` and compare against `motion-state-blend` at x = 29 with
+  `galleryInputs probe` at the same offset.
+- **Moving cut.** `motion-carve` at x = 32: the carved face rides the cutter's
+  slot, so `world.debug-view motion` shows it moving with the cutter while the
+  rest of the box stays still.
+- **Folds in motion.** `motion-mirror` and `motion-polar` at x = 35 and 38: the
+  mirrored wing pair and the eight blades must stay whole and symmetric through
+  the swing; a copy that lags, tears or vanishes is the folded slot losing its
+  parent's delta.
+- **Paints and inset on a moving surface.** `view.override camera look 14 1.9
+  61.2 14 1.2 64` for `motion-paint`, then x = 17 for `motion-inset`: a stripe,
+  ring or eye that swims across its surface instead of riding it is a paint
+  frame bug. `world.temporal off` shows whether the swim is the resolve's.
+- **Twist, bend and cells in motion.** x = 20, 23 and 29 on the z 64 row, with
+  `world.debug-view normals`: the dynamic path bakes the warped shape once and
+  turns it rigidly, so its normals must hold steady on the surface.
+- **IK.** `view.override camera look 35 1.9 61.2 35 1.4 64`, then write
+  `galleryInputs reach` around `[35.35, 1.45, 63.75]`: the hand follows, and the
+  arm folds rather than stretches.

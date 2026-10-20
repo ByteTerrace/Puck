@@ -193,8 +193,11 @@ whole-document revalidation or the per-section `Mutate` grant check.
 its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
 is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
 each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
-several documents each own one disjoint slice of a world (the debug world imports `skies.puck`, `shapes.puck`,
-`theme` and `controls`) rather than forcing every slice through the single-parent basis chain. A keyed
+several documents each own one disjoint slice of a world (the debug world imports `theme` and `controls`) rather
+than forcing every slice through the single-parent basis chain. In `.puck`, `import "name"` lowers to an `imports`
+entry, while `import "name.puck"` (a path naming a `.puck` source, `WorldSourceDeclaration.ImportsModule`) only brings
+that source's `let`s and templates into the compile: its own top-level sections are never composed, so a module such
+as `shapes.puck` hands its rows over through templates the importing file expands. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
 preserved across a split, only content is; compare two composed trees by canonicalizing each keyed list (sort by
@@ -277,7 +280,8 @@ and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
 `theme.puck` (the standard theme) and `controls.puck` (cursor, key hints, icons,
 binding bar, play wheel) as documents; `quality.puck`, `skies.puck` and
-`shapes.puck` beside them are imported the same way. The quarantined
+`shapes.puck` beside them are source modules whose templates the importing
+file expands. The quarantined
 `standard.puck` library and the island built on it are prior art. Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
