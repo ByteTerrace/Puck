@@ -208,6 +208,29 @@ public struct SecondOrderFollower3 {
     public void Reseed() {
         Seeded = false;
     }
+    /// <summary>Carries a follower of a world-space point through a rigid motion of the world it follows in
+    /// (<c>x → rotation·x + translation</c>), so it eases on from where it was rather than chasing the jump. An unseeded
+    /// follower is left as it is.</summary>
+    /// <param name="rotation">The motion's unit rotation.</param>
+    /// <param name="translation">The motion's translation, applied after the rotation.</param>
+    public void Carry(Quaternion rotation, Vector3 translation) {
+        if (!Seeded) {
+            return;
+        }
+
+        Value = (Vector3.Transform(
+            rotation: rotation,
+            value: Value
+        ) + translation);
+        Velocity = Vector3.Transform(
+            rotation: rotation,
+            value: Velocity
+        );
+        PreviousTarget = (Vector3.Transform(
+            rotation: rotation,
+            value: PreviousTarget
+        ) + translation);
+    }
     /// <summary>Seeds the follower at rest on a target, discarding any prior state.</summary>
     /// <param name="target">The target to seed at.</param>
     public void Seed(Vector3 target) {
@@ -306,6 +329,35 @@ public struct SecondOrderFollower4 {
     /// across the gap (a hard cut).</summary>
     public void Reseed() {
         Seeded = false;
+    }
+    /// <summary>Carries a follower of a world-space attitude through a rotation of the world it follows in: each lane,
+    /// read as a quaternion, is multiplied on the left by <paramref name="rotation"/>, which is linear, so the rate turns
+    /// exactly as the value does. An unseeded follower is left as it is.</summary>
+    /// <param name="rotation">The unit rotation.</param>
+    public void Carry(Quaternion rotation) {
+        if (!Seeded) {
+            return;
+        }
+
+        Value = Turn(lane: Value);
+        Velocity = Turn(lane: Velocity);
+        PreviousTarget = Turn(lane: PreviousTarget);
+
+        Vector4 Turn(Vector4 lane) {
+            var turned = (rotation * new Quaternion(
+                w: lane.W,
+                x: lane.X,
+                y: lane.Y,
+                z: lane.Z
+            ));
+
+            return new Vector4(
+                w: turned.W,
+                x: turned.X,
+                y: turned.Y,
+                z: turned.Z
+            );
+        }
     }
     /// <summary>Seeds the follower at rest on a target, discarding any prior state.</summary>
     /// <param name="target">The target to seed at.</param>

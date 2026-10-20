@@ -1,9 +1,11 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Authoring;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -14,11 +16,24 @@ namespace Puck.World.Server.Tests;
 /// row references its own document, so its destination resolves to the row itself; a door laid flat in the floor faces
 /// up and its counterpart, a door in the ceiling above it, faces down. A seat dropped over the floor door falls
 /// through it, comes out of the ceiling door still falling at the speed it entered with, and falls through the floor
-/// door again, keeping its body index throughout, and a tape recorded across the loop replays to the same states. Red
-/// leg: a floor door whose counterpart is a wall door would turn a fall into a walk, so the crossing is refused by name
-/// and the body falls on through the floor.
+/// door again, keeping its body index throughout, and a tape recorded across the loop replays to the same states. The
+/// crossing is continuous motion, not a teleport: the body stays airborne through it, and a presentation mirror sees
+/// one carried pose change per crossing, never a snap, whose presented step is the fall's own step rather than the
+/// six metres the body moved up. A ceiling door left unturned turns the traveller a half about up on each crossing.
+/// Red leg: a floor door whose counterpart is a wall door would turn a fall into a walk, so the crossing is refused
+/// by name and the body falls on through the floor.
 /// </summary>
 public sealed class InPlacePortalCrossingLawTests {
+    /// <summary>The door the floor door leads to.</summary>
+    public enum Counterpart {
+        /// <summary>The ceiling door, turned a half about up so the pair keeps the traveller's heading.</summary>
+        Ceiling,
+        /// <summary>The ceiling door unturned, so the pair turns the traveller a half about up.</summary>
+        TurnedCeiling,
+        /// <summary>A wall door, which no fall can cross into.</summary>
+        Wall,
+    }
+
     private const float CeilingHeight = 6f;
     private const int CrossingsWanted = 3;
     private const float DoorZ = -10f;
@@ -94,8 +109,8 @@ public sealed class InPlacePortalCrossingLawTests {
         YawDegrees: yawDegrees
     );
     // The floor door at the origin of the shaft facing up, and the door its glass leads to: the ceiling door facing
-    // down, turned a half about up so the pair keeps a traveller's heading, or a wall door facing +Z.
-    private static WorldDefinition Shaft(string ownPath, bool wallCounterpart) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
+    // down, turned a half about up so the pair keeps a traveller's heading or left unturned, or a wall door facing +Z.
+    private static WorldDefinition Shaft(string ownPath, Counterpart counterpart) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
         CreationsRaw = [
             Door(angle: (-MathF.PI / 2f), id: "floor-door"),
             Door(angle: (MathF.PI / 2f), id: "ceiling-door"),
@@ -109,7 +124,7 @@ public sealed class InPlacePortalCrossingLawTests {
         )],
         PlacementRowsRaw = [
             Placement(
-                counterpart: (wallCounterpart ? $"wall/{Face}" : $"ceiling/{Face}"),
+                counterpart: ((counterpart == Counterpart.Wall) ? $"wall/{Face}" : $"ceiling/{Face}"),
                 id: "floor",
                 position: new Vector3(x: 0f, y: 0f, z: DoorZ),
                 prototype: "floor-door",
@@ -120,7 +135,7 @@ public sealed class InPlacePortalCrossingLawTests {
                 id: "ceiling",
                 position: new Vector3(x: 0f, y: CeilingHeight, z: DoorZ),
                 prototype: "ceiling-door",
-                yawDegrees: 180f
+                yawDegrees: ((counterpart == Counterpart.TurnedCeiling) ? 0f : 180f)
             ),
             Placement(
                 counterpart: null,
@@ -142,8 +157,9 @@ public sealed class InPlacePortalCrossingLawTests {
         private readonly TemporaryDirectory m_rowState;
         private readonly TemporaryDirectory m_tapeRoot;
         private readonly IDisposable m_narrationLease;
+        private readonly IDisposable m_mirrorLease;
 
-        public Scenario(bool wallCounterpart) {
+        public Scenario(Counterpart counterpart) {
             m_files = new TemporaryDirectory(prefix: "puck-in-place-files-");
             m_hostRoot = new TemporaryDirectory(prefix: "puck-in-place-host-");
             m_tapeRoot = new TemporaryDirectory(prefix: "puck-in-place-tape-");
@@ -153,8 +169,8 @@ public sealed class InPlacePortalCrossingLawTests {
                 path2: "shaft.world.json"
             );
             var definition = Shaft(
-                ownPath: path,
-                wallCounterpart: wallCounterpart
+                counterpart: counterpart,
+                ownPath: path
             );
 
             FileBackedRows.Write((path, definition));
@@ -174,6 +190,8 @@ public sealed class InPlacePortalCrossingLawTests {
             );
             Host.Admit(row: Instance);
             m_narrationLease = Host.AttachNarrationSink(sink: Narration);
+            Mirror = new WorldSessionMirror(placeholder: definition);
+            m_mirrorLease = Server.AttachSink(sink: Mirror);
             Tape = new WorldReplayTape(
                 addonHostFactory: static (_, _) => new NullAddonHost(),
                 engines: [],
@@ -195,11 +213,14 @@ public sealed class InPlacePortalCrossingLawTests {
         public WorldInstanceHost Host { get; }
         public WorldInstance Instance { get; }
         public LoopbackTransport Link => ((LoopbackTransport)Instance.Link);
+        // A presentation mirror of the row, fed every snapshot the row delivers.
+        public WorldSessionMirror Mirror { get; }
         public RecordingNarrationSink Narration { get; } = new();
         public WorldServer Server { get; }
         public WorldReplayTape Tape { get; }
 
         public void Dispose() {
+            m_mirrorLease.Dispose();
             m_narrationLease.Dispose();
             Host.Dispose();
             Instance.Dispose();
@@ -229,10 +250,13 @@ public sealed class InPlacePortalCrossingLawTests {
         }
     }
 
-    [Fact]
-    public void ABodyFallingThroughAFloorDoorComesOutOfTheCeilingDoorStillFalling_AndLoops() {
-        using var scenario = new Scenario(wallCounterpart: false);
+    [InlineData(Counterpart.Ceiling)]
+    [InlineData(Counterpart.TurnedCeiling)]
+    [Theory]
+    public void ABodyFallingThroughAFloorDoorComesOutOfTheCeilingDoorStillFalling_AndLoops(Counterpart counterpart) {
+        using var scenario = new Scenario(counterpart: counterpart);
         var name = $"in-place-{Guid.NewGuid():N}";
+        var stepSeconds = (1f / Fixtures.DefaultRateHz);
 
         Assert.True(
             condition: scenario.Tape.TryBeginRecording(
@@ -242,19 +266,30 @@ public sealed class InPlacePortalCrossingLawTests {
             userMessage: refusal
         );
         scenario.DropOverFloor();
+        // The pose itself is a snap; the fall it starts is what the mirror must present without one.
+        scenario.Step();
 
+        var poseEpoch = scenario.Mirror.PoseEpoch(index: 0);
         var crossings = 0;
+        var turn = ((counterpart == Counterpart.TurnedCeiling)
+            ? FixedQ4816.Pi
+            : FixedQ4816.Zero
+        );
 
         for (var tick = 0; ((tick < LoopBound) && (crossings < CrossingsWanted)); tick++) {
             var body = scenario.Server.Body(index: 0)!;
             var entering = body.CaptureTransferState().VerticalVelocity;
+            var heading = body.FixedYaw;
 
             scenario.Host.DrainPendingTransfers();
 
-            if (scenario.Count(text: "in place") > crossings) {
+            var crossed = (scenario.Count(text: "in place") > crossings);
+
+            if (crossed) {
                 crossings++;
 
-                // The same body, at the same index, out of the ceiling door and falling exactly as fast as it fell in.
+                // The same body, at the same index, out of the ceiling door, turned by the pair and falling exactly as
+                // fast as it fell in.
                 Assert.True(condition: scenario.Server.Population.IsActive(index: 0));
                 Assert.Same(
                     actual: scenario.Server.Body(index: 0),
@@ -269,9 +304,33 @@ public sealed class InPlacePortalCrossingLawTests {
                     actual: body.CaptureTransferState().VerticalVelocity,
                     expected: entering
                 );
+                Assert.Equal(
+                    actual: FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (body.FixedYaw - heading))),
+                    expected: turn
+                );
             }
 
             scenario.Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+
+            // Presented, the crossing is a carried pose change and the fall's own step: no snap, no grounded tick, and
+            // a downward step no longer than the body's own speed covers, where a snap would present six metres up.
+            var presented = (scenario.Mirror.CurrentPosition(index: 0) - scenario.Mirror.PreviousPosition(index: 0));
+            var fall = MathF.Abs(x: ((float)scenario.Server.Body(index: 0)!.CaptureTransferState().VerticalVelocity));
+
+            Assert.Equal(
+                actual: scenario.Mirror.PoseEpoch(index: 0),
+                expected: poseEpoch
+            );
+            Assert.Equal(
+                actual: scenario.Mirror.Carries.Epoch(index: 0),
+                expected: crossings
+            );
+            Assert.True(condition: scenario.Mirror.Facts(index: 0).HasFlag(flag: BodyFacts.Airborne));
+            Assert.False(condition: scenario.Mirror.Facts(index: 0).HasFlag(flag: BodyFacts.Grounded));
+            Assert.True(
+                condition: ((presented.Y < 0f) && (-presented.Y <= ((fall * stepSeconds) + 1e-3f))),
+                userMessage: $"tick {tick}{(crossed ? ", a crossing," : string.Empty)} presented a step of {presented} for a fall at {fall} m/s"
+            );
         }
 
         Assert.Equal(
@@ -303,7 +362,7 @@ public sealed class InPlacePortalCrossingLawTests {
     }
     [Fact]
     public void AFloorDoorLeadingToAWallDoorRefusesByName_AndTheBodyFallsOnThroughTheFloor() {
-        using var scenario = new Scenario(wallCounterpart: true);
+        using var scenario = new Scenario(counterpart: Counterpart.Wall);
 
         scenario.DropOverFloor();
 
@@ -331,18 +390,10 @@ public sealed class InPlacePortalCrossingLawTests {
             Up: FixedVector3.UnitY
         );
 
-        Assert.Null(@object: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.CrossInPlace(
-            destination: in frame,
-            slot: -1,
-            source: in frame
-        )));
         Assert.False(condition: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.ApplyInPlaceCrossing(crossing: new WorldInPlaceCrossing(
-            PlanarVelocity: FixedVector3.Zero,
-            Position: FixedVector3.Zero,
+            Destination: frame,
             Slot: -1,
-            TravelTurn: FixedQ4816.Zero,
-            VerticalVelocity: FixedQ4816.Zero,
-            YawRadians: FixedQ4816.Zero
+            Source: frame
         ))));
     }
 }

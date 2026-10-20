@@ -496,7 +496,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <remarks>Copies every kept field out of the borrowed <paramref name="snapshot"/> before returning (see this
     /// type's own borrowed-snapshot remarks). Continuity mirrors <c>WorldClient.DeliverSnapshot</c>'s
     /// snap-vs-interpolate split only — a newly active entity or a <see cref="EntityContinuityKind.Teleport"/> resets
-    /// both interpolation endpoints to the fresh pose so the first/next frame never streaks; every other case
+    /// both interpolation endpoints to the fresh pose so the first/next frame never streaks; a
+    /// <see cref="EntityContinuityKind.Carry"/> carries current into previous through the crossing and records it in
+    /// <see cref="Carries"/>; every other case
     /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
     /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -551,6 +553,15 @@ public sealed class WorldSessionMirror : IClientSink {
                     m_previousPosition[index] = entry.Position;
                     m_previousOrientation[index] = entry.Orientation;
                     m_poseEpoch[index]++;
+                } else if (entry.Continuity.Carried is { } carried) {
+                    // An in-place crossing: the previous pose rides the crossing, so the frame interpolates on from
+                    // where the body was, carried, and every latched consumer carries its own state the same way.
+                    m_previousPosition[index] = carried.Point(point: m_currentPosition[index]);
+                    m_previousOrientation[index] = carried.Attitude(attitude: m_currentOrientation[index]);
+                    Carries.Record(
+                        carry: carried,
+                        index: index
+                    );
                 } else {
                     m_previousPosition[index] = m_currentPosition[index];
                     m_previousOrientation[index] = m_currentOrientation[index];
@@ -820,6 +831,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The epoch.</returns>
     public int PoseEpoch(int index) => m_poseEpoch[index];
+    /// <summary>Gets the in-place portal crossings each entity has made, which a consumer that latched an entity's
+    /// world-space pose carries it through, as <c>WorldClient.Carries</c> does for the local world.</summary>
+    public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
     /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
     /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
     /// delivered table cannot cover. The same resolve <c>WorldClient.Look</c> performs, over this mirror's own

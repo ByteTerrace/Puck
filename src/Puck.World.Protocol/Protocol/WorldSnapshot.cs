@@ -16,6 +16,11 @@ public enum EntityContinuityKind : byte {
     /// <summary>A server correction snapped the sim pose — snap authority but ease the pre-snap render error to zero over
     /// <see cref="EntityContinuity.Seconds"/>.</summary>
     Correction,
+
+    /// <summary>The body crossed a portal pair standing in its own world, moving through the rigid
+    /// <see cref="EntityContinuity.Carried"/> motion and keeping its momentum — carry the previous pose and every
+    /// latched presentation state through it, then interpolate as for <see cref="Continuous"/>.</summary>
+    Carry,
 }
 /// <summary>The per-entity continuity hint a <see cref="EntitySnapshot"/> carries: whether the client interpolates
 /// (<see cref="EntityContinuityKind.Continuous"/>), snaps (<see cref="EntityContinuityKind.Teleport"/>), or eases across
@@ -24,7 +29,9 @@ public enum EntityContinuityKind : byte {
 /// flag.</summary>
 /// <param name="Kind">The kind of pose change.</param>
 /// <param name="Seconds">The smoothing window for <see cref="EntityContinuityKind.Correction"/>; zero otherwise.</param>
-public readonly record struct EntityContinuity(EntityContinuityKind Kind, float Seconds = 0f) {
+/// <param name="Carried">The rigid motion for <see cref="EntityContinuityKind.Carry"/>; <see langword="null"/>
+/// otherwise.</param>
+public readonly record struct EntityContinuity(EntityContinuityKind Kind, float Seconds = 0f, WorldPoseCarry? Carried = null) {
     /// <summary>Gets the ordinary-integration hint — the client interpolates from the previous snapshot pose.</summary>
     public static EntityContinuity Continuous => new(Kind: EntityContinuityKind.Continuous);
     /// <summary>Gets the hard-teleport hint — the client snaps the render pose without interpolating the jump.</summary>
@@ -37,6 +44,25 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
         Kind: EntityContinuityKind.Correction,
         Seconds: seconds
     );
+    /// <summary>Creates an in-place crossing hint — the client carries its previous pose through
+    /// <paramref name="carried"/> and interpolates on.</summary>
+    /// <param name="carried">The rigid motion the crossing moved the body by.</param>
+    public static EntityContinuity Carry(WorldPoseCarry carried) => new(
+        Kind: EntityContinuityKind.Carry,
+        Carried: carried
+    );
+
+    /// <summary>Returns the hint for this pose change followed by <paramref name="later"/> before any client saw
+    /// either: two carries compose, a carry keeps an earlier snap or correction, and anything else is
+    /// <paramref name="later"/> unless it is <see cref="EntityContinuityKind.Continuous"/>.</summary>
+    /// <param name="later">The later pose change's hint.</param>
+    /// <returns>The combined hint.</returns>
+    public EntityContinuity Then(EntityContinuity later) => (later.Kind, Kind) switch {
+        (EntityContinuityKind.Continuous, _) => this,
+        (EntityContinuityKind.Carry, EntityContinuityKind.Carry) => Carry(carried: Carried!.Value.Then(later: later.Carried!.Value)),
+        (EntityContinuityKind.Carry, EntityContinuityKind.Teleport or EntityContinuityKind.Correction) => this,
+        _ => later,
+    };
 }
 /// <summary>One entity's authoritative render state for a tick — the server's outbound currency for a single body. The
 /// client draws from a run of these, interpolating (or snapping/easing per <see cref="Continuity"/>) between consecutive

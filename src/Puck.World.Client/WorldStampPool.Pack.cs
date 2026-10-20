@@ -274,6 +274,39 @@ public sealed partial class WorldStampPool {
         )
         );
     }
+    // Carries everything a body-rooted registration latched in world space through an in-place crossing's rigid
+    // motion: the root and part followers, the drivers' last pose and eased world velocity, and every effector's
+    // planted, stepping and resolved points and normals. Body-local state (driver phases, weights, own deltas) is
+    // unchanged by it.
+    private static void Carry(Registration live, WorldPoseCarry carry) {
+        live.RootPositionFollower.Carry(
+            rotation: carry.Rotation,
+            translation: carry.Translation
+        );
+        live.RootOrientationFollower.Carry(rotation: carry.Rotation);
+        live.FollowedPosition = carry.Point(point: live.FollowedPosition);
+        live.FollowedOrientation = carry.Attitude(attitude: live.FollowedOrientation);
+        live.DriverPosition = carry.Point(point: live.DriverPosition);
+        live.DriverOrientation = carry.Attitude(attitude: live.DriverOrientation);
+        live.Kinematics.Carry(rotation: carry.Rotation);
+
+        for (var shapeSlot = 0; (shapeSlot < live.PartFollower.Length); shapeSlot++) {
+            live.PartFollower[shapeSlot].Carry(
+                rotation: carry.Rotation,
+                translation: carry.Translation
+            );
+        }
+
+        for (var effector = 0; (effector < live.EffectorPlantTarget.Length); effector++) {
+            live.EffectorPlantTarget[effector] = carry.Point(point: live.EffectorPlantTarget[effector]);
+            live.EffectorPlantNormal[effector] = carry.Direction(direction: live.EffectorPlantNormal[effector]);
+            live.EffectorTarget[effector] = carry.Point(point: live.EffectorTarget[effector]);
+            live.EffectorNormal[effector] = carry.Direction(direction: live.EffectorNormal[effector]);
+            live.EffectorStepFrom[effector] = carry.Point(point: live.EffectorStepFrom[effector]);
+            live.EffectorStepTo[effector] = carry.Point(point: live.EffectorStepTo[effector]);
+            live.EffectorStepToNormal[effector] = carry.Direction(direction: live.EffectorStepToNormal[effector]);
+        }
+    }
     // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
     // deltaSeconds.
     private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
@@ -283,6 +316,30 @@ public sealed partial class WorldStampPool {
         if (live.BodyIndex is { } watched) {
             var epoch = client.PoseEpoch(index: watched);
             var address = client.EntityAddress(index: watched);
+            var crossings = client.Carries.Epoch(index: watched);
+            var continuous = ((live.RootEpoch == epoch) && (live.RootAddress == address));
+
+            // An in-place crossing moved the body continuously through a rigid motion: everything this registration
+            // latched in world space rides the same motion. A history too short to carry it is a cut.
+            if (
+                continuous &&
+                (live.RootCarryEpoch != crossings)
+            ) {
+                if (client.Carries.TrySince(
+                    carry: out var carry,
+                    index: watched,
+                    since: live.RootCarryEpoch
+                )) {
+                    Carry(
+                        carry: carry,
+                        live: live
+                    );
+                } else {
+                    live.RootEpoch = -1;
+                }
+            }
+
+            live.RootCarryEpoch = crossings;
 
             if ((live.RootEpoch != epoch) || (live.RootAddress != address)) {
                 live.RootPositionFollower.Reseed();
