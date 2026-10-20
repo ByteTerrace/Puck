@@ -320,7 +320,10 @@ Source first, then structure, then pixels:
    until you have looked at a capture (`references/loop.md`).
 5. Audit what the boot baked:
    `puck mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>`
-   names the shapes at each group's worst clusters, in the author frame.
+   names the shapes at each group's worst clusters, in the author frame, and
+   says which way the mesh faces against the field's gradient at the worst
+   sample: opposed directions with both shapes at 0 mm is a sliver between
+   two surfaces, not a bake fault.
    Frayed edges show as face normals off the gradient; a cutter whose field is
    only a lower bound (a stretched ellipsoid, a non-uniform scale) shows as a
    loose field; give that cutter an exact primitive instead. The
