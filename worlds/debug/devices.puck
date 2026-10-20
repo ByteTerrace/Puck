@@ -1,14 +1,11 @@
-// The device row: one instance of every gaming machine the World hosts, each a labelled body on a plinth whose screen
+// The device row: one of each gaming device the World hosts, each a labelled body on a plinth whose screen
 // shows the machine running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug
 // world imports this file whole. The row stands on the open ground west of the spawn at z = -6, every device 3 m from
 // the next and facing +Z, toward the origin:
 //
-//   x -10  the Humble Gaming Brick as the DMG
-//   x -13  the Humble Gaming Brick as the CGB
-//   x -16  the Humble Gaming Brick as the AGB, running brick cartridges in its compatibility mode
-//   x -19  the Advanced Gaming Brick, the AGB's own machine
-//   x -22  the tune jukebox, whose content is a tune document
-//   x -25  the Humble Gaming Deck, running its test cartridges on the set above it
+//   x -10  the Humble Gaming Brick
+//   x -13  the Advanced Gaming Brick
+//   x -16  the Humble Gaming Deck, running its test cartridges on the set above it
 //
 // devices.md beside this file gives the console lines that list, swap, engage, reset and eject each one.
 
@@ -136,81 +133,24 @@ template landscapeHandheld() {
 }
 
 prototypes {
-  prototype "device-brick-dmg" {
+  prototype "device-humble-gaming-brick" {
     document {
-      device(label: "BRICK DMG", shell: { color: "#C9C5BC", roughness: 0.55, specular: 0.15 }, buttons: { color: "#8E1F4B", roughness: 0.4, specular: 0.3 })
+      device(label: "HUMBLE GAMING BRICK", shell: { color: "#2E9C9C", roughness: 0.45, specular: 0.25 }, buttons: { color: "#26272B", roughness: 0.4, specular: 0.3 })
       portraitHandheld()
     }
   }
 
-  prototype "device-brick-cgb" {
+  prototype "device-advanced-gaming-brick" {
     document {
-      device(label: "BRICK CGB", shell: { color: "#2E9C9C", roughness: 0.45, specular: 0.25 }, buttons: { color: "#26272B", roughness: 0.4, specular: 0.3 })
-      portraitHandheld()
-    }
-  }
-
-  prototype "device-brick-agb" {
-    document {
-      device(label: "BRICK AGB MODE", shell: { color: "#3F7F9E", roughness: 0.45, specular: 0.25 }, buttons: { color: "#D8D4CC", roughness: 0.4, specular: 0.3 })
+      device(label: "ADVANCED GAMING BRICK", shell: { color: "#4B3F9E", roughness: 0.45, specular: 0.25 }, buttons: { color: "#D8D4CC", roughness: 0.4, specular: 0.3 })
       landscapeHandheld()
-    }
-  }
-
-  prototype "device-advanced-brick" {
-    document {
-      device(label: "ADVANCED BRICK", shell: { color: "#4B3F9E", roughness: 0.45, specular: 0.25 }, buttons: { color: "#D8D4CC", roughness: 0.4, specular: 0.3 })
-      landscapeHandheld()
-    }
-  }
-
-  // A jukebox cabinet: a chamfered wooden case, a speaker either side of the screen and three transport keys below.
-  prototype "device-tune-jukebox" {
-    document {
-      device(label: "TUNE JUKEBOX", shell: { color: "#8B5A2B", roughness: 0.7, specular: 0.1 }, buttons: { color: "#C9A43A", roughness: 0.35, specular: 0.4 })
-      shape Box "case" {
-        chamfer: 0.03
-        material: 0
-        position [0, 0.62, 0]
-        scale [0.45, 0.32, 0.15]
-      }
-      shape Ellipsoid "speaker-left" {
-        material: 3
-        position [-0.32, 0.62, 0.15]
-        scale [0.1, 0.1, 0.025]
-      }
-      shape Ellipsoid "speaker-right" {
-        material: 3
-        position [0.32, 0.62, 0.15]
-        scale [0.1, 0.1, 0.025]
-      }
-      shape Box "bezel" {
-        material: 3
-        position [0, 0.68, 0.15]
-        scale [0.19, 0.17, 0.012]
-      }
-      shape Box "key-back" {
-        material: 4
-        position [-0.08, 0.42, 0.155]
-        scale [0.03, 0.015, 0.012]
-      }
-      shape Box "key-play" {
-        material: 4
-        position [0, 0.42, 0.155]
-        scale [0.03, 0.015, 0.012]
-      }
-      shape Box "key-next" {
-        material: 4
-        position [0.08, 0.42, 0.155]
-        scale [0.03, 0.015, 0.012]
-      }
     }
   }
 
   // A home console and its television: the set's screen above, the console with its cartridge slot in front.
-  prototype "device-gaming-deck" {
+  prototype "device-humble-gaming-deck" {
     document {
-      device(label: "GAMING DECK", shell: { color: "#2B2B2E", roughness: 0.6, specular: 0.15 }, buttons: { color: "#B8312F", roughness: 0.4, specular: 0.3 })
+      device(label: "HUMBLE GAMING DECK", shell: { color: "#2B2B2E", roughness: 0.6, specular: 0.15 }, buttons: { color: "#B8312F", roughness: 0.4, specular: 0.3 })
       shape Box "set" {
         chamfer: 0.03
         material: 0
@@ -243,63 +183,32 @@ prototypes {
 }
 
 placements {
-  placement "device-brick-dmg" {
-    prototype: "device-brick-dmg"
+  placement "device-humble-gaming-brick" {
+    prototype: "device-humble-gaming-brick"
     position [-10, 0, deviceZ]
     yawDegrees: 180
   }
 
-  placement "device-brick-cgb" {
-    prototype: "device-brick-cgb"
+  placement "device-advanced-gaming-brick" {
+    prototype: "device-advanced-gaming-brick"
     position [-13, 0, deviceZ]
     yawDegrees: 180
   }
 
-  placement "device-brick-agb" {
-    prototype: "device-brick-agb"
+  placement "device-humble-gaming-deck" {
+    prototype: "device-humble-gaming-deck"
     position [-16, 0, deviceZ]
-    yawDegrees: 180
-  }
-
-  placement "device-advanced-brick" {
-    prototype: "device-advanced-brick"
-    position [-19, 0, deviceZ]
-    yawDegrees: 180
-  }
-
-  placement "device-tune-jukebox" {
-    prototype: "device-tune-jukebox"
-    position [-22, 0, deviceZ]
-    yawDegrees: 180
-  }
-
-  placement "device-gaming-deck" {
-    prototype: "device-gaming-deck"
-    position [-25, 0, deviceZ]
     yawDegrees: 180
   }
 }
 
 // Each machine boots a shipped cartridge, so the world boots the same on every machine, and swaps to any file
-// `machine.content` lists from its folders. The DMG runs the forge's dmg target, since a Color-only image parks a
-// monochrome processor; the CGB and the AGB mode share the CGB cartridges. A device's second folder is the owner's
-// local, git-ignored `roms/` at the repository root, which resolves when the world boots from this source and is
-// listed as absent wherever it does not exist.
+// `machine.content` lists from its folders. The brick is the Color model, which runs the forge's cgb and dmg targets
+// alike. A device's last folder is the owner's local, git-ignored `roms/` at the repository root, which resolves when
+// the world boots from this source and is listed as absent wherever it does not exist.
 machines [
   {
-    name: "brick-dmg"
-    engine: "gaming-brick"
-    configuration {
-      schema: "puck.gaming-brick.configuration.v1"
-      model: "dmg"
-      content {
-        path: "cartridges/dmg/tetromino.dmg.cartridge.json"
-      }
-    }
-    contentFolders ["cartridges/dmg", "../../roms/hgb"]
-  }
-  {
-    name: "brick-cgb"
+    name: "humble-gaming-brick"
     engine: "gaming-brick"
     configuration {
       schema: "puck.gaming-brick.configuration.v1"
@@ -308,22 +217,10 @@ machines [
         path: "cartridges/cgb/tetromino.cgb.cartridge.json"
       }
     }
-    contentFolders ["cartridges/cgb", "../../roms/hgb"]
+    contentFolders ["cartridges/cgb", "cartridges/dmg", "../../roms/hgb"]
   }
   {
-    name: "brick-agb"
-    engine: "gaming-brick"
-    configuration {
-      schema: "puck.gaming-brick.configuration.v1"
-      model: "agb"
-      content {
-        path: "cartridges/cgb/hgb-mirror.cgb.cartridge.json"
-      }
-    }
-    contentFolders ["cartridges/cgb", "../../roms/hgb"]
-  }
-  {
-    name: "advanced-brick"
+    name: "advanced-gaming-brick"
     engine: "advanced-gaming-brick"
     configuration {
       schema: "puck.advanced-gaming-brick.config.v1"
@@ -334,18 +231,7 @@ machines [
     contentFolders ["cartridges/agb", "../../roms/agb"]
   }
   {
-    name: "tune-jukebox"
-    engine: "tune-instrument"
-    configuration {
-      schema: "puck.tune-instrument.configuration.v1"
-      content {
-        path: "tunes/arrival-tune.audio.json"
-      }
-    }
-    contentFolders ["tunes"]
-  }
-  {
-    name: "gaming-deck"
+    name: "humble-gaming-deck"
     engine: "humble-gaming-deck"
     configuration {
       schema: "puck.humble-gaming-deck.configuration.v1"
@@ -402,8 +288,8 @@ kits {
   ]
 }
 
-// Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. A brick screen is 160 by
-// 144, the advanced brick's 240 by 160 and the deck's 256 by 240, at 2 mm a pixel.
+// Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. The brick's screen is
+// 160 by 144, the advanced brick's 240 by 160 and the deck's 256 by 240, at 2 mm a pixel.
 let deviceRoute = { engageable: true, engageRadius: 3, kit: "devicePad" }
 
 screens [
@@ -416,67 +302,31 @@ screens [
     halfHeight: 0.144
     halfDepth: 0.005
     round: 0
-    source: machine(instance: `brick-dmg`, output: "video")
+    source: machine(instance: `humble-gaming-brick`, output: "video")
     route: deviceRoute
   }
   {
     index: 1
-    origin [-13, 0.88, (deviceZ + 0.067)]
-    right [1, 0, 0]
-    up [0, 1, 0]
-    halfWidth: 0.16
-    halfHeight: 0.144
-    halfDepth: 0.005
-    round: 0
-    source: machine(instance: `brick-cgb`, output: "video")
-    route: deviceRoute
-  }
-  {
-    index: 2
-    origin [-16, 0.6, (deviceZ + 0.077)]
-    right [1, 0, 0]
-    up [0, 1, 0]
-    halfWidth: 0.16
-    halfHeight: 0.144
-    halfDepth: 0.005
-    round: 0
-    source: machine(instance: `brick-agb`, output: "video")
-    route: deviceRoute
-  }
-  {
-    index: 3
-    origin [-19, 0.6, (deviceZ + 0.077)]
+    origin [-13, 0.6, (deviceZ + 0.077)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.24
     halfHeight: 0.16
     halfDepth: 0.005
     round: 0
-    source: machine(instance: `advanced-brick`, output: "video")
+    source: machine(instance: `advanced-gaming-brick`, output: "video")
     route: deviceRoute
   }
   {
-    index: 4
-    origin [-22, 0.68, (deviceZ + 0.172)]
-    right [1, 0, 0]
-    up [0, 1, 0]
-    halfWidth: 0.16
-    halfHeight: 0.144
-    halfDepth: 0.005
-    round: 0
-    source: machine(instance: `tune-jukebox`, output: "video")
-    route: deviceRoute
-  }
-  {
-    index: 5
-    origin [-25, 0.64, (deviceZ + 0.122)]
+    index: 2
+    origin [-16, 0.64, (deviceZ + 0.122)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.256
     halfHeight: 0.24
     halfDepth: 0.005
     round: 0
-    source: machine(instance: `gaming-deck`, output: "video")
+    source: machine(instance: `humble-gaming-deck`, output: "video")
     // The deck has two controller ports; an engaged seat plays the first.
     route {
       engageable: true
