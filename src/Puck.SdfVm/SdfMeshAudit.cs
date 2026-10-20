@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Baking;
 using Puck.SignedDistance.Queries;
 
 namespace Puck.SdfVm;
@@ -572,21 +573,13 @@ public static class SdfMeshAudit {
     // at the least), worst first; ties fall to the cluster nearest the frame's origin along x, then y, then z.
     private static List<SdfMeshAuditCluster> Cluster(List<Sample> flagged, float cell) {
         var reach = MathF.Max((1.5f * cell), 0.005f);
-        var parents = new int[flagged.Count];
+        var clusters = new SdfDisjointSet(count: flagged.Count);
         var buckets = new Dictionary<(int, int, int), List<int>>();
 
         (int, int, int) Bucket(Vector3 point) => ((int)MathF.Floor(point.X / reach), (int)MathF.Floor(point.Y / reach), (int)MathF.Floor(point.Z / reach));
-        int Root(int sample) {
-            while (parents[sample] != sample) {
-                parents[sample] = parents[parents[sample]];
-                sample = parents[sample];
-            }
-            return sample;
-        }
+        int Root(int sample) => clusters.Find(element: sample);
 
         for (var sample = 0; (sample < flagged.Count); sample++) {
-            parents[sample] = sample;
-
             var (bx, by, bz) = Bucket(point: flagged[sample].Position);
 
             for (var dz = -1; (dz <= 1); dz++) {
@@ -595,7 +588,7 @@ public static class SdfMeshAudit {
                         if (!buckets.TryGetValue(key: ((bx + dx), (by + dy), (bz + dz)), value: out var near)) { continue; }
                         foreach (var other in near) {
                             if (Vector3.Distance(value1: flagged[sample].Position, value2: flagged[other].Position) <= reach) {
-                                parents[Root(sample: sample)] = Root(sample: other);
+                                clusters.Union(first: sample, second: other);
                             }
                         }
                     }

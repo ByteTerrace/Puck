@@ -1458,27 +1458,13 @@ public sealed class SdfSampledLattice {
     private (int[] Quads, int[] Materials) WithoutSpecks(int[] quads, int[] materials, float[] positions) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
-        var parent = new int[vertexCount];
+        var pieceSets = new SdfDisjointSet(count: vertexCount);
 
-        for (var vertex = 0; (vertex < vertexCount); vertex++) {
-            parent[vertex] = vertex;
-        }
-
-        int Root(int vertex) {
-            while (parent[vertex] != vertex) {
-                vertex = parent[vertex] = parent[parent[vertex]];
-            }
-
-            return vertex;
-        }
+        int Root(int vertex) => pieceSets.Find(element: vertex);
 
         for (var quad = 0; (quad < quadCount); quad++) {
-            var first = Root(vertex: quads[(4 * quad)]);
-
             for (var corner = 1; (corner < 4); corner++) {
-                var other = Root(vertex: quads[((4 * quad) + corner)]);
-
-                if (other != first) { parent[other] = first; }
+                pieceSets.Union(first: quads[(4 * quad)], second: quads[((4 * quad) + corner)]);
             }
         }
 

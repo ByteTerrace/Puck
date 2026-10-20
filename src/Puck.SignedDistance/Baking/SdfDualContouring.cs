@@ -710,20 +710,9 @@ internal static class SdfDualContouring {
     // vertices of one cell are one piece when a quad joins them.
     private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, List<double>> vertexPlanes, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
-        var parent = new int[vertexCount];
+        var pieceSets = new SdfDisjointSet(count: vertexCount);
 
-        for (var vertex = 0; (vertex < vertexCount); vertex++) {
-            parent[vertex] = vertex;
-        }
-
-        int Root(int vertex) {
-            while (parent[vertex] != vertex) {
-                parent[vertex] = parent[parent[vertex]];
-                vertex = parent[vertex];
-            }
-
-            return vertex;
-        }
+        int Root(int vertex) => pieceSets.Find(element: vertex);
 
         for (var quad = 0; (quad < quads.Count); quad += 4) {
             for (var corner = 0; (corner < 4); corner++) {
@@ -731,10 +720,7 @@ internal static class SdfDualContouring {
                 var b = quads[(quad + ((corner + 1) & 3))];
 
                 if ((owners[a] >= 0) && (owners[a] == owners[b])) {
-                    var ra = Root(vertex: a);
-                    var rb = Root(vertex: b);
-
-                    parent[Math.Max(val1: ra, val2: rb)] = Math.Min(val1: ra, val2: rb);
+                    pieceSets.Union(first: a, second: b);
                 }
             }
         }
@@ -934,28 +920,15 @@ internal static class SdfDualContouring {
     // The patches of a corner-sign mask: the sign-changing cube edges joined by the marching-squares segments of the six
     // faces, each connected piece one patch.
     private static (sbyte[] PatchOfEdge, int Count) Patches(int mask) {
-        var parent = new int[CellEdges.Length];
+        var patchSets = new SdfDisjointSet(count: CellEdges.Length);
         var changes = new bool[CellEdges.Length];
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {
-            parent[edge] = edge;
             changes[edge] = ((((mask >> CellEdges[edge].A) ^ (mask >> CellEdges[edge].B)) & 1) != 0);
         }
 
-        int Root(int edge) {
-            while (parent[edge] != edge) {
-                edge = parent[edge];
-            }
-
-            return edge;
-        }
-
-        void Join(int first, int second) {
-            var a = Root(edge: first);
-            var b = Root(edge: second);
-
-            parent[Math.Max(val1: a, val2: b)] = Math.Min(val1: a, val2: b);
-        }
+        int Root(int edge) => patchSets.Find(element: edge);
+        void Join(int first, int second) => patchSets.Union(first: first, second: second);
 
         var onFace = new int[4];
 
