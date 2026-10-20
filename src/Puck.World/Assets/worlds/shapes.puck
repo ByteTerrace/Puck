@@ -1128,10 +1128,10 @@ template motionPrototypes() {
       exhibit(label: "PARENT CHAIN", extra: [accent])
     }
   }
-  // The sphere slides along the side of the still box, through a smooth union. The group bakes once, at the pose its
-  // program arrived in, and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves
-  // away. The sphere stays partly outside the box over the whole slide: a sphere the bake found inside the box would
-  // bake into no surface and never draw.
+  // The sphere slides along the side of the still box, through a smooth union. The group bakes at the pose its program
+  // arrived in and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves away, until
+  // the clock pauses and the group bakes again at the held pose (PUCK122 warns of it). The sphere stays partly outside
+  // the box over the whole slide: a sphere the bake found inside the box would bake into no surface and never draw.
   prototype "motion-smooth-blend" {
     document {
       clockDriver(key: "blend", cadence: 1.2)

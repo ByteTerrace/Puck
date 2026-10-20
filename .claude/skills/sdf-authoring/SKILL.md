@@ -265,6 +265,21 @@ special case. A shape carrying `domain` folds may not also carry a swing or
 slide. Details, caps, every refusal, and the Moth's driver map are in
 `references/rig.md`.
 
+**Blends between shapes that move apart (owner's ruling).** A pooled `group`
+bakes one mesh at the pose its program arrives in, and each vertex then rides
+one shape's slot, so a smooth or non-union blend joining shapes with different
+motion owners (a swing, slide, effector chain or frame not shared through
+`parent`) stretches its seam as they move. It is a warning, not an error:
+PUCK122 in `puck compile --validate`, `puck lint` and `puck creation stats`
+names the creation, the two shapes, what moves each and the blend
+(`CreationMotion.MovingBlends`). Once the shapes' relative pose holds still the
+engine bakes the group again there (the
+[settle rebake](../rendering/references/mesh-bake.md#groups-poses-and-materials)),
+so a pose that settles reads right and continuous motion keeps the stretched
+seam. When the seam must hold while the shapes move, give them one owner: put
+the swing or slide on a shape both parent under, or take the moving shape out
+of the group and accept a union crease.
+
 ## Render-only versus deterministic
 
 A solid placement requiring deterministic field contact refuses non-detail

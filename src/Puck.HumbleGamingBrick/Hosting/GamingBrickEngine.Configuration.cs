@@ -129,6 +129,8 @@ public sealed partial class GamingBrickEngine {
     );
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentException">The configuration is invalid, its content asset was not prepared, or the
+    /// image is not a cartridge the machine can run.</exception>
     public IMachineRuntime CreateMachine(MachineCreationRequest request) {
         ArgumentNullException.ThrowIfNull(request);
         MachineConfigurationValidation.Validate(
@@ -153,12 +155,12 @@ public sealed partial class GamingBrickEngine {
 
         return new MachineHost(
             model: model,
-            cartridgeRom: (configuration.TryGetProperty(
+            cartridgeRom: RequireRunnable(image: (configuration.TryGetProperty(
                 propertyName: "content",
                 value: out _
             )
             ? request.RequireAsset(fieldPath: "content.path").Image.ToArray()
-            : null),
+            : null)),
             savePath: request.SavePath,
             audioSampleRate: request.AudioSampleRate,
             bootMode: boot,

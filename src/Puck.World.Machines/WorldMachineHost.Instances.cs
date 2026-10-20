@@ -35,9 +35,15 @@ public sealed partial class WorldMachineHost {
             lease.Runtime.Status,
             (queued?.CompletedSteps ?? lease.CompletedSteps),
             (queued?.PendingSteps ?? 0),
-            queued?.QueueFault
+            queued?.QueueFault,
+            MountedContent(lease: lease)
         );
     }
+    // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
+    // authored content file is absent leaves out.
+    private static string? MountedContent(MachineLease lease) => lease.Assets.Values.FirstOrDefault(
+        predicate: static asset => (asset.Role == MachineFieldRole.ContentPath)
+    )?.Path;
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(string instance, string output) =>
         ((m_instances.TryGetValue(
@@ -137,8 +143,13 @@ public sealed partial class WorldMachineHost {
 
         try {
             var current = live.Declaration;
+            // A machine that booted with its authored content absent runs without it, so an operation built from its
+            // configuration (a reset) recreates the machine it runs rather than reading the absent file.
             var requestForProvider = new MachineCreationRequest(
-                Configuration: current.Configuration.Clone(),
+                Configuration: WithoutFields(
+                    configuration: current.Configuration,
+                    fieldPaths: live.Lease.AbsentContent
+                ),
                 Assets: live.Lease.Assets,
                 AudioSampleRate: MachineAudioRate.SampleRate
             );
@@ -153,6 +164,7 @@ public sealed partial class WorldMachineHost {
                     return false;
                 case MachineOperationPreparation.Replacement replacement: {
                         var requestForReplacement = PrepareCreation(
+                            absentContent: out _,
                             engine: engine,
                             configuration: replacement.Configuration,
                             documentDirectory: m_documentDirectory
@@ -593,14 +605,18 @@ public sealed partial class WorldMachineHost {
                 var request = PrepareCreation(
                     engine,
                     declaration.Configuration,
-                    candidate.DocumentDirectory
+                    candidate.DocumentDirectory,
+                    absentContent: out var absentContent,
+                    declaredBy: declaration.Name
                 );
                 var runtime = engine.CreateMachine(request: request);
                 var lease = new MachineLease(
                     runtime,
                     plan.NextGeneration++,
                     request.Assets
-                );
+                ) {
+                    AbsentContent = absentContent,
+                };
 
                 plan.Created.Add(item: lease);
                 ValidateRuntimeOutputs(
@@ -670,14 +686,18 @@ public sealed partial class WorldMachineHost {
             element2: second.Configuration
         ));
     // Reads a configuration's content and asset paths, each relative path beside documentDirectory: the directory of
-    // the document that declares the machine.
-    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory) {
+    // the document that declares the machine. A document's own declaration whose content file is absent boots the
+    // machine with no cartridge, named once, so a world whose content lives only on some machines boots everywhere; an
+    // operation that names absent content is refused.
+    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory,
+        out IReadOnlyList<string> absentContent, string? declaredBy = null) {
         MachineConfigurationValidation.Validate(
             descriptor: engine.Descriptor.Configuration,
             value: configuration
         );
         var tree = JsonNode.Parse(configuration.GetRawText())!.AsObject();
         var assets = new Dictionary<string, PreparedMachineAsset>(comparer: StringComparer.Ordinal);
+        var absent = new List<string>();
 
         MachineConfigurationFields.Visit(
             configuration: tree,
@@ -688,6 +708,20 @@ public sealed partial class WorldMachineHost {
                 }
                 var path = site.Value!.GetValue<string>();
 
+                if (
+                    (declaredBy is not null) &&
+                    (site.Field.Role == MachineFieldRole.ContentPath) &&
+                    WorldDocumentPaths.TryResolve(
+                        documentDirectory: documentDirectory,
+                        path: path,
+                        reason: out _,
+                        resolved: out var resolvedContent
+                    ) &&
+                    !File.Exists(path: resolvedContent)
+                ) {
+                    absent.Add(item: site.Path);
+                    return;
+                }
                 if (!TryReadContent(
                     path,
                     documentDirectory,
@@ -733,16 +767,51 @@ public sealed partial class WorldMachineHost {
                         image,
                         WorldDefinitionFileSource.ComputeContentHash(content: source),
                         source,
-                        content
+                        content,
+                        site.Field.Role
                     )
                 );
             }
+        );
+        foreach (var fieldPath in absent) {
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub.Narrate(
+                    channel: "machine",
+                    text: $"[machine: '{declaredBy}' configuration.{fieldPath} names content absent here; it runs with no cartridge]"
+                );
+            }
+        }
+        absentContent = absent;
+        configuration = WithoutFields(
+            configuration: configuration,
+            fieldPaths: absent
         );
         return new(
             configuration.Clone(),
             assets.ToFrozenDictionary(comparer: StringComparer.Ordinal),
             MachineAudioRate.SampleRate
         );
+    }
+    // A configuration without the named content fields: each field's whole object leaves it, so the engine creates its
+    // empty machine rather than asking for an asset that was never read.
+    private static JsonElement WithoutFields(JsonElement configuration, IReadOnlyList<string> fieldPaths) {
+        if (fieldPaths.Count == 0) {
+            return configuration.Clone();
+        }
+
+        var tree = JsonNode.Parse(configuration.GetRawText())!.AsObject();
+
+        foreach (var fieldPath in fieldPaths) {
+            var segments = fieldPath.Split(separator: '.');
+            var removed = Math.Max(val1: 0, val2: (segments.Length - 2));
+            JsonNode? holder = tree;
+
+            for (var index = 0; (index < removed); index++) {
+                holder = holder?[segments[index]];
+            }
+            _ = (holder as JsonObject)?.Remove(propertyName: segments[removed]);
+        }
+        return JsonSerializer.SerializeToElement(value: tree);
     }
     private static void ValidateRuntimeOutputs(MachineEngineDescriptor descriptor, IMachineRuntime runtime) {
         ValidatePorts(
@@ -814,6 +883,9 @@ public sealed partial class WorldMachineHost {
         public IMachineRuntime Runtime { get; } = runtime;
         public ulong Generation { get; set; } = generation;
         public IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
+        // The configuration's content fields whose files were absent when the runtime was created, so it runs without
+        // them.
+        public IReadOnlyList<string> AbsentContent { get; init; } = [];
 
         public long CompletedSteps { get; set; }
     }

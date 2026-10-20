@@ -38,23 +38,6 @@ public static class ShaderFrameInterface {
     public const uint EngineTickRate = ((uint)FixedTickConversion.TicksPerSecond);
     /// <summary>The frame member holding one while the pointer is pressed and zero otherwise (<c>uint</c>).</summary>
     public const string PointerDown = "pointerDown";
-    /// <summary>The frame member holding how many presses the pointer has made over the pass (<c>uint</c>).</summary>
-    public const string PointerPresses = "pointerPresses";
-    /// <summary>The frame member holding the paired camera's position (<c>float3</c>).</summary>
-    public const string CameraPosition = "cameraPosition";
-    /// <summary>The frame member holding the paired camera's vertical field of view in radians, or zero when the pass has
-    /// no paired camera (<c>float</c>).</summary>
-    public const string CameraFov = "cameraFov";
-    /// <summary>The frame member holding the point the paired camera looks at (<c>float3</c>).</summary>
-    public const string CameraTarget = "cameraTarget";
-    /// <summary>The frame member holding the extent, in display pixels and fractional, of the rect the node's output is
-    /// placed in this frame (<c>float2</c>), or the node's own extent when its host places it nowhere. The placement
-    /// stretches the whole output into that rect, and a pane's output keeps its layout's allocation envelope while the
-    /// rect eases, so a pass projects at <c>placedExtent.x / placedExtent.y</c>, the paired camera's aspect, never at
-    /// its output's.</summary>
-    public const string PlacedExtent = "placedExtent";
-    /// <summary>The frame member holding the paired camera's up direction (<c>float3</c>).</summary>
-    public const string CameraUp = "cameraUp";
 
     /// <summary>Gets the frame group's members: the values every pass of a node shares each frame, in declaration
     /// order.</summary>
@@ -66,12 +49,6 @@ public static class ShaderFrameInterface {
         Value(name: Frame, type: ShaderValueType.Uint),
         Value(name: TickRate, type: ShaderValueType.Uint),
         Value(name: PointerDown, type: ShaderValueType.Uint),
-        Value(name: PointerPresses, type: ShaderValueType.Uint),
-        Value(name: CameraPosition, type: ShaderValueType.Float3),
-        Value(name: CameraFov, type: ShaderValueType.Float),
-        Value(name: CameraTarget, type: ShaderValueType.Float3),
-        Value(name: CameraUp, type: ShaderValueType.Float3),
-        Value(name: PlacedExtent, type: ShaderValueType.Float2),
     ];
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
@@ -214,29 +191,14 @@ public static class ShaderFrameInterface {
 /// <param name="Pointer">The pointer's position during its most recent press, in the pass's pixels with the origin at
 /// the top-left corner, or zero before the first press.</param>
 /// <param name="PointerDown">Whether the pointer is pressed.</param>
-/// <param name="PointerPresses">How many presses the pointer has made over the pass.</param>
-/// <param name="CameraPosition">The paired camera's position, or zero with no paired camera.</param>
-/// <param name="CameraTarget">The point the paired camera looks at, or zero with no paired camera.</param>
-/// <param name="CameraUp">The paired camera's up direction, or zero with no paired camera.</param>
-/// <param name="CameraFov">The paired camera's vertical field of view in radians, or zero with no paired camera, which
-/// a pass reads as having none.</param>
 /// <param name="StateTick">The simulation tick of the state the frame shows, or <see langword="null"/> when the host
 /// names none. No pass reads it: a node records it with each image it renders, and a capture served from that image
 /// records it, however many frames later the image is served.</param>
-/// <param name="PlacedExtent">The extent, in display pixels and fractional, of the rect the host places the node's
-/// output in this frame, whose aspect a pass projects at (<see cref="ShaderFrameInterface.PlacedExtent"/>), or
-/// <see langword="null"/> when the host places it nowhere, which the node writes as its own extent.</param>
 public readonly record struct ShaderFrameValues(
     ulong Tick,
     double Time,
     double TimeDelta,
     Vector2 Pointer,
     bool PointerDown,
-    uint PointerPresses,
-    Vector3 CameraPosition,
-    Vector3 CameraTarget,
-    Vector3 CameraUp,
-    float CameraFov,
-    ulong? StateTick = null,
-    Vector2? PlacedExtent = null
+    ulong? StateTick = null
 );

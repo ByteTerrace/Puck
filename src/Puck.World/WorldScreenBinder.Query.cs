@@ -19,8 +19,11 @@ namespace Puck.World;
 /// <param name="Fault">A slot's live fault (a missing content file, no camera device, a window not found), or <see langword="null"/>.</param>
 /// <param name="Cartridge">The cartridge document the machine's content was compiled from, or <see langword="null"/>
 /// for content booted as read.</param>
+/// <param name="Content">The content path the machine mounted, or <see langword="null"/> when it runs with no cartridge
+/// or no machine is assigned.</param>
 public readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null);
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null,
+    string? Content = null);
 public sealed partial class WorldScreenBinder {
     /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> — a facade over
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
@@ -90,7 +93,8 @@ public sealed partial class WorldScreenBinder {
                 MaximumPendingSteps: machineState.MaximumPendingSteps,
                 BackpressureEvents: machineState.BackpressureEvents,
                 Fault: machineState.Fault,
-                Cartridge: machineState.Cartridge
+                Cartridge: machineState.Cartridge,
+                Content: machineState.Content
             );
         }
 

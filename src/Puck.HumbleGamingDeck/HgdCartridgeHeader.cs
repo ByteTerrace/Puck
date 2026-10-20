@@ -124,12 +124,23 @@ public sealed record HgdCartridgeHeader {
         private init;
     }
 
+    /// <summary>The length of the iNES and NES 2.0 header in bytes.</summary>
+    public const int Length = 16;
+
+    /// <summary>Determines whether an image begins with a whole iNES or NES 2.0 header: at least <see cref="Length"/>
+    /// bytes, the first four the signature <c>NES</c> and <c>0x1A</c>. The rest of the header is not checked.</summary>
+    /// <param name="header">The image's leading bytes, at least <see cref="Length"/> of them when the image has that
+    /// many.</param>
+    /// <param name="imageLength">The whole image's length in bytes.</param>
+    /// <returns><see langword="true"/> when the image carries the signature.</returns>
+    public static bool IsCartridgeImage(ReadOnlySpan<byte> header, long imageLength) =>
+        ((imageLength >= Length) && (header.Length >= Length) && header[..4].SequenceEqual(other: "NES\u001a"u8));
     /// <summary>Parses all sixteen header bytes without consulting a database.</summary>
     /// <param name="header">The header bytes, at least sixteen bytes beginning with the iNES signature.</param>
     /// <returns>The decoded header.</returns>
     /// <exception cref="InvalidDataException">The signature, reserved bits, or size encoding is damaged or ambiguous.</exception>
     public static HgdCartridgeHeader Parse(ReadOnlySpan<byte> header) {
-        if ((header.Length < 16) || !header[..4].SequenceEqual(other: "NES\u001a"u8)) {
+        if (!IsCartridgeImage(header: header, imageLength: header.Length)) {
             throw new InvalidDataException(message: "The cartridge needs a complete iNES or NES 2.0 header and NES signature.");
         }
         var nes20 = ((header[7] & 12) == 8);

@@ -804,6 +804,9 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
                 ? "bound"
                 : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText} gun={gunText}"
             );
+            if (state.Content is null) {
+                _ = builder.Append(value: $" {WorldMachineCommandModule.NoCartridge}");
+            }
         } else {
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,

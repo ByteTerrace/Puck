@@ -63,9 +63,6 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// uploaded producer's source package, <c>source.&lt;producer id&gt;</c>, opened from <see cref="Settings"/> and converted
 /// once a frame at most however many instances read it, or <see langword="null"/> for a row that names a
 /// <see cref="Source"/>. A package instance reads no input and takes no time scale, output or override.</param>
-/// <param name="Camera">The authored camera the instance renders from, feeding the frame block's
-/// <c>cameraPosition</c>, <c>cameraTarget</c>, <c>cameraUp</c> and <c>cameraFov</c>, or <see langword="null"/>, which
-/// leaves <c>cameraFov</c> zero so a graph keeps its own pointer orbit.</param>
 /// <param name="Refresh">How often it refreshes, or <see langword="null"/> for every frame something visible reads
 /// it.</param>
 /// <param name="Inputs">The external versions of its graph bound to other instances' outputs, or
@@ -95,7 +92,6 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Source = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Package = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Camera = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphRefresh? Refresh = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraphInput>? Inputs = null,
     float TimeScale = 1f,

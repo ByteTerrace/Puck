@@ -116,26 +116,6 @@ public sealed partial class WorldStampPool {
             (radius > 0f)
         );
     }
-    private static int GroupMotionOwner(Registration live, CreationDocument document, int index) {
-        while (index >= 0) {
-            var shape = document.Shapes![index];
-
-            if (
-                (shape.Swings is { Count: > 0 }) ||
-                (shape.Slides is { Count: > 0 })
-            ) {
-                return index;
-            }
-            foreach (var effector in (document.Effectors ?? [])) {
-                if (
-                    (shape.Name is { } name) &&
-                    effector.Chain.Contains(value: name.Value)
-                ) {
-                    return index;
-                }
-            }
-            index = live.PartParent[index];
-        }
-        return -1;
-    }
+    private static int GroupMotionOwner(Registration live, CreationDocument document, int index) =>
+        CreationMotion.Owner(document: document, index: index, parents: live.PartParent);
 }

@@ -895,9 +895,7 @@ frames publish their retained placements on every prepared frame. Editor compari
 viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
 frame, one rebuild for a shrinking transition across quantization steps and for an opposite-axis one,
 and the split layout's half-display
-allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
-camera projects for, so a pane shader projects at the placed aspect while its output keeps the
-allocation's.
+allocation.
 
 Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
 Repeated window resizes can delay frame production, but cannot advance the capture to a later tick

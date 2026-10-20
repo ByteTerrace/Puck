@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-scrgb' (sha256/3ddb93a719c4f34e99e5c1578638693c0db3f4de77b22bc68fe9b31217d2d908). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-scrgb' (sha256/e79fe0bca7969a9cf99f51f409e455831422516b7e371487b6668c0f5f05bc6e). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_SCRGB
 #define PUCK_SHADER_INTERFACE_SOURCE_SCRGB
 
@@ -11,16 +11,6 @@ struct SourceScrgbFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourceScrgbFrame> frameGroup : register(b0, space0);
 

@@ -69,7 +69,7 @@ public static class Cartridge {
             header: header,
             rom: rom
         ),
-            _ => throw new NotSupportedException(message: $"The mapper '{header.Mapper}' is not yet implemented."),
+            _ => throw new NotSupportedException(message: $"Cartridge type 0x{header.TypeCode:X2} names a mapper the machine does not implement."),
         };
     }
 }

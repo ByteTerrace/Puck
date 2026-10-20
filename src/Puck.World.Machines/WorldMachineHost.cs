@@ -1129,7 +1129,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 (namedQueued?.MaximumPendingSteps ?? 0),
                 (namedQueued?.BackpressureEvents ?? 0),
                 namedQueued?.QueueFault,
-                cartridge
+                cartridge,
+                MountedContent(lease: lease)
             );
         }
 
@@ -1143,7 +1144,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             MaximumPendingSteps: (queued?.MaximumPendingSteps ?? 0),
             BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
             Fault: (queued?.QueueFault ?? slot.DeclaredFault),
-            Cartridge: slot.Cartridge
+            Cartridge: slot.Cartridge,
+            Content: ((slot.Machine is null) ? null : slot.MachineContentPath)
         );
     }
     /// <inheritdoc/>

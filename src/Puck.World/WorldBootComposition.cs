@@ -438,9 +438,9 @@ public static class WorldBootComposition {
         // never GPU-wires it, so no capture device or GPU-side texture is ever touched.
         services.AddSingleton(implementationFactory: static sp => {
             var definition = sp.GetRequiredService<WorldDefinition>();
-
-            return new WorldScreenBinder(
-                renderProbe: sp.GetService<WorldRenderProbe>(),
+            var probe = sp.GetService<WorldRenderProbe>();
+            var binder = new WorldScreenBinder(
+                renderProbe: probe,
                 screens: ExpandedScreens(definition: definition),
                 machines: sp.GetRequiredService<WorldMachineHost>(),
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
@@ -479,6 +479,9 @@ public static class WorldBootComposition {
                 MeshLibrary = new SdfMeshLibrary(store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes) : null)),
                 SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers,
             };
+
+            probe?.MeshSettle.Retarget(target: binder.MeshLibrary.Settles);
+            return binder;
         });
         // The slice of the binder the frame presenter drives each frame.
         services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
@@ -1233,6 +1236,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
         AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
@@ -1583,6 +1587,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.

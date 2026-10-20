@@ -317,9 +317,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         return [];
     }
     /// <inheritdoc/>
-    /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, a pane's
-    /// the named camera its row pairs, recorded by <see cref="SetCamera"/>, and a camera view's or a session's the one it
-    /// last rendered from (<see cref="ViewScenes"/>), a session's in its destination's space.</remarks>
+    /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, recorded by
+    /// <see cref="SetCamera"/>, and a camera view's or a session's the one it last rendered from
+    /// (<see cref="ViewScenes"/>), a session's in its destination's space. A <c>views.graphs</c> pane has none.</remarks>
     bool IRenderGraphHitScene.TryCamera(int instance, out CameraSnapshot camera) {
         if (
             (m_runtime is { } runtime) &&

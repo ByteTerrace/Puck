@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-rgba' (sha256/5d2b3c22c375804a8694d1a199aff3f75f70b38c91a1e83d909a282a4c2d0a02). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-rgba' (sha256/9ea1f16449fd5d7d5729bcd3bcefe8e9a361cd68ff45119e953086c34f5c93bf). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_RGBA
 #define PUCK_SHADER_INTERFACE_SOURCE_RGBA
 
@@ -11,16 +11,6 @@ struct SourceRgbaFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourceRgbaFrame> frameGroup : register(b0, space0);
 

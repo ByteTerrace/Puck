@@ -57,7 +57,7 @@ of scope here.
   (`humble-gaming-deck`) is registered by `Puck.HumbleGamingDeck.Forge`'s
   extension, which the World and the CLI compose as a built-in and the silo
   installs, and a world screen hosts a Deck machine that mounts a raw `.nes`
-  image from its `contentFolder`. A screen route names the input port its
+  image from its `contentFolders`. A screen route names the input port its
   engaged seat drives (`route.port`), so the two controller ports route
   explicitly. The debug world's device row runs the Deck on the two shipped
   test cartridges, `colour-bars.nes` and `moving-sprite.nes`, which the forge's

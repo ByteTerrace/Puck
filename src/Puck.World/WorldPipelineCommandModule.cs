@@ -121,13 +121,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.load",
-            description: "pipeline.load <name> <source> [camera] — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
+            description: "pipeline.load <name> <source> — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {
-                if (args.Count is < 2 or > 3) {
+                if (args.Count != 2) {
                     return CommandResult.Usage(
-                    form: "<name> <source> [camera]",
+                    form: "<name> <source>",
                     verb: "pipeline.load"
                 );
                 }
@@ -136,10 +136,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         Principal: context.Principal,
                         Graph: new WorldViewGraph(
                             Name: args[0].ToString(),
-                            Source: args[1].ToString(),
-                            Camera: ((args.Count == 3)
-                    ? args[2].ToString()
-                    : null)
+                            Source: args[1].ToString()
                         )
                     ),
                     echoes: echoes,

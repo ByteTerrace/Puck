@@ -156,7 +156,35 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   intersection face keeps the slot of the shape it shapes
   (`sdfComposeCandidate`); only a union-family winner hands its slot on. Rigid
   per-vertex skinning stretches a blend seam between members that move far
-  apart.
+  apart, until they settle.
+- **A skinned group bakes again once its members settle (owner's ruling).** A
+  smooth or non-union blend across shapes that move independently is warned at
+  authoring time (PUCK122, `CreationMotion.MovingBlends`), and its mesh is
+  rebaked once the shapes' relative pose settles. `SdfMeshPathBake.Settle`
+  watches every dynamic group whose geometry reads slots besides its own: once
+  their poses in the group's frame drift past `SdfMeshSettle.DriftPosition` or
+  `DriftAngle` from the baked pose and then hold within `StillPosition` and
+  `StillAngle` for `SettleSeconds` of frame time, `SdfMeshBakeGroup.PlanSlot`
+  plans that slot's group again with its other slots' poses snapped to
+  `SdfMeshSettle.PositionSteps` and `OrientationSteps`
+  (`SdfMeshGeometryBuilder.Snap`, whose steps join the hash), so poses that
+  settle near one another key one geometry and the library or its store answers
+  the second. The snap's worst rounding sits under the drift, so a group baked at
+  its snapped pose is no candidate where it stands. The replacement takes the
+  group's place drawing the old skinned mesh until its own lands; one that meshes
+  no surface hands the group back, blocked until its pose moves. A pose still
+  changing never rebakes, and each bake starts at most `MaxInFlight` at once and
+  `MaxPerSecond` a second. The thresholds are bake constants beside its cell
+  sizes, not document fields: they measure a mesh against its own field, not
+  anything a world means. `world.counters sdf.mesh-settle` reads queued, done,
+  reused, moving (frames a drifted group waited while it moved), capped and
+  refused, summed over the residencies sharing the presentation's library. A
+  program that arrives later still plans every group at the pose of its frame,
+  unsnapped.
+- **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
+  it replaces until its own lands, so it counts as drawn already; `Land` and
+  `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
+  draws stale, or a still group keeps drawing the old mesh.
 
 ## The mesh region
 
@@ -204,7 +232,8 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   shapes ride their own slots, so their places and turns are frame transforms;
   the symptom of a miss is an edit that shows only once the group's first shape
   changes. The key is taken from the frame a program arrives in, so shapes that
-  move against one another later keep the mesh of that pose.
+  move against one another later keep the mesh of that pose until they settle
+  and the group bakes again (the settle rebake above).
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity: the bake kernels'
   bytecode, `Puck.SignedDistance`'s build, and the hash of the

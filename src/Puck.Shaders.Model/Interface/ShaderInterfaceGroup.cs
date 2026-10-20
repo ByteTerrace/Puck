@@ -8,7 +8,7 @@ namespace Puck.Shaders;
 /// group is set 0 and space 0 in every pass.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderInterfaceGroup>))]
 public enum ShaderInterfaceGroup {
-    /// <summary>Changes every frame: resolution, presentation time, the deterministic tick, the paired camera.</summary>
+    /// <summary>Changes every frame: resolution, presentation time, the deterministic tick, the pointer.</summary>
     Frame = 0,
     /// <summary>Changes every tick at most: the state mirror's regions and the field lattices.</summary>
     World = 1,

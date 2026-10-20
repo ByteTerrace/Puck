@@ -34,29 +34,26 @@ public sealed class HgdCartridge {
     public static HgdCartridge Load(ReadOnlySpan<byte> image) {
         var header = HgdCartridgeHeader.Parse(header: image);
 
-        if ((header.Mapper != 0) || (header.Submapper != 0)) {
-            throw new NotSupportedException(message: $"Unimplemented mapper {header.Mapper} ({MapperName(mapper: header.Mapper)}), submapper {header.Submapper}.");
+        if (Unimplemented(header: header) is { } unimplemented) {
+            throw new NotSupportedException(message: unimplemented);
         }
-        if (header.ConsoleType != 0) {
-            throw new NotSupportedException(message: $"Unimplemented console type {header.ConsoleType}, console detail {header.ConsoleDetail:X2}.");
-        }
-        var prgRam = (header.PrgRamSize + header.PrgNvRamSize);
-        var chrRam = (header.ChrRamSize + header.ChrNvRamSize);
-
-        if (((header.PrgRomSize != 16384) && (header.PrgRomSize != 32768)) ||
-            ((header.ChrRomSize != 0) && (header.ChrRomSize != 8192)) ||
-            ((header.ChrRomSize == 0) ? (chrRam != 8192) : (chrRam != 0)) ||
-            (prgRam > 8192) || ((prgRam & (prgRam - 1)) != 0) ||
-            (header.HasTrainer && (prgRam < 8192)) || (header.MiscellaneousRomCount != 0) || header.HasBusConflicts) {
-            throw new NotSupportedException(message: "Unimplemented NROM (mapper 0, submapper 0) memory layout: needs 16/32 KiB PRG, 8 KiB CHR ROM or RAM, and at most 8 KiB PRG-RAM; a trainer requires 8 KiB PRG-RAM.");
-        }
-        var expected = (((16UL + (header.HasTrainer ? 512UL : 0UL)) + header.PrgRomSize) + header.ChrRomSize);
-
-        if (((ulong)image.Length) != expected) {
-            throw new InvalidDataException(message: $"Damaged NROM payload: header describes {expected} bytes, image has {image.Length}; truncated or unexplained trailing data.");
+        if (Damaged(header: header, imageLength: image.Length) is { } damaged) {
+            throw new InvalidDataException(message: damaged);
         }
 
         return new HgdCartridge(image: image.ToArray(), header: header);
+    }
+    /// <summary>Returns why <see cref="Load"/> refuses an image with this header and length, judged without the
+    /// payload: a board, console or memory layout the Deck does not implement, or a length the header does not
+    /// describe.</summary>
+    /// <param name="header">The image's decoded header.</param>
+    /// <param name="imageLength">The whole image's length in bytes.</param>
+    /// <returns>The reason, or <see langword="null"/> when <see cref="Load"/> accepts the image.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="header"/> is <see langword="null"/>.</exception>
+    public static string? Refusal(HgdCartridgeHeader header, long imageLength) {
+        ArgumentNullException.ThrowIfNull(argument: header);
+
+        return (Unimplemented(header: header) ?? Damaged(header: header, imageLength: imageLength));
     }
     /// <summary>Creates a board with private writable memory over this image.</summary>
     /// <returns>The independent NROM board.</returns>
@@ -64,6 +61,33 @@ public sealed class HgdCartridge {
         return new HgdNrom(cartridge: this);
     }
 
+    private static string? Damaged(HgdCartridgeHeader header, long imageLength) {
+        var expected = (((16UL + (header.HasTrainer ? 512UL : 0UL)) + header.PrgRomSize) + header.ChrRomSize);
+
+        return ((((ulong)imageLength) != expected)
+            ? $"Damaged NROM payload: header describes {expected} bytes, image has {imageLength}; truncated or unexplained trailing data."
+            : null
+        );
+    }
+    private static string? Unimplemented(HgdCartridgeHeader header) {
+        if ((header.Mapper != 0) || (header.Submapper != 0)) {
+            return $"Unimplemented mapper {header.Mapper} ({MapperName(mapper: header.Mapper)}), submapper {header.Submapper}.";
+        }
+        if (header.ConsoleType != 0) {
+            return $"Unimplemented console type {header.ConsoleType}, console detail {header.ConsoleDetail:X2}.";
+        }
+        var prgRam = (header.PrgRamSize + header.PrgNvRamSize);
+        var chrRam = (header.ChrRamSize + header.ChrNvRamSize);
+
+        return ((((header.PrgRomSize != 16384) && (header.PrgRomSize != 32768)) ||
+            ((header.ChrRomSize != 0) && (header.ChrRomSize != 8192)) ||
+            ((header.ChrRomSize == 0) ? (chrRam != 8192) : (chrRam != 0)) ||
+            (prgRam > 8192) || ((prgRam & (prgRam - 1)) != 0) ||
+            (header.HasTrainer && (prgRam < 8192)) || (header.MiscellaneousRomCount != 0) || header.HasBusConflicts)
+            ? "Unimplemented NROM (mapper 0, submapper 0) memory layout: needs 16/32 KiB PRG, 8 KiB CHR ROM or RAM, and at most 8 KiB PRG-RAM; a trainer requires 8 KiB PRG-RAM."
+            : null
+        );
+    }
     private static string MapperName(int mapper) {
         return mapper switch {
             0 => "NROM",

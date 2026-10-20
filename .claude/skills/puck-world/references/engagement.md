@@ -401,22 +401,40 @@ source); and the Immediate read-backs `screen.state`, `screen.peek`,
 auto-insert submits `WorldScreenOp.Select` from a verb; `SetOptions`, `Link` and
 `Unlink` have codec arms but no console verb.
 
-**Swappable content comes from an authored folder (the owner's ruling).** The
-cartridges a device can swap to are the files in the folder its world author
-points to, one folder per device type: `machines[].contentFolder`, a
-portable relative path resolved beside the declaring document
+**Swappable content comes from authored folders (the owner's ruling).** The
+cartridges a device can swap to are the files in the folders its world author
+lists, never a host flag: `machines[].contentFolders`, an ordered list of
+portable relative paths each resolved beside the declaring document
 (`WorldDocumentPaths`, relocated through imports like every file field),
-refused by name in `WorldDefinitionValidator.Machines.cs` when it is rooted or
-not spelled with `/`. `machine.content <instance>` reads it back (folder,
-resolved path, mounted content, one segment per file the engine can mount:
-what its content provider recognizes, or every file for a raw-content engine,
-`WorldMachineContentFolder`); `machine.swap <instance> <name>` mounts one
-through `content.insert`. No verb lists a hard-coded set or scans outside the
-authored folder. The shipped cartridges sit one folder per forge target
-(`Assets/cartridges/cgb/`, `Assets/cartridges/dmg/`, `Assets/cartridges/agb/`), and the debug world's
-device row (`worlds/devices.puck`, `devices.md`) points each device at its
-folder. Provider operations, a swap among them, are refused while
-`replay.record` runs (`WhileRecording`).
+refused by name in `WorldDefinitionValidator.Machines.cs` when one is rooted or
+not spelled with `/`, is listed twice, or the list is empty. A local folder
+(the owner's git-ignored `roms/`) is listed like any other and may be absent:
+validation reads only the spelling, never the disk, so nothing in validation,
+boot, deploy or CI depends on it existing, and a world's boot content comes
+from a shipped folder so it boots the same everywhere. `machine.content
+<instance>` reads the folders back as they stand on disk at that moment (one
+segment per folder with its resolved path, `present=` and file count; one per
+file with its folder, `mounted=`, and `refused=<reason>` for a file the engine
+cannot mount; `mounted="no cartridge"` when none is), through
+`WorldMachineContentFolder`. A file is mountable when the engine's content
+provider prepares it, or when the engine judges it, by its header and whatever
+its extension, an image its machines run (`IMachineImageRecognizer`: the brick's
+header checksum and mapper, the advanced brick's fixed byte and complement
+checksum, the deck's iNES signature and board); a raw-content engine with
+neither mounts every file. `machine.swap <instance> <name>` resolves a file
+name, a `<folder>/<file>` name, or a stem across the folders in order, refuses
+an unknown, ambiguous or unmountable name by name, and mounts through
+`content.insert`; the engine refuses an unrunnable image again at creation. A
+machine whose authored content file is absent boots with no cartridge (named
+once on stderr, `screen.state … no cartridge`), never refusing the world; an
+operation naming absent content is refused. A folder that empties or vanishes
+while the World runs shows in the next listing, and the cartridge mounted from
+it keeps running from memory. No verb lists a hard-coded set or scans outside
+the authored folders. The shipped cartridges sit one folder per forge target
+(`Assets/cartridges/cgb/`, `Assets/cartridges/dmg/`, `Assets/cartridges/agb/`),
+and the debug world's device row (`worlds/devices.puck`, `devices.md`) lists
+each device's shipped folder, then its `roms/` folder. Provider operations, a
+swap among them, are refused while `replay.record` runs (`WhileRecording`).
 
 ## Read-backs
 

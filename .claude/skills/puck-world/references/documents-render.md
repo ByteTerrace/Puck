@@ -328,8 +328,6 @@ resolves relative to the world document. A source row loads through
 the instance's failed compilation, by code. The graph's own shader paths
 resolve relative to its document. `WorldViewSlot.Instance` (`instance: "name"`
 in `.puck`) names the row; a slot cannot name both a camera and an instance.
-The row's camera supplies
-optional shader camera inputs, with zero FOV denoting no paired camera.
 `timeScale` seeds presentation time. `views.shaderToolchain` optionally names
 the compiler directory; otherwise executable lookup uses the process path.
 
