@@ -318,8 +318,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             view: view,
             width: width
         );
+        // A shadow cascade can record first; history always describes the camera's sample grid, not that pass's target.
         var temporal = m_owner.TemporalOf(
-            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: width, renderHeight: height
+            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: recording.RenderWidth, renderHeight: recording.RenderHeight
         );
 
         if (m_part == SdfWorldPackage.Parts.Views) {

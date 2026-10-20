@@ -23,9 +23,10 @@ public enum SdfPrismProfileKind {
 }
 /// <summary>Authored profile controls for a solid prism. The profile is extruded along local Z.</summary>
 /// <param name="Kind">The profile family.</param>
-/// <param name="CornerRadius">A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner
-/// radius, ChamferedRectangle's chamfer radius, or <see cref="SdfPrismProfileKind.Convex"/>'s uniform corner
-/// rounding.</param>
+/// <param name="CornerRadius">A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner
+/// radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius
+/// (<see cref="SdfProgramBuilder.ConvexPolygonInradius"/>) for <see cref="SdfPrismProfileKind.Convex"/>'s uniform
+/// corner rounding, also clamped to the extrusion half-depth when extruded.</param>
 /// <param name="Sides">Polygon side count, from 3 through 32.</param>
 /// <param name="Vertices"><see cref="SdfPrismProfileKind.Convex"/> only: 3 to <see cref="MaxConvexVertices"/> local
 /// XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no

@@ -7973,7 +7973,7 @@ export type WorldPrototype = {
            */
           kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
           /**
-           * A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner radius, ChamferedRectangle's chamfer radius, or Convex's uniform corner rounding.
+           * A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius (ConvexPolygonInradius) for Convex's uniform corner rounding, also clamped to the extrusion half-depth when extruded.
            */
           cornerRadius?: number;
           /**
@@ -8292,7 +8292,7 @@ export type WorldPrototype = {
          */
         kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
         /**
-         * A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner radius, ChamferedRectangle's chamfer radius, or Convex's uniform corner rounding.
+         * A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius (ConvexPolygonInradius) for Convex's uniform corner rounding, also clamped to the extrusion half-depth when extruded.
          */
         cornerRadius?: number;
         /**
@@ -9196,7 +9196,7 @@ export type WorldRenderAtmosphere = {
 };
 
 /**
- * The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.
+ * The stylized curvature enrichment, keyed on mean curvature estimated from the baked triangle's interpolated vertex normals in world units. Every field is optional individually — absent resolves to the engine's default. The three gains share one shading gate: while all are zero their enrichment is skipped. The surface pass supplies the same curvature for edge weathering without querying the field.
  */
 export type WorldRenderCurvature = {
   /**

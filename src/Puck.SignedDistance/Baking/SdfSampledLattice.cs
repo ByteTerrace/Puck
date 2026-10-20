@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Puck.SignedDistance.Baking;
 
@@ -34,17 +35,19 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// none.</summary>
     public bool[] Beside { get; init; } = [];
 
-    // The least turn, in degrees, between two quads' facings at a crease vertex that splits it (SplitAtCreases): just past
-    // the turn that makes a vertex a crease (SdfDualContouring's thirty degrees), so every crease its planes found splits.
-    // At the forty-five degrees a chamfer turns, a threshold at forty-five split its vertices or not by the quads' noise
-    // from one vertex to the next, and the flat faces beside the chamfer dented where they did.
-    private const double CreaseDegrees = 32.0;
+    // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
+    // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
+    private const double CreaseDegrees = 25.0;
 
-    /// <summary>Returns the contour with its crease vertices split: a <see cref="Features"/> vertex two of whose quads face
-    /// apart by more than 32 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
-    /// area-weighted facing of the vertex's quads within 32 degrees of that quad's, so a sharp edge shades as the two faces
+    /// <summary>Selects each quad's outward-facing diagonal from its current vertex positions and normals. Call again
+    /// after changing positions, before <see cref="SplitAtCreases"/> freezes the per-face normals.</summary>
+    public void SelectDiagonals() => SdfSampledLattice.SelectDiagonals(contour: this);
+
+    /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
+    /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
+    /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
     /// meeting at it rather than as a band of blended normals. Any other vertex gives such a vertex to the corners of the
-    /// quads that face more than 32 degrees from its own normal: a vertex on a rounding narrower than its cell carries the
+    /// quads that face more than 25 degrees from its own normal: a vertex on a rounding narrower than its cell carries the
     /// rounding's normal, which the faces beyond it would otherwise blend across a cell. A quad folded against its own
     /// vertices' normals neither splits nor lends its facing.</summary>
     /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
@@ -65,9 +68,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
             var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
-            var atCrease = (Feature(vertex: ia) || Feature(vertex: ib) || Feature(vertex: ic) || Feature(vertex: id));
-
-            if (atCrease && (ic != id)) {
+            if (ic != id) {
                 var a = At(values: positions, vertex: ia);
                 var first = Vector3.Cross(vector1: (At(values: positions, vertex: ib) - a), vector2: (At(values: positions, vertex: ic) - a));
                 var second = Vector3.Cross(vector1: (At(values: positions, vertex: ic) - a), vector2: (At(values: positions, vertex: id) - a));
@@ -126,11 +127,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             around[(starts[vertex] + filled[vertex]++)] = (corner >> 2);
         }
 
-        // A feature vertex lies on a crease where two of its quads face apart by more than the crease angle.
+        // Incident faces define the shading crease even when field correction cleared the QEF's feature flag. A normal
+        // halfway between a chamfer's faces is less than the split angle from either face and cannot detect that crease.
         var creased = new bool[vertexCount];
 
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
-            if (!Feature(vertex: vertex)) { continue; }
             for (var first = starts[vertex]; (first < starts[(vertex + 1)]) && !creased[vertex]; first++) {
                 if (!(facings[around[first]].LengthSquared() > 0f)) { continue; }
                 var one = Vector3.Normalize(value: facings[around[first]]);
@@ -146,8 +147,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         var addedPositions = new List<float>();
         var addedNormals = new List<float>();
-        // A split vertex by the vertex it copies and the lowest quad of the facing group it shades.
-        var splits = new Dictionary<(int Vertex, int Group), int>();
+        // A lowest quad only narrows the search: overlapping normal neighborhoods can share that quad without sharing
+        // their other members, so reuse a split only when its complete neighborhood agrees.
+        var splits = new Dictionary<(int Vertex, int Group), List<(int[] Members, int Vertex)>>();
+        var members = new List<int>();
 
         for (var quad = 0; (quad < quadCount); quad++) {
             var facing = facings[quad];
@@ -175,6 +178,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
                 var sum = Vector3.Zero;
                 var group = int.MaxValue;
+                members.Clear();
 
                 for (var index = starts[vertex]; (index < starts[(vertex + 1)]); index++) {
                     var other = around[index];
@@ -183,13 +187,26 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     if (!(otherFacing.LengthSquared() > 0f) || (Vector3.Dot(vector1: Vector3.Normalize(value: otherFacing), vector2: facing) < cosine)) { continue; }
                     sum += otherFacing;
                     group = Math.Min(val1: group, val2: other);
+                    members.Add(item: other);
                 }
 
-                if (!splits.TryGetValue(key: (vertex, group), value: out var split)) {
+                if (!splits.TryGetValue(key: (vertex, group), value: out var candidates)) {
+                    candidates = [];
+                    splits.Add(key: (vertex, group), value: candidates);
+                }
+                var split = -1;
+
+                foreach (var candidate in candidates) {
+                    if (CollectionsMarshal.AsSpan(list: members).SequenceEqual(other: candidate.Members)) {
+                        split = candidate.Vertex;
+                        break;
+                    }
+                }
+                if (split < 0) {
                     var normal = Vector3.Normalize(value: sum);
 
                     split = (vertexCount + (addedPositions.Count / 3));
-                    splits.Add(key: (vertex, group), value: split);
+                    candidates.Add(item: ([.. members], split));
                     addedPositions.Add(item: positions[(3 * vertex)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 1)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 2)]);
@@ -217,8 +234,8 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
 /// surface by manifold dual contouring, placing each vertex by the tangent planes of
-/// its crossings: each crossing's gradient and value are measured where the edge crosses, and the plane passes through
-/// the crossing moved back onto the surface by that value, so a sharp edge between two faces stays sharp at any cell
+/// its crossings: each crossing is located along its edge before its gradient is measured, so its plane belongs to the
+/// face that edge crosses rather than a different face nearer a linear estimate inside the solid. A sharp edge stays sharp at any cell
 /// size. Where the edge lies up to half a cell past the cell that sees both its faces, in a neighbour that sees one, the
 /// vertex of a straight edge reaches past its cell to it, and a curved convex edge moves onto the neighbour's vertex.
 /// <para>Where the samples cannot resolve the surface, the lattice refines (<see cref="Refine"/>): a cell crossed by a
@@ -227,7 +244,8 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// and contoured at it, with the cells around them contoured at the fine spacing from their coarse corners so the mesh
 /// stays closed where its resolution changes. Every other cell contours whole.</para>
 /// <para>The lattice is answered in stages: <see cref="Refine"/> names the fine samples to measure and
-/// <see cref="AnswerRefinement"/> takes their values; <see cref="GradientPoints"/> names the samples the contour reads a
+/// <see cref="AnswerRefinement"/> takes their values; <see cref="CrossingPoints"/> and <see cref="AnswerCrossings"/>
+/// bracket the edge roots; <see cref="GradientPoints"/> names the samples the contour reads a
 /// gradient at, the corners its vertex normals interpolate and the crossings its tangent planes pass through, and
 /// <see cref="AnswerGradients"/> takes them. A sampled lattice's values come
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
@@ -262,6 +280,10 @@ public sealed class SdfSampledLattice {
     private readonly Dictionary<int, Vector3> m_fineGradients = [];
     private int[] m_gradientKeys = [];
     private long[] m_crossingKeys = [];
+    private bool m_crossingsPrepared;
+    private bool m_rootsPrepared;
+    private readonly Dictionary<long, CrossingRoot> m_crossingRoots = [];
+    private long[] m_pendingCrossings = [];
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
     // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
@@ -701,6 +723,100 @@ public sealed class SdfSampledLattice {
             m_fineMaterials[(first + index)] = materials[index];
         }
     }
+    // An edge root stays bracketed by its original signs. The first trial is the linear estimate; subsequent trials
+    // bisect, so a field flat inside a corner cannot stall the search on the wrong face as an unguarded secant can.
+    private sealed class CrossingRoot(float first, float second) {
+        public float Low { get; set; }
+        public float High { get; set; } = 1f;
+        public bool LowInside { get; } = (first < 0f);
+        public float Position { get; set; } = Math.Clamp(value: (first / (first - second)), min: 0f, max: 1f);
+        public int Rounds { get; set; }
+        public bool Done { get; set; } = ((first == 0f) || (second == 0f));
+    }
+    // Closing sheets changes their edge crossings deliberately; both crossing searches and gradient sampling use the
+    // resulting lattice, prepared once after the refinement answers arrive.
+    private void PrepareCrossings() {
+        if (m_crossingsPrepared) { return; }
+        CloseSheets();
+        m_crossingKeys = CrossingEdges();
+        m_crossingsPrepared = true;
+    }
+    private int EdgeEnd(int start, int axis, int length) {
+        var fineX = (((m_samplesX - 1) * m_factor) + 1);
+        var fineY = (((m_samplesY - 1) * m_factor) + 1);
+
+        return (start + ((axis == 0) ? length : ((axis == 1) ? (length * fineX) : (length * fineX * fineY))));
+    }
+    private bool MeasuredSample(int key) {
+        var (x, y, z) = FineCoordinates(key: key);
+
+        return (((x % m_factor) == 0) && ((y % m_factor) == 0) && ((z % m_factor) == 0)) || m_fineSlots.ContainsKey(key: key);
+    }
+    private Vector3 CrossingPoint(long key, float fraction) {
+        var (start, axis, length) = CrossingEdge(key: key);
+        var (x, y, z) = FineCoordinates(key: start);
+        var along = (fraction * length);
+
+        return (m_origin + (new Vector3(x: (x + ((axis == 0) ? along : 0f)), y: (y + ((axis == 1) ? along : 0f)), z: (z + ((axis == 2) ? along : 0f))) * ContourCell));
+    }
+    /// <summary>Returns the next points for locating each sign-changing edge's zero along that edge. After refinement,
+    /// repeatedly answer these points with <see cref="AnswerCrossings"/> until this returns no points, then measure
+    /// <see cref="GradientPoints"/>. Artificial transition samples and closed thin sheets keep their lattice crossings.</summary>
+    /// <returns>The next round's points in the order <see cref="AnswerCrossings"/> takes their values.</returns>
+    public Vector3[] CrossingPoints() {
+        PrepareCrossings();
+        if (!m_rootsPrepared) {
+            foreach (var key in m_crossingKeys) {
+                var (start, axis, length) = CrossingEdge(key: key);
+                var end = EdgeEnd(start: start, axis: axis, length: length);
+
+                if (m_closed.ContainsKey(key: start) || m_closed.ContainsKey(key: end) || !MeasuredSample(key: start) || !MeasuredSample(key: end)) { continue; }
+                var (x, y, z) = FineCoordinates(key: start);
+                var (ex, ey, ez) = FineCoordinates(key: end);
+
+                m_crossingRoots.Add(key: key, value: new CrossingRoot(first: FineValue(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez)));
+            }
+            m_rootsPrepared = true;
+        }
+
+        var pending = new List<long>();
+        var points = new List<Vector3>();
+
+        foreach (var key in m_crossingKeys) {
+            if (!m_crossingRoots.TryGetValue(key: key, value: out var root) || root.Done) { continue; }
+            pending.Add(item: key);
+            points.Add(item: CrossingPoint(key: key, fraction: root.Position));
+        }
+        m_pendingCrossings = [.. pending];
+
+        return [.. points];
+    }
+    /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with field values. Every root remains
+    /// on its own edge; at most twelve bisections after the initial estimate bound its error below one 4,096th of an edge.</summary>
+    /// <param name="first">The first point answered in the current round.</param>
+    /// <param name="values">One field value per point.</param>
+    /// <exception cref="ArgumentException">The chunk reaches past the current round or holds a non-finite value.</exception>
+    public void AnswerCrossings(int first, ReadOnlySpan<float> values) {
+        if ((first < 0) || ((first + values.Length) > m_pendingCrossings.Length)) {
+            throw new ArgumentException(message: "A crossing answer must name points in the current crossing round.");
+        }
+        for (var index = 0; (index < values.Length); index++) {
+            var value = values[index];
+
+            if (!float.IsFinite(value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
+            var root = m_crossingRoots[m_pendingCrossings[(first + index)]];
+
+            if (value == 0f) {
+                root.Done = true;
+                continue;
+            }
+            if ((value < 0f) == root.LowInside) { root.Low = root.Position; }
+            else { root.High = root.Position; }
+            root.Rounds++;
+            root.Position = ((root.Low + root.High) * 0.5f);
+            root.Done = ((root.Rounds >= 13) || ((root.High - root.Low) <= 0.0001f));
+        }
+    }
     /// <summary>Returns the samples the contour reads a gradient at: the corners of every crossed cell that contours whole,
     /// the coarse corners of every refined cell, whose gradients its unmeasured fine samples interpolate, and the measured
     /// corners of every crossed fine cell, which its vertex normals interpolate; then the crossing of every sign-changing
@@ -708,7 +824,7 @@ public sealed class SdfSampledLattice {
     /// <returns>The samples, in the lattice's frame, in the order <see cref="AnswerGradients"/> takes their
     /// answers.</returns>
     public Vector3[] GradientPoints() {
-        CloseSheets();
+        PrepareCrossings();
 
         var keys = new List<int>();
         var seen = new HashSet<int>();
@@ -773,7 +889,6 @@ public sealed class SdfSampledLattice {
         }
 
         m_gradientKeys = [.. keys];
-        m_crossingKeys = CrossingEdges();
 
         var points = new Vector3[(keys.Count + m_crossingKeys.Length)];
         var fine = ContourCell;
@@ -1156,9 +1271,14 @@ public sealed class SdfSampledLattice {
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
     private long CrossingKey(int start, int axis, int length) => (((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L);
     private (int Start, int Axis, int Length) CrossingEdge(long key) => (((int)((key / 2L) / 3L)), ((int)((key / 2L) % 3L)), (((key & 1L) == 1L) ? m_factor : 1));
-    // Where along the edge `length` fine cells long along `axis` from fine sample (x, y, z) its values cross zero, in [0, 1]:
-    // the linear interpolation the contour places the crossing by.
+    // The refined zero along the edge `length` fine cells long from (x, y, z), in [0, 1]. Synthetic samples retain the
+    // linear crossing of the lattice the contour must connect, rather than the underlying field it intentionally replaces.
     private float Crossing(int x, int y, int z, int axis, int length) {
+        var fineX = (((m_samplesX - 1) * m_factor) + 1);
+        var fineY = (((m_samplesY - 1) * m_factor) + 1);
+        var start = (x + (fineX * (y + (fineY * z))));
+
+        if (m_crossingRoots.TryGetValue(key: CrossingKey(start: start, axis: axis, length: length), value: out var root)) { return root.Position; }
         var va = FineValue(x: x, y: y, z: z);
         var vb = FineValue(x: (x + ((axis == 0) ? length : 0)), y: (y + ((axis == 1) ? length : 0)), z: (z + ((axis == 2) ? length : 0)));
         var denominator = (va - vb);
@@ -1225,17 +1345,9 @@ public sealed class SdfSampledLattice {
         float[] positions = [.. surface.Positions.Select(selector: static value => ((float)value))];
         var quads = surface.Quads;
 
-        for (var quad = 0; (quad < materials.Length); quad++) {
-            var at = (4 * quad);
-
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: surface.Features, normals: normals, positions: positions, quad: quads.AsSpan(start: at, length: 4))) {
-                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
-            }
-        }
-
         (quads, materials) = WithoutSpecks(materials: materials, positions: positions, quads: quads);
 
-        return new SdfContour(
+        var contour = new SdfContour(
             Normals: normals,
             Positions: positions,
             QuadMaterials: materials,
@@ -1245,6 +1357,21 @@ public sealed class SdfSampledLattice {
             Beside = surface.Beside,
             Solved = surface.Solved,
         };
+        contour.SelectDiagonals();
+
+        return contour;
+    }
+
+    internal static void SelectDiagonals(SdfContour contour) {
+        var quads = contour.Quads;
+
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var at = (4 * quad);
+
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: contour.Features, normals: contour.Normals, positions: contour.Positions, quad: quads.AsSpan(start: at, length: 4))) {
+                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
+            }
+        }
     }
 
     // Whether a quad of four vertex indices splits along its first diagonal, its first corner to its third, rather than
@@ -1498,6 +1625,7 @@ public sealed class SdfSampledLattice {
     // cell coordinates scaled per axis, and a normal trilinearly interpolated from the gradients of the eight samples
     // around a point.
     private readonly struct Lattice(SdfSampledLattice owner) : ISdfRefinedContourLattice {
+        public double Crossing(int x, int y, int z, int axis, int length) => owner.Crossing(x: x, y: y, z: z, axis: axis, length: length);
         public int CellsX => ((owner.m_samplesX - 1) * owner.m_factor);
         public int CellsY => ((owner.m_samplesY - 1) * owner.m_factor);
         public int CellsZ => ((owner.m_samplesZ - 1) * owner.m_factor);
@@ -1556,9 +1684,11 @@ public sealed class SdfSampledLattice {
 
                     gradient /= magnitude;
                     (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
-                    // The distance to the surface to first order, the value over the gradient's magnitude, which a field
-                    // that is no true distance would misstate as the value alone; never past the edge's own length.
-                    offset = (closed ? 0.0 : Math.Clamp(value: (measured.W / magnitude), min: -reach, max: reach));
+                    // A measured root stays on its edge. Only an interpolated transition sample keeps the previous
+                    // first-order plane correction; a closed sheet retains its deliberately displaced crossing.
+                    offset = ((closed || owner.m_crossingRoots.ContainsKey(key: owner.CrossingKey(axis: axis, length: length, start: start)))
+                        ? 0.0
+                        : Math.Clamp(value: (measured.W / magnitude), min: -reach, max: reach));
 
                     return true;
                 }

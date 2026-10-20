@@ -12,6 +12,25 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     private const string Feed = "test.feed";
 
+    [InlineData(false, 1f)]
+    [InlineData(true, 1f)]
+    [InlineData(true, 0.5f)]
+    [Theory]
+    public void ShadowPassesKeepHistoryInTheCameraSampleGrid(bool temporal, float renderScale) {
+        using var rig = new TemporalRig(views: 1, temporal: temporal, renderScale: renderScale);
+
+        if (!temporal) { rig.Selected.DebugMode = DebugViewModes.Motion; }
+        rig.Produce();
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+        Assert.Equal(expected: new Vector2(Extent * renderScale), actual: rig.PreviousExtent());
+        rig.ShadowsEnabled = false;
+        rig.Produce();
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+        Assert.Equal(expected: new Vector2(Extent * renderScale), actual: rig.PreviousExtent());
+    }
+
     [InlineData(0, false)]
     [InlineData(4, false)]
     [InlineData(0, true)]
@@ -551,6 +570,15 @@ public sealed partial class SdfWorldPassesLawTests {
             return new Vector2(x: BitConverter.ToSingle(startIndex: jitter, value: block), y: BitConverter.ToSingle(startIndex: (jitter + sizeof(float)), value: block));
         }
         public bool PreviousValid() => (BitConverter.ToSingle(value: Block(), startIndex: (Offset(member: SdfWorldPackage.PreviousView) + (3 * sizeof(float)))) != 0f);
+        public Vector2 PreviousExtent() {
+            var block = Block();
+            var offset = (Offset(member: SdfWorldPackage.PreviousView) + (16 * sizeof(float)));
+
+            return new Vector2(
+                x: BitConverter.ToSingle(value: block, startIndex: offset),
+                y: BitConverter.ToSingle(value: block, startIndex: (offset + sizeof(float)))
+            );
+        }
         // The bytes of the history surface the resolve of one more frame writes. The resolve's pass set is the third from the
         // frame's last: the sky and the composite follow it.
         public uint HistorySurfaceBytes() {
