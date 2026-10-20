@@ -128,8 +128,11 @@ boot draws each of them on the RTX 2060, Direct3D 12 and Vulkan alike, in the
 chase camera, and a body that crosses takes the meshes its first world baked, in the world it
 arrives in and the world it returns to. On the RTX 2060 under Direct3D 12, a
 warm crossing's frames run 13 to 23 ms, the programs it rebuilds building off
-the frame thread, and a window growing across an octave on the approach at
-most one of about 26 to 29 ms; the first crossing of a boot still costs about
+the frame thread. A window's glass renders within a sixteenth of the screen
+share it covers (`RenderGraphExtent.Quantize`), so it resizes about twenty
+times on a long approach where an octave rule resized three or four times; on
+the RTX 4070 under Direct3D 12 no approach frame passes 20 ms of work, and one
+garbage collection of about 12 ms lands near the frame. The first crossing of a boot still costs about
 81 ms, mostly the runtime compiling the transfer path (49 ms on the ReadyToRun
 publish), and a frame of 50 to 56 ms after it while the garden's mesh region
 grows to take the body. Under Vulkan a warm crossing still costs 21 to 36 ms back
