@@ -122,7 +122,7 @@ internal static class WorldDocumentCorpus {
         if (!WorldDocumentName.IsSourceFile(path: path)) {
             if (!WorldDefinitionLoader.TryResolve(
                 catalog: catalog,
-                explicitPath: path,
+                path: path,
                 failure: out reason,
                 source: out var resolved
             )) {
@@ -171,7 +171,7 @@ internal static class WorldDocumentCorpus {
             foreach (var staged in stagedPaths) {
                 if (!WorldDefinitionLoader.TryResolve(
                     catalog: catalog,
-                    explicitPath: staged,
+                    path: staged,
                     failure: out reason,
                     source: out var resolved
                 )) {

@@ -16,7 +16,7 @@ public sealed class WorldDocumentPathLawTests {
         newValue: patchSource,
         oldValue: "PATCH"
     );
-    private static byte[] ShippedPatch() => File.ReadAllBytes(path: PuckPaths.Shipped(relativePath: $"Assets/worlds/{Patch}"));
+    private static byte[] ShippedPatch() => File.ReadAllBytes(path: CompiledWorldFixtures.ShippedPatch());
 
     [Fact]
     public void ALoadedDocumentReadsItsAssetBesideItAndADirectorylessCopyRefusesByName() {
@@ -42,7 +42,7 @@ public sealed class WorldDocumentPathLawTests {
     [Fact]
     public void ARelativeSourceNeverReadsTheExecutablesCopy() {
         using var directory = new TemporaryDirectory();
-        var shipped = $"Assets/worlds/{Patch}";
+        var shipped = $"Assets/{Patch}";
 
         Assert.True(condition: File.Exists(path: PuckPaths.Shipped(relativePath: shipped)));
 

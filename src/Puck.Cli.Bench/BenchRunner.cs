@@ -44,7 +44,7 @@ public static class BenchRunner {
             description: "Run the BenchmarkDotNet micro-benchmarks over the Maths, SDF, and state kernels.",
             name: "kernels"
         ) { benchmarkArguments };
-        var worldArgument = new Argument<string?>(name: "world") { Arity = ArgumentArity.ZeroOrOne, Description = $"The world's .puck source or .world.json document. Default: the debug world, {WorldBenchmarks.DefaultWorldRelativePath}." };
+        var worldArgument = new Argument<string?>(name: "world") { Arity = ArgumentArity.ZeroOrOne, Description = $"The world's asset package folder, .puck source or .world.json document. Default: the debug world, {WorldBenchmarks.DefaultWorldRelativePath}." };
         var worldCommand = new Command(
             description: "Time the Puck.World.Server tick path with a plain stopwatch harness.",
             name: "world"

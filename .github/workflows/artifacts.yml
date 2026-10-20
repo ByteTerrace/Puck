@@ -71,8 +71,12 @@ jobs:
         run: |
           dotnet publish src/Puck.Azure.Functions -c Release --no-build --no-restore -o artifacts/runtime/functions
           dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
+      # The engine ships no world: the debug world's asset package is compiled beside it, its documents, compiled
+      # worlds and shader package store included, so the published World boots it compiling nothing.
+      - name: Compile the debug world's package into the published World
+        run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll compile --tree worlds/debug --output artifacts/world/worlds/debug
       - name: Verify the published World host
-        run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll bench startup src/Puck.World/Assets/worlds/debug.puck --headless --samples 1 --world-artifact artifacts/world/Puck.World.dll --output artifacts/world-startup
+        run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll bench startup artifacts/world/worlds/debug --headless --samples 1 --world-artifact artifacts/world/Puck.World.dll --output artifacts/world-startup
       - name: Capture compiled outputs and their source identity
         run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll artifacts capture
       - name: Upload compiled Windows assemblies

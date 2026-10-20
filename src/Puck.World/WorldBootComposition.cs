@@ -69,15 +69,15 @@ public static class WorldBootComposition {
     }
     private static WorldViewGraphHost BuildGraphHost(IServiceProvider sp) {
         var documentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath);
-        // The build's package store ships beside the shipped worlds (build/WorldAssets.targets), so a source row naming
-        // a shipped pipeline loads its package, wherever the booted document lies, and compiles nothing.
+        // A compiled package carries its package store beside its root document (`puck compile --tree` writes it at the
+        // output root), so a source row naming a packaged pipeline loads its package and compiles nothing; a source
+        // boot has no store and compiles on first use.
         var host = new WorldViewGraphHost(
             packager: new ShaderPackager(
                 compiler: sp.GetRequiredService<ShaderCompiler>(),
                 store: Path.Combine(
-                    path1: AppContext.BaseDirectory,
-                    path2: Path.GetDirectoryName(path: WorldDefinitionLoader.DefaultRelativePath)!,
-                    path3: ShaderPackager.StoreDirectoryName
+                    path1: documentDirectory,
+                    path2: ShaderPackager.StoreDirectoryName
                 )
             ),
             documentDirectory: documentDirectory

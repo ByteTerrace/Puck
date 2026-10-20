@@ -112,8 +112,9 @@ settles a question, decide by that principle and say why.
 3. **The game is greenfield.** `Puck.World` and everything under
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`
-   (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
-   0 or less runs until the window closes). `puck canary` checks game behavior
+   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2`;
+   0 or less runs until the window closes). `Puck.World` boots only the world
+   it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
    stderr. Never substitute a build-only check, add a `--validate-*` flag, or
    add a Post stage for a game feature.
@@ -192,7 +193,7 @@ it once a parity world exists, and none does while the campaign runs
 ([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
 runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
 hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,
-the one live world and the World's default), each file at its old repository
+the one live world), each file at its old repository
 path, with the fixtures, laws, baselines and ledgers that only booted or tested
 them ([decision](docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),
 [quarantined gates](docs/plans/open-items.md#quarantined-gates)). Anything there

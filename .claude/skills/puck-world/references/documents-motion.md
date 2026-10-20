@@ -1,7 +1,7 @@
 # A kit's `motion` row: holds and shaping
 
 Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
-generated (`puck schema`, or `Assets/worlds/schema/kits.schema.json`); this
+generated (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/kits.schema.json`); this
 file is the decision/derivation prose the schema cannot state.
 
 **Kit motion row (`WorldKit.Motion`, a `WorldMotion` row).** A kit declares

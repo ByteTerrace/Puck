@@ -26,6 +26,8 @@ public static class CorpusSources {
             searchOption: option,
             searchPattern: "*.puck"
         )
+            // A source is a world source by its schema: line, never its folder: a cartridge source in a package is not.
+            .Where(predicate: static path => Puck.World.Transpiler.Composition.WorldSourceIndex.IsWorldSourceFile(path: path))
             .Select(selector: path => Path.GetRelativePath(
                 path: path,
                 relativeTo: root

@@ -39,7 +39,7 @@ reasoning behind every decision is in
   and, of compiled worlds, the one validated load, the container with its
   header, and the `DEFN`, `ASST` and `CURV` chunks (owned by
   [the worlds manual](../architecture/worlds.md#compiled-worlds)).
-- **Not started:** the product tree, the rest of the ledger, the rest of the
+- **Not started:** the rest of the asset packages, the rest of the ledger, the rest of the
   compiled-world chunks, and the evidence package. Release-pair qualification
   (`puck world release qualify`) exists; only metadata-only definition deltas
   pass it, other sections refuse, and Azure acceptance is open.
@@ -56,17 +56,17 @@ reasoning behind every decision is in
 ## The forcing artifact
 
 The quilt, [the forcing world](state-and-language.md#the-forcing-world), is
-built as a product, shipped as compiled worlds inside it, deployed to a hosted
-authority, rolled back, and restored. The product tree supplies the unit
-(`content/puck/product.json` names its worlds, cartridges, addons, and
-branding, and the engine ships none of it); compiled worlds supply the delivery
+built as an asset package, shipped as compiled worlds inside it, deployed to a
+hosted authority, rolled back, and restored. The package supplies the unit
+(`worlds/<id>/manifest.json` names its entry, its folder carries its worlds,
+cartridges and addons, and the engine ships none of it); compiled worlds supply the delivery
 format; the ledger supplies the boundary between house content and someone
 else's; release pairs supply the operation (release B replaces A inside a
 maintenance window, players earn items and cross corner boundaries under B, an
 operator rolls back to A, and the items and completed transfers survive); and
 the evidence package proves one candidate carrying all four.
 
-**Check:** the quilt boots from its product root with `--product`, and the
+**Check:** the quilt boots from its package folder with `--world`, and the
 same command without one refuses and names what it needs; a law derives every
 chunk fresh and compares it byte for byte with the chunk loaded from the
 compiled world, and a `puck landing` canary boots the quilt from JSON and from
@@ -78,55 +78,41 @@ repeats with an interrupted deployment and an interrupted rollback.
 
 ## Packages
 
-### The product tree
+### Asset packages
 
-**Owns:** `content/<id>/`, `product.json` (`puck.product.v1`), content
-resolution in `Puck.World`, `puck official` renamed to `puck product`,
-`puck world prepare`, `puck world release prepare`, `puck azure build`, the
-silo image, and the eviction of everything under `src/Puck.World/Assets`.
+**Owns:** `worlds/<id>/` packages and their `manifest.json`
+(`puck.asset-package.v1`), package resolution in `Puck.World` (`--world
+<folder>`), `puck compile --tree`, `puck world prepare`, `puck world release
+prepare`, `puck official build`, `puck azure build`, the silo image, and the
+eviction of everything under `src/Puck.World/Assets` but the default recording.
 
-**Delivers, in this order, as one landing:**
+**Delivered:** the debug world is the package `worlds/debug/`; `Puck.World`
+boots a package folder (its manifest's entry) and refuses to boot without
+`--world`; the shader package store is `packages/` beside the booted document;
+`puck compile --tree <package> --output <out>` writes a bootable copy of a
+package, and the release publish compiles the debug package beside the
+published engine; the silo image, `world prepare`, `official build` and the
+Azure release take the package folder; test fixtures moved to the tests that
+read them, the orphans were deleted, and the generated schemas moved to
+`src/Puck.World.Schema/Schemas/` ([decision](../decisions/runtime-and-delivery.md#asset-packages)).
 
-1. Test fixtures move to the tests that use them (the canary music, tunes, and
-   patch, the `quilt-nw-gap` shard, the shader-pipeline demo world), the orphans
-   are deleted (the hud-builder addon binary, `sdf/example.sdf.json`, the
-   transition stinger patch), and the generated schemas and default recording
-   move to the projects that own them.
-2. `content/puck` and its manifest exist and the official content moves there:
-   `branding/` (copies the build makes from the repository's `branding/`),
-   `worlds/`, `cartridges/`, `music/`, `tunes/`, `patches/`, `addons/`,
-   `pipelines/`, `hosting/`. The manifest declares `id` (the self-update
-   application id), `name`, branding, root worlds, every document and asset
-   with a family and a manifest-relative path, `channels`, `engines`, and the
-   runtime extensions its hosted worlds require; the asset families are the
-   official manifest's (music, table, tune, patch)
-   plus `cartridge`, `addon`, `pipeline`, and `compiled`. `Puck.World --product
-   <root>` resolves every path against the root and nothing against the
-   executable's directory or the repository layout; `--world <path>` stays for
-   one document outside any product. The default boot, the shipped-worlds
-   fallback, and the `Assets\**` content item are deleted. The build refuses a
-   file under the root the manifest does not name and a manifest entry whose
-   file is missing or whose hash disagrees.
-3. `puck product build <root>` keeps the content-addressed output, verification,
-   and serve verbs, scoped per product (`<out>/<id>/<channel>/manifest.json`)
+**Delivers, in this order:**
+
+1. The manifest supplies the window title and icon, and a world may not
+   override them; `branding/` copies land in the package.
+2. `puck official` scoped per package (`<out>/<id>/<channel>/manifest.json`)
    over a shared `objects/sha256` store; the manifest supplies the identity,
    channels, and publication base that are hard-coded today.
-4. The hosted and desktop engines take a product root; the release manifest
-   pins the product's content and required extensions; the silo image and the
-   desktop artifact carry no content.
-5. The manual, project map, package READMEs, and skills cite `content/puck` by
-   document name, `puck.product.v1` is documented with the schemas, and the
-   procedure for authoring a product outside this repository is written and
-   followed once from an empty folder to a booting world.
+3. The release manifest pins the package's content and required extensions;
+   the desktop artifact carries no content.
+4. The procedure for authoring a package outside this repository is written
+   and followed once from an empty folder to a booting world.
 
-**Check:** `dotnet run --project src/Puck.World -c Release -- --product
-content/puck --exit-after-seconds 2` boots the official world and the same
-command without `--product` refuses naming it; `puck product build content/puck`
-then `puck product verify` passes; the dashboard boots the official world from
-the built tree; `puck azure build` produces a bundle with no hard-coded product
-name or channel; the silo image contains no content tree; `puck landing`
-passes; `src/Puck.World` has no `Assets` directory; no documentation or skill
-cites `src/Puck.World/Assets`.
+**Check:** `dotnet run --project src/Puck.World -c Release -- --world
+worlds/debug --exit-after-seconds 2` boots the debug world and the same command
+without `--world` refuses naming it; `puck official build --worlds worlds/debug`
+then `puck official verify` passes; `puck azure build` produces a bundle with no
+hard-coded package name or channel; `puck landing` passes.
 
 ### The ledger
 
@@ -153,9 +139,8 @@ verification ROMs; the cartridges' move into the product.
    Advance header that neither the ledger nor a product manifest names fails.
    `verify.yml`'s `ledgers` job runs it and the corpus cache key hashes the
    manifest.
-3. The cartridges move into `content/puck/cartridges` and its manifest;
-   `pip.agb.puck` is committed beside its document; `CartridgeRoundTripTests`
-   enumerates cartridges from product manifests.
+3. Landed: the cartridges live in the debug package's `cartridges/`, each
+   `.puck` source beside its document.
 4. Landed: the CGB cartridge is `tetromino.cgb` in source, document, tests,
    and prose, re-themed so its presentation no longer resembles the commercial
    game while its rules, piece shapes, scoring, and speeds stay. The re-theme
@@ -214,8 +199,8 @@ projections and neighbour solids, and the live scene program are never stored.
 | `SCNE` | capacity probe, static scene streams, client static field | `DEFN`, `FONT` |
 | `AUDI` | voice patches, tune ROMs | patch and tune files |
 
-`puck compile` writes one beside a document's JSON, `build/WorldAssets.targets`
-produces them for shipped worlds, the runtime writes one into the per-user
+`puck compile` writes one beside a document's JSON, `puck compile --tree`
+produces them for a package's worlds, the runtime writes one into the per-user
 compiled-world cache on a miss. Checkpoints, replay tapes, and instance starts do
 not yet reference one by its header hash. Every package that adds a chunk
 carries the same law: for every shipped world, each product derived fresh equals
@@ -265,7 +250,7 @@ Check: a desktop boot, an instance start, and a checkpoint restore each run
 `world.boot.validations` and `world.boot.rule-compilations` kinds (`WorldBootWork`).
 
 **Container, header, `DEFN`, `ASST` (landed).** Owns the container codec's
-shared home, `puck compile`, `WorldAssets.targets`, the runtime cache. The
+shared home, `puck compile`, the runtime cache. The
 codec, the header, the chunk registry (`CompiledWorldChunks`), both chunks,
 the three producers, and the boot's use of them are in place, and
 [the worlds manual](../architecture/worlds.md#compiled-worlds) owns their
@@ -276,8 +261,8 @@ in `tests/Puck.World.Games.Tests` ignores a mismatched
 header, re-derives a chunk whose asset input moved while keeping the
 rest, and admits byte for byte the definition a fresh draw admits;
 `WorldDocumentOutputLawTests` in
-`tests/Puck.Cli.Worlds.Tests` holds every shipped compiled world to what its document
-derives fresh, byte for byte. Still open:
+`tests/Puck.Cli.Worlds.Tests` holds every compiled world a tree compile writes to
+what its document derives fresh, byte for byte. Still open:
 
 - A hit still validates and compiles rules like a miss. Admitting a compiled
   world's definition without validating again needs the validation receipt to
@@ -527,25 +512,25 @@ carries the commands and results against the candidate.
 
 | Step | Packages, in parallel | Why here |
 |---|---|---|
-| 1 — today | The product tree; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
+| 1 — today | The rest of the asset packages; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
 | 2 | One validated load; the container; the view's static sections; the derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state, and a new chunk outside the engine build's reach adds its key with the chunk. |
 | 3 | Simulation chunks; target registers and the authoring envelope | Content-keyed caches first; the widest slice of the boot profile. The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. |
-| 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged product; the observation channel needs the rebuilt substrate's delivery seam. |
+| 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged world; the observation channel needs the rebuilt substrate's delivery seam. |
 | 5 | The primary client onto the view | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |
 | 6 | The evidence package; the forcing artifact end to end | One candidate carrying all four. |
 
 ## Verification summary
 
 ```bash
-dotnet run --project src/Puck.World -c Release -- --product content/puck --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
 ```
 
 ```bash
-puck product build content/puck
+puck official build --tree artifacts/official --channel dev --engine src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot --worlds worlds/debug
 ```
 
 ```bash
-puck product verify
+puck official verify --tree artifacts/official --channel dev
 ```
 
 ```bash

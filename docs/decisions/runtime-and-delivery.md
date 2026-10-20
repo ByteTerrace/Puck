@@ -6,54 +6,54 @@ lives in [the server README](../../src/Puck.World.Server/README.md) and
 [the deployment guide](../development/ci.md); a decision here is why the
 contract has the shape it has.
 
-## Products
+## Asset packages
 
-**Status: not implemented; owned by [the product tree](../plans/runtime-and-delivery.md#the-product-tree).**
-Nothing below exists yet: there is no `content/` tree, no `product.json`, and
-no `--product` option. `Puck.World` boots the worlds under its own
-`Assets/worlds`, and the build and release verbs read their content from there.
-The decisions in this section are the contract those steps deliver.
+**Status: the debug world is the first package; the rest of [the package
+programme](../plans/runtime-and-delivery.md#asset-packages) is planned.**
 
-**The engine ships no content.** `Puck.World` and its siblings ship engine
-data only: shaders, fonts, overlays, probe kinds, document schemas, each owned
-by the project that uses it. Worlds, cartridges, music, addons, and art belong
-to a product. No second product exists yet, so nothing but review proves the
-build is product-neutral, and a Puck-specific name in a build verb is a defect.
+**A world is an asset package the engine is handed (owner ruling).** The debug
+world is the package `worlds/debug/` at the repository root, independent of the
+engine: its documents and every file they name (fonts, tunes, cartridges,
+pipeline sources) live in the folder, and every path a document authors
+resolves beside the document. `Puck.World --world <folder>` boots it; the same
+flag still takes a `.puck` source or a `.world.json` document.
 
-**The unit is a product, rooted at `content/<id>/`.** "Client",
-"distribution", "channel", "title", and "identity" were all taken by existing
-meanings. The official world is `content/puck/`. A product's internal folders
-are its own choice; the official layout is not a requirement.
+**The manifest names the package and its entry (owner ruling).** A package's
+`manifest.json` declares `schema` (`puck.asset-package.v1`), `id`, `name` and
+`entry`. The entry is a document name, never a file, so one manifest serves the
+source tree (the entry's `.puck` source) and a compiled package (its
+`.world.json`). The manifest lists no files: the folder is the payload, and a
+world's basis and imports are its source's own business.
+`Puck.World.WorldPackageManifest` is the one reader, strict about every member.
 
-**The manifest is the contract.** The build reads `product.json` to learn what
-a product contains and never infers content from folder names, because
-products are often authored with outside tooling.
+**No world, no boot (owner ruling).** `Puck.World` launched without `--world`
+refuses and names what it needs. The engine names no repository path and has
+no default world; the debug launch (`.claude/launch.json`) and every documented
+run command pass `--world worlds/debug`.
 
-**No product, no boot.** Launched without a product or world, `Puck.World`
-refuses and names what it needs. There is no hidden default world.
+**The shader package store is `packages/` beside the booted document (owner
+ruling).** `puck compile --tree <package> --output <out>` writes a bootable copy
+of a package: its compiled documents and compiled worlds, the store at the
+output's root, and every other file of the package. A source boot has no store
+and compiles a pipeline on first use.
 
-**Existing pipelines are extended, not joined by a new one.** Eight pipelines
-package, bundle, or release something; four carry content and select it three
-different ways under two manifest schemas. The manifest replaces the
-selection; the pipelines stay.
+**The engine ships no content.** `Puck.World` and its siblings ship engine data
+only: shaders, fonts, overlays, probe kinds and the default recording, each
+owned by the project that uses it. Document schemas live with the document
+model (`src/Puck.World.Schema/Schemas/`) and ship in the CLI package, because
+only CLI tooling reads them. Worlds, cartridges, music, addons and art belong
+to a package. Test fixtures live with the tests that read them.
 
-**The packaged unit is the product tree; a compiled world is a file inside
-it.** `product.json` declares identity, branding, channels, engines, and every
-document and asset, which is what a release manifest must pin and an operator
-deploys. A compiled world holds one world's derived products keyed by the
-build that derived them: a cache with a strong key, not an identity. Making
-the cache the unit would force the release manifest to name a file whose
-contents change with every engine build and leave branding, cartridges, and
-addons with no home. Shipped worlds carry compiled worlds as build output
-named in the manifest under their own family, and the runtime cache still
-writes one on a miss.
+**Existing pipelines take a package; none is added.** `puck compile --tree`,
+`puck world prepare`, `puck official build --worlds` and the silo image each
+take the package folder, and the release publish compiles the package beside
+the published engine.
 
-**The manifest supplies the window title and icon**, and a world may not
-override them; branding is a property of the product a player installed, never
-of the document it happens to be showing. `content/puck/branding` holds copies
-the build makes from `branding/`, which authors the assets once. Document
-schemas ship in the CLI package, because only CLI tooling reads them. Signing
-and upload stay outside the programme; neither exists.
+**Planned, not implemented.** A package's manifest supplying the window title
+and icon, which a world may not override; channels; the release manifest
+pinning package content; and the desktop artifact carrying no content. A
+compiled world stays a cache with a strong key inside a package, never the
+packaged unit, because its bytes change with every engine build.
 
 ## ROMs
 
@@ -74,20 +74,21 @@ such as an emulator reference or a game named for its feel, is not a shipped
 name.
 
 **Every house cartridge has a `.puck` source.** Each sits beside its compiled
-document under `Assets/cartridges/<target>`, one folder per forge target, and
-`puck compile` reproduces the document byte for byte.
+document under the package's `cartridges/<target>`, one folder per forge target,
+and `puck compile` reproduces the document byte for byte.
 
 **Licensed images stay usable as evidence, recorded by hash only.** Their bytes
 never enter the repository; the ledger records id and SHA-256, and the battery
 refuses an image whose hash matches no accepted value.
 
-**`roms/` holds the engine's verification ROMs; cartridges live in the product
-that ships them.** House cartridges are product content, not evidence.
+**`roms/` holds the engine's verification ROMs; cartridges live in the package
+that ships them.** House cartridges are package content, not evidence, and
+`roms/` is never copied into a build, publish or image.
 
 **The ledger governs `bios=` and `firmware.path` too.** They are player-facing
 inputs for a player's own images, but one home for every path that reaches a
 ROM is worth more than the exemption. `tetromino` is an arcade cabinet in the
-product, not a test fixture: a cabinet is what gives it a player.
+package, not a test fixture: a cabinet is what gives it a player.
 
 ## Compiled worlds
 

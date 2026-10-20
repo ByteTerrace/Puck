@@ -87,11 +87,10 @@ public static class ParityCommand {
 
         using var lease = world;
 
-        // The parity world ships as a released world does: the tree compile writes its documents and their compiled
+        // The parity world ships as a released package does: the tree compile writes its documents and their compiled
         // worlds into the run, beside a copy of every other file the tree holds (the graph and its sources the documents
         // name), and the legs boot that copy.
         if (!TryShipWorld(
-            artifact: world.Path,
             parityWorld: parityWorld,
             runDirectory: runDirectory,
             suiteClock: suiteClock,
@@ -215,55 +214,32 @@ public static class ParityCommand {
         return true;
     }
 
-    // Compiles the parity tree into the run: every document and .puck source under it; every other file of the tree is
-    // copied beside.
-    // The compile runs through the world compiler the World artifact's own build wrote beside it, since a compiled world holds only
-    // for the engine build that derived it (CompiledWorld.EngineBuild) and the World artifact's build is the one that
-    // boots it.
-    private static bool TryShipWorld(string artifact, ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
+    // Compiles the parity tree into the run as a release publish compiles a package (`puck compile --tree`): its world
+    // sources and documents compiled, every other file of the tree copied beside them. The compile runs through this
+    // CLI's own world compiler; a compiled world derived under another engine build than the World artifact's is
+    // re-derived at boot (CompiledWorld.EngineBuild), so the legs boot the same rows either way.
+    private static bool TryShipWorld(ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
         world = string.Empty;
 
         try {
-            return ShipWorld(artifact: artifact, parityWorld: parityWorld, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
+            return ShipWorld(parityWorld: parityWorld, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"ERROR: the parity tree could not ship: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
         }
     }
-    private static bool ShipWorld(string artifact, ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
+    private static bool ShipWorld(ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
         var tree = parityWorld.Tree;
         var output = Path.Combine(
             path1: runDirectory,
             path2: "world"
         );
-        var sources = new List<string>();
 
-        _ = Directory.CreateDirectory(path: output);
         world = Path.Combine(
             path1: output,
             path2: parityWorld.ShippedName
         );
-
-        foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-            var name = Path.GetFileName(path: file);
-
-            if (name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldDocumentName.DocumentSuffix) || name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
-                sources.Add(item: file);
-            } else {
-                var destination = Path.Combine(
-                    path1: output,
-                    path2: Path.GetRelativePath(path: file, relativeTo: tree)
-                );
-
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destination)!);
-                File.Copy(
-                    destFileName: destination,
-                    overwrite: true,
-                    sourceFileName: file
-                );
-            }
-        }
 
         var timeout = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
 
@@ -276,13 +252,12 @@ public static class ParityCommand {
         var compile = CliProcess.RunCaptured(
             arguments: [
                 Path.Combine(
-                    path1: Path.GetDirectoryName(path: artifact)!,
+                    path1: AppContext.BaseDirectory,
                     path2: WorldsRoot.CompilerAssembly
                 ),
                 "compile",
                 "--tree", tree,
                 "--output", output,
-                .. sources,
             ],
             fileName: "dotnet",
             input: string.Empty,
@@ -420,7 +395,7 @@ public static class ParityCommand {
             across a whole-frame mean). Failures write both frames, a delta heatmap, and a
             per-verdict summary beside the run.
 
-            The run compiles the source's directory with the World artifact's own CLI and boots the compiled world.
+            The run compiles the source's directory with this CLI's world compiler (puck compile --tree) and boots the compiled world.
 
             With --debug-layers each leg boots its World under its backend's validation layer, as
             `puck canary --debug-layers` does, and prints one validation verdict: VALIDATION-OK, or

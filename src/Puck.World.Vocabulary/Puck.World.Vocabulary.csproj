@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!-- The vocabulary a world document is validated against and the one wiring of Puck.World.Schema's injection seams
          (WorldSchemaVocabularyHooks). It sits below Puck.World.Client so the world compile (Puck.Cli.Worlds) validates
-         with it without loading the client, and an edit to the client reruns no world compile. -->
+         with it without loading the client. -->
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>

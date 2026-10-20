@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using System.Text;
 using Puck.Abstractions.Machines;
 
@@ -26,10 +25,9 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
     public string SourcePath { get; set; } = SourcePath;
 }
 /// <summary>
-/// Resolves the world definition at boot: a <c>--world &lt;path&gt;</c> argument (or, absent one, the shipped
-/// <c>Assets/worlds/debug.world.json</c> beside the executable, which the build compiles from <c>debug.puck</c>: the
-/// debug world, the one live world while every other world is quarantined in <c>experimental/</c>), loaded through
-/// <see cref="WorldJsonContext"/>, schema-checked, and passed through <see cref="WorldDefinitionValidator"/>.
+/// Resolves the world definition at boot from the document a <c>--world &lt;path&gt;</c> argument names, loaded through
+/// <see cref="WorldJsonContext"/>, schema-checked, and passed through <see cref="WorldDefinitionValidator"/>. The
+/// engine has no default world: a boot is handed the world it runs.
 /// </summary>
 /// <remarks>Every resolved path is an assertion: absent, unreadable, or invalid, it fails the boot with a named reason
 /// and a non-zero exit. A typo or missing shipped asset must never quietly run some other world. Boot prints exactly
@@ -39,9 +37,6 @@ public static partial class WorldDefinitionLoader {
     /// spelling <c>Puck.World</c>'s <c>WorldInstanceHost.BootInstanceName</c> derives from, since this project
     /// cannot see that composition-root type.</summary>
     public const string BootInstanceName = "boot";
-    /// <summary>The default world file this build ships, resolved through <see cref="PuckPaths.Shipped"/> when no
-    /// <c>--world</c> path is supplied.</summary>
-    public const string DefaultRelativePath = "Assets/worlds/debug.world.json";
 
     // Every byte-level load door decodes here, so the boot ledger counts each such load once; a file load counts in
     // WorldDefinitionFileSource.TryLoadParsed instead.
@@ -284,10 +279,9 @@ public static partial class WorldDefinitionLoader {
         definition = admission?.Definition;
         return accepted;
     }
-    /// <summary>Resolves the active world definition from an explicit file or the shipped default file. Failure to
-    /// load either file refuses the boot.</summary>
-    /// <param name="explicitPath">The <c>--world</c> path, or <see langword="null"/>/empty for the shipped default
-    /// file.</param>
+    /// <summary>Resolves the active world definition from a document file. Failure to load it refuses the
+    /// boot.</summary>
+    /// <param name="path">The document file, absolute or relative to the current directory.</param>
     /// <param name="source">The resolved definition and its origin, when this returns <see langword="true"/>.</param>
     /// <param name="failure">The one-line boot-failure message, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
@@ -297,20 +291,13 @@ public static partial class WorldDefinitionLoader {
     /// <param name="compiledWorlds">The cache the boot reads its compiled world from and writes one into on a miss, or
     /// <see langword="null"/> to draw the document without one.</param>
     /// <returns><see langword="true"/> when the boot may proceed.</returns>
-    public static bool TryResolve(string? explicitPath, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
+    public static bool TryResolve(string path, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
         Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldCache? compiledWorlds = null) {
-        var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
-
-        string path;
-
         try {
-            path = (explicitly
-                ? Path.GetFullPath(path: explicitPath!)
-                : PuckPaths.Shipped(relativePath: DefaultRelativePath)
-            );
+            path = Path.GetFullPath(path: path);
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
             source = null!;
-            failure = $"[world] definition refused: cannot resolve path '{explicitPath}' ({exception.Message.ReplaceLineEndings(replacementText: " ")})";
+            failure = $"[world] definition refused: cannot resolve path '{path}' ({exception.Message.ReplaceLineEndings(replacementText: " ")})";
 
             return false;
         }
@@ -343,9 +330,7 @@ public static partial class WorldDefinitionLoader {
             overrides: overrides,
             compiled: compiled
         )) {
-            Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly
-                ? "--world"
-                : "shipped default")})");
+            Console.Error.WriteLine(value: $"[world] definition: {path} (--world)");
             if (compiled?.Resolution is { } resolution) {
                 Console.Error.WriteLine(value: resolution.Describe());
             }

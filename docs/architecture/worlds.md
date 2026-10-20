@@ -50,8 +50,8 @@ through one resolver (`WorldDocumentPaths`): a `basis` or `imports` entry, a
 `modulePath`, a `views.graphs` row's `source`, a probe's `track`, a machine's
 configured content, `host.icon`, and a `schedule` instance's `document`. An
 absolute path is honored as written. A document and its files therefore move
-together: the build copies the `Assets` tree beside the executable with its
-layout intact, a staged composition or test world re-expresses its paths from
+together: an [asset package](#asset-packages) boots from wherever it lies, a
+compiled package keeps the package's layout, a staged composition or test world re-expresses its paths from
 its source directory to the staging directory, and `world.save` to another
 directory re-expresses them from the loaded document's directory to the
 target's. `puck compile --output` to another directory re-expresses a compiled
@@ -76,9 +76,58 @@ written: worlds staged together reach each other by name. A `captures`
 directory the document names also resolves beside it. A `schedule` names no
 output directory at all: `--schedule-dir` both arms it and says where it writes.
 
-Files the engine ships (the default world, fonts, shaders, probe kinds) resolve
-beside the executable through `PuckPaths.Shipped`. Neither resolver falls back
-to the other.
+Files the engine ships (fonts, shaders, probe kinds, the default recording)
+resolve beside the executable through `PuckPaths.Shipped`. The engine ships no
+world. Neither resolver falls back to the other.
+
+## Asset packages
+
+A world reaches the engine as an asset package: a folder holding its documents
+and every file they name, with a `manifest.json` at its root. The debug world is
+the package `worlds/debug/`:
+
+```text
+worlds/debug/
+  manifest.json
+  debug.puck  garden.puck  quality.puck  skies.puck  shapes.puck  ...
+  avatars/moth.puck
+  fonts/  tunes/  cartridges/<target>/  pipelines/
+```
+
+The manifest (`puck.asset-package.v1`) holds exactly four strings:
+
+```json
+{
+  "schema": "puck.asset-package.v1",
+  "id": "debug",
+  "name": "Puck Debug World",
+  "entry": "debug"
+}
+```
+
+`entry` is a document name, never a file: in the source tree it resolves to the
+entry's `.puck` source beside the manifest, and in a compiled package to its
+`.world.json` document. The manifest lists no files; the folder is the payload,
+and a world's basis and imports are its source's own business.
+`WorldPackageManifest` is the one reader, and it refuses an unknown member, a
+missing or non-string member, another schema, an entry spelled as a file or
+leaving the package, and an entry that names no document beside the manifest.
+
+`Puck.World --world <folder>` (or `--world <folder>/manifest.json`) boots the
+entry, printing a `[world] package:` line before the `[world] definition:` line.
+`--world` also takes a `.puck` source or a `.world.json` document, and a boot
+without `--world` refuses and names what it needs: the engine has no default
+world and names no repository path
+([decision](../decisions/runtime-and-delivery.md#asset-packages)).
+
+`puck compile --tree <package> --output <out>` writes a bootable copy of a
+package: each world source's documents and compiled worlds, every other file of
+the package (its manifest, fonts, tunes, cartridges and their sources, module
+libraries, pipeline sources), and the shader package store at the output's root.
+A world source is selected by its `schema:` line, never by its folder or suffix,
+so a cartridge source inside a package is copied rather than compiled as a
+world. `puck world prepare <package>`, `puck official build --worlds <package>`
+and the silo image take the same folder.
 
 ## Compiled worlds
 
@@ -132,14 +181,16 @@ and neighbour solids, and the live scene program.
 
 **Where compiled worlds come from.** `puck compile` writes one beside each world
 document it writes, and a `.world.json` path given to it contributes its compiled
-world alone. The game's build runs the same compile over every shipped world
-(`build/WorldAssets.targets`) and ships each compiled world beside its document
-in `Assets/worlds`. A module fragment, which does not parse and draw as a world
-on its own, has none. `puck compile --tree` also writes the
+world alone. The engine's build compiles no world: a release publish runs
+`puck compile --tree <package> --output <out>` over an
+[asset package](#asset-packages), which writes each compiled world beside its
+document, copies every other file of the package, and writes the
 [package store](../reference/shaders.md#the-builds-package-store), `packages/`,
 at the root of its output, holding the compiled shader package of every source
-its worlds' `views.graphs` rows name, so a released world compiles no shader on
-the player's device. A boot looks beside its document first and then in the
+its worlds' `views.graphs` rows name. A boot reads the store beside the document
+it boots, so a released world compiles no shader on the player's device. A
+module fragment, which does not parse and draw as a world on its own, has no
+compiled world. A boot looks beside its document first and then in the
 per-user `compiled-worlds` cache, which every boot on the device shares whatever
 its [state root](../../src/Puck.World/README.md), takes the first compiled world
 whose header is its own, and, when it derived any chunk, writes the whole

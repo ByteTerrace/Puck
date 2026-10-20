@@ -7,20 +7,22 @@ namespace Puck.Shaders.Tests;
 /// <summary>A resource's Direct3D 12 register number equals its Vulkan binding number, and its register space equals
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
 /// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c> with every include
-/// their closures reach, the graph's package-library kernels, and the
-/// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
-/// every source a shipped <c>*.graph.json</c> names. They hold every declaration that carries both a
+/// their closures reach, the graph's package-library kernels, and the pipeline sources a world package or a test
+/// fixture carries (<see cref="PipelineTrees"/>), which <c>puck compile --tree</c> packages, with every source a
+/// <c>*.graph.json</c> among them names. They hold every declaration that carries both a
 /// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
-    // The item types build/Shaders.targets compiles, the pipeline sources
-    // build/WorldAssets.targets packages into the store beside the shipped worlds, and the graph's package-library kernels.
+    // The item types build/Shaders.targets compiles, and the graph's package-library kernels.
     private static readonly string[] ShaderItemTypes = [
         "ComputeShaderSource",
         "Direct3D11KernelSource",
         "FragmentShaderSource",
-        "PuckWorldPipelineSource",
         "VertexShaderSource",
     ];
+    // The trees, repository-relative, whose pipeline sources (each *.hlsl and *.graph.json) a tree compile packages: the
+    // world packages and the test fixtures' pipelines.
+    private static readonly string[] PipelineTrees = ["worlds", "tests/Shared/Pipelines"];
+    private const string PipelineItemType = "PipelineSource";
     // The item types build/Shaders.targets compiles as stage sources, whose include closures it compiles with them.
     private static readonly string[] StageItemTypes = ["ComputeShaderSource", "FragmentShaderSource", "VertexShaderSource"];
 
@@ -121,8 +123,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
 
         return path;
     }
-    // A project file and every file it imports by a literal path, which is where build/WorldAssets.targets declares
-    // the pipeline sources of the project that imports it.
+    // A project file and every file it imports by a literal path, which may declare the project's shader items.
     private static IEnumerable<XDocument> ProjectAndImports(string project) {
         var document = XDocument.Load(uri: project);
 
@@ -184,6 +185,25 @@ public sealed partial class ShaderRegisterBindingLawTests {
                 )))) {
                     yield return (project, element.Name.LocalName, file);
                 }
+            }
+        }
+
+        foreach (var tree in PipelineTrees) {
+            var directory = Path.Combine(
+                path1: root,
+                path2: tree
+            );
+
+            if (!Directory.Exists(path: directory)) {
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(
+                path: directory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            ).Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))).Order(comparer: StringComparer.Ordinal)) {
+                yield return (tree, PipelineItemType, Path.GetFullPath(path: file));
             }
         }
     }

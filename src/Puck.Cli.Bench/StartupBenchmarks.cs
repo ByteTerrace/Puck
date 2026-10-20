@@ -12,7 +12,7 @@ namespace Puck.Cli.Bench;
 // and pipe delivery are inside the capture interval, making it a conservative bound on visible-frame readiness.
 public static class StartupBenchmarks {
     public static Command Create() {
-        var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "World sources/documents. Default: the debug world, src/Puck.World/Assets/worlds/debug.puck." };
+        var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "Worlds to boot: asset package folders, sources or documents. Default: the debug world's package, worlds/debug." };
         var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net11.0/Puck.World.dll. Never builds." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
         var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
@@ -41,10 +41,10 @@ public static class StartupBenchmarks {
         }
         if (worlds.Length == 0) {
             // The debug world is the one live world; every other world is quarantined in experimental/.
-            worlds = [Path.Combine(path1: root, path2: "src/Puck.World/Assets/worlds/debug.puck")];
+            worlds = [Path.Combine(path1: root, path2: WorldBenchmarks.DefaultWorldRelativePath)];
         }
         worlds = worlds.Select(selector: Path.GetFullPath).ToArray();
-        if (worlds.Any(predicate: path => !File.Exists(path: path)) || (worlds.Distinct(comparer: PuckPaths.Comparer).Count() != worlds.Length)) {
+        if (worlds.Any(predicate: path => !(File.Exists(path: path) || Directory.Exists(path: path))) || (worlds.Distinct(comparer: PuckPaths.Comparer).Count() != worlds.Length)) {
             Console.Error.WriteLine(value: "startup: every world must exist and occur exactly once.");
             return 2;
         }

@@ -212,18 +212,19 @@ KERNEL-class probe kind's kernel therefore compiles at build, as do the camera
 frame converter's kernels and the display encode every swapchain compositor draws, and a pipeline
 package loads from its binaries.
 
-**A shipped world names its pipelines by source, and the build stores their
-packages by key.** The build packages every source a shipped world's pipeline
-row names into a package store beside the worlds, each under a key over the
+**A world names its pipelines by source, and its package's compile stores their
+packages by key.** `puck compile --tree` packages every source a package's
+pipeline row names into a package store beside the package's root document
+(`packages/`), each under a key over the
 source's closure, its passes' interfaces, and the names it plans under. A row
 naming a source loads the stored package with that key and compiles nothing;
 only a source with no stored package compiles, through `ShaderPipelineLoader`,
 which is the authoring path, and where nothing can compile it the row is refused
-by name. The build does not rewrite a shipped document's rows to name
+by name. The compile does not rewrite a document's rows to name
 packages. The document an author edits is then the document that ships, a
-shipped world booted from the source tree and from the build finds the same
-package, and an edited source misses its package and compiles, so authoring
-keeps its loop without a second document.
+compiled package booted from its output finds its packages beside the document,
+a source boot compiles on first use, and an edited source misses its package
+and compiles, so authoring keeps its loop without a second document.
 
 **A pass declares an interface, and its declarations are generated from it.** A
 pass names the scalars, vectors, arrays, and images it reads and writes, each

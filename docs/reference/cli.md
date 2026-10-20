@@ -495,7 +495,7 @@ unwritable output exits 2.
 ## `puck official`—the local official tree producer
 
 ```sh
-puck official build --tree <dir> --channel <name> --engine <AppBundle dir> [--worlds <dir>] [--allow-dirty]
+puck official build --tree <dir> --channel <name> --engine <AppBundle dir> --worlds <package> [--allow-dirty]
 puck official verify --tree <dir> --channel <name> [--expect-commit <hex>]
 puck official serve --tree <dir> [--port 61102]
 ```
@@ -2307,7 +2307,7 @@ for `<c>…</c>` tokens, keeps those shaped like a console verb (a family the
 console actually uses, dotted), and resolves each against: the console-verb
 enumeration, verb names spelled literally in registrations, every other
 verb-shaped string literal under `src/`, and every world-document field path
-the generated section schemas under `src/Puck.World/Assets/worlds/schema/`
+the generated section schemas under `src/Puck.World.Schema/Schemas/schema/`
 declare (`storage.userId`, `audio.masterGain`)—a document field is cited
 exactly like a verb and the generated schema is the vocabulary that cannot
 drift from the shape.
@@ -3004,8 +3004,8 @@ when supplied. A failed build or generation keeps its run directory and logs.
 Normal `obj` and `bin` outputs are untouched. After regeneration, rebuild normally
 and run `schema --check` from the newly built CLI.
 
-Written to `src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json` (root)
-and `src/Puck.World/Assets/worlds/schema/*.schema.json` (sections + common),
+Written to `src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json` (root)
+and `src/Puck.World.Schema/Schemas/schema/*.schema.json` (sections + common),
 which already flow to `Puck.World`'s build output (`Assets/**` copies
 `PreserveNewest`), so the schema ships beside the world documents it
 describes. The same run writes the projection schema beside the root
@@ -3029,8 +3029,8 @@ error or missing repository root.
 
 Six verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
 world documents. JSON stays the wire form; `.puck` is the hand-authored source
-of the game's shipped worlds, which the game's build compiles into its own output
-(`build/WorldAssets.targets`). `.puck`
+of a world package's worlds, which a release publish compiles with
+`puck compile --tree`. `.puck`
 sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
@@ -3045,16 +3045,23 @@ puck migrate <name> <path> [--check]
 ```
 
 `compile` requires source paths unless `--tree <root>` is supplied. With
-`--tree` and no source paths, it selects every `.puck` and `.world.json` file
-under `<root>` recursively, in ordinal path order. With source paths, it
+`--tree` and no source paths, it selects every world `.puck` source (one whose
+`schema:` is the world vocabulary's, or absent) and every `.world.json` file
+under `<root>` recursively, in ordinal path order; a cartridge source is
+selected by its schema, never by its folder or suffix. A world source given
+`--validate` without `--output` is validated and writes nothing; a world source
+has no committed document beside it. With source paths, it
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier
 successful outputs in place. `--output` and `--watch` require exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
 world document is written to the same relative place under the `--output`
-directory, and any other `*.world.json` or `*.puckb` under that
-directory is removed once all sources compiled, so it holds exactly this run's worlds. No run writes one
+directory, every other file of the tree (a package manifest, fonts, tunes,
+cartridges and their sources, module libraries, pipeline sources) is copied to
+the same place, and any other `*.world.json` or `*.puckb` under that
+directory is removed once all sources compiled, so the output is the tree as a
+bootable package. No run writes one
 document file twice: a source whose output lands on a file an earlier source of
 the run wrote, exactly or in another letter case, is refused by name (exit 1),
 since a document name is unique ignoring case, in the one wording every door
@@ -3063,10 +3070,10 @@ refuses two files carrying one document name in (`DocumentName.Collision`).
 files the run left under the output directory to `<report>`, one
 output-relative path with forward slashes per line in ordinal order, once the
 run succeeds; the run removes the report before it starts, so a failed run
-leaves none. The game's build uses the tree form (`build/WorldAssets.targets`)
-so the compiler and schema metadata initialize once, and ships exactly the
-files the report names: which documents a source emits, and under which names,
-is not its file name, so the build never derives them from the sources' names.
+leaves none. Which documents a source emits, and under which names, is not its
+file name, so a caller reads the report rather than deriving it from the
+sources' names. A release publish runs the tree form over a package
+(`puck compile --tree worlds/debug --output <publish>/worlds/debug`).
 `--check` compiles the tree into a scratch directory and compares it with
 `--output` instead of writing there. It exits 1 naming each file a fresh run
 writes that the output lacks or holds with other bytes, and each document,

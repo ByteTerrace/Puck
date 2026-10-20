@@ -79,5 +79,9 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <Import Project="../../build/WorldAssets.targets" />
+    <ItemGroup>
+        <!-- The engine's own content: the default recording. Worlds are asset packages the engine is handed at boot,
+             never shipped beside it. -->
+        <Content Include="Assets/recordings/**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

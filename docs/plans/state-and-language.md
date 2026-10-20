@@ -116,9 +116,9 @@ a player across authorities. It reproduces no existing JSON, so the
 language is pulled toward reading well rather than toward the shapes it
 replaces. Its pages are [drafted below](#the-forcing-world-drafted); each page
 is the check for the package that makes it compile, so the world grows with
-the language instead of arriving after it. It is authored under the product
-tree from its first line ([Runtime and delivery](runtime-and-delivery.md)
-roots it at `content/puck`).
+the language instead of arriving after it. It is authored as an asset package
+from its first line ([Runtime and delivery](runtime-and-delivery.md#asset-packages)
+roots it at `worlds/<id>/`).
 
 The place, as a player meets it:
 
@@ -533,8 +533,8 @@ before, apart from the members the reshape names.
 **Owns:** the module expander (`module`, `use`, `import`, aliases, re-export,
 parameters of kind `Point`, `Angle`, `Asset`, `Module`, `Pool`, `Row`,
 `Gate`), `function` and `select`, several documents from one source,
-`border`, `asset` with its lock file, and the forcing world itself under the
-product tree.
+`border`, `asset` with its lock file, and the forcing world itself as an
+asset package.
 
 **Expander status:** the source module slice is implemented:
 typed arguments, required exports and re-exports, aliased recursive naming,
@@ -977,7 +977,7 @@ What is open, in order:
 | Step | In parallel | Why here |
 |---|---|---|
 | 1 | C1, including the line-of-sight pricing the costing correction leaves to it | C1 is what every later package allocates under, and the correction's remaining item needs its reference schedule. |
-| 2 | S6's remainder: the forcing world under the product tree, and the shipped island, districts, and shards moved onto the modules, with their canaries re-recorded and the JSON sources deleted | Needs the language proven, which the landed packages above supply. |
+| 2 | S6's remainder: the forcing world as an asset package, and the shipped island, districts, and shards moved onto the modules, with their canaries re-recorded and the JSON sources deleted | Needs the language proven, which the landed packages above supply. |
 | 3 | S7's two open steps: [remote home adoption](records-and-pools.md#remote-home-adoption) and records carrying timed row traits | Remote adoption closes the forcing world's badge check across separate authorities. |
 | 4 | The deferred games, each when the capability it forces is otherwise unproven | See the table above. |
 

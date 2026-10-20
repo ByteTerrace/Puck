@@ -1,7 +1,7 @@
 # Binding composition (`WorldBindingComposer.cs`)
 
 Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
-generated (`puck schema`, or `Assets/worlds/schema/bindingOverlays.schema.json`);
+generated (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/bindingOverlays.schema.json`);
 this file is the decision/derivation prose the schema cannot state.
 
 The composer is N-ary (`Compose(params ReadOnlySpan<BindingProfileDocument?>)`,
@@ -211,7 +211,7 @@ a row overrides it — a matching row that lost to an earlier row is reported,
 never silent. No shipped world authors `seatModes` today — the mechanism above
 (a `{layout, <name>, <name>}` context row flipping the seat onto a
 wheel-restricted group while a matching layout is active) is the shape to
-follow; check `Assets/worlds/schema/seatModes.schema.json` for the current
+follow; check `src/Puck.World.Schema/Schemas/schema/seatModes.schema.json` for the current
 field names before authoring one. Every group needs a resting (empty-chord)
 page — a blank-slate group authors one with an empty `entries` list.
 

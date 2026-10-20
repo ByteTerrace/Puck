@@ -2,7 +2,7 @@
 
 Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and the
 `ActionPredicate`/`ActionEffect` `$type` union list are generated
-(`puck schema`, or `Assets/worlds/schema/rules.schema.json`); this file is the
+(`puck schema`, or `src/Puck.World.Schema/Schemas/schema/rules.schema.json`); this file is the
 decision/derivation prose the schema cannot state.
 
 `rules` (`WorldRule`, `Puck.World.Schema/WorldRules.cs`) is the OPTIONAL

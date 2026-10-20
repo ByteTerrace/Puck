@@ -17,5 +17,5 @@ puck-stdlib = { path = "../puck-stdlib" }
 # features when it does not build the crate's defaults.
 [package.metadata.puck]
 builds = [
-    { outputs = ["src/Puck.World/Assets/addons/puck-addon-default.wasm"] },
+    { outputs = ["wasm/puck-addon-default/dist/puck-addon-default.wasm"] },
 ]

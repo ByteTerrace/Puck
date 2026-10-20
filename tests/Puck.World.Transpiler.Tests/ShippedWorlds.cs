@@ -91,9 +91,10 @@ internal static class ShippedWorlds {
         throw new DirectoryNotFoundException(message: "Could not locate src/Puck.World/Assets/worlds directory from test runner.");
     }
     /// <summary>Returns every <c>*.puck</c> world source under the worlds directory, recursively, as forward-slashed
-    /// paths relative to it, in ordinal order.</summary>
+    /// paths relative to it, in ordinal order. A source is selected by its <c>schema:</c>
+    /// (<see cref="Composition.WorldSourceIndex.IsWorldSource"/>), so a cartridge source in a package is not one.</summary>
     /// <returns>The committed source corpus.</returns>
-    public static IEnumerable<string> SourcePaths() => Enumerate(pattern: "*.puck");
+    public static IEnumerable<string> SourcePaths() => Enumerate(pattern: "*.puck").Where(predicate: static path => Composition.WorldSourceIndex.IsWorldSourceFile(path: PathOf(relativePath: path)));
     /// <summary>Returns the committed source corpus as xUnit theory data.</summary>
     /// <returns>The source corpus as xUnit theory data.</returns>
     public static TheoryData<string> Sources() => new(values: SourcePaths());

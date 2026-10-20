@@ -10,8 +10,8 @@ using Puck.World.Transpiler.Composition;
 namespace Puck.Cli.Transpiler;
 
 public static partial class CompileCommand {
-    // `puck compile --tree <root> --output <directory> [--written <report>] <sources…>`: the build's one generation
-    // step. Each source's documents land at the same relative place under the output directory that the source holds
+    // `puck compile --tree <root> --output <directory> [--written <report>] <sources…>`: an asset package compiled into
+    // a bootable copy of itself, as a release publish runs it. Each source's documents land at the same relative place under the output directory that the source holds
     // under the tree, so a document's relative basis, import, reference and asset paths resolve there as they do beside
     // its source; each document that draws as a world has its compiled world beside it, and every pipeline source a
     // compiled world names ships as a package in the store at the output's root (WritePipelinePackages). Every name resolves first, as the
@@ -20,9 +20,9 @@ public static partial class CompileCommand {
     // source of its exact name emits that name, which wins; a composition beside it that declares other worlds leaves it shipping, and a source of
     // another stem emitting its name is refused with it before anything is written. The output directory is the tree's
     // alone: after every source compiled, a world document or compiled world there that this run did not
-    // write belongs to a source that was renamed or deleted, and is removed so nothing can load it. Which documents a
-    // source emits is not its file name, so the
-    // run reports what it wrote rather than leaving a build to derive it from the sources' names.
+    // write belongs to a source that was renamed or deleted, and is removed so nothing can load it. Every other file of
+    // the tree is copied beside them (CopyTreeFiles). Which documents a source emits is not its file name, so the run
+    // reports what it wrote rather than leaving a caller to derive it from the sources' names.
     private static int RunTree(string tree, string output, string? report, IReadOnlyList<string> paths, bool strict, bool validate) {
         var root = Path.GetFullPath(path: tree);
         var directory = Path.GetFullPath(path: output);
@@ -133,6 +133,16 @@ public static partial class CompileCommand {
             }
         }
 
+        var copied = CopyTreeFiles(
+            directory: directory,
+            root: root,
+            written: written
+        );
+
+        if (copied != 0) {
+            return copied;
+        }
+
         var pipelines = WritePipelinePackages(
             directory: directory,
             root: root,
@@ -179,19 +189,7 @@ public static partial class CompileCommand {
             oldChar: Path.DirectorySeparatorChar
         ) + "\n")).Order(comparer: StringComparer.Ordinal);
 
-        // Beside the report, the Puck assemblies the run loaded, one full path per line: the code its outputs are a
-        // function of, which the build holds the next run's need against (build/WorldAssets.targets). An assembly the run
-        // never loaded cannot move what it wrote, so a change to one reruns nothing.
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(predicate: static assembly => (!assembly.IsDynamic && (assembly.GetName().Name is { } name) && name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.") && (assembly.Location.Length != 0)))
-            .Select(selector: static assembly => (assembly.Location.Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar) + "\n"))
-            .Order(comparer: StringComparer.Ordinal);
-
         try {
-            AtomicFile.WriteAllText(
-                contents: string.Concat(values: assemblies),
-                path: (reportPath + ".assemblies")
-            );
             AtomicFile.WriteAllText(
                 contents: string.Concat(values: lines),
                 path: reportPath
@@ -203,6 +201,57 @@ public static partial class CompileCommand {
         }
 
         Console.WriteLine(value: $"Reported {written.Count:N0} written files in '{CliPaths.ToDisplay(fullPath: reportPath)}'.");
+
+        return 0;
+    }
+    // Whether a tree file is a source a tree run compiles: a world .puck source, selected by its schema: line and never
+    // by folder or suffix, or a .world.json document. A cartridge source is the package's content, copied as it stands.
+    private static bool IsTreeSource(string file) => (WorldDocumentName.IsDocumentFile(path: file) || (
+        WorldDocumentName.IsSourceFile(path: file) &&
+        WorldSourceIndex.IsWorldSourceFile(path: file)
+    ));
+    private static bool IsModuleLibrary(string file) => (
+        WorldDocumentName.IsSourceFile(path: file) &&
+        (WorldSourceIndex.Declaration(path: file) is { EmitsDocument: false, Worlds.Count: 0 })
+    );
+    // Every other file of the tree lands at its own place under the output, so the output is the tree as a bootable
+    // package: its manifest, the files its documents name (fonts, tunes, cartridges, pipeline sources a package key
+    // reads beside the document), and anything else it carries. A module library compiles to nothing, so a copy is how
+    // it travels: a cartridge's shared module names no schema of its own. A compiled world, or a document a source
+    // carries, is the run's to write, never a copy.
+    private static int CopyTreeFiles(string root, string directory, Dictionary<string, string> written) {
+        foreach (var file in Directory.EnumerateFiles(
+            path: root,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*"
+        ).Order(comparer: StringComparer.Ordinal)) {
+            if ((IsTreeSource(file: file) && !IsModuleLibrary(file: file)) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: CompiledWorld.Extension)) {
+                continue;
+            }
+
+            var target = Path.GetFullPath(path: Path.Combine(
+                path1: directory,
+                path2: Path.GetRelativePath(
+                    path: file,
+                    relativeTo: root
+                )
+            ));
+
+            try {
+                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+                File.Copy(
+                    destFileName: target,
+                    overwrite: true,
+                    sourceFileName: file
+                );
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                Console.Error.WriteLine(value: $"error: Could not copy '{CliPaths.ToDisplay(fullPath: file)}' to '{CliPaths.ToDisplay(fullPath: target)}': {exception.Message}");
+
+                return 2;
+            }
+
+            written[target] = file;
+        }
 
         return 0;
     }

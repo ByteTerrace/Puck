@@ -437,7 +437,9 @@ public static partial class AzureCommand {
             "--channel",
             "stable",
             "--engine",
-            "src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot"
+            "src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot",
+            "--worlds",
+            HostedWorldSource
         );
         await PuckAsync(
             "official",

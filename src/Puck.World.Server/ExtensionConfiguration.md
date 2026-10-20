@@ -15,7 +15,7 @@ the host; configuration never loads DLLs or executes paths.
 
 ## Select a deployment
 
-Copy the [Azure example](../Puck.World/Assets/hosting/azure.extensions.example.json)
+Copy the [Azure example](../Puck.World.Azure/azure.extensions.example.json)
 to a private deployment directory. Set the resource ID, API version, incarnation,
 and authentication arrangement for the resource you intend to operate. Choose a
 new lineage UUID for a new authority, then retain it across ordinary restarts.
@@ -138,7 +138,7 @@ An `observations` entry reads an approved external collection and maps selected
 fields into existing state rows of any cell kind, and nothing else. The
 [granaries example](../../experimental/src/Puck.World/Assets/worlds/modules/README.md) uses this
 path to represent storage accounts without configuring any cloud mutation
-operations; the [Azure hosting example](../Puck.World/Assets/hosting/azure.extensions.example.json)
+operations; the [Azure hosting example](../Puck.World.Azure/azure.extensions.example.json)
 also shows a `Fixed` row fed by a metrics observation. An observation writes
 rows only; a district that wants one placement per observed row reads the
 target row from an ordinary authored rule or placement facet.

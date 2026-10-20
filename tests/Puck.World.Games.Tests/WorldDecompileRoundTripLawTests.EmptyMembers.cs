@@ -11,7 +11,7 @@ namespace Puck.World.Games.Tests;
 // each held empty inside a document that carries only the parents on the way to it.
 public sealed partial class WorldDecompileRoundTripLawTests {
     private const int MaxDepth = 6;
-    private const string SchemaFile = "src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json";
+    private const string SchemaFile = "src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json";
 
     // One step from the document down to a member: its name, and when the member is a list that the path goes on into,
     // the identity member of the row it goes into.

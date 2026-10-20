@@ -62,7 +62,8 @@ macOS, and nothing here is verified there.
   `.claude/settings.json` turns auto memory off, selects the Concise output
   style, enables the `puck` server from `.mcp.json` and the Codex plugin, names
   the plugin's marketplace, and registers the hooks, and `.claude/launch.json`
-  holds the preview configurations. Trust the folder when Claude Code asks,
+  holds the debug world's launch (`debug-world`: `--world worlds/debug
+  --control`) and the preview configurations. Trust the folder when Claude Code asks,
   because the marketplace entry loads only in a trusted project. Settings are
   repository-wide: keep no per-machine settings file, and put a setting every
   machine should share in `.claude/settings.json`. There is no Claude-specific memory file, on purpose: Claude Code reads
@@ -323,10 +324,9 @@ request settles. The reload writes into the build's shader cache, so the next
 build publishes those kernels without compiling them. A change to a C# struct,
 buffer layout or binding needs the C# loop instead.
 
-The world compile the build runs (`build/WorldAssets.targets`) reruns only when
-a world source, a pipeline source, or an assembly it loaded changes. It
-validates through `Puck.World.Vocabulary` and never loads `Puck.World.Client`,
-so a client edit compiles one project and skips it.
+The engine's build compiles no world: the debug world boots from its source
+package (`--world worlds/debug`), compiled in memory and cached per user, so a
+world edit is a `world.reload` and an engine edit rebuilds only the engine.
 
 Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
 the CPU at the stated load:

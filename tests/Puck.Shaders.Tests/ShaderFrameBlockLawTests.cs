@@ -61,7 +61,7 @@ public sealed class ShaderFrameBlockLawTests {
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
-        "src/Puck.World/Assets/pipelines/ink.graph.json",
+        "tests/Shared/Pipelines/ink/ink.graph.json",
         "src/Puck.World/Assets/pipelines/moth.hlsl",
     ]);
 

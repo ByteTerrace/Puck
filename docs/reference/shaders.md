@@ -1975,7 +1975,7 @@ indices, binds both ranges and draws the indices.
 
 ### Loading and installing
 
-See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.graph.json)
+See the [three-pass ink pipeline](../../tests/Shared/Pipelines/ink/ink.graph.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
 graph document. Source paths in the pipeline resolve relative to that
@@ -2586,7 +2586,7 @@ interface, so a quality tier cannot change what a pass reads.
 ```
 
 ```sh
-puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/ink
+puck shaders package tests/Shared/Pipelines/ink/ink.graph.json --output artifacts/ink
 puck shaders pipeline artifacts/ink
 ```
 
@@ -2723,21 +2723,21 @@ same state (`WorldViewGraphTierLawTests`). A package row names no tier.
 
 ### The build's package store
 
-A shipped world names its pipelines by source, and the game's build compiles
-them. The tree run of `puck compile` that writes the shipped worlds
-(`build/WorldAssets.targets`) reads every `views.graphs` row that names a
-`source` in every world
+A world package names its pipelines by source, and its release compile builds
+them. The tree run of `puck compile` that compiles a package
+(`puck compile --tree <package> --output <out>`) reads every `views.graphs` row
+that names a `source` in every world
 it compiled, resolves each row's source from the document's place in the tree,
-and writes that source's package into the store at the output's root, shipped as
-`Assets/worlds/packages`. `ShaderPackager.StoreAsync` writes it under the
+and writes that source's package into the store at the output's root,
+`packages/`, beside the package's root document, where a boot of that document
+reads it. `ShaderPackager.StoreAsync` writes it under the
 source's key, `ShaderPackager.KeyOf`: a content pin over the document's logical
 path, the name the pipeline plans under, every file of the closure with its
 pin, and each pass's name, interface hash and generated declarations' pin. A
 one-off shader plans under its instance's name, so two rows naming one shader
 under two names store two packages. A missing source, a closure that does not
-fit a package, or a pass that does not compile fails the build, and a package
-no row names any more is removed, both from the store and, after the copy,
-from the output's `Assets/worlds/packages`.
+fit a package, or a pass that does not compile fails the run, and a package
+no row names any more is removed from the store.
 
 A package is written beside its directory and moved into place whole, with its
 manifest written last: the manifest is its commit record. A clean or rebuild

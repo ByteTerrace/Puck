@@ -125,7 +125,7 @@ eight-body scene: one isolated inspection subject and seven held pose stations,
 with named cameras and independent sky and volumetric-cloud toggles.
 
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
-and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
+and the [Azure example](../Puck.World.Azure/azure.extensions.example.json). The operator
 selects the file with `--extensions-config-file`; `world.extensions.catalog`
 lists every composed [extension](../../docs/reference/extensions.md) and its
 contributions, and `world.extensions` reads back the configured connections and
@@ -724,7 +724,7 @@ pipeline.reset ink
 pipeline.time ink resume
 ```
 
-Edit [the simulation shader](Assets/pipelines/ink-simulation.hlsl) while it runs.
+Edit [the simulation shader](../../tests/Shared/Pipelines/ink/ink-simulation.hlsl) while it runs.
 Compilation happens in the background. A typo reports a source diagnostic and
 keeps the complete last successful pipeline running. Saving a correction
 installs a new candidate at a frame boundary. `pipeline.reload ink` requests
@@ -813,7 +813,7 @@ states the contract.
 A row naming a package reads the same way:
 
 ```text
-puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/packages/ink
+puck shaders package tests/Shared/Pipelines/ink/ink.graph.json --output artifacts/packages/ink
 pipeline.load ink ../../../../artifacts/packages/ink
 pipeline.wait ink installed
 ```
@@ -2095,8 +2095,8 @@ own declared range; a parameter binding targeting the same field overwrites a
 single-instance row's one instance is written and a seat-relative row's every
 live instance is written; with a suffix, only that one instance.
 
-No shipped world declares a probe. The checked-in track
-`Assets/probes/tracks/brio-head.probe-track.json` and the verbs above are the
+No live world declares a probe. A quarantined example track
+(`experimental/src/Puck.World/Assets/probes/tracks/brio-head.probe-track.json`) and the verbs above are the
 probe surface. A district that needs a camera reading authors its `probes` rows
 on the one world and proves them with `probe.status`, `body.channels`, and
 `wire.errors`; the kernel's own numbers are pinned hardware-free by

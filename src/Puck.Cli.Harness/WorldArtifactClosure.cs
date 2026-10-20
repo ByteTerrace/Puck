@@ -8,7 +8,7 @@ namespace Puck.Cli;
 /// themselves rather than by asking MSBuild, so that computing them costs no evaluation.
 /// <para>
 /// The walk starts at <c>src/Puck.World/Puck.World.csproj</c> and follows every <c>ProjectReference</c>, including
-/// the ones that carry no assembly (the CLI that compiles the shipped worlds, the analyzers). For each project it
+/// the ones that carry no assembly (the analyzers). For each project it
 /// reads the project file, the nearest <c>Directory.Build.props</c> and <c>Directory.Build.targets</c> above it, and
 /// every file those import from inside the checkout. A project contributes its whole directory. Any other path a
 /// walked file names through <c>$(MSBuildThisFileDirectory)</c> or <c>$(MSBuildProjectDirectory)</c>, or through a

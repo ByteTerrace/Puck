@@ -13,7 +13,7 @@ loaded as a world: `puck.world.projection.v1` (`WorldProjection.cs`) and
 **Field names, enums, defaults, and validation ranges are generated, not
 restated here.** `puck schema` derives `puck.world.definition.v1.schema.json` (root),
 `puck.world.projection.v1.schema.json`, and one file per document section
-under `Assets/worlds/schema/*.schema.json` directly from `WorldDefinition.cs`
+under `src/Puck.World.Schema/Schemas/schema/*.schema.json` directly from `WorldDefinition.cs`
 over the same source-generated `WorldJsonContext` the engine parses a world
 through (`System.Text.Json`'s `JsonSchemaExporter` — never hand-maintained);
 the same run writes the dashboard portal's `worldDefinition.generated.ts`

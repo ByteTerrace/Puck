@@ -56,11 +56,9 @@
         <Compile Include="../Shared/World/WorldDocumentCorpus.cs" Link="World/WorldDocumentCorpus.cs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
-             the game ships Assets/worlds (WorldAssetRowLoader); the shipped worlds these laws boot author them, so the
-             suite carries the same files at the same relative paths. -->
-        <None Include="../../src/Puck.World/Assets/worlds/music/**" LinkBase="Assets/worlds/music" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
+        <!-- A copy of the patch fixture beside the test executable, which WorldDocumentPathLawTests proves a document's
+             relative row never reads. -->
+        <None Include="../Shared/World/Assets/patches/**" LinkBase="Assets/patches" CopyToOutputDirectory="PreserveNewest" />
         <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

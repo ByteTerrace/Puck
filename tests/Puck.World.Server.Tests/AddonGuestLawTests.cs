@@ -158,12 +158,11 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: 0, actual: tick.CellCount);
         Assert.Equal(expected: AddonState.Enabled, actual: guest.State);
     }
-    // Every committed guest binary: the modules Puck.World ships and each verification guest's dist builds.
-    public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateFiles(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/addons"), searchPattern: "*.wasm")
-        .Concat(second: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
+    // Every committed guest binary: each guest crate's dist builds.
+    public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
             .Select(selector: static crate => Path.Combine(path1: crate, path2: "dist"))
             .Where(predicate: Directory.Exists)
-            .SelectMany(selector: static dist => Directory.EnumerateFiles(path: dist, searchPattern: "*.wasm")))
+            .SelectMany(selector: static dist => Directory.EnumerateFiles(path: dist, searchPattern: "*.wasm"))
         .Select(selector: static path => Path.GetRelativePath(path: path, relativeTo: RepositoryPaths.RequireRoot()).Replace(newChar: '/', oldChar: '\\'))
         .Order(comparer: StringComparer.Ordinal));
     // The committed guest binaries are built against this host's ABI: a stale one reports another version from

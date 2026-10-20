@@ -19,8 +19,6 @@ public sealed record AffectedCanary(string Directory, IReadOnlyList<string> File
 /// <param name="Baselines">The committed baseline artifacts, in ordinal name order, checked by the gate.</param>
 /// <param name="Canaries">The canary ids, ordinal order.</param>
 /// <param name="CanaryChecks">The canary ids whose manifests need strict loading and listing, ordinal order.</param>
-/// <param name="Catalog">Whether the shipped world catalog must be checked against a fresh tree compile
-/// (<c>puck compile --tree … --check</c>): a shipped world source, or code whose output the compile writes, changed.</param>
 /// <param name="Everything">Whether build infrastructure changed, which reaches every suite.</param>
 /// <param name="Parity">Whether <c>puck parity</c> must run: a chosen canary renders on a GPU, so the change reaches
 /// the render path parity compares across backends.</param>
@@ -31,7 +29,7 @@ public sealed record AffectedCanary(string Directory, IReadOnlyList<string> File
 /// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
+public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
@@ -82,7 +80,6 @@ public static class AffectedSelection {
     /// <see cref="WorldArtifactClosure"/> walks and the World build key hashes): a change to it may change every World
     /// a canary boots, so it selects every canary, and a change to any other such path selects none.</param>
     /// <param name="declaresTests">Whether a changed <c>.puck</c> source declares <c>test</c> blocks.</param>
-    /// <param name="catalogInputs">Whether a changed file is an input of the shipped catalog's tree compile.</param>
     /// <param name="canariesReaching">The canaries whose manifest worlds and fixtures reach a changed file through the
     /// documents they name (<see cref="AffectedDocuments"/>); none when none do.</param>
     /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
@@ -90,7 +87,7 @@ public static class AffectedSelection {
     /// unmapped.</param>
     /// <param name="compiledUnchanged">Whether a changed shipped world file compiles to the same document value at the
     /// base and the head (<see cref="AffectedCompiledWorlds"/>): a canary boots the compiled world, so such a file reaches
-    /// its suites and the catalog check but no canary, and it is never unmapped.</param>
+    /// its suites but no canary, and it is never unmapped.</param>
     /// <param name="triviaOnly">Whether a C# edit changes only trivia, so reaches no execution.</param>
     /// <param name="proseOnly">Whether a manifest edit changes only prose, so needs its strict load/list check.</param>
     /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
@@ -116,7 +113,6 @@ public static class AffectedSelection {
         Func<string, IReadOnlyList<string>> consumersOf,
         IReadOnlySet<string> worldClosure,
         Func<string, bool> declaresTests,
-        Func<string, string?, bool> catalogInputs,
         Func<string, IReadOnlyList<string>> standInsFor,
         Func<string, IReadOnlySet<string>> canariesReaching,
         Func<string, bool> worldInput,
@@ -129,7 +125,6 @@ public static class AffectedSelection {
         Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null,
         Func<string, IReadOnlyList<string>>? linkedBy = null
     ) {
-        var catalog = false;
         var everything = false;
         var worldBuild = false;
         var seeds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -189,7 +184,6 @@ public static class AffectedSelection {
             if (compiledUnchanged?.Invoke(arg: path) == true) {
                 var unchangedOwner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
 
-                catalog |= catalogInputs(arg1: path, arg2: unchangedOwner?.Name);
                 if (unchangedOwner is not null) {
                     _ = seeds.Add(item: unchangedOwner.Name);
                 }
@@ -245,8 +239,6 @@ public static class AffectedSelection {
             }
 
             var owner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
-
-            catalog |= catalogInputs(arg1: path, arg2: owner?.Name);
 
             if (linkedBy is not null) {
                 seeds.UnionWith(other: linkedBy(arg: path));
@@ -322,7 +314,6 @@ public static class AffectedSelection {
             Baselines: [.. baselines],
             Canaries: [.. selected],
             CanaryChecks: [.. checks],
-            Catalog: (catalog || everything),
             Everything: everything,
             Parity: parity,
             Suites: [.. reached.Where(predicate: static project => project.IsSuite).Select(selector: static project => project.Name).Order(comparer: StringComparer.Ordinal)],

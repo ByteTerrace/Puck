@@ -170,7 +170,7 @@ client instead; its operation discovery contains only those grants.
 
 For read-only discovery, `AzureResourceInventory` uses the same generic ARM SDK
 pipeline to list an explicitly named resource group's resources. The
-[granaries deployment](../Puck.World/Assets/hosting/granaries.extensions.json)
+[granaries deployment](../../experimental/src/Puck.World/Assets/hosting/granaries.extensions.json)
 shows the complete no-C# wiring. Source settings pin `resourceGroup`, `apiVersion`,
 and `resourceType`; optional `namePrefix` and `excludeNames` narrow membership.
 `fields` maps disclosure names to slash-separated property paths such as `/id`,
@@ -204,7 +204,7 @@ timeseries for it, or never completing a bucket refuses the whole read.
 `AzureConfiguredProvider.BindObservation` dispatches on the settings' own `kind`
 field: absent or `"inventory"` selects the resource-group inventory above,
 `"metrics"` selects this reader. The
-[Azure hosting example](../Puck.World/Assets/hosting/azure.extensions.example.json)
+[Azure hosting example](azure.extensions.example.json)
 shows one of each. No credentials ever appear in either kind's settings; both
 share the provider's own credential and the same bounded, complete-or-refused
 snapshot contract.

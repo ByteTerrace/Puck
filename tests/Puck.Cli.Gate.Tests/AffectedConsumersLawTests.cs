@@ -77,7 +77,6 @@ public sealed class AffectedConsumersLawTests {
         var linkedBy = AffectedConsumers.Linking(projects: Projects, repositoryRoot: Repository(scratch: scratch));
         var plan = AffectedSelection.Select(
             canaries: [],
-            catalogInputs: static (_, _) => false,
             canariesReaching: static _ => new HashSet<string>(),
             changed: ["src/Engine/Assets/addons/guest.wasm"],
             consumersOf: static _ => [],

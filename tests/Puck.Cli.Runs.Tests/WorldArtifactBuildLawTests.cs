@@ -532,8 +532,8 @@ public sealed class WorldArtifactBuildLawTests {
             collection: projects,
             expected: WorldArtifactClosure.WorldProject
         );
-        // The game build runs the world-authoring verbs' own executable, so no other verb assembly is in its closure.
-        Assert.Contains(
+        // The engine's build compiles no world, so no verb assembly is in its closure.
+        Assert.DoesNotContain(
             collection: projects,
             expected: "src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj"
         );

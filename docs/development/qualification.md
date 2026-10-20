@@ -20,6 +20,7 @@ output directory:
 ```text
 dotnet build src/Puck.World -c Release -p:PuckShaderSpirvEnabled=true
 dotnet publish src/Puck.World -c Release --no-build --no-restore -p:PuckShaderSpirvEnabled=true -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
+puck compile --tree worlds/debug --output artifacts/world/worlds/debug
 puck qualify artifacts/world --profile tests/Puck.Qualification/release.profile.json
 ```
 

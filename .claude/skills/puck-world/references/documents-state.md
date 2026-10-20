@@ -2,7 +2,7 @@
 
 Part of [`puck.world.definition.v1`](documents.md). Field names, `kind`/`domain`
 enums, and numeric ceilings are generated (`puck schema`, or
-`Assets/worlds/schema/state.schema.json`); this file is the decision/derivation
+`src/Puck.World.Schema/Schemas/schema/state.schema.json`); this file is the decision/derivation
 prose the schema cannot state. `rules` — the primitive that reads and writes
 these rows — is [documents-rules.md](documents-rules.md).
 

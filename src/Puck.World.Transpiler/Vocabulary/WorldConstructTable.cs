@@ -437,7 +437,7 @@ public sealed class WorldConstructTable {
         _ = output.AppendLine(value: "Every construct of `puck.world.definition.v1`'s authoring vocabulary: the word at the start of");
         _ = output.AppendLine(value: "the line, the members it carries, the document member it lowers to, and what the printer needs");
         _ = output.AppendLine(value: "before it may print a document node back as that construct. What a document field means is");
-        _ = output.AppendLine(value: "`puck schema`'s (`src/Puck.World/Assets/worlds/schema/`), and which fields carry names is");
+        _ = output.AppendLine(value: "`puck schema`'s (`src/Puck.World.Schema/Schemas/schema/`), and which fields carry names is");
         _ = output.AppendLine(value: "`puck registry`'s ([the name registry](../world-name-registry.md)); this table is the surface and");
         _ = output.AppendLine(value: "its mapping onto them.");
         _ = output.AppendLine();

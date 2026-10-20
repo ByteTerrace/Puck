@@ -360,9 +360,9 @@ shared grant leaf.
 
 ## The shipped example
 
-`src/Puck.World/Assets/addons/puck-addon-default.wasm` (source under
-`wasm/puck-addon-default/`) — no shipped world mounts it; it ships as an
-asset, ready to author into any world's `addons` row: the
+`wasm/puck-addon-default/dist/puck-addon-default.wasm` (source under
+`wasm/puck-addon-default/`) — no world mounts it; it is committed beside its
+crate, ready to author into any world's `addons` row: the
 dead-reckoning clamp-walk ghost — consumes the `GrantedBody` disclosure for
 a Drive handle, asks for Observe, dead-reckons off pose answers, and emits
 NOTHING when no pose is held (a refused grant leaves the ghost standing,

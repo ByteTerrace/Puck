@@ -38,6 +38,17 @@ public static partial class CompileCommand {
             return 0;
         }
 
+        // A world source has no committed document, so a validation writes nothing into the source tree: only an
+        // explicit --output (or a tree run's) receives the documents it proved.
+        if (validate && (outputPath is null) && (written is null)) {
+            if (compilation.Assets?.SaveUpdatedLock(diagnostics: diagnostics) == false) {
+                PrintDiagnostics(diagnostics: diagnostics, filePath: sourcePath, sourceText: source);
+                return 1;
+            }
+            Console.WriteLine(value: $"Validated '{Path.GetFileName(path: sourcePath)}' ({string.Join(separator: ", ", values: outputs.Select(selector: static output => output.Name))}); nothing written without --output.");
+            return 0;
+        }
+
         // Each document lands under the name it is emitted by, in one directory: beside the source, where a mirrored
         // tree writes the source's own directory, or in the directory a composition's -o names. Only an ordinary
         // source's -o outside a tree run names its document's file itself. Declared names are validated as portable

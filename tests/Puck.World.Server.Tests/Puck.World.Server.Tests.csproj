@@ -79,8 +79,4 @@
         <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
         <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
-    <ItemGroup>
-        <!-- AddonGuestLawTests reads the committed guest binaries the game ships, at the path the game ships them. -->
-        <None Include="../../src/Puck.World/Assets/addons/*.wasm" LinkBase="Assets/addons" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
 </Project>
