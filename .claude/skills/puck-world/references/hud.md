@@ -306,8 +306,9 @@ banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (32 — the declared ceiling 
 one bar's authored slot set of input source ids) slots, plus
 the one label, `WorldBindingBarCapacity.MaxModifiers` (16) modifier
 indicators (`OverlayCapacity.BindingBarMaxModifiers`), and
-`BindingBarWriter.MaxHintLines` (8) hint lines every bar draws once regardless
-of bank count — `OverlayCapacity.BindingBarMaxBanks`/
+`BindingBarWriter.MaxHintLines` (8) chord hints of up to
+`BindingBarWriter.MaxHintMembers` (4) member chips and one action chip or label
+each, which every bar draws once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
 `BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.
 `OverlayFrameBuilder.MaxElements` (2048) is sized to fit this reservation
 beside the others.

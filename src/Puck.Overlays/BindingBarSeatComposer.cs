@@ -157,6 +157,113 @@ public static class BindingBarSeatComposer {
 
         return count;
     }
+    /// <summary>Composes the bar's command-chord hints from a page view. A chord row of the active group becomes a hint
+    /// only when the bar places every member — a control in <paramref name="slotSet"/>, or any member while the bar
+    /// draws its modifier row — and every member's badge resolves: the hint is the members' badges and the action's
+    /// icon, else the row's label while the bar draws text. Any other row stays off the bar, so the bar never spells a
+    /// source or a command name.</summary>
+    /// <param name="view">The seat's active page view.</param>
+    /// <param name="slotSet">The bar's slot set: the controls it places.</param>
+    /// <param name="modifiers">Whether the bar draws its modifier row, which places every chord member.</param>
+    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> drops label badges and label
+    /// actions.</param>
+    /// <param name="resolveBadge">Resolves a member's input source id to its badge content — the same door a slot's
+    /// badge resolves through.</param>
+    /// <param name="resolveAction">Resolves a chord row to its action's icon content.</param>
+    /// <param name="destination">The destination hints; rows past its length stay off the bar.</param>
+    /// <param name="members">The backing the hints' member badges are written into,
+    /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</param>
+    /// <returns>The number of hints written.</returns>
+    /// <exception cref="ArgumentException"><paramref name="members"/> is shorter than
+    /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</exception>
+    public static int ComposeHints(BindingPageView view, IReadOnlyList<string> slotSet, bool modifiers, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Func<BindingChordCommandView, OverlayResolvedGlyph> resolveAction, Span<OverlayBindingHint> destination, Memory<OverlayResolvedGlyph> members) {
+        ArgumentNullException.ThrowIfNull(argument: view);
+        ArgumentNullException.ThrowIfNull(argument: slotSet);
+        ArgumentNullException.ThrowIfNull(argument: resolveBadge);
+        ArgumentNullException.ThrowIfNull(argument: resolveAction);
+
+        if (members.Length < (destination.Length * BindingBarWriter.MaxHintMembers)) {
+            throw new ArgumentException(
+                message: $"Expected {(destination.Length * BindingBarWriter.MaxHintMembers)} member slots; got {members.Length}.",
+                paramName: nameof(members)
+            );
+        }
+
+        var chords = view.CommandChords;
+        var count = 0;
+
+        for (var row = 0; ((row < chords.Count) && (count < destination.Length)); row++) {
+            var chord = chords[row];
+            var sources = chord.Sources;
+
+            if (
+                (sources.Count == 0) ||
+                (sources.Count > BindingBarWriter.MaxHintMembers)
+            ) {
+                continue;
+            }
+
+            var badges = members.Slice(
+                length: sources.Count,
+                start: (count * BindingBarWriter.MaxHintMembers)
+            );
+            var placed = true;
+
+            for (var index = 0; (placed && (index < sources.Count)); index++) {
+                var badge = Badge(
+                    glyph: resolveBadge(sources[index]),
+                    text: text
+                );
+
+                badges.Span[index] = badge;
+                placed = (
+                    (badge != OverlayResolvedGlyph.None) &&
+                    (modifiers || Places(
+                        slotSet: slotSet,
+                        source: sources[index]
+                    ))
+                );
+            }
+
+            var action = Badge(
+                glyph: resolveAction(chord),
+                text: text
+            );
+            var label = (((action == OverlayResolvedGlyph.None) && text)
+                ? (chord.Label ?? string.Empty)
+                : string.Empty
+            );
+
+            if (
+                !placed ||
+                ((action == OverlayResolvedGlyph.None) && (label.Length == 0))
+            ) {
+                continue;
+            }
+
+            destination[count] = new OverlayBindingHint(
+                Action: action,
+                Label: label,
+                Members: badges
+            );
+            count++;
+        }
+
+        return count;
+    }
+    private static bool Places(IReadOnlyList<string> slotSet, string source) {
+        for (var index = 0; (index < slotSet.Count); index++) {
+            if (string.Equals(
+                a: slotSet[index],
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
     /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
     /// renders a page that is not live, so it shows no press).</summary>
