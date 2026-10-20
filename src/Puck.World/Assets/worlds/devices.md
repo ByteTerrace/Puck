@@ -9,7 +9,7 @@ it running, and each names the folder its swappable content comes from in
 
 | x | Device | Instance | Engine and model | Screen | Boots | `contentFolder` |
 |---|---|---|---|---|---|---|
-| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.cgb` | `../cartridges/cgb` |
+| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.cgb` (its screen holds on the firmware logo) | `../cartridges/cgb` |
 | -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `../cartridges/cgb` |
 | -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb` |
 | -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb` |
@@ -18,8 +18,11 @@ it running, and each names the folder its swappable content comes from in
 
 The `gaming-brick` engine's three hardware families are the three brick devices;
 its other revisions (`mgb`, `sgb`, `cgb0` and the rest) are steppings of those
-families that `device.model` selects on a running brick. The DMG runs the CGB
-cartridges in its monochrome mode, since the forge has no DMG target. The AGB
+families that `device.model` selects on a running brick. The forge has no DMG
+target, so the DMG mounts the CGB cartridges and shows what its firmware draws:
+its cold boot holds on the Puck logo for them (a `fast` boot shows a blank
+white screen instead), and a swap there changes what is mounted but not the
+picture. The AGB
 mode device is the AGB console running brick cartridges; the Advanced Gaming
 Brick is the same console running its own. The jukebox's content is a
 `puck.tune.v1` document, and its screen is the jukebox's transport display. No
@@ -52,7 +55,8 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Engage it (within 3 m), playing it with the Moth's controls | `body.engage <screen>` |
 | Disengage | `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
-| Frame the whole row | `view.override camera look -17.5 2.5 2 -17.5 0.7 -6`, then `view.override camera auto` |
+| Put every device back on its authored cartridge (and pick up an edit to `devices.puck`) | `world.reload` |
+| Frame the whole row | `view.override camera look -17.5 2.6 4.5 -17.5 0.6 -6`, then `view.override camera auto` |
 | Frame one device | `view.override camera look <x> 1.1 -4.4 <x> 0.75 -6` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,

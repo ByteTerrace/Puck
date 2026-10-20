@@ -142,6 +142,46 @@ public sealed class MachineContentFolderLawTests {
             Assert.True(condition: registry.Submit(line: "machine.swap nobody gun").IsError);
         }
     }
+    // A reload submits the re-read document through the rebuild leaf, whose JSON holds no directory; the directory
+    // rides beside it, so the document's machines still resolve their relative content beside the file.
+    [Fact]
+    public void AReloadedDocumentResolvesItsMachineContentBesideItsFile() {
+        using var root = Layout();
+        var (fixture, registry) = Boot(contentFolder: "../carts", root: root);
+
+        using (fixture) {
+            var reread = WithCabinet(contentFolder: "../carts");
+            var cabinet = reread.Machines.Single(predicate: static machine => (machine.Name == "cabinet"));
+
+            reread = (reread with {
+                DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json")),
+                MachinesRaw = [.. reread.Machines.Where(predicate: static machine => (machine.Name != "cabinet")), cabinet with {
+                    Configuration = JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = "../carts/gun.cgb.cartridge.json" } }),
+                }],
+            });
+
+            Assert.True(condition: WorldFrameCodec.TryEncode(
+                failure: out var encodeFailure,
+                frame: out var frame,
+                payload: new WorldSubmissionPayload.Rebuild(Value: new WorldRebuildRequest(
+                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: reread)),
+                    Definition: reread,
+                    Force: true,
+                    Kind: WorldRebuildKind.Reload,
+                    Origin: new WorldRebuildOrigin.File(Path: Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json"))
+                ))
+            ), userMessage: encodeFailure.ToString());
+            Assert.True(condition: WorldFrameCodec.TryDecode(failure: out var decodeFailure, frame: frame, payload: out var decoded), userMessage: decodeFailure.ToString());
+
+            var request = Assert.IsType<WorldSubmissionPayload.Rebuild>(@object: decoded).Value;
+
+            Assert.Equal(expected: reread.DocumentDirectory, actual: request.Definition!.DocumentDirectory);
+            fixture.Server.EnqueueRebuild(principal: Principal.Console, request: request);
+            fixture.Step();
+
+            Assert.Contains(expectedSubstring: "mounted=../carts/gun.cgb.cartridge.json", actualString: registry.Submit(line: "machine.content cabinet").Output);
+        }
+    }
     [Fact]
     public void AMachineWithNoFolderOrAMissingOneListsNothing() {
         using var root = Layout();

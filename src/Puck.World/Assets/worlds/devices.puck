@@ -39,7 +39,7 @@ template portraitHandheld() {
   shape Superellipsoid "shell" {
     exponent: 6
     material: 0
-    position [0, 0.72, 0]
+    position [0, 0.715, 0]
     scale [0.26, 0.42, 0.05]
   }
   shape Box "bezel" {
@@ -85,7 +85,7 @@ template landscapeHandheld() {
   shape Superellipsoid "shell" {
     exponent: 4
     material: 0
-    position [0, 0.56, 0]
+    position [0, 0.555, 0]
     scale [0.5, 0.26, 0.06]
   }
   shape Box "shoulder-left" {
@@ -281,7 +281,7 @@ placements {
 }
 
 // Each machine boots its first cartridge and swaps to any file `machine.content` lists from its folder. The three brick
-// models share the CGB cartridges, which the DMG runs in its monochrome mode.
+// models share the CGB cartridges; the DMG's firmware holds on its logo for them, since the forge has no DMG target.
 machines [
   {
     name: "brick-dmg"
@@ -388,15 +388,14 @@ kits {
   ]
 }
 
-// Each screen is the device's face, 6 mm proud of its bezel. A brick screen is 160 by 144, the advanced brick's 240 by
-// 160 and the deck's 256 by 240, at 2 mm a pixel.
-let deviceFaceZ = (deviceZ + 0.06)
+// Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. A brick screen is 160 by
+// 144, the advanced brick's 240 by 160 and the deck's 256 by 240, at 2 mm a pixel.
 let deviceRoute = { engageable: true, engageRadius: 3, kit: "devicePad" }
 
 screens [
   {
     index: 0
-    origin [-10, 0.88, deviceFaceZ]
+    origin [-10, 0.88, (deviceZ + 0.067)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
@@ -408,7 +407,7 @@ screens [
   }
   {
     index: 1
-    origin [-13, 0.88, deviceFaceZ]
+    origin [-13, 0.88, (deviceZ + 0.067)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
@@ -420,7 +419,7 @@ screens [
   }
   {
     index: 2
-    origin [-16, 0.6, (deviceZ + 0.073)]
+    origin [-16, 0.6, (deviceZ + 0.077)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
@@ -432,7 +431,7 @@ screens [
   }
   {
     index: 3
-    origin [-19, 0.6, (deviceZ + 0.073)]
+    origin [-19, 0.6, (deviceZ + 0.077)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.24
@@ -444,7 +443,7 @@ screens [
   }
   {
     index: 4
-    origin [-22, 0.68, (deviceZ + 0.168)]
+    origin [-22, 0.68, (deviceZ + 0.172)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
@@ -456,7 +455,7 @@ screens [
   }
   {
     index: 5
-    origin [-25, 0.64, (deviceZ + 0.118)]
+    origin [-25, 0.64, (deviceZ + 0.122)]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.256

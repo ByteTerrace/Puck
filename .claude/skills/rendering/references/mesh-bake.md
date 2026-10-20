@@ -114,6 +114,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   the finest detail its
   instances declare over their bounds (`SdfMeshBakeGroup.Detail`). Engraved
   text stays in one scoped instance with the shapes it carves.
+- **A screen slab is a static instance of its own** (`WorldScreenStamper`),
+  bounded by the slab and declaring its thickness as detail. Segments no
+  instance owns bake in the world group, one lattice the far distance wide,
+  too coarse to hold a centimetre-thick slab or keep the body behind it off its
+  face.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
