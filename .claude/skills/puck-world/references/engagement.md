@@ -387,13 +387,11 @@ jumbotron-view/test-pattern/QR screen sources remain presentation-only;
 machine through a `WorldScreenOp.Eject` submission first, then call
 `WorldScreenBinder` directly.
 
-Console grammars: `screen.insert <index> <contentPath> [engine] [options…]`
-(a content path an engine's content provider recognizes, such as a
-`.cartridge.json`, is compiled at bind, and `screen.state` echoes `cartridge
-<path> hash <source> rom <image>`; a screen whose source names a declared machine
-instance takes the content path alone, inserted through `machine.operation`'s
-`content.insert` provider path, and refuses an engine or options because the
-instance keeps its authored configuration); `screen.eject <index>` (a named
+Console grammars: `screen.insert <index> <contentPath>` (a screen whose source
+names a declared machine instance takes a file from its `contentFolders`,
+inserted through `machine.operation`'s `content.insert` provider path, and
+refuses an engine or options because the instance keeps its authored
+configuration; a screen with no declared machine refuses the insert); `screen.eject <index>` (a named
 machine display clears only the screen source through a
 `WorldMutation.UpsertScreen`); `screen.source <index> <kind> …` (a presentation
 source); and the Immediate read-backs `screen.state`, `screen.peek`,
@@ -424,7 +422,16 @@ checksum, the deck's iNES signature and board); a raw-content engine with
 neither mounts every file. `machine.swap <instance> <name>` resolves a file
 name, a `<folder>/<file>` name, or a stem across the folders in order, refuses
 an unknown, ambiguous or unmountable name by name, and mounts through
-`content.insert`; the engine refuses an unrunnable image again at creation. A
+`content.insert`; the engine refuses an unrunnable image again at creation.
+The folders bind every mount, not just the swap: `WorldMachineHost`'s operation
+preparation admits a content path the declaration does not already name only
+when `WorldMachineContentFolder.TryAdmit` finds it directly in one of the
+folders (resolved beside the document, `..` collapsed, the folder or its own
+link target as the directory, a linked file leading into it), so
+`machine.operation … content.insert`, `screen.insert` and `forge.play` onto a
+device refuse any other path by name, and a machine with no folders keeps its
+authored content. A screen-owned (legacy slot) `WorldScreenOp.Insert` is refused
+by the server: no machines row lists its folders. A
 machine whose authored content file is absent boots with no cartridge (named
 once on stderr, `screen.state … no cartridge`), never refusing the world; an
 operation naming absent content is refused. A folder that empties or vanishes
@@ -470,10 +477,9 @@ revoke-driven dissolution, two-seat pad merge).
 
 **The context-button (`EngageChannel`) shape**: a world with a ZERO-SCREEN boot
 cannot gain a screen live for this — the render-provider capacity is probed and
-frozen at boot, so `world.row.set screens` followed by a same-session
-`screen.insert` refuses `no screen 0 declared` even after the mutation echoes
-applied. Boot with the screen already declared (a scratch world copy, or
-`screen.insert` alone against a world that ships one), warp within
+frozen at boot, so a screen added by `world.row.set screens` carries no live
+machine. Boot with the machine screen already declared (a scratch world copy,
+or the debug world's device row), warp within
 `engageRadius`, `body.press <channel>` — assert `screen.state` reads
 `engaged=p<n>` and `world.contacts <n>` stays `grounded=true` (no jump); warp
 away, press again — assert `world.contacts` reads `grounded=false` instead.

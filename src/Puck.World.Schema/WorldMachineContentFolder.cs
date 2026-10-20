@@ -166,6 +166,92 @@ public static class WorldMachineContentFolder {
         return false;
     }
 
+    /// <summary>Decides whether a content path a provider operation would mount names a file directly in one of the
+    /// machine's authored folders, the only content a machine mounts besides what its author boots it with. The path
+    /// resolves beside the document as every content path does, rooted or relative, and its <c>..</c> segments collapse
+    /// first, so a spelling that leaves a folder and comes back is judged by where it lands. The file's directory must
+    /// be a folder as the document resolves it, or the folder's own link target when the folder is a symbolic link or a
+    /// junction; a file that is itself a link must lead into that folder too. A subfolder is not a folder. Whether the
+    /// file exists, and whether the engine can mount it, the operation decides afterwards.</summary>
+    /// <param name="machine">The machine declaration whose folders admit the path.</param>
+    /// <param name="documentDirectory">The directory of the document the folders and the path are relative to, or
+    /// <see langword="null"/> for a document with none.</param>
+    /// <param name="contentPath">The content path the operation names.</param>
+    /// <param name="reason">The named refusal, or empty when the path is admitted.</param>
+    /// <returns><see langword="true"/> when the path names a file directly in one of the machine's folders.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="machine"/> or <paramref name="contentPath"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool TryAdmit(WorldMachine machine, string? documentDirectory, string contentPath, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: machine);
+        ArgumentNullException.ThrowIfNull(argument: contentPath);
+
+        if (machine.ContentFolders is not { Count: > 0 } authored) {
+            reason = $"machine '{machine.Name}' names no contentFolders, so '{contentPath}' is not content it can mount";
+            return false;
+        }
+        if (!TryFull(documentDirectory: documentDirectory, path: contentPath, full: out var file, reason: out var unresolved)) {
+            reason = $"'{contentPath}' {unresolved}";
+            return false;
+        }
+
+        var directory = Path.GetDirectoryName(path: file);
+        var target = LinkedFile(file: file);
+
+        foreach (var folder in authored) {
+            if (!TryFull(documentDirectory: documentDirectory, path: folder, full: out var resolved, reason: out _)) {
+                continue;
+            }
+
+            var linked = LinkedDirectory(directory: resolved);
+
+            if (
+                (SamePath(left: directory, right: resolved) || SamePath(left: directory, right: linked)) &&
+                ((target is null) || SamePath(left: Path.GetDirectoryName(path: target), right: linked))
+            ) {
+                reason = string.Empty;
+                return true;
+            }
+        }
+        reason = $"'{contentPath}' is not a file in machine '{machine.Name}' contentFolders ({string.Join(separator: ", ", values: authored)})";
+        return false;
+    }
+
+    // Resolves a path beside the document and collapses its dot segments, spelled the platform's way so it compares
+    // with what the file system reports.
+    private static bool TryFull(string? documentDirectory, string path, out string full, out string reason) {
+        full = string.Empty;
+
+        if (!WorldDocumentPaths.TryResolve(documentDirectory: documentDirectory, path: path, reason: out reason, resolved: out var resolved)) {
+            return false;
+        }
+        full = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: resolved));
+        return true;
+    }
+    // The directory a folder names on disk: its final link target when it is a symbolic link or a junction, else itself.
+    private static string LinkedDirectory(string directory) {
+        try {
+            return ((new DirectoryInfo(path: directory).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+                ? Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: target.FullName))
+                : directory);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return directory;
+        }
+    }
+    // The file a link resolves to, or null when the path is no link (or names nothing yet).
+    private static string? LinkedFile(string file) {
+        try {
+            return ((new FileInfo(fileName: file).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+                ? Path.GetFullPath(path: target.FullName)
+                : null);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return null;
+        }
+    }
+    private static bool SamePath(string? left, string right) => string.Equals(
+        a: left,
+        b: right,
+        comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+    );
     private static string Describe(IReadOnlyList<Entry> entries, bool qualified) => ((entries.Count == 0)
         ? "none"
         : string.Join(

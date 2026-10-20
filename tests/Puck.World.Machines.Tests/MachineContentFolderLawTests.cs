@@ -300,13 +300,78 @@ public sealed class MachineContentFolderLawTests {
             Assert.Contains(expectedSubstring: "mounted=../carts/gun.cgb.cartridge.json", actualString: registry.Submit(line: "machine.content cabinet").Output);
         }
     }
+    // Every mount, whichever verb or wire submission asks for it, names a file directly in one of the folders: a path
+    // outside them, rooted or climbing out of one with '..', a file in a folder's subfolder, and a link in a folder that
+    // leads out of it are refused by name, and the machine keeps running what it ran.
     [Fact]
-    public void AMachineWithNoFoldersListsNothing() {
+    public void AContentInsertMountsOnlyAFileInTheFolders() {
+        using var root = Layout();
+        var outside = Path.Combine(path1: root.PathOf(name: "world"), path2: "outside.cgb.cartridge.json");
+        var nested = Path.Combine(path1: root.PathOf(name: "carts"), path2: "nested");
+
+        File.Copy(destFileName: outside, sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.cartridge.json"));
+        _ = Directory.CreateDirectory(path: nested);
+        File.Copy(destFileName: Path.Combine(path1: nested, path2: "deep.cgb.cartridge.json"), sourceFileName: outside);
+
+        var (fixture, registry) = Boot(contentFolders: ["../carts", "../local"], root: root);
+
+        using (fixture) {
+            string Insert(string path) => registry.Submit(line: $"machine.operation cabinet {fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation} content.insert {JsonSerializer.Serialize(new { schema = "puck.gaming-brick.content-insert.v1", content = new { path } })}").Output;
+
+            foreach (var refused in new[] { outside, "../world/outside.cgb.cartridge.json", "../carts/../world/outside.cgb.cartridge.json", "../carts/nested/deep.cgb.cartridge.json" }) {
+                Assert.Contains(expectedSubstring: "is not a file in machine 'cabinet' contentFolders (../carts, ../local)", actualString: Insert(path: refused));
+            }
+            Assert.Equal(expected: Mirror, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+
+            // A rooted spelling of a file in a folder is the same file, and is admitted.
+            var inside = Path.Combine(path1: root.PathOf(name: "carts"), path2: "gun.cgb.cartridge.json");
+
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: Insert(path: inside));
+            Assert.Equal(expected: inside, actual: fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Content);
+
+            var link = Path.Combine(path1: root.PathOf(name: "carts"), path2: "link.cgb.cartridge.json");
+
+            try {
+                _ = File.CreateSymbolicLink(path: link, pathToTarget: outside);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                Assert.Skip(reason: $"this machine cannot create a symbolic link: {exception.Message}");
+            }
+            Assert.Contains(expectedSubstring: "is not a file in machine 'cabinet' contentFolders", actualString: Insert(path: "../carts/link.cgb.cartridge.json"));
+        }
+    }
+    // A screen showing no declared machine has no folders, so a screen-owned insert mounts nothing.
+    [Fact]
+    public void AScreenOwnedInsertIsRefusedByName() {
+        using var root = Layout();
+        var (fixture, _) = Boot(contentFolders: ["../carts"], root: root);
+
+        using (fixture) {
+            var echoes = new List<WorldEditEcho>();
+
+            fixture.Server.EchoTap = echoes.Add;
+            new LoopbackTransport(server: fixture.Server).SubmitScreenOp(
+                op: new WorldScreenOp.Insert(ContentPath: "../carts/gun.cgb.cartridge.json", EngineId: "gaming-brick", Index: 8, Options: null),
+                principal: Principal.Console
+            );
+
+            var echo = Assert.Single(collection: echoes);
+
+            Assert.True(condition: echo.Rejected);
+            Assert.Contains(expectedSubstring: "content mounts only into a declared machine", actualString: echo.Message);
+        }
+    }
+    [Fact]
+    public void AMachineWithNoFoldersListsNothingAndMountsOnlyItsOwnContent() {
         using var root = Layout();
         var (bare, bareRegistry) = Boot(contentFolders: null, root: root);
 
         using (bare) {
             Assert.Contains(expectedSubstring: "names no contentFolders", actualString: bareRegistry.Submit(line: "machine.content cabinet").Output);
+
+            var generation = bare.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
+
+            Assert.Contains(expectedSubstring: "names no contentFolders, so '../carts/gun.cgb.cartridge.json' is not content it can mount", actualString: bareRegistry.Submit(line: $"machine.operation cabinet {generation} content.insert {{\"schema\":\"puck.gaming-brick.content-insert.v1\",\"content\":{{\"path\":\"../carts/gun.cgb.cartridge.json\"}}}}").Output);
+            Assert.Contains(expectedSubstring: "status=Applied", actualString: bareRegistry.Submit(line: $"machine.operation cabinet {generation} content.insert {{\"schema\":\"puck.gaming-brick.content-insert.v1\",\"content\":{{\"path\":\"{Mirror}\"}}}}").Output);
         }
     }
     [Fact]

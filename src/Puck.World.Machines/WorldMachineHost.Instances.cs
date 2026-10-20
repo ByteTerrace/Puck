@@ -158,6 +158,15 @@ public sealed partial class WorldMachineHost {
                 request: request
             );
 
+            if (RefuseUnlistedContent(
+                current: current,
+                engine: engine,
+                next: ((prepared as MachineOperationPreparation.Replacement)?.Configuration ?? (prepared as MachineOperationPreparation.Runtime)?.Configuration)
+            ) is { } unlisted) {
+                refusal = unlisted;
+                return false;
+            }
+
             switch (prepared) {
                 case MachineOperationPreparation.Refusal refused:
                     refusal = refused.Result;
@@ -673,6 +682,39 @@ public sealed partial class WorldMachineHost {
             reason = $"Machine '{preparing}' preparation refused: {exception.Message}";
             return false;
         }
+    }
+    // An operation mounts content only from the machine's authored contentFolders: every content path the operation's
+    // configuration names that the machine's current declaration does not already name must be a file directly in one
+    // of those folders (WorldMachineContentFolder.TryAdmit), whichever verb or wire submission asked for it. Content the
+    // declaration already names (its authored boot content, or a file an earlier operation admitted) stays mountable,
+    // so a reset recreates what runs.
+    private MachineOperationResult? RefuseUnlistedContent(WorldMachine current, IMachineEngine engine, JsonElement? next) {
+        var kept = ContentPaths(configuration: current.Configuration, engine: engine);
+
+        foreach (var (field, path) in ((next is { } configuration) ? ContentPaths(configuration: configuration, engine: engine) : [])) {
+            if (
+                !(kept.TryGetValue(key: field, value: out var authored) && string.Equals(a: authored, b: path, comparisonType: StringComparison.Ordinal)) &&
+                !WorldMachineContentFolder.TryAdmit(contentPath: path, documentDirectory: m_documentDirectory, machine: current, reason: out var reason)
+            ) {
+                return new MachineOperationResult(MachineOperationStatus.Refused, reason: $"Machine '{current.Name}' configuration.{field}: {reason}.");
+            }
+        }
+        return null;
+    }
+    // The content-role fields a configuration names, by field path.
+    private static Dictionary<string, string> ContentPaths(JsonElement configuration, IMachineEngine engine) {
+        var paths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        MachineConfigurationFields.Visit(
+            configuration: JsonNode.Parse(configuration.GetRawText())!.AsObject(),
+            descriptor: engine.Descriptor.Configuration,
+            visitor: site => {
+                if ((site.Field.Role == MachineFieldRole.ContentPath) && (site.Value?.GetValue<string>() is { } path)) {
+                    paths[site.Path] = path;
+                }
+            }
+        );
+        return paths;
     }
     private static bool MachineDeclarationsMatch(WorldMachine first, WorldMachine second) =>
         (string.Equals(

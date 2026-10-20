@@ -50,7 +50,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine. The machine retains its authored configuration. Empty legacy slots additionally accept [engine] [options…] through the screen-operation protocol.",
+            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing: the server refuses the insert by name.",
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(

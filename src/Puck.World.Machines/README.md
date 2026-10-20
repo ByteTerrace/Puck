@@ -107,7 +107,15 @@ absent and marks the one mounted, or `no cartridge`. `machine.swap <instance>
 <name>` mounts one by file name, `<folder>/<file>`, or the part before its first
 `.`, through the same `content.insert` operation, and refuses an unknown,
 ambiguous or unmountable name by name. Nothing outside the folders is listed or
-mounted by name (`WorldMachineContentFolder`). A declaration whose content file
+mounted (`WorldMachineContentFolder`): every operation the host prepares, whatever
+verb or wire submission asked for it, may name only content its declaration
+already names or a file directly in one of its folders (`TryAdmit`: the path
+resolves beside the document with its `..` segments collapsed, its directory is
+the folder or the folder's own link target, and a file that is a link leads into
+that folder), and anything else is refused by name. A machine with no folders
+keeps the content it was authored with. A screen showing no declared machine
+mounts nothing: the server refuses `screen.insert` and `forge.play` onto it by
+name. A declaration whose content file
 is absent boots its machine with no cartridge rather than refusing the world;
 an operation naming absent content is refused.
 

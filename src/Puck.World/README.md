@@ -1791,7 +1791,9 @@ every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert`, `forge.play` and `machine.swap` (a file from the
 machine's authored `contentFolders`, which `machine.content` lists) use that
-executor for named producers, while `screen.eject` detaches the display. The debug
+executor for named producers, and the host admits from any of them only content
+the machine already names or a file directly in one of its `contentFolders`; a
+screen showing no declared machine mounts nothing. `screen.eject` detaches the display. The debug
 world's device row runs one of each machine
 ([`devices.md`](../../worlds/debug/devices.md)). The screen operations (insert, eject,
 select, options, link, unlink) remain their own ordered payload kind beside the

@@ -1369,14 +1369,10 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        // A screen-owned machine belongs to no machines row, so no author lists the folders its content may come from:
+        // content mounts only into a declared machine, from its contentFolders (machine.swap, or content.insert).
         var (ok, message, contentHash) = op switch {
-            WorldScreenOp.Insert insert => Host.Machines.TryInsert(
-            index: insert.Index,
-            contentPath: insert.ContentPath,
-            engineId: insert.EngineId,
-            options: insert.Options,
-            expectedContentHash: expectedContentHash
-        ),
+            WorldScreenOp.Insert insert => (false, $"screen {insert.Index} mounts no '{insert.ContentPath}': content mounts only into a declared machine, from a file in its contentFolders (machine.swap <instance> <name>)", ((string?)null)),
             WorldScreenOp.Eject eject => ((Host.Machines.TryEject(index: eject.Index) is (var ejectOk, var ejectMessage))
             ? (ejectOk, ejectMessage, ((string?)null))
             : default),
