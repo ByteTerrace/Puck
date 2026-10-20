@@ -53,10 +53,17 @@ of scope here.
 - **In progress:** NTSC accuracy. AccuracyCoin runs in the battery and reports
   every test's own result, so the stage fails while any test fails, and those
   failures are the package's work list.
-- **Not started:** every package below NTSC accuracy. In particular the
-  `humble-gaming-deck` engine is an `IMachineEngine` that no extension
-  registers and no World composition references, so a World cabinet cannot
-  host the Deck yet (package 8).
+- **In progress:** World cabinets (package 8). `HumbleGamingDeckEngine`
+  (`humble-gaming-deck`) is registered by `Puck.HumbleGamingDeck.Forge`'s
+  extension, which the World and the CLI compose as a built-in and the silo
+  installs, and a world screen hosts a Deck machine that mounts a raw `.nes`
+  image from its `contentFolder`. A screen route names the input port its
+  engaged seat drives (`route.port`), so the two controller ports route
+  explicitly. The debug world's device row runs the Deck on the two shipped
+  test cartridges, `colour-bars.nes` and `moving-sprite.nes`, which the forge's
+  `DeckProgram` assembles (`puck cartridges deck`). Ordered operations while
+  recording, replay receipts and the canary remain.
+- **Not started:** every other package below NTSC accuracy.
 
 ## What state of the art means here
 
@@ -341,12 +348,15 @@ attachment changes.
 **Owns:** engine and content-provider registration, multi-port routing, ordered
 operations, and replay receipts.
 
-**Delivers:** the Deck in a World cabinet beside the bricks.
+**Delivers:** the Deck in a World cabinet beside the bricks. In place: the
+engine and its extension, raw-image content from a machine's content folder,
+routes that name an input port, and the shipped test cartridges on the debug
+world's device row.
 
 **Check:** a real World canary running independent cabinets with input, audio,
-video, saves, and restoration. Two existing World limits block full
-multiplayer cabinet replay: an engaged display folds input into one port, and
-provider operations are refused while recording.
+video, saves, and restoration. One existing World limit blocks full multiplayer
+cabinet replay: provider operations, a cartridge swap among them, are refused
+while recording.
 
 ## Decisions
 

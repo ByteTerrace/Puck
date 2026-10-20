@@ -37,6 +37,7 @@
         <Project Path="src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
         <Project Path="src/Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
+        <Project Path="src/Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
         <Project Path="src/Puck.HumbleGamingDeck.Post/Puck.HumbleGamingDeck.Post.csproj" />
         <Project Path="src/Puck.Input/Puck.Input.csproj" />
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />

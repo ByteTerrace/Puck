@@ -10,6 +10,7 @@ using Puck.Cli.Branding;
 using Puck.Cli.Bench;
 using Puck.Cli.Canary;
 using Puck.Cli.CartridgeCost;
+using Puck.Cli.Cartridges;
 using Puck.Cli.Counters;
 using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
@@ -75,6 +76,7 @@ public static class PuckRootCommand {
             BundleCommand.Create(),
             CanaryCommand.Create(),
             CartridgeCostCommand.Create(),
+            CartridgesCommand.Create(),
             CountersCommand.Create(),
             DeclarationsCommand.Create(),
             DeterminismCommand.Create(),

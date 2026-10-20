@@ -609,6 +609,14 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.input {((int)input)} is not a destination.");
         }
+        // The port's name is the provider's; the machine host checks it against the bound runtime's ports.
+        if (route.Port is { } port) {
+            if (string.IsNullOrWhiteSpace(value: port)) {
+                errors.Add(item: $"{path}.port must name a machine input port; omit it for a machine with a sole port.");
+            } else if (!route.Engageable) {
+                errors.Add(item: $"{path}.port '{port}' is named but engageable is false: a passive display drives no input port.");
+            }
+        }
     }
 
     // The one frame-source gate, shared by a screen row/magazine entry's own Producer/View/Probe arms

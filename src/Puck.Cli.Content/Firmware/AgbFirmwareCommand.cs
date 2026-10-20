@@ -28,10 +28,10 @@ public static class AgbFirmwareCommand {
                 source: source
             );
 
-            return (FirmwareArtifact.WriteOrVerify(
+            return (GeneratedArtifact.WriteOrVerify(
                 bytes: bytes,
-                machine: "agb",
                 path: output,
+                verb: "firmware agb",
                 verify: verify
             )
                 ? 0

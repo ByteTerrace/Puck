@@ -215,7 +215,7 @@ public sealed class NamedMachineLifetimeLawTests {
         );
     }
     [Fact]
-    public void HeadlessMultiPortMachineAdvancesWithNeutralInputs_WhileDisplayedRouteIsRefused() {
+    public void MultiPortMachineTakesEngagedInputOnlyOnThePortItsRouteNames() {
         var engine = new InputEngine(portCount: 2);
         using var host = Host(engine: engine);
         var headless = Document(InputRow(name: "headless"));
@@ -243,24 +243,64 @@ public sealed class NamedMachineLifetimeLawTests {
             )
         );
 
-        var displayed = headless with {
-            ScreensRaw = [Panel() with { Source = new WorldScreenSource.Machine(
-                Instance: "headless",
-                Output: "video"
-            ) }],
+        // A passive display routes no input, so it needs no port.
+        var display = Panel() with {
+            Source = new WorldScreenSource.Machine(
+            Instance: "headless",
+            Output: "video"
+        ),
         };
+        var passive = headless with { ScreensRaw = [display] };
 
-        Assert.False(condition: host.TryPrepare(
-            candidate: displayed,
+        Install(
             current: headless,
-            plan: out var refused,
-            reason: out var reason
-        ));
-        Assert.Null(@object: refused);
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "multiple input ports"
+            host: host,
+            next: passive
+        );
+
+        // An engageable display must name the port it drives, and the port must be the machine's.
+        var engageable = new WorldScreenRoute(
+            Engageable: true,
+            EngageRadius: 1f
+        );
+
+        foreach (var (route, refusal) in new[] { (engageable, "must name the one it drives"), (engageable with { Port = "port9" }, "does not have (port0, port1)") }) {
+            Assert.False(condition: host.TryPrepare(
+                candidate: headless with { ScreensRaw = [display with { Route = route }] },
+                current: passive,
+                plan: out var refused,
+                reason: out var reason
+            ));
+            Assert.Null(@object: refused);
+            Assert.Contains(
+                actualString: reason,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: refusal
+            );
+        }
+
+        var routed = headless with { ScreensRaw = [display with { Route = engageable with { Port = "port1" } }] };
+
+        Install(
+            current: passive,
+            host: host,
+            next: routed
+        );
+        host.Advance(
+            840,
+            new ScreenPadSnapshot[] { new(
+                Pad: MachinePadState.Neutral with { Buttons = MachineButtons.South },
+                ScreenIndex: 0
+            ) }
+        );
+        Assert.Same(expected: runtime, actual: Assert.Single(collection: engine.Created));
+        Assert.Equal(
+            MachineButtons.None,
+            runtime.Ports["port0"].State.Buttons
+        );
+        Assert.Equal(
+            MachineButtons.South,
+            runtime.Ports["port1"].State.Buttons
         );
         Assert.False(condition: runtime.Disposed);
     }

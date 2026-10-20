@@ -95,9 +95,11 @@ hardware observations, addon watches, the execution and content receipt,
    rebinding. Cable endpoints are declared on the machine row and groups derive
    from those declarations. In place: cable endpoints on the machine row, a
    removed display leaving its machine and generation alone and releasing its
-   input, and named link members that advance once. Open: authored screen
-   `Name` and the derived catalog, routes that name a machine instance and
-   port, and cable-group membership by machine name in place of screen index.
+   input, named link members that advance once, and routes that name the
+   input port they drive (`route.port`, required for an engageable display of a
+   multi-port machine). Open: authored screen `Name` and the derived catalog,
+   routes that name a machine instance, and cable-group membership by machine
+   name in place of screen index.
 2. **Hardware consumers.** One machine-operation payload carries instance,
    expected generation, provider operation id, and a descriptor-validated
    payload; rules invoke it through one generic, schema-validated effect whose

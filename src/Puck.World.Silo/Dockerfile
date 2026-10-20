@@ -25,6 +25,7 @@ RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,r
     && dotnet publish src/Puck.World.Azure -c Release -o /app/worlds/extensions/Puck.World.Azure \
     && dotnet publish src/Puck.HumbleGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.HumbleGamingBrick.Forge \
     && dotnet publish src/Puck.AdvancedGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.AdvancedGamingBrick.Forge \
+    && dotnet publish src/Puck.HumbleGamingDeck.Forge -c Release -o /app/worlds/extensions/Puck.HumbleGamingDeck.Forge \
     && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp \
     && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure
 

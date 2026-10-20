@@ -6,9 +6,53 @@ is particular to the Deck.
 
 ## The engine
 
-The Deck has no `IMachineEngine` yet, so World cannot host it: writing the
-engine and wiring it into World's cabinets is the World cabinets package. The
-host below is what that engine will wrap.
+`HumbleGamingDeckEngine` is the Deck's `IMachineEngine`, id
+`humble-gaming-deck`, and `Puck.HumbleGamingDeck.Forge`'s
+`HumbleGamingDeckExtension` registers it; the World and the CLI compose it as a
+built-in, and the silo installs the forge as an extension. Its configuration,
+`puck.humble-gaming-deck.configuration.v1`, has one field, `content.path`: an
+iNES or NES 2.0 image, mounted as raw bytes, so no content provider registers
+with it and a machine's `contentFolder` offers every file it holds. The engine
+takes no options and no firmware: the cartridge starts through its reset vector
+with the default power-on profile. Its operations are `content.insert`,
+`content.eject` and `machine.reset`, each a host replacement. The engine parses
+an image before building a host, so a damaged or unsupported cartridge is
+refused with the loader's own diagnostic.
+
+The machine has two input ports, `controls` ($4016) and `controls-2` ($4017).
+A world screen that shows it and can be engaged names the port it drives in its
+route (`route { port: "controls" }`); the host refuses such a screen whose
+route names no port, and the port nobody routes to holds neutral input.
+
+```text
+machines [
+  {
+    name: "deck"
+    engine: "humble-gaming-deck"
+    configuration {
+      schema: "puck.humble-gaming-deck.configuration.v1"
+      content {
+        path: "../cartridges/deck/colour-bars.nes"
+      }
+    }
+  }
+]
+```
+
+## Test cartridges
+
+No world runs a downloaded ROM. `DeckTestCartridges` builds the shipped images
+with `DeckProgram`, the forge's 6502 assembler, and
+`puck cartridges deck --output src/Puck.World/Assets/cartridges/deck` writes
+them (`--check` compares without writing):
+
+| Cartridge | Picture | Input |
+|---|---|---|
+| `colour-bars.nes` | Eight vertical bars: white, yellow, cyan, green, magenta, red, blue, black. | A, B and Select emphasise blue, green and red; Start turns the picture greyscale. |
+| `moving-sprite.nes` | A 16 by 16 orange ball bouncing round a navy sky above a green checkered ground. | The control pad steers the ball. |
+
+The battery's `shipped-cartridges` stage runs both and reads their pictures from
+the PPU's pixel codes.
 
 ## The host and the core
 

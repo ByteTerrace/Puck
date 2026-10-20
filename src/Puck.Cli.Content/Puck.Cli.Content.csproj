@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The checked-in content generators: branding, firmware, cartridge-cost, font-atlas and wasm-stdlib. -->
+    <!-- The checked-in content generators: branding, cartridges, firmware, cartridge-cost, font-atlas and wasm-stdlib. -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Content</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>
@@ -13,6 +13,7 @@
         <ProjectReference Include="../Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
         <ProjectReference Include="../Puck.Scripting/Puck.Scripting.csproj" />
         <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
     </ItemGroup>

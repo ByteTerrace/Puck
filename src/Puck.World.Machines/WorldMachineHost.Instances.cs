@@ -397,19 +397,16 @@ public sealed partial class WorldMachineHost {
             var runtime = lease.Runtime;
 
             if (runtime is IMachineInputPorts ports) {
-                var input = MachineInput(
-                    instance: instance.Declaration.Name,
-                    pads: pads,
-                    routed: out var routed
-                );
+                var sole = (ports.InputPorts.Count == 1);
 
-                if (
-                    (ports.InputPorts.Count > 1) &&
-                    routed
-                ) {
-                    throw new InvalidOperationException(message: $"Machine '{instance.Declaration.Name}' has an ambiguous engaged input route.");
-                }
-                foreach (var port in ports.InputPorts.Values) {
+                foreach (var (name, port) in ports.InputPorts) {
+                    var input = MachineInput(
+                        instance: instance.Declaration.Name,
+                        pads: pads,
+                        port: name,
+                        sole: sole
+                    );
+
                     port.SetState(state: in input);
                 }
             }
@@ -431,10 +428,12 @@ public sealed partial class WorldMachineHost {
             }
         }
     }
-    private MachinePadState MachineInput(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, out bool routed) {
+    // The input one port of a named machine receives: the engaged pads of every screen showing the machine whose route
+    // names that port, or that names none when the port is the machine's sole one, merged; neutral when none is engaged.
+    private MachinePadState MachineInput(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, string port, bool sole) {
         var input = MachinePadState.Neutral;
+        var routed = false;
 
-        routed = false;
         foreach (var slot in m_slots.Values) {
             if (
                 (slot.DeclaredSource is WorldScreenSource.Machine source) &&
@@ -442,7 +441,14 @@ public sealed partial class WorldMachineHost {
                 a: source.Instance,
                 b: instance,
                 comparisonType: StringComparison.Ordinal
-            )
+            ) &&
+                ((slot.Route.Port is { } routedPort)
+                ? string.Equals(
+                    a: routedPort,
+                    b: port,
+                    comparisonType: StringComparison.Ordinal
+                )
+                : sole)
             ) {
                 foreach (ref readonly var snapshot in pads) {
                     if (snapshot.ScreenIndex != slot.Index) {
@@ -464,31 +470,57 @@ public sealed partial class WorldMachineHost {
         }
         return input;
     }
+    // Every engageable screen showing the machine must resolve to one of its input ports: the port its route names, or
+    // the machine's sole port when the route names none. A passive display routes no input and needs no port.
     private void ValidateInputRoute(string instance, IMachineRuntime runtime, IReadOnlyList<WorldScreen>? candidateScreens = null) {
-        if (
-            (runtime is not IMachineInputPorts ports) ||
-            (ports.InputPorts.Count <= 1)
-        ) {
-            return;
-        }
-        var displayed = ((candidateScreens is not null)
-            ? candidateScreens.Any(predicate: screen => ((screen.Source is WorldScreenSource.Machine source) &&
-                string.Equals(
-                a: source.Instance,
-                b: instance,
-                comparisonType: StringComparison.Ordinal
-            )))
-            : m_slots.Values.Any(predicate: slot => ((slot.DeclaredSource is WorldScreenSource.Machine source) &&
-                string.Equals(
-                a: source.Instance,
-                b: instance,
-                comparisonType: StringComparison.Ordinal
-            )))
+        var routes = ((candidateScreens is not null)
+            ? candidateScreens.Select(selector: static screen => (screen.Index, Source: ((WorldScreenSource?)screen.Source), screen.Route))
+            : m_slots.Values.Select(selector: static slot => (slot.Index, Source: slot.DeclaredSource, slot.Route))
         );
 
-        if (displayed) {
-            throw new ArgumentException(message: $"Machine '{instance}' has multiple input ports and cannot infer an engaged display route.");
+        foreach (var (index, source, route) in routes) {
+            if (
+                (source is WorldScreenSource.Machine machine) &&
+                string.Equals(
+                a: machine.Instance,
+                b: instance,
+                comparisonType: StringComparison.Ordinal
+            ) &&
+                (InputRouteRefusal(
+                index: index,
+                machine: $"machine '{instance}'",
+                route: route,
+                runtime: runtime
+            ) is { } refusal)
+            ) {
+                throw new ArgumentException(message: refusal);
+            }
         }
+    }
+    // Why an engageable screen's route resolves to no input port of the runtime it shows, or null when it resolves.
+    private static string? InputRouteRefusal(int index, string machine, WorldScreenRoute route, IMachineRuntime runtime) {
+        var ports = ((runtime as IMachineInputPorts)?.InputPorts ?? FrozenDictionary<string, IMachineInputPort>.Empty);
+
+        if (!route.Engageable) {
+            return null;
+        }
+        if (route.Port is { } port) {
+            return (ports.ContainsKey(key: port)
+                ? null
+                : $"Screen {index} routes to input port '{port}', which {machine} does not have ({DescribePorts(ports: ports)})."
+            );
+        }
+        return ((ports.Count > 1)
+            ? $"The {machine} on screen {index} has input ports {DescribePorts(ports: ports)}; the screen's route must name the one it drives."
+            : null
+        );
+
+        static string DescribePorts(IReadOnlyDictionary<string, IMachineInputPort> ports) => ((ports.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ", ",
+                values: ports.Keys.Order(comparer: StringComparer.Ordinal)
+            ));
     }
     private bool TryPrepareInstances(WorldDefinition? current, WorldDefinition candidate,
         out PreparedInstances? prepared, out string? reason) {

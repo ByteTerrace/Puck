@@ -12,9 +12,10 @@ instruction.
 | [Picture processing](ppu.md) | The PPU's background and sprite pipelines, registers, and nametable mirroring. |
 | [Audio](apu.md) | The five channels, the frame counter, and the presentation mixer. |
 | [Input and DMA](input-and-dma.md) | The controller ports and the DMA unit. |
-| [Hosting](hosting.md) | The engine, the queued host and synchronous core, and colour. |
+| [Hosting](hosting.md) | The engine, the test cartridges, the queued host and synchronous core, and colour. |
 
-Other regions, other cartridge boards, expansion audio, the Famicom Disk System,
-peripherals, and World cabinets remain open work.
+A World screen hosts the Deck through the `humble-gaming-deck` engine. Other
+regions, other cartridge boards, expansion audio, the Famicom Disk System,
+and peripherals remain open work.
 
 [Machine emulation](../README.md) · [Shared infrastructure](../shared/README.md)

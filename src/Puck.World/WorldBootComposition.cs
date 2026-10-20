@@ -1738,7 +1738,7 @@ public static class WorldBootComposition {
         return services;
     }
     /// <summary>Composes the World's extensions once, before its world document composes: the built-in
-    /// <see cref="WorldServerExtension"/> and both Gaming Brick forges, and every extension installed in the given
+    /// <see cref="WorldServerExtension"/>, both Gaming Brick forges and the Gaming Deck forge, and every extension installed in the given
     /// directories. The machine catalog, connection authentication, and configured service providers all read this one
     /// set.</summary>
     /// <param name="directories">The extensions directories to search.</param>
@@ -1748,6 +1748,7 @@ public static class WorldBootComposition {
         builtIns: [
             new Puck.AdvancedGamingBrick.Forge.AdvancedGamingBrickExtension(),
             new Puck.HumbleGamingBrick.Forge.HumbleGamingBrickExtension(),
+            new Puck.HumbleGamingDeck.Forge.HumbleGamingDeckExtension(),
             new WorldServerExtension(),
         ],
         directories: directories

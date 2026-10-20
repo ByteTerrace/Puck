@@ -20,6 +20,7 @@
 
 # Binary artifacts: never diff or EOL-convert.
 *.png  binary
+*.nes  binary
 *.dll  binary
 *.so   binary
 *.lib  binary

@@ -5101,6 +5101,7 @@ public static partial class WorldModelShape {
                 M("channels", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldScreenRoute), "Channels", Read | Write, static value => ((global::Puck.World.WorldScreenRoute)value).Channels),
                 M("kit", typeof(global::System.String), typeof(global::Puck.World.WorldScreenRoute), "Kit", Read | Write, static value => ((global::Puck.World.WorldScreenRoute)value).Kit),
                 M("input", typeof(global::System.Nullable<global::Puck.Commands.SourceDestination>), typeof(global::Puck.World.WorldScreenRoute), "Input", Read | Write, static value => ((global::Puck.World.WorldScreenRoute)value).Input),
+                M("port", typeof(global::System.String), typeof(global::Puck.World.WorldScreenRoute), "Port", Read | Write, static value => ((global::Puck.World.WorldScreenRoute)value).Port),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenSource), true, JsonTypeInfoKind.Object, null,
