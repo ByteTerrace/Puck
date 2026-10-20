@@ -60,11 +60,12 @@ public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shap
 /// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
 /// </summary>
 public static class CreationStampEmitter {
-    // The degeneracy floor on a scale axis, in the fixed domain. Q48.16 resolves 1/65536, so 0.0001 lands on the
-    // nearest representable value above it rather than exactly — this is a guard against a zero-scale axis collapsing
-    // the frame, never a value a result is read off, so the quantization is immaterial. A product of two floors still
-    // underflows to zero, which yields a zero-extent (inert) collider rather than a vanishingly thin one.
-    private static readonly FixedQ4816 MinimumTransformExtent = FixedQ4816.FromDouble(value: 0.0001);
+    // The degeneracy floor on a scale axis, SdfSolidGeometry.MinimumScale in the fixed domain. Q48.16 resolves 1/65536,
+    // so the floor lands on the nearest representable value above it rather than exactly — this is a guard against a
+    // zero-scale axis collapsing the frame, never a value a result is read off, so the quantization is immaterial. A
+    // product of two floors still underflows to zero, which yields a zero-extent (inert) collider rather than a
+    // vanishingly thin one.
+    private static readonly FixedQ4816 MinimumTransformExtent = FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale);
 
     // One stamp's transform constants, derived once in fixed point from either public transform record, so the render
     // program and the contact program encode the same origin, rotation, scale and mirror alignment: the render path
