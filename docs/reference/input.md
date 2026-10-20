@@ -275,8 +275,11 @@ moves.
 The same policy locks the pointer for a drag that reads only its motion
 (`IWindowCursorPolicy.LocksPointer`; the World's is any seat holding
 `player.orbit` or `player.steer`). While `INativeWindowCursor.LocksPointer` is
-set, the Win32 window hides the cursor, holds the mouse capture, confines the
-cursor to its client area, freezes the reported pointer position, and, after a
+set, the Win32 window hides the cursor, holds the mouse capture (so the cursor
+may roam outside the client area and every mouse message still arrives; it is
+not confined, since confining it would move the cursor a Remote Desktop client
+reports from without the window knowing), freezes the reported pointer
+position, and, after a
 pump of its events leaves the cursor a quarter of the client's width or height
 from the centre, moves it back to the centre, so the drag's relative motion
 never ends at a window or screen edge. Raw relative input sees no motion from

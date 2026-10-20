@@ -219,6 +219,19 @@ internal sealed partial class PlayerCommandModule {
 
         return CommandResult.None;
     }
+    // A held drag flag (player.orbit, player.steer): its press also turns the camera by the motion that came with it.
+    private CommandResult DragFlag(CommandContext context, Action<SeatController, bool> set) {
+        var result = HeldFlag(
+            context: context,
+            set: set
+        );
+
+        if (context.Phase == CommandPhase.Started) {
+            m_viewInput.BeginDrag(slot: context.Slot);
+        }
+
+        return result;
+    }
     private CommandResult LookRouter(CommandContext context, WireArgs args, SeatLookBehavior behavior, string verb) {
         if (!TryStickValue(
             args: in args,
@@ -644,7 +657,7 @@ internal sealed partial class PlayerCommandModule {
             description: "Held: while down, pointer motion orbits the seat camera (yaw/pitch at seatDefaults.seatCameraFeel's pointer sensitivities); the body is untouched. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
             valueKind: CommandValueKind.Digital,
             held: true,
-            handler: context => HeldFlag(
+            handler: context => DragFlag(
                 context: context,
                 set: static (seat, held) => seat.SetOrbit(held: held)
             )
@@ -723,7 +736,7 @@ internal sealed partial class PlayerCommandModule {
             description: "Held: while down, pointer motion orbits the seat camera AND the body faces where the camera looks — the seat composes the camera facing into the world's FaceX/FaceY/FaceZ channels each tick and the sim's facing snap turns the body (needs those channels and views.seatControl.yawReference World; the validator refuses a binding without them). Bind it once, like player.orbit.",
             valueKind: CommandValueKind.Digital,
             held: true,
-            handler: context => HeldFlag(
+            handler: context => DragFlag(
                 context: context,
                 set: static (seat, held) => seat.SetSteer(held: held)
             )

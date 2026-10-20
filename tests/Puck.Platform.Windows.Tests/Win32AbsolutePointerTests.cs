@@ -51,9 +51,8 @@ public sealed class Win32AbsolutePointerTests {
 
                 readX += ((motionX / 65535.0) * ScreenWidth);
                 readY += ((motionY / 65535.0) * ScreenHeight);
-                // The lock's ClipCursor holds the server's cursor inside the client area.
-                serverX = Math.Clamp(value: clientX, min: ClientLeft, max: (ClientLeft + ClientWidth - 1));
-                serverY = Math.Clamp(value: clientY, min: ClientTop, max: (ClientTop + ClientHeight - 1));
+                // The lock confines nothing, so the server's cursor is where the client's report puts it.
+                (serverX, serverY) = (clientX, clientY);
             }
 
             if (
