@@ -59,9 +59,9 @@ of scope here.
   installs, and a world screen hosts a Deck machine that mounts a raw `.nes`
   image from its `contentFolder`. A screen route names the input port its
   engaged seat drives (`route.port`), so the two controller ports route
-  explicitly. The debug world's device row runs the Deck on the two shipped
-  test cartridges, `colour-bars.nes` and `moving-sprite.nes`, which the forge's
-  `DeckProgram` assembles (`puck cartridges deck`). Ordered operations while
+  explicitly. Two shipped
+  test cartridges, `colour-bars.nes` and `moving-sprite.nes`, are what the forge's
+  `DeckProgram` assembles (`puck cartridges deck`). The debug world's device row, ordered operations while
   recording, replay receipts and the canary remain.
 - **Not started:** every other package below NTSC accuracy.
 
@@ -350,7 +350,7 @@ operations, and replay receipts.
 
 **Delivers:** the Deck in a World cabinet beside the bricks. In place: the
 engine and its extension, raw-image content from a machine's content folder,
-routes that name an input port, and the shipped test cartridges on the debug
+routes that name an input port, and the shipped test cartridges. Open: the Deck on the debug
 world's device row.
 
 **Check:** a real World canary running independent cabinets with input, audio,
