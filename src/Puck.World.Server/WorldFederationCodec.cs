@@ -189,6 +189,13 @@ public static partial class WorldFederationCodec {
         }
 
         var seconds = reader.ReadSingle();
+        WorldPoseCarry? carried = ((continuityKind == EntityContinuityKind.Carry)
+            ? new WorldPoseCarry(
+                Rotation: reader.ReadFiniteQuaternion(field: $"snapshot entity {ordinal} carry rotation"),
+                Translation: reader.ReadFiniteVector(field: $"snapshot entity {ordinal} carry translation")
+            )
+            : null
+        );
         var generation = reader.ReadInt32();
         var placementId = reader.ReadNullableString(field: $"snapshot entity {ordinal} placement id");
         // Read wide and test wide: narrowing to the enum first would drop the very bits the admission test exists to
@@ -237,7 +244,8 @@ public static partial class WorldFederationCodec {
             catalogRig,
             new EntityContinuity(
                 Kind: continuityKind,
-                Seconds: seconds
+                Seconds: seconds,
+                Carried: carried
             ),
             generation,
             placementId,
@@ -786,6 +794,10 @@ public static partial class WorldFederationCodec {
             writer.WriteByte(value: entry.CatalogRig);
             writer.WriteByte(value: ((byte)entry.Continuity.Kind));
             writer.WriteSingle(value: entry.Continuity.Seconds);
+            if (entry.Continuity.Carried is { } carried) {
+                writer.WriteQuaternion(value: carried.Rotation);
+                writer.WriteVector(value: carried.Translation);
+            }
             writer.WriteInt32(value: entry.Generation);
             writer.WriteNullableString(value: entry.PlacementId);
             writer.WriteUInt32(value: ((uint)entry.Facts));

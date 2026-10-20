@@ -7,9 +7,9 @@ namespace Puck.Commands.Tests;
 /// <summary>Exercises the text-dispatch surface: the wire-native fast path and its argument parsing, rejection
 /// accounting, quiet acknowledgements, interned command identity, and command-map gating.</summary>
 public sealed class CommandRegistryTests {
-    // help, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
-    // module's, so they take three of the 16-bit ids a snapshot entry can name.
-    private const int BuiltInCommandCount = 3;
+    // help, run, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
+    // module's, so they take four of the 16-bit ids a snapshot entry can name.
+    private const int BuiltInCommandCount = 4;
 
     [Fact]
     public void ABlankAliasIsRefusedNamingTheCommandAndItsAliasList() {
@@ -813,7 +813,7 @@ public sealed class CommandRegistryTests {
         );
         Assert.Equal(
             actual: registry.Submit(line: "help --names").Output.Split(separator: '\n'),
-            expected: ["alpha", "beta", "help", "ping", "sum", "wire.ack", "wire.errors"]
+            expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"]
         );
 
         var unmatched = registry.Submit(line: "help world.sky");
@@ -1033,7 +1033,7 @@ public sealed class CommandRegistryTests {
         // binding vocabulary all read this, and a verb Submit dispatches but Definitions denies existed let the three
         // of them each be right and still disagree.
         Assert.Equal(
-            expected: ["alpha", "beta", "help", "ping", "sum", "wire.ack", "wire.errors"],
+            expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"],
             actual: definitions.Select(selector: static metadata => metadata.Name)
         );
         Assert.Equal(

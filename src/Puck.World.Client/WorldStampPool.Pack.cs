@@ -274,15 +274,74 @@ public sealed partial class WorldStampPool {
         )
         );
     }
+    // Carries everything a body-rooted registration latched in world space through an in-place crossing's rigid
+    // motion: the root and part followers, the drivers' last pose and eased world velocity, and every effector's
+    // planted, stepping and resolved points and normals. Body-local state (driver phases, weights, own deltas) is
+    // unchanged by it.
+    private static void Carry(Registration live, WorldPoseCarry carry) {
+        live.RootPositionFollower.Carry(
+            rotation: carry.Rotation,
+            translation: carry.Translation
+        );
+        live.RootOrientationFollower.Carry(rotation: carry.Rotation);
+        live.FollowedPosition = carry.Point(point: live.FollowedPosition);
+        live.FollowedOrientation = carry.Attitude(attitude: live.FollowedOrientation);
+        live.DriverPosition = carry.Point(point: live.DriverPosition);
+        live.DriverOrientation = carry.Attitude(attitude: live.DriverOrientation);
+        live.Kinematics.Carry(rotation: carry.Rotation);
+
+        for (var shapeSlot = 0; (shapeSlot < live.PartFollower.Length); shapeSlot++) {
+            live.PartFollower[shapeSlot].Carry(
+                rotation: carry.Rotation,
+                translation: carry.Translation
+            );
+        }
+
+        for (var effector = 0; (effector < live.EffectorPlantTarget.Length); effector++) {
+            live.EffectorPlantTarget[effector] = carry.Point(point: live.EffectorPlantTarget[effector]);
+            live.EffectorPlantNormal[effector] = carry.Direction(direction: live.EffectorPlantNormal[effector]);
+            live.EffectorTarget[effector] = carry.Point(point: live.EffectorTarget[effector]);
+            live.EffectorNormal[effector] = carry.Direction(direction: live.EffectorNormal[effector]);
+            live.EffectorStepFrom[effector] = carry.Point(point: live.EffectorStepFrom[effector]);
+            live.EffectorStepTo[effector] = carry.Point(point: live.EffectorStepTo[effector]);
+            live.EffectorStepToNormal[effector] = carry.Direction(direction: live.EffectorStepToNormal[effector]);
+        }
+    }
     // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
     // deltaSeconds.
     private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.
+        var cut = false;
+
         if (live.BodyIndex is { } watched) {
             var epoch = client.PoseEpoch(index: watched);
             var address = client.EntityAddress(index: watched);
+            var crossings = client.Carries.Epoch(index: watched);
+            var continuous = ((live.RootEpoch == epoch) && (live.RootAddress == address));
+
+            // An in-place crossing moved the body continuously through a rigid motion: everything this registration
+            // latched in world space rides the same motion. A history too short to carry it is a cut.
+            if (
+                continuous &&
+                (live.RootCarryEpoch != crossings)
+            ) {
+                if (client.Carries.TrySince(
+                    carry: out var carry,
+                    index: watched,
+                    since: live.RootCarryEpoch
+                )) {
+                    Carry(
+                        carry: carry,
+                        live: live
+                    );
+                } else {
+                    live.RootEpoch = -1;
+                }
+            }
+
+            live.RootCarryEpoch = crossings;
 
             if ((live.RootEpoch != epoch) || (live.RootAddress != address)) {
                 live.RootPositionFollower.Reseed();
@@ -296,6 +355,18 @@ public sealed partial class WorldStampPool {
 
                 Array.Clear(array: live.EffectorPlanted);
                 Array.Clear(array: live.EffectorStepping);
+                // The drivers measure travel from the pose they last saw, which a teleport of the same occupant has
+                // left behind: they hold their phases and weights through the jump's frame and relatch there, and
+                // their eased motion and followers restart, so the next frame reads the body's own motion and seeds
+                // on it. A teleport or a respawn shows no one-frame spike and no pop. A new occupant reseeds them all
+                // in WorldGaitDrivers.Advance.
+                cut = (live.DriverSeeded && (live.DriverAddress == address));
+
+                if (cut) {
+                    live.DriverPosition = rootPosition;
+                    live.DriverOrientation = rootRotation;
+                    live.Kinematics.Reset();
+                }
             }
         }
 
@@ -338,24 +409,26 @@ public sealed partial class WorldStampPool {
             rows: client.Definition.Dynamics
         );
 
-        WorldGaitDrivers.Advance(
-            address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
-            deltaSeconds: deltaSeconds,
-            drivers: drivers,
-            facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
-            easedSpeed: ref live.DriverSpeed,
-            lastAddress: ref live.DriverAddress,
-            lastOrientation: ref live.DriverOrientation,
-            lastPosition: ref live.DriverPosition,
-            orientation: rootRotation,
-            phases: live.DriverPhase,
-            position: rootPosition,
-            seeded: ref live.DriverSeeded,
-            weights: live.DriverWeight,
-            reads: live.Reads,
-            kinematics: live.Kinematics,
-            definition: client.Definition
-        );
+        if (!cut) {
+            WorldGaitDrivers.Advance(
+                address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
+                deltaSeconds: deltaSeconds,
+                drivers: drivers,
+                facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
+                easedSpeed: ref live.DriverSpeed,
+                lastAddress: ref live.DriverAddress,
+                lastOrientation: ref live.DriverOrientation,
+                lastPosition: ref live.DriverPosition,
+                orientation: rootRotation,
+                phases: live.DriverPhase,
+                position: rootPosition,
+                seeded: ref live.DriverSeeded,
+                weights: live.DriverWeight,
+                reads: live.Reads,
+                kinematics: live.Kinematics,
+                definition: client.Definition
+            );
+        }
 
         var shapes = (document.Shapes ?? []);
         var poses = FramePoses(

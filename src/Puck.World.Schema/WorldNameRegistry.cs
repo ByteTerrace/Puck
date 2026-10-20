@@ -1317,6 +1317,8 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
+        new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),
         new(typeof(StatePoolField), nameof(StatePoolField.Enum), "an enum name is local to the document"),
         new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Field), "a field local to its pool record"),

@@ -89,6 +89,11 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// <param name="Settings">A source package row's producer settings, which its producer opens the image with and its
 /// shape validates, as a screen's <c>producer</c> source's settings are, or <see langword="null"/> for the producer's
 /// defaults. Only a row naming a source package (<c>source.&lt;producer id&gt;</c>) takes settings.</param>
+/// <param name="Fit">How a layout slot showing the instance fits its image: <see cref="WorldHudFrameFit.Stretch"/> fills
+/// the slot whatever the two aspect ratios, and <see cref="WorldHudFrameFit.Contain"/> shows the whole image at its own
+/// aspect ratio, centred, with letterbox bars where it does not reach the slot's edges, which a pointer passes through
+/// to the game. A window capture's aspect ratio is the captured window's, whatever its profile extent. A pane is never
+/// cropped, so <see cref="WorldHudFrameFit.Cover"/> is refused. <see langword="null"/> stretches.</param>
 public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Source = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Package = null,
@@ -99,7 +104,8 @@ public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldHudFrameFit? Fit = null);
 /// <summary>One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass
 /// of the root graph (<c>WorldViewGraphs.MainInstance</c>), written as a <c>puck.render.graph.v1</c> document's
 /// <c>packages</c> row is, less its ports. The rows run in order after every view and pane is placed and before the

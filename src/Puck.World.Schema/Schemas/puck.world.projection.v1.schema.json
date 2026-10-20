@@ -22121,6 +22121,10 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "passThrough": {
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "additionalProperties": false,
@@ -22496,12 +22500,12 @@
                 "default": true
               },
               "text": {
-                "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+                "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and a chord hint\u0027s label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
                 "type": "boolean",
                 "default": true
               },
               "modifiers": {
-                "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+                "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.",
                 "type": "boolean",
                 "default": true
               },
@@ -25531,6 +25535,17 @@
                   "high",
                   null
                 ]
+              },
+              "fit": {
+                "description": "How a layout slot showing the instance fits its image: Stretch fills the slot whatever the two aspect ratios, and Contain shows the whole image at its own aspect ratio, centred, with letterbox bars where it does not reach the slot\u0027s edges, which a pointer passes through to the game. A window capture\u0027s aspect ratio is the captured window\u0027s, whatever its profile extent. A pane is never cropped, so Cover is refused. null stretches.",
+                "enum": [
+                  "Cover",
+                  "Contain",
+                  "Stretch",
+                  null
+                ],
+                "default": null,
+                "title": "WorldHudFrameFit"
               }
             },
             "required": [

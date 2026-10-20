@@ -170,6 +170,9 @@ public sealed partial class WorldStampPool {
         // EntityAddress for a body index reused by a different inhabitant (a distinct address, even at the SAME
         // index and creation hash, so a same-content edit never inherits a stale follower position across it).
         public int RootEpoch = -1;
+        // The body's IWorldStampSource.Carries count this registration's world-space state was last carried to; an
+        // in-place crossing past it carries the state on (PackRegistration) instead of reseeding it.
+        public int RootCarryEpoch = -1;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;

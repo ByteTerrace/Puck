@@ -72,6 +72,7 @@ export type WorldDefinition = {
   sets?: (CellSetRow | null)[] | null;
   editor?: WorldEditorDefaults | null;
   timeline?: WorldTimelineSection | null;
+  commands?: (WorldConsoleCommand | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -689,6 +690,7 @@ export type BindingCommandDefinition = {
   value?: CommandValue | null;
   mode?: BindingEntryMode;
   text?: string | null;
+  passThrough?: boolean;
 };
 
 export type BindingContextDefinition = {
@@ -3450,11 +3452,11 @@ export type WorldBindingBarAuthoring = {
    */
   enabled?: boolean;
   /**
-   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
+   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and a chord hint's label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
    */
   text?: boolean;
   /**
-   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text's, not this one's.
+   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.
    */
   modifiers?: boolean;
   /**
@@ -4548,6 +4550,46 @@ export type WorldCollisionEvents = {
    */
   beginBudget?: number;
 };
+
+export type WorldConsoleCommand = {
+  /**
+   * The command's namespaced name (debug.go), unique within the document and never a registered verb's.
+   */
+  name: string;
+  /**
+   * The help text the listing shows before the command's usage, or null.
+   */
+  help?: string | null;
+  /**
+   * The parameters, in argument order; a required one never follows an optional one.
+   */
+  parameters?: (WorldConsoleCommandParameter | null)[] | null;
+  /**
+   * The console lines the command submits, in order. A {name} placeholder takes a parameter's argument and {{/}} stand for literal braces; the first token, the verb, is literal.
+   */
+  lines?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameter = {
+  /**
+   * The parameter's name, which a line's {name} placeholder substitutes.
+   */
+  name: string;
+  /**
+   * What an argument for it must be.
+   */
+  kind?: WorldConsoleCommandParameterKind;
+  /**
+   * The argument a caller who omits it gets, written as it would be typed; null makes the argument required.
+   */
+  default?: string | null;
+  /**
+   * The admitted values of a Choice parameter, each one plain token; no other kind carries any.
+   */
+  values?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameterKind = "Text" | "Number" | "Integer" | "Choice" | "Body" | "Spawn";
 
 export type WorldContactRequirement = "SmoothUnionContact" | "GradientDerivedUp";
 
@@ -12406,6 +12448,10 @@ export type WorldViewGraph = {
    * The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row's tier present the same state. null loads the variant no tier names.
    */
   tier?: QualityTier | null;
+  /**
+   * How a layout slot showing the instance fits its image: Stretch fills the slot whatever the two aspect ratios, and Contain shows the whole image at its own aspect ratio, centred, with letterbox bars where it does not reach the slot's edges, which a pointer passes through to the game. A window capture's aspect ratio is the captured window's, whatever its profile extent. A pane is never cropped, so Cover is refused. null stretches.
+   */
+  fit?: WorldHudFrameFit | null;
 };
 
 export type WorldViewGraphBudget = {

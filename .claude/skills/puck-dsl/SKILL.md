@@ -94,6 +94,44 @@ examples; [references/diagnostics.md](references/diagnostics.md) the codes
 authors hit most. `PuckDiagnosticCodes.cs` declares every code once, with its
 meaning as the XML doc comment.
 
+## Authoring a console command
+
+The owner's ruling: a console command composed from existing verbs is authored
+in a world document, never as C# work. A `commands` row lowers through the
+generic value path (no sugar); its full contract is
+[document-authored commands](../../../docs/reference/commands.md#document-authored-commands):
+
+```text
+commands [
+  {
+    name: "gallery.show"                  // namespaced; never an engine verb's name
+    help: "Stands a body at the gallery and picks a layout."
+    parameters [
+      { name: "layout", kind: Choice, values ["play", "front"], default: "play" }
+      { name: "body", kind: Body, default: "0" }  // a default is written as typed
+    ]
+    lines [
+      "body.pose spawn:gallery {body}"    // {name} substitutes; {{ and }} are literal braces
+      "view.override layout {layout}"
+    ]
+  }
+]
+```
+
+- Kinds: `Text` (default), `Number`, `Integer`, `Choice` (`values`), `Body`
+  (0..4095), `Spawn` (a `spawnPoints` id). Arguments are positional plain
+  tokens; required parameters come first; every parameter appears in a line.
+- A line's first token (the verb) is literal; it may be another authored
+  command (no loops) or any verb a binding may name. Operator verbs,
+  unbindable verbs (`quit`, `world.save`, `storage.*`) and engine-verb names
+  are refused when the World validates the document (boot, `world.reload`).
+  `puck compile --validate` has no registry, so offline it checks names,
+  parameters, defaults and templates only.
+- `commands` is keyed by `name`, so each imported document authors its own
+  rows. Bind one like any verb (`command: "debug.go", text: "chess"`), or run
+  `run <name> [args]`. Verify by booting the world: `help --names <prefix>`
+  lists it, and the command answers its lines' output.
+
 ## The verbs
 
 ```text

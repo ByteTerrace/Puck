@@ -55,7 +55,8 @@ public sealed class CompiledBindingProfile {
     // completion synthesizes its release. Source is the command destination's precomputed synthetic ownership id:
     // parallel synthesized holds release independently, while all togglers of one destination share its latch owner.
     // Reassertable marks a held channel destination: it may recover continuous state from a digital Active sample
-    // without turning that sample into a command edge. Mode remains input-side.
+    // without turning that sample into a command edge. Mode remains input-side. PassThrough leaves the press that
+    // completes a chord row to its source's own binding too.
     internal sealed record CompiledCommandEdge(
         string Command,
         bool DispatchRelease,
@@ -64,7 +65,8 @@ public sealed class CompiledBindingProfile {
         bool Reassertable,
         BindingEntryMode Mode,
         string Source,
-        string? Text = null
+        string? Text = null,
+        bool PassThrough = false
     );
     // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker
     // resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across the whole compiled profile) a slot's

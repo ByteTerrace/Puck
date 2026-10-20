@@ -135,6 +135,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // teleport, an over-threshold correction) reseeds the follower exactly like an address change does, so the boom
     // never streaks the follower across the jump. -1 (never observed) reseeds on the first frame.
     private readonly int[] m_avatarDynamicsPoseEpoch = NewPoseEpochs();
+    // The client's Carries count each avatar's latched world-space state was last carried to.
+    private readonly int[] m_avatarCarryEpoch = new int[WorldBodiesLimits.CapacityCeiling];
 
     // The screens, static placement stamps + the creation-stamp pool, then the view's active avatars as leaf-level dynamic
     // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
@@ -605,6 +607,32 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 }
 
                 continue;
+            }
+
+            // An in-place crossing moved the avatar continuously: its last position and followers ride the crossing's
+            // rigid motion, so the gait and the eased pose carry on; a history too short to carry them is a cut.
+            var crossings = m_client.Carries.Epoch(index: index);
+
+            if (m_avatarCarryEpoch[index] != crossings) {
+                if (
+                    m_avatarPoseSeeded[index] &&
+                    m_client.Carries.TrySince(
+                    carry: out var carry,
+                    index: index,
+                    since: m_avatarCarryEpoch[index]
+                )
+                ) {
+                    m_avatarPreviousPositions[index] = carry.Point(point: m_avatarPreviousPositions[index]);
+                    m_avatarPositionFollower[index].Carry(
+                        rotation: carry.Rotation,
+                        translation: carry.Translation
+                    );
+                    m_avatarOrientationFollower[index].Carry(rotation: carry.Rotation);
+                } else {
+                    m_avatarPoseSeeded[index] = false;
+                }
+
+                m_avatarCarryEpoch[index] = crossings;
             }
 
             if (!m_avatarOwners.Wake(

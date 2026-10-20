@@ -300,13 +300,14 @@ public sealed record WorldBindingBarBank(
 /// <param name="Enabled">Whether the bar is shown when no live override hides it.</param>
 /// <param name="Text">Whether the bar draws the atlas text it composes — a badge whose icon row carries a
 /// <c>Label</c> (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier
-/// indicators, and the chord-hint lines above them. <see langword="false"/> drops every label-content badge outright
+/// indicators, and a chord hint's label. <see langword="false"/> drops every label-content badge outright
 /// and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position
 /// marks), the bound actions' icons, and the modifier indicators all still draw.</param>
 /// <param name="Modifiers">Whether the bar draws the modifier indicator row on its anchor line — one plate per
 /// modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit
-/// while held. <see langword="false"/> drops the row and leaves the slot clusters alone; the chord hints and page
-/// label are <paramref name="Text"/>'s, not this one's.</param>
+/// while held. <see langword="false"/> drops the row and leaves the slot clusters alone. While the row draws, it
+/// places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord
+/// whose members are all in <paramref name="SlotSet"/>.</param>
 /// <param name="PageLabel">Whether the bar names the active page under its anchor while <paramref name="Text"/> is on;
 /// <see langword="false"/> keeps every badge label and chord hint and drops only the page's name.</param>
 /// <param name="SlotSet">The physical controls this bar shows, by input source id (<c>gamepad.buttonSouth</c>,

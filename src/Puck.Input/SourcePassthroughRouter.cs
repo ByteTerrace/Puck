@@ -71,6 +71,23 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
 
     /// <summary>Gets the keyboard focus between the game and a passthrough source.</summary>
     public SourceFocus Focus { get; } = new();
+    /// <summary>Gets whether the pointer belongs to a passthrough source's window rather than the game: it lies on the
+    /// source of a permitted passthrough pane among the published panes, whose window the source still shows, or a button
+    /// pressed on a source is still held. A host shows the system cursor while it does, since the game's cursor shows
+    /// nothing a window under it would.</summary>
+    public bool HoldsPointer => (
+        (m_buttons.Count > 0) ||
+        (
+            TryUnderPointer(
+                hit: out _,
+                mapping: out var mapping
+            ) &&
+            m_windows.TryGet(
+                source: mapping.Source,
+                window: out _
+            )
+        )
+    );
 
     // A button press that went to a source: where it was delivered, or that it landed off the client area and was
     // delivered nowhere, so its release is consumed without a delivery too.
@@ -117,7 +134,8 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     /// <param name="inputEvent">The event, in the window's order. A <see cref="WindowInputKind.PointerPosition"/> event's
     /// <see cref="WindowInputEvent.Vector"/> is in display pixels from the display's top-left corner.</param>
     /// <returns><see langword="true"/> when the game must not see the event. A pointer position is never withheld, so
-    /// the game keeps drawing its cursor over a passthrough pane.</returns>
+    /// the game keeps its pointer position over a passthrough pane; the pointer's motion there is withheld, and
+    /// <see cref="HoldsPointer"/> tells the host to show the system cursor instead.</returns>
     public bool Route(in WindowInputEvent inputEvent) {
         RevokeUnshown();
 

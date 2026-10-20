@@ -90,7 +90,8 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("ruleGroups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw = null,
     [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null,
     [property: JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEditorDefaults? EditorRaw = null,
-    [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null
+    [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null,
+    [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
@@ -347,6 +348,10 @@ public sealed partial record WorldDefinition(
         seconds: Population.ReconnectGraceSeconds,
         ratePerSecond: ((uint)SimulationRateHz)
     );
+    /// <summary>Gets the console commands the document authors from existing verbs (<see cref="WorldConsoleCommand"/>) —
+    /// ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldConsoleCommand> Commands => (CommandsRaw ?? []);
     /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);

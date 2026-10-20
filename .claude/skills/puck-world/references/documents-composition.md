@@ -57,10 +57,18 @@ subject names them:
   pair is refused at the crossing, by name, unless it maps world up onto itself
   (`WorldFrameIsometry.PreservesWorldUp`: two walls, or a floor and a ceiling).
   A destination whose reference names the world's own document resolves to the
-  running world itself, and a mapped crossing there moves the body in place
-  (`WorldInstanceHost.ApplyInPlaceCrossing`, `WorldServer.CrossInPlace`, taped
-  as a `Crossing` replay entry) instead of transferring it: the debug world's
-  loop shaft (`worlds/debug/loop.puck`) is the live example.
+  running world itself, and a mapped crossing there carries the body in place
+  (`WorldInstanceHost.ApplyInPlaceCrossing` → `WorldBody.CrossInPlace`, taped
+  as a `Crossing` replay entry) instead of transferring it. It is continuous
+  motion, never a teleport: every world-space point and direction the body
+  holds, its previous position included, maps through the pair, its momentum,
+  followers and facts carry on, and the snapshot's continuity is `Carry` with
+  the rigid motion (`WorldPoseCarry`). Presentation carries what it latched the
+  same way: the mirrors' interpolation endpoints, `IWorldStampSource.Carries`
+  for the stamp pool's followers, gait drivers and effectors and for the
+  catalog avatars, while the chase boom is translation-invariant and turns
+  through `CrossView` for a turning pair. The debug world's loop shaft
+  (`worlds/debug/loop.puck`) is the live example.
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
   field, `RateHz` (required in an authored section), the authoritative
   server's fixed step rate in Hz. Read through
