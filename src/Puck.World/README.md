@@ -1792,7 +1792,7 @@ boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert`, `forge.play` and `machine.swap` (a file from the
-machine's authored `contentFolder`, which `machine.content` lists) use that
+machine's authored `contentFolders`, which `machine.content` lists) use that
 executor for named producers, while `screen.eject` detaches the display. The debug
 world's device row runs one of each machine
 ([`devices.md`](Assets/worlds/devices.md)). The screen operations (insert, eject,

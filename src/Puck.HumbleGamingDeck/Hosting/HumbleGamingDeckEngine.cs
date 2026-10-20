@@ -9,12 +9,32 @@ namespace Puck.HumbleGamingDeck;
 /// vector, so the engine takes no firmware and no options: power-on state is the default
 /// <see cref="HgdPowerOnProfile"/>.
 /// </summary>
-public sealed class HumbleGamingDeckEngine : IMachineEngine, IMachineOperationProvider {
+public sealed class HumbleGamingDeckEngine : IMachineEngine, IMachineImageRecognizer, IMachineOperationProvider {
     /// <summary>The engine identifier a world machine row names.</summary>
     public const string EngineId = "humble-gaming-deck";
 
     /// <inheritdoc/>
     public string Id => EngineId;
+    /// <inheritdoc/>
+    public int ImageHeaderLength => HgdCartridgeHeader.Length;
+    /// <inheritdoc/>
+    public string? RefuseImage(ReadOnlySpan<byte> header, long imageLength) {
+        if (!HgdCartridgeHeader.IsCartridgeImage(
+            header: header,
+            imageLength: imageLength
+        )) {
+            return "no iNES or NES 2.0 header signature";
+        }
+
+        try {
+            return HgdCartridge.Refusal(
+                header: HgdCartridgeHeader.Parse(header: header),
+                imageLength: imageLength
+            );
+        } catch (InvalidDataException exception) {
+            return exception.Message;
+        }
+    }
     /// <inheritdoc/>
     public MachineEngineDescriptor Descriptor { get; } = new(
         EngineId,

@@ -8,9 +8,20 @@ namespace Puck.AdvancedGamingBrick;
 /// <c>fast</c> skips startup without discarding BIOS services; a final <c>bios=&lt;path&gt;</c> selects an external image.
 /// <c>stub</c> explicitly selects a zeroed image for diagnostics that never call BIOS services or dispatch IRQs.
 /// </summary>
-public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachineOperationProvider {
+public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachineImageRecognizer, IMachineOperationProvider {
     /// <inheritdoc/>
     public string Id => "advanced-gaming-brick";
+    /// <inheritdoc/>
+    public int ImageHeaderLength => AgbCartridgeHeader.Length;
+
+    /// <inheritdoc/>
+    public string? RefuseImage(ReadOnlySpan<byte> header, long imageLength) => (AgbCartridgeHeader.IsCartridgeImage(
+        header: header,
+        imageLength: imageLength
+    )
+        ? null
+        : "no advanced-gaming-brick cartridge header: the fixed byte at 0xB2 or the complement checksum at 0xBD does not hold"
+    );
 
     /// <inheritdoc/>
     public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {

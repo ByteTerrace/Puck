@@ -23,4 +23,6 @@ public enum MapperKind {
     HuC3 = 10,
     /// <summary>The camera cartridge (MAC-GBD) mapper.</summary>
     Camera = 11,
+    /// <summary>A cartridge type the machine does not implement; <see cref="CartridgeHeader.TypeCode"/> names it.</summary>
+    Unimplemented = 12,
 }

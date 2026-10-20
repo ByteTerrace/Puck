@@ -259,21 +259,44 @@ public static class WorldDocumentPaths {
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "source", ["views", "graphs"]),
         new(typeof(Puck.Text.TextFontDefinition), nameof(Puck.Text.TextFontDefinition.Source), "source", ["text", "fonts"]),
         new(typeof(WorldHostDefaults), nameof(WorldHostDefaults.Icon), "icon", ["host"]),
-        new(typeof(WorldMachine), nameof(WorldMachine.ContentFolder), "contentFolder", ["machines"]),
+        new(typeof(WorldMachine), nameof(WorldMachine.ContentFolders), "contentFolders", ["machines"]),
     ];
 
+    // A member holds one path, or a list of them (a machine's contentFolders), each relocated in place.
     private static void RelocateMember(JsonObject row, string member, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins) {
-        if (
-            (row[member] is JsonValue value) &&
-            value.TryGetValue<string>(value: out var path) &&
-            (path.Length > 0)
-        ) {
-            row[member] = JsonValue.Create(value: Relocate(
-                path: path,
-                sourceDocumentPath: sourceDocumentPath,
-                targetDocumentPath: targetDocumentPath
-            ));
-            origins?.Copy(source: value, target: row[member]);
+        switch (row[member]) {
+            case JsonValue value:
+                if (Relocated(value: value, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins) is { } relocated) {
+                    row[member] = relocated;
+                }
+                break;
+            case JsonArray paths:
+                for (var index = 0; (index < paths.Count); index++) {
+                    if (
+                        (paths[index] is JsonValue item) &&
+                        (Relocated(value: item, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins) is { } relocatedItem)
+                    ) {
+                        paths[index] = relocatedItem;
+                    }
+                }
+                break;
         }
+    }
+    private static JsonValue? Relocated(JsonValue value, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins) {
+        if (
+            !value.TryGetValue<string>(value: out var path) ||
+            (path.Length == 0)
+        ) {
+            return null;
+        }
+
+        var relocated = JsonValue.Create(value: Relocate(
+            path: path,
+            sourceDocumentPath: sourceDocumentPath,
+            targetDocumentPath: targetDocumentPath
+        ));
+
+        origins?.Copy(source: value, target: relocated);
+        return relocated;
     }
 }

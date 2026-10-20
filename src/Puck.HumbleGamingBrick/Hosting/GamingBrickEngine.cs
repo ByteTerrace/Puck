@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick;
 /// <see cref="LinkedMachineGroup"/>, which takes ownership of both cores and advances them over the deterministic
 /// <see cref="SerialLinkSession"/> interleave until the link is disposed.
 /// </summary>
-public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingEngine, IMachineOperationProvider {
+public sealed partial class GamingBrickEngine : IMachineEngine, IMachineImageRecognizer, IMachineLinkingEngine, IMachineOperationProvider {
     // The serial port carries exactly one peer, so a cable link is a pair.
     private const int CableSeats = 2;
     // The revision a bare family token selects: the two steppings the accuracy work targets, plus the Advanced console.
@@ -43,19 +43,37 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
 
     /// <inheritdoc/>
     public string Id => "gaming-brick";
+    /// <inheritdoc/>
+    public int ImageHeaderLength => CartridgeHeader.Length;
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentException"><paramref name="options"/> holds an unknown token, or
+    /// <paramref name="contentBytes"/> is not a cartridge the machine can run.</exception>
     public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         var (model, boot) = ParseOptions(options: options);
 
         return new MachineHost(
             audioSampleRate: audioSampleRate,
-            cartridgeRom: contentBytes,
+            cartridgeRom: RequireRunnable(image: contentBytes),
             bootMode: boot.Mode,
             bootRomPath: boot.ImagePath,
             model: model,
             savePath: savePath
         );
+    }
+    /// <inheritdoc/>
+    public string? RefuseImage(ReadOnlySpan<byte> header, long imageLength) {
+        if (imageLength < CartridgeHeader.Length) {
+            return ShortImage(imageLength: imageLength);
+        }
+        if (!CartridgeHeader.IsCartridgeImage(
+            header: header,
+            imageLength: imageLength
+        )) {
+            return "no gaming-brick cartridge header: the header checksum at 0x14D does not hold";
+        }
+
+        return Unrunnable(header: CartridgeHeader.Parse(rom: header[..CartridgeHeader.Length].ToArray()));
     }
     /// <inheritdoc/>
     public bool TryLink(IReadOnlyList<IMachineRuntime> machines, out IMachineLink? link, out string reason) {
@@ -182,6 +200,26 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
         return $"{modelToken} {boot.Format()}";
     }
 
+    // The image is read before the host exists, so a cartridge the machine cannot run is refused by name without
+    // starting a worker. A header checksum that does not hold is the firmware's to refuse, as hardware's boot does.
+    private static byte[]? RequireRunnable(byte[]? image) {
+        if (image is null) {
+            return null;
+        }
+        if (((image.Length < CartridgeHeader.Length)
+            ? ShortImage(imageLength: image.Length)
+            : Unrunnable(header: CartridgeHeader.Parse(rom: image))) is { } reason) {
+            throw new ArgumentException(message: $"gaming-brick cannot run the cartridge: {reason}");
+        }
+
+        return image;
+    }
+    private static string ShortImage(long imageLength) =>
+        $"the image is {imageLength} bytes, shorter than its 0x{CartridgeHeader.Length:X}-byte header";
+    private static string? Unrunnable(CartridgeHeader header) => ((header.Mapper == MapperKind.Unimplemented)
+        ? $"cartridge type 0x{header.TypeCode:X2} names a mapper the machine does not implement"
+        : null
+    );
     private static bool TryParseModelToken(string token, out ConsoleModel model) =>
         ModelTokens.TryGetValue(
             key: token,

@@ -1,5 +1,5 @@
 // The device row: one instance of every gaming machine the World hosts, each a labelled body on a plinth whose screen
-// shows the machine running, with the cartridges it can swap to in the folder its `contentFolder` names. The debug
+// shows the machine running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug
 // world imports this file whole. The row stands on the open ground west of the spawn at z = -6, every device 3 m from
 // the next and facing +Z, toward the origin:
 //
@@ -280,9 +280,11 @@ placements {
   }
 }
 
-// Each machine boots its first cartridge and swaps to any file `machine.content` lists from its folder. The DMG runs
-// the forge's dmg target, since a Color-only image parks a monochrome processor; the CGB and the AGB mode share the
-// CGB cartridges.
+// Each machine boots a shipped cartridge, so the world boots the same on every machine, and swaps to any file
+// `machine.content` lists from its folders. The DMG runs the forge's dmg target, since a Color-only image parks a
+// monochrome processor; the CGB and the AGB mode share the CGB cartridges. A device's second folder is the owner's
+// local, git-ignored `roms/` at the repository root, which resolves when the world boots from this source and is
+// listed as absent wherever it does not exist.
 machines [
   {
     name: "brick-dmg"
@@ -294,7 +296,7 @@ machines [
         path: "../cartridges/dmg/tetromino.dmg.cartridge.json"
       }
     }
-    contentFolder: "../cartridges/dmg"
+    contentFolders ["../cartridges/dmg", "../../../../roms/hgb"]
   }
   {
     name: "brick-cgb"
@@ -306,7 +308,7 @@ machines [
         path: "../cartridges/cgb/tetromino.cgb.cartridge.json"
       }
     }
-    contentFolder: "../cartridges/cgb"
+    contentFolders ["../cartridges/cgb", "../../../../roms/hgb"]
   }
   {
     name: "brick-agb"
@@ -318,7 +320,7 @@ machines [
         path: "../cartridges/cgb/hgb-mirror.cgb.cartridge.json"
       }
     }
-    contentFolder: "../cartridges/cgb"
+    contentFolders ["../cartridges/cgb", "../../../../roms/hgb"]
   }
   {
     name: "advanced-brick"
@@ -329,7 +331,7 @@ machines [
         path: "../cartridges/agb/pip.agb.cartridge.json"
       }
     }
-    contentFolder: "../cartridges/agb"
+    contentFolders ["../cartridges/agb", "../../../../roms/agb"]
   }
   {
     name: "tune-jukebox"
@@ -340,7 +342,7 @@ machines [
         path: "tunes/arrival-tune.audio.json"
       }
     }
-    contentFolder: "tunes"
+    contentFolders ["tunes"]
   }
   {
     name: "gaming-deck"
@@ -351,7 +353,7 @@ machines [
         path: "../cartridges/deck/colour-bars.nes"
       }
     }
-    contentFolder: "../cartridges/deck"
+    contentFolders ["../cartridges/deck", "../../../../roms/hgd"]
   }
 ]
 

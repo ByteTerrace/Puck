@@ -21,8 +21,11 @@ namespace Puck.World.Server;
 /// <see langword="null"/>.</param>
 /// <param name="Cartridge">The cartridge document the live machine's content was compiled from, or
 /// <see langword="null"/> when the content booted as read (a ROM image) or no machine is assigned.</param>
+/// <param name="Content">The content path the live machine mounted, or <see langword="null"/> when it runs with no
+/// cartridge or no machine is assigned.</param>
 public readonly record struct WorldMachineState(bool Assigned, string? Engine, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null);
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null,
+    string? Content = null);
 /// <summary>A compiled cartridge document behind a booted machine — the source the host compiled at bind and the
 /// two hashes that pin it, echoed by <c>screen.state</c> as <c>cartridge &lt;path&gt; hash &lt;source&gt; rom
 /// &lt;rom&gt;</c>. The file's own content pin (the replay CAS signature) is separate: it covers the bytes read

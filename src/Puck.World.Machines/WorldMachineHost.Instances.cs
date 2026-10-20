@@ -35,9 +35,15 @@ public sealed partial class WorldMachineHost {
             lease.Runtime.Status,
             (queued?.CompletedSteps ?? lease.CompletedSteps),
             (queued?.PendingSteps ?? 0),
-            queued?.QueueFault
+            queued?.QueueFault,
+            MountedContent(lease: lease)
         );
     }
+    // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
+    // authored content file is absent leaves out.
+    private static string? MountedContent(MachineLease lease) => lease.Assets.Values.FirstOrDefault(
+        predicate: static asset => (asset.Role == MachineFieldRole.ContentPath)
+    )?.Path;
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(string instance, string output) =>
         ((m_instances.TryGetValue(
@@ -593,7 +599,8 @@ public sealed partial class WorldMachineHost {
                 var request = PrepareCreation(
                     engine,
                     declaration.Configuration,
-                    candidate.DocumentDirectory
+                    candidate.DocumentDirectory,
+                    declaredBy: declaration.Name
                 );
                 var runtime = engine.CreateMachine(request: request);
                 var lease = new MachineLease(
@@ -670,14 +677,18 @@ public sealed partial class WorldMachineHost {
             element2: second.Configuration
         ));
     // Reads a configuration's content and asset paths, each relative path beside documentDirectory: the directory of
-    // the document that declares the machine.
-    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory) {
+    // the document that declares the machine. A document's own declaration whose content file is absent boots the
+    // machine with no cartridge, named once, so a world whose content lives only on some machines boots everywhere; an
+    // operation that names absent content is refused.
+    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory,
+        string? declaredBy = null) {
         MachineConfigurationValidation.Validate(
             descriptor: engine.Descriptor.Configuration,
             value: configuration
         );
         var tree = JsonNode.Parse(configuration.GetRawText())!.AsObject();
         var assets = new Dictionary<string, PreparedMachineAsset>(comparer: StringComparer.Ordinal);
+        var absent = new List<string>();
 
         MachineConfigurationFields.Visit(
             configuration: tree,
@@ -688,6 +699,20 @@ public sealed partial class WorldMachineHost {
                 }
                 var path = site.Value!.GetValue<string>();
 
+                if (
+                    (declaredBy is not null) &&
+                    (site.Field.Role == MachineFieldRole.ContentPath) &&
+                    WorldDocumentPaths.TryResolve(
+                        documentDirectory: documentDirectory,
+                        path: path,
+                        reason: out _,
+                        resolved: out var resolvedContent
+                    ) &&
+                    !File.Exists(path: resolvedContent)
+                ) {
+                    absent.Add(item: site.Path);
+                    return;
+                }
                 if (!TryReadContent(
                     path,
                     documentDirectory,
@@ -733,11 +758,33 @@ public sealed partial class WorldMachineHost {
                         image,
                         WorldDefinitionFileSource.ComputeContentHash(content: source),
                         source,
-                        content
+                        content,
+                        site.Field.Role
                     )
                 );
             }
         );
+        if (absent.Count > 0) {
+            // The absent field's whole object leaves the configuration the engine builds from, so the engine creates
+            // its empty machine rather than asking for an asset that was never read.
+            foreach (var fieldPath in absent) {
+                var segments = fieldPath.Split(separator: '.');
+                var removed = Math.Max(val1: 0, val2: (segments.Length - 2));
+                JsonNode? holder = tree;
+
+                for (var index = 0; (index < removed); index++) {
+                    holder = holder?[segments[index]];
+                }
+                _ = (holder as JsonObject)?.Remove(propertyName: segments[removed]);
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub.Narrate(
+                        channel: "machine",
+                        text: $"[machine: '{declaredBy}' configuration.{fieldPath} names content absent here; it runs with no cartridge]"
+                    );
+                }
+            }
+            configuration = JsonSerializer.SerializeToElement(value: tree);
+        }
         return new(
             configuration.Clone(),
             assets.ToFrozenDictionary(comparer: StringComparer.Ordinal),

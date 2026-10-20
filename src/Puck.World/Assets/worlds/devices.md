@@ -4,17 +4,27 @@ The debug world shows one instance of every gaming machine the World hosts, on a
 row of labelled plinths at z = -6 west of the spawn, 3 m apart and facing +Z.
 [`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
-it running, and each names the folder its swappable content comes from in
-`contentFolder`.
+it running, and each lists the folders its swappable content comes from in
+`contentFolders`: its shipped folder, then the owner's local folder under the
+git-ignored `roms/` at the repository root.
 
-| x | Device | Instance | Engine and model | Screen | Boots | `contentFolder` |
+| x | Device | Instance | Engine and model | Screen | Boots | `contentFolders` |
 |---|---|---|---|---|---|---|
-| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.dmg` | `../cartridges/dmg` |
-| -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `../cartridges/cgb` |
-| -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb` |
-| -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb` |
+| -10 | Humble Gaming Brick, DMG | `brick-dmg` | `gaming-brick`, `dmg` | 0 | `tetromino.dmg` | `../cartridges/dmg`, `roms/hgb` |
+| -13 | Humble Gaming Brick, CGB | `brick-cgb` | `gaming-brick`, `cgb` | 1 | `tetromino.cgb` | `../cartridges/cgb`, `roms/hgb` |
+| -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb`, `roms/hgb` |
+| -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb`, `roms/agb` |
 | -22 | Tune jukebox | `tune-jukebox` | `tune-instrument` | 4 | `arrival-tune.audio.json` | `tunes` |
-| -25 | Humble Gaming Deck | `gaming-deck` | `humble-gaming-deck` | 5 | `colour-bars.nes` | `../cartridges/deck` |
+| -25 | Humble Gaming Deck | `gaming-deck` | `humble-gaming-deck` | 5 | `colour-bars.nes` | `../cartridges/deck`, `roms/hgd` |
+
+A `roms/` folder is spelled `../../../../roms/<device>` beside this file, so it
+resolves when the world boots from its source
+(`--world src/Puck.World/Assets/worlds/debug.puck`, the recipe in
+[`debug.md`](debug.md)). Wherever it does not exist (CI, the Azure deploy, the
+compiled copy beside the executable, any machine without the owner's ROMs)
+`machine.content` lists it `present=false` and the world boots and validates the
+same: every device boots a shipped cartridge. The files in it are the owner's
+and never enter the repository, a build output or a package.
 
 The `gaming-brick` engine's three hardware families are the three brick devices;
 its other revisions (`mgb`, `sgb`, `cgb0` and the rest) are steppings of those
@@ -31,9 +41,13 @@ seat plays (`controls`, port one), since the console has two.
 
 The shipped cartridges sit one folder per forge target, `cartridges/cgb/`,
 `cartridges/dmg/` and `cartridges/agb/`, each source beside its compiled
-document. A device lists the files in its folder its engine can mount: the
-`.cartridge.json` documents for a brick, every file for the jukebox and the
-deck, whose engines read their content raw. `test-card.agb` is the Advanced
+document. A device lists every file in its folders, each mountable or refused
+with the reason: a brick mounts the `.cartridge.json` documents and any raw
+image whose header it runs (the header checksum holds and the mapper is one it
+implements), whatever the file's extension, so a cartridge's `.puck` source is
+listed as refused; the advanced brick mounts an image whose header holds the
+fixed byte and complement checksum; the deck mounts an iNES image of a board it
+implements (NROM); the jukebox mounts every file. `test-card.agb` is the Advanced
 Gaming Brick's second cartridge: eight colour bars drifting one pixel a frame,
 so a picture that stops drifting is a machine that stopped. The DMG's two are
 `tetromino.dmg`, the CGB game in four shades, and `test-card.dmg`, four shade
@@ -50,8 +64,8 @@ Every line runs at the console; `<instance>` is a name from the table.
 | To | Console line |
 |---|---|
 | List what a device can swap to, and what it runs now | `machine.content <instance>` |
-| Swap to another cartridge in its folder | `machine.swap <instance> <file>`, or `machine.swap <instance> <stem>` (`machine.swap brick-cgb light-gun`) |
-| Read the running content back | `screen.state <screen>` (`cartridge <path> hash … rom …`) or `machine.content <instance>` (`mounted=`) |
+| Swap to another cartridge in its folders | `machine.swap <instance> <file>`, `machine.swap <instance> <folder>/<file>` when two folders hold the name, or `machine.swap <instance> <stem>` (`machine.swap brick-cgb light-gun`) |
+| Read the running content back | `screen.state <screen>` (`cartridge <path> hash … rom …`, or `no cartridge`) or `machine.content <instance>` (`mounted=`) |
 | Read every device's generation and status | `machine.state` |
 | Reset a device on its current content | `machine.operation <instance> <generation> machine.reset {"schema":"puck.<engine>.machine-reset.v1"}` |
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
@@ -84,9 +98,13 @@ cartridge copies to `0xC280` each frame (`screen.peek <screen> 0xC280`):
 | `gamepad.start` | `enter` | start | `0x80` |
 
 Each `machine.swap` restarts the device on the new cartridge and keeps the rest
-of its configuration (its model and boot mode). A name the folder does not hold
-is refused with the list of what it does hold, and a stem two files share is
-refused until the whole file name is given.
+of its configuration (its model and boot mode). A name the folders do not hold
+is refused with the list of what they do hold, a stem two mountable files share
+is refused until the whole file name is given, a file name two folders hold is
+refused until its folder is given, and a file the device cannot mount is
+refused with the reason `machine.content` gives. A folder that empties or
+vanishes while the World runs shows in the next `machine.content`, and a
+cartridge mounted from it keeps running.
 
 ## Limits
 

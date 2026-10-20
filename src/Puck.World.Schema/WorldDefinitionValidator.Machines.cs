@@ -80,11 +80,22 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name: duplicate instance '{machine.Name}'.");
             }
             path = $"{path} ({machine.Name})";
-            if (
-                (machine.ContentFolder is { } folder) &&
-                !WorldDocumentPaths.IsPortableRelativeFilePath(path: folder)
-            ) {
-                errors.Add(item: $"{path}.contentFolder '{folder}' must be a relative folder spelled with '/', with no root, drive, trailing '/', or empty or '.' segment.");
+            if (machine.ContentFolders is { } folders) {
+                if (folders.Count == 0) {
+                    errors.Add(item: $"{path}.contentFolders names no folder; omit it for a device with no swappable content.");
+                }
+
+                var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                for (var folderIndex = 0; (folderIndex < folders.Count); folderIndex++) {
+                    var folder = folders[folderIndex];
+
+                    if (!WorldDocumentPaths.IsPortableRelativeFilePath(path: folder)) {
+                        errors.Add(item: $"{path}.contentFolders[{folderIndex}] '{folder}' must be a relative folder spelled with '/', with no root, drive, trailing '/', or empty or '.' segment.");
+                    } else if (!seen.Add(item: folder)) {
+                        errors.Add(item: $"{path}.contentFolders[{folderIndex}] '{folder}' is listed twice.");
+                    }
+                }
             }
             ValidateMachineBindings(
                 definition: definition,

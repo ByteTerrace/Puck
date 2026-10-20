@@ -57,15 +57,6 @@ public static class AgbForgeCartridge {
     /// </remarks>
     public const uint WaitControlValue = 0x4017u;
 
-    private static byte ComputeComplementChecksum(byte[] rom) {
-        var sum = 0;
-
-        for (var offset = 0x0A0; (offset <= 0x0BC); offset++) {
-            sum += rom[offset];
-        }
-
-        return ((byte)(((0 - sum) - 0x19) & 0xFF));
-    }
     private static void WriteHeaderText(byte[] rom, string title, string gameCode) {
         var titleBytes = Encoding.ASCII.GetBytes(s: title.ToUpperInvariant());
 
@@ -164,7 +155,7 @@ public static class AgbForgeCartridge {
         );
 
         rom[0x0B2] = 0x96;
-        rom[0x0BD] = ComputeComplementChecksum(rom: rom);
+        rom[0x0BD] = AgbCartridgeHeader.ComputeComplementChecksum(rom: rom);
 
         WriteWord(
             offset: EntryStubOffset,

@@ -9,6 +9,10 @@ namespace Puck.World;
 /// <summary>Named machine execution read-back and generic ordered provider operations.</summary>
 /// <param name="authority">The console session's authority resolver.</param>
 public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    /// <summary>The value <c>machine.content</c>'s <c>mounted</c> field and <c>screen.state</c> give a machine that runs
+    /// with no content.</summary>
+    public const string NoCartridge = "no cartridge";
+
     private CommandResult Operation(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
             return CommandResult.Error(output: "[machine.operation: expected <instance> <generation> <operationId> <json>]");
@@ -170,13 +174,13 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.content",
-            description: "Lists the content a named machine can swap to: machine.content <instance>. Echoes the machine's authored contentFolder, the folder it resolves to, the content mounted now, and one segment per file in that folder the machine's engine can mount (mounted=true on the one it runs). A query (always echoes).",
+            description: "Lists the content a named machine can swap to: machine.content <instance>. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why. A query (always echoes).",
             handler: Content
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.swap",
-            description: "Mounts a file from a named machine's contentFolder: machine.swap <instance> <name>, where <name> is a file name machine.content lists, or the part of one before its first '.' when only one listed file has it. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
+            description: "Mounts a file from a named machine's contentFolders: machine.swap <instance> <name>, where <name> is a file name machine.content lists, its folder and file name (<folder>/<file>) when two folders hold the name, or the part of a mountable file's name before its first '.' when only one has it. A name no file answers, one several answer, or one naming a file the engine cannot mount is refused by name. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
             handler: Swap
         );
     }
@@ -195,6 +199,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         if (!TryListContent(
             entries: out var entries,
             failure: out var failure,
+            folders: out var folders,
             instance: args[0].ToString(),
             machine: out var machine,
             server: server,
@@ -203,34 +208,49 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             return failure;
         }
 
-        var mounted = MountedContent(machine: machine);
+        var mounted = server.Machines.InstanceState(name: machine.Name)?.Content;
         var echo = CommandEcho.Open(verb: "machine.content").Head(head: machine.Name)
             .Field(
             key: "engine",
             value: machine.Engine
         )
             .Field(
-            key: "folder",
-            value: machine.ContentFolder!
-        )
-            .Field(
-            key: "resolved",
-            value: WorldDocumentPaths.Resolve(
-                documentDirectory: server.Definition.DocumentDirectory,
-                path: machine.ContentFolder!
-            )
-        )
-            .Field(
             key: "mounted",
-            value: (mounted ?? "none")
+            value: (mounted ?? NoCartridge)
         )
             .Field(
-            key: "entries",
-            value: entries.Count
+            key: "mountable",
+            value: entries.Count(predicate: static entry => (entry.Refusal is null))
+        )
+            .Field(
+            key: "refused",
+            value: entries.Count(predicate: static entry => (entry.Refusal is not null))
         );
 
+        foreach (var folder in folders) {
+            echo = echo.Segment().Head(head: "folder").Field(
+                key: "path",
+                value: folder.Path
+            )
+                .Field(
+                key: "resolved",
+                value: folder.Resolved
+            )
+                .Field(
+                key: "present",
+                value: folder.Present
+            )
+                .Field(
+                key: "files",
+                value: entries.Count(predicate: entry => string.Equals(a: entry.Folder, b: folder.Path, comparisonType: StringComparison.Ordinal))
+            );
+        }
         foreach (var entry in entries) {
             echo = echo.Segment().Head(head: entry.Name).Field(
+                key: "folder",
+                value: entry.Folder
+            )
+                .Field(
                 key: "mounted",
                 value: string.Equals(
                     a: entry.ContentPath,
@@ -238,25 +258,15 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                     comparisonType: StringComparison.Ordinal
                 )
             );
+            if (entry.Refusal is { } refusal) {
+                echo = echo.Field(
+                    key: "refused",
+                    value: refusal
+                );
+            }
         }
         return new CommandResult(Output: echo.Close());
     }
-    // The content path a live declaration mounts, as every engine's content.insert payload spells it.
-    private static string? MountedContent(WorldMachine machine) =>
-        ((machine.Configuration.ValueKind == JsonValueKind.Object) &&
-        machine.Configuration.TryGetProperty(
-            propertyName: "content",
-            value: out var content
-        ) &&
-        (content.ValueKind == JsonValueKind.Object) &&
-        content.TryGetProperty(
-            propertyName: "path",
-            value: out var path
-        ) &&
-        (path.ValueKind == JsonValueKind.String)
-            ? path.GetString()
-            : null
-        );
     private CommandResult Swap(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
             return CommandResult.Error(output: "[machine.swap: expected <instance> <name>]");
@@ -272,6 +282,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         if (!TryListContent(
             entries: out var entries,
             failure: out var failure,
+            folders: out _,
             instance: args[0].ToString(),
             machine: out var machine,
             server: server,
@@ -304,9 +315,13 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             verb: "machine.swap"
         );
     }
-    // Lists a live machine's folder: the host's current declaration, so a swap lists against the content it runs.
+    // Lists a live machine's folders as they stand now: the host's current declaration, so a swap lists against the
+    // content it runs, and the disk as it is, so a folder that appeared, emptied or vanished since the last listing
+    // shows it.
     private static bool TryListContent(WorldServer server, string instance, string verb, out WorldMachine machine,
-        out IReadOnlyList<WorldMachineContentFolder.Entry> entries, out CommandResult failure) {
+        out IReadOnlyList<WorldMachineContentFolder.Folder> folders, out IReadOnlyList<WorldMachineContentFolder.Entry> entries,
+        out CommandResult failure) {
+        folders = [];
         entries = [];
         failure = CommandResult.None;
 
@@ -324,6 +339,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             catalog: server.Machines.ValidationCatalog,
             documentDirectory: server.Definition.DocumentDirectory,
             entries: out entries,
+            folders: out folders,
             machine: live,
             reason: out var reason
         )) {
