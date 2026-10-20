@@ -96,26 +96,20 @@ public static class WorldPortalVisibility {
         var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
         var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
         var origin = ((Vector3)glass.Origin);
-        var tangent = camera.TanHalfFieldOfView;
-        var horizontal = (camera.AspectRatio * tangent);
         var low = new Vector2(value: float.PositiveInfinity);
         var high = new Vector2(value: float.NegativeInfinity);
 
         for (var corner = 0; (corner < 4); corner++) {
-            var toward = (((origin + (((corner & 1) == 0) ? -right : right)) + (((corner & 2) == 0) ? -up : up)) - camera.Position);
-            var depth = Vector3.Dot(
-                vector1: toward,
-                vector2: camera.Forward
-            );
-
-            if (depth <= camera.Near) {
+            if (
+                !camera.TryProject(
+                    depth: out var depth,
+                    ndc: out var projected,
+                    world: ((origin + (((corner & 1) == 0) ? -right : right)) + (((corner & 2) == 0) ? -up : up))
+                ) ||
+                (depth <= camera.Near)
+            ) {
                 return (Width: 1.0, Height: 1.0);
             }
-
-            var projected = new Vector2(
-                x: (Vector3.Dot(vector1: toward, vector2: camera.Right) / (depth * horizontal)),
-                y: (Vector3.Dot(vector1: toward, vector2: camera.Up) / (depth * tangent))
-            );
 
             low = Vector2.Min(value1: low, value2: projected);
             high = Vector2.Max(value1: high, value2: projected);
