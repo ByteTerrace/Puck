@@ -49,7 +49,6 @@ public sealed class WorldPresentedFrameLawTests {
 
         layout.WriteFrame(
             block: block,
-            extent: default,
             frame: 0UL,
             values: in values
         );

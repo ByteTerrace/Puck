@@ -26,7 +26,7 @@ preference for two subtle shells and supersede the earlier folding-fan proposal.
 
 ## Preserve the character
 
-The [Puck shader source](../../../../src/Puck.World/Assets/pipelines/moth.hlsl) is the sole shader implementation and renders the character with procedural SDF geometry; the [pipeline guide](../../../../src/Puck.World/README.md#shader-pipelines) covers launching, live reload and animation controls. Its header documents the pose selector, flight-cycle animation, pack opening, framing, colorway and quality controls. The same rigid parts serve all poses, with separate ankle articulation and pose-driven backpack thrust. It remains an approximation of these concept sheets.
+The Moth's implementation is the native SDF creation in [moth.puck](../../../../src/Puck.World/Assets/worlds/avatars/moth.puck); [the flight studio guide](../../../../src/Puck.World/Assets/worlds/avatars/moth.md) covers launching, the inspection layouts and live editing. These concept sheets are the visual standard it is built toward.
 
 Keep warm brown skin, expressive brown eyes, black swept hair and one thick braid rooted beside her right cheek through the front helmet opening. The braid can trail during movement; its attachment does not change or move through the helmet back. The hood has an ivory face rim and lilac shell. Its opening follows the forehead and cheeks with a continuous shaped curve. Avoid a box or pentagonal house surrounding the face.
 

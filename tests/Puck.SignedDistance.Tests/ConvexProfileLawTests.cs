@@ -408,8 +408,7 @@ public sealed class ConvexProfileLawTests {
     }
     [Fact]
     public void TheStudyShoulderPentagonEvaluatesWithTheRightSignAtItsCentreAndOutside() {
-        // The world-unit XY profile in src/Puck.World/Assets/pipelines/moth.hlsl's shoulderProfile, traversed clockwise
-        // for the prism profile contract. The shader's edgePlane accepts its counterclockwise traversal.
+        // A convex pentagon in world-unit XY, traversed clockwise for the prism profile contract.
         Vector2[] pentagon = [
             new(
                 x: 0.06f,

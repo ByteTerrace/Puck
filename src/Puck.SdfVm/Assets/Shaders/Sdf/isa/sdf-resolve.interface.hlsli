@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/281614deb027cdfb1fda33c656438025d54a6c913541ad6c351da53729e1a6a4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/b0cf80053677087f9fbb0baacdc048b9e96450f6141df2d9def2b568a3d481d6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -91,16 +91,6 @@ struct SdfResolveFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfResolveFrame> frameGroup : register(b0, space0);
 

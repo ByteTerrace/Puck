@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/cfae138cae6faed72035d881e2f1722b087c01a2acf52c96cdbe71e9e4085164). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/6ff36b0a268312356368ec21d1b2ee3440d462d813deec160f8db916481d74ec). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -11,16 +11,6 @@ struct SdfBricksFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfBricksFrame> frameGroup : register(b0, space0);
 

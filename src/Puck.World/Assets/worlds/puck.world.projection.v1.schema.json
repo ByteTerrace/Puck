@@ -25345,14 +25345,6 @@
                 ],
                 "default": null
               },
-              "camera": {
-                "description": "The authored camera the instance renders from, feeding the frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a graph keeps its own pointer orbit.",
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "default": null
-              },
               "refresh": {
                 "description": "How often it refreshes, or null for every frame something visible reads it.",
                 "type": [

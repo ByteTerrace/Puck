@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Collections.ObjectModel;
-using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Maths;
@@ -37,17 +36,11 @@ public sealed record ShaderPipelineArraySlot(
 /// generated declarations read it from.
 /// </summary>
 public sealed class ShaderPipelineParameterLayout {
-    private readonly uint m_cameraFov;
-    private readonly uint m_cameraPosition;
-    private readonly uint m_cameraTarget;
-    private readonly uint m_cameraUp;
     private readonly uint m_extent;
     private readonly uint m_frame;
     private readonly Dictionary<string, uint> m_passOffsets;
-    private readonly uint m_placedExtent;
     private readonly uint m_pointer;
     private readonly uint m_pointerDown;
-    private readonly uint m_pointerPresses;
     private readonly uint m_tick;
     private readonly uint m_tickRate;
     private readonly uint m_time;
@@ -95,12 +88,6 @@ public sealed class ShaderPipelineParameterLayout {
         m_frame = frameOffsets[ShaderFrameInterface.Frame];
         m_tickRate = frameOffsets[ShaderFrameInterface.TickRate];
         m_pointerDown = frameOffsets[ShaderFrameInterface.PointerDown];
-        m_pointerPresses = frameOffsets[ShaderFrameInterface.PointerPresses];
-        m_cameraPosition = frameOffsets[ShaderFrameInterface.CameraPosition];
-        m_cameraFov = frameOffsets[ShaderFrameInterface.CameraFov];
-        m_cameraTarget = frameOffsets[ShaderFrameInterface.CameraTarget];
-        m_cameraUp = frameOffsets[ShaderFrameInterface.CameraUp];
-        m_placedExtent = frameOffsets[ShaderFrameInterface.PlacedExtent];
     }
 
     /// <summary>Gets the frame group block's size in bytes, a multiple of 16: the block <see cref="WriteFrame"/>
@@ -203,20 +190,6 @@ public sealed class ShaderPipelineParameterLayout {
             },
             StringComparer.Ordinal
         );
-    private static void WriteVector3(Span<byte> block, uint offset, Vector3 value) {
-        BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[((int)offset)..],
-            value: value.X
-        );
-        BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[((int)(offset + 4))..],
-            value: value.Y
-        );
-        BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[((int)(offset + 8))..],
-            value: value.Z
-        );
-    }
     private static void WriteUInt32(Span<byte> block, uint offset, uint value) =>
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block[((int)offset)..],
@@ -395,14 +368,12 @@ public sealed class ShaderPipelineParameterLayout {
     /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
     /// <param name="values">The host's frame values, the presented engine tick among them.</param>
     /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
-    /// <param name="extent">The node's own extent, in pixels, written as the placed extent when
-    /// <paramref name="values"/> names none (<see cref="ShaderFrameValues.PlacedExtent"/>).</param>
     /// <param name="tickRate">The rate, in ticks a second, the tick is written at: the plan's
     /// <c>ShaderPipelinePlan.TickRate</c>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
     /// <see cref="FrameBlockSizeBytes"/>, or <paramref name="tickRate"/> does not divide the engine rate exactly.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tickRate"/> is zero.</exception>
-    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, (uint Width, uint Height) extent, uint tickRate = ShaderFrameInterface.EngineTickRate) {
+    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, uint tickRate = ShaderFrameInterface.EngineTickRate) {
         Require(
             block: block,
             sizeBytes: FrameBlockSizeBytes
@@ -419,16 +390,6 @@ public sealed class ShaderPipelineParameterLayout {
         WriteUInt32(block: block, offset: m_frame, value: unchecked((uint)frame));
         WriteUInt32(block: block, offset: m_tickRate, value: tickRate);
         WriteUInt32(block: block, offset: m_pointerDown, value: (values.PointerDown ? 1u : 0u));
-        WriteUInt32(block: block, offset: m_pointerPresses, value: values.PointerPresses);
-        WriteVector3(block: block, offset: m_cameraPosition, value: values.CameraPosition);
-        WriteSingle(block: block, offset: m_cameraFov, value: values.CameraFov);
-        WriteVector3(block: block, offset: m_cameraTarget, value: values.CameraTarget);
-        WriteVector3(block: block, offset: m_cameraUp, value: values.CameraUp);
-
-        var placed = (values.PlacedExtent ?? new Vector2(x: extent.Width, y: extent.Height));
-
-        WriteSingle(block: block, offset: m_placedExtent, value: placed.X);
-        WriteSingle(block: block, offset: (m_placedExtent + 4), value: placed.Y);
     }
 
     private static void Require(Span<byte> block, uint sizeBytes) {

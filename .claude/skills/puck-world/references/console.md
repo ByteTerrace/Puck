@@ -694,7 +694,7 @@ than a second command vocabulary here.
 
 `pipeline.*` (`WorldPipelineCommandModule`) is core-registered in rendered and
 headless hosts. The verbs keep their `pipeline.*` names and address
-`views.graphs` rows. `pipeline.load <name> <source> [camera]` upserts a
+`views.graphs` rows. `pipeline.load <name> <source>` upserts a
 `views.graphs` row through normal authority and validation. A rendered host
 (`WorldViewGraphHost`) reconciles the accepted `views` section into the render
 graph runtime's instance set each frame, compiles each source row in the

@@ -148,7 +148,7 @@ public class ComprehensiveSyntheticTests {
                         {
                             camera: null
                             height: 1
-                            pipeline: "moth-pipeline"
+                            pipeline: "ink"
                             width: 1
                             x: 0
                             y: 0
@@ -166,9 +166,9 @@ public class ComprehensiveSyntheticTests {
 
                 seatRigPreset("pilot", turnAngle, 2.5m)
 
-                pipeline "moth-pipeline" {
+                pipeline "ink" {
                     camera: null
-                    source: "../pipelines/moth.hlsl"
+                    source: "../pipelines/ink.graph.json"
                     timeScale: 1
                 }
             }

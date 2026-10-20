@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-palette' (sha256/bf57f9be73e5f8a92971c177af42b2cc39c139f6beea878afb7ed541fb0f4286). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-palette' (sha256/30aec628742251575ed45df20599d2e7877963633c7f38671af9f7da5f609b37). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 #define PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 
@@ -11,16 +11,6 @@ struct SourcePaletteFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourcePaletteFrame> frameGroup : register(b0, space0);
 
