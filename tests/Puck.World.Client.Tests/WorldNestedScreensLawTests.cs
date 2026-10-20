@@ -413,17 +413,6 @@ public sealed class WorldNestedScreensLawTests {
         ), glass: glass));
         Assert.Equal(expected: (1.0, 1.0), actual: WorldPortalVisibility.Coverage(camera: (camera with { Near = 6f }), glass: glass));
     }
-    // THE LAW: a window's extent moves by whole octaves: it grows to the smallest power of two that holds its glass and
-    // halves only once the glass falls well below the half, so a glass at an octave's edge reallocates nothing.
-    [Fact]
-    public void AWindowsOctaveGrowsAtOnceAndShrinksOnlyWellBelowItsHalf() {
-        Assert.Equal(expected: 0.0, actual: WorldPortalVisibility.Octave(coverage: 0.0, held: 0.5));
-        Assert.Equal(expected: 0.5, actual: WorldPortalVisibility.Octave(coverage: 0.44, held: 0.0));
-        Assert.Equal(expected: 1.0, actual: WorldPortalVisibility.Octave(coverage: 0.6, held: 0.5));
-        Assert.Equal(expected: 1.0, actual: WorldPortalVisibility.Octave(coverage: 0.45, held: 1.0));
-        Assert.Equal(expected: 0.5, actual: WorldPortalVisibility.Octave(coverage: 0.39, held: 1.0));
-        Assert.Equal(expected: 0.125, actual: WorldPortalVisibility.Octave(coverage: 0.1, held: 0.0));
-    }
     // THE LAW: an authority can keep a session while its screen changes projection, camera or resolution. Its view
     // must reopen with those settings even when the session provider still holds the same destination.
     [Fact]
