@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using Puck.Transpiler.Diagnostics;
 using Puck.World;
 using Puck.World.Authoring;
 using Puck.World.Authoring.Sculpting;
@@ -15,7 +16,8 @@ namespace Puck.Cli.Creation;
 /// verbs: <c>sculpts</c> lists the registry, <c>sculpt &lt;name&gt; --world &lt;path&gt;</c> applies a sculpt's
 /// <see cref="SculptPatch"/> to a world file on disk (refusing and leaving it untouched on a validation failure),
 /// and <c>stats --world &lt;path&gt; [--prototype &lt;id&gt;]</c> reports a creation's shape budget and feature
-/// usage, field-scope clamps and segments, then constructs the world's deterministic contact field, and <c>shape --world
+/// usage, a PUCK122 warning line for each blend joining shapes that move independently
+/// (<see cref="CreationMotion.MovingBlends"/>), field-scope clamps and segments, then constructs the world's deterministic contact field, and <c>shape --world
 /// &lt;path&gt; --prototype &lt;id&gt; [--shape &lt;name&gt;...]</c> reads each shape's law (<see cref="CreationShapeLaws"/>),
 /// the twin of the in-engine <c>creation.shape</c>. Exit codes: 0 succeeded, 1 the patched document was refused (sculpt),
 /// or loading, render emission or contact compilation failed (stats), or loading failed (shape), 2 a usage error (unknown
@@ -87,7 +89,7 @@ public static partial class CreationCommand {
     private static Command ShapeCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string>(name: "--prototype") { Description = "The prototype id whose creation to read.", Required = true };
-        var shapeOption = new Option<string[]>(name: "--shape") { Description = "Limit to the named shapes (default: every shape).", AllowMultipleArgumentsPerToken = true };
+        var shapeOption = new Option<string[]>(name: "--shape") { AllowMultipleArgumentsPerToken = true, Description = "Limit to the named shapes (default: every shape)." };
         var command = new Command(
             description: "Reads back each shape's law, as the in-engine creation.shape does: what the renderer lowers it to, whether that field is exact, a bound (its gain and step scale) or uncertified, whether the fixed-point evaluator interprets it, and what deterministic contact makes of it on a solid placement.",
             name: "shape"
@@ -322,6 +324,10 @@ public static partial class CreationCommand {
                     values: facets
                 )}");
             }
+        }
+
+        foreach (var blend in CreationMotion.MovingBlends(document: document)) {
+            Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.MovingBlend}: '{id}' {CreationMotion.Describe(blend: blend, document: document)}");
         }
 
         if (document.Palette is { Count: > 0 } palette) {

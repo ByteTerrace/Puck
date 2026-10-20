@@ -32,6 +32,13 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         kinds: SdfMovedTransforms.Kinds,
         name: SdfMovedTransforms.SourceName
     );
+    /// <summary>The <c>sdf.mesh-settle</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshSettle"/>):
+    /// registered with the probe before the screen binder exists, and pointed at its mesh library's counts when the
+    /// binder is built, so they read every residency sharing that library.</summary>
+    public ForwardingWorkCounterSource MeshSettle { get; } = new(
+        kinds: SdfMeshSettle.Kinds,
+        name: SdfMeshSettle.SourceName
+    );
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }
@@ -72,7 +79,6 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
 
     /// <summary>The presentation's render settings, or <see langword="null"/> until the render factory has run.</summary>
     public WorldRenderSettings? Settings { get; set; }
-
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
     /// readback is the frame the display shows.</summary>

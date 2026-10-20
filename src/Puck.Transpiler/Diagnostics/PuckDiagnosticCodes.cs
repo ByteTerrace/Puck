@@ -318,6 +318,11 @@ public static class PuckDiagnosticCodes {
     /// inside its <c>graph</c> block: the statement stands outside one, binds one member twice, or the block writes
     /// the raw <c>parameters</c> member the statement lowers to.</summary>
     public const string GraphParameter = "PUCK120";
+    /// <summary>PUCK122: a warning that an animated creation's pooled blend group joins, by a blend other than
+    /// <c>Union</c>, shapes that move independently. The group bakes one mesh whose vertices each ride one shape, so
+    /// the seam the blend made stretches as the shapes move apart, until their relative pose settles and the group
+    /// bakes again there. Not an error: a world may move a blend on purpose.</summary>
+    public const string MovingBlend = "PUCK122";
     /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
     public const string VectorMixStall = "PUCK_LINT_010";
 }
