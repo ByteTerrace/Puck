@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.Abstractions.Sources;
 using Windows.Media.Capture.Frames;
 
 namespace Puck.Platform.Windows;
@@ -53,13 +54,13 @@ public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRa
     );
     public Win32YuvConversion Resolve() {
         var matrix = (Matrix switch {
-            0u or 1u => Win32YuvMatrix.Bt709,
-            2u => Win32YuvMatrix.Bt601,
+            0u or 1u => ImageYuvMatrix.Bt709,
+            2u => ImageYuvMatrix.Bt601,
             _ => throw new NotSupportedException(message: $"the camera reports unsupported YUV transfer matrix {Matrix}"),
         });
         var range = (NominalRange switch {
-            0u or 2u => Win32YuvRange.Limited,
-            1u => Win32YuvRange.Full,
+            0u or 2u => ImageYuvRange.Limited,
+            1u => ImageYuvRange.Full,
             _ => throw new NotSupportedException(message: $"the camera reports unsupported YUV nominal range {NominalRange}"),
         });
 
@@ -75,17 +76,9 @@ public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRa
         );
     }
 }
-public enum Win32YuvMatrix {
-    Bt709,
-    Bt601,
-}
-public enum Win32YuvRange {
-    Limited,
-    Full,
-}
 public readonly record struct Win32YuvConversion(
-    Win32YuvMatrix Matrix,
-    Win32YuvRange Range,
+    ImageYuvMatrix Matrix,
+    ImageYuvRange Range,
     bool ChromaHorizontallyCosited,
     bool ChromaVerticallyCosited
 );

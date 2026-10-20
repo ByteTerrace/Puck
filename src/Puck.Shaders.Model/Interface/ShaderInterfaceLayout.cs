@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -229,8 +230,6 @@ public sealed class ShaderInterfaceLayout {
             ? null
             : $"the module's pass block is '{block.Name}'; interface '{Interface.Name}' is stamped '{stamp}', whose pass block is '{group.BlockVariableName}'.");
     }
-    private static uint AlignUp(uint value, uint alignment) =>
-        ((((value + alignment) - 1) / alignment) * alignment);
     // The first reflected binding one view does not place, with the view's binding at its place, if any.
     private static (int Index, ShaderInterfaceBinding Binding, ShaderInterfaceBinding? Expected)? FirstMismatch(IReadOnlyList<ShaderInterfaceBinding> expected, IReadOnlyList<ShaderInterfaceBinding> reflected) {
         for (var index = 0; (index < reflected.Count); index++) {
@@ -290,10 +289,7 @@ public sealed class ShaderInterfaceLayout {
                     2 => 8u,
                     _ => RowBytes,
                 });
-            var offset = AlignUp(
-                alignment: alignment,
-                value: cursor
-            );
+            var offset = cursor.AlignUp(alignment: alignment);
 
             for (; (cursor < offset); cursor += ShaderValueTypes.ComponentBytes) {
                 blockMembers.Add(item: new ShaderInterfaceBlockMember(
@@ -364,10 +360,7 @@ public sealed class ShaderInterfaceLayout {
 
         return new ShaderInterfaceGroupLayout(
             BlockMembers: blockMembers.AsReadOnly(),
-            BlockSizeBytes: AlignUp(
-                alignment: RowBytes,
-                value: cursor
-            ),
+            BlockSizeBytes: cursor.AlignUp(alignment: RowBytes),
             BlockTypeName: blockTypeName,
             BlockVariableName: blockVariableName,
             Bindings: bindings.AsReadOnly(),

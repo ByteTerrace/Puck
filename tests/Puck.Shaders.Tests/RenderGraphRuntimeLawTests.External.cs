@@ -11,8 +11,8 @@ namespace Puck.Shaders.Tests;
 // producer does not publish, and the layout a package recorder is told its images are in.
 public sealed partial class RenderGraphRuntimeLawTests {
     private const string World = "test.world";
-    // The SDF engine's pass count, which prices the world producer.
-    private const int WorldPasses = 11;
+    // The SDF engine's pass count, read from the engine catalog, which prices the world producer.
+    private static readonly int WorldPasses = RenderGraphPackageCatalog.Engine.Packages.Single(predicate: static package => (package.Id == RenderGraphPackageCatalog.SdfWorld)).Fragment!.Passes.Count;
 
     private static RenderGraphInstance External(string name, RenderGraphRefresh? refresh = null) => new(
         ExternalPackage: World,

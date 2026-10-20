@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.World.Authoring;
 
@@ -14,6 +15,10 @@ public static class HexColor {
     /// hosting world resolves it (<c>Puck.World.WorldColor</c>), so a creation on its own can only admit the syntax.
     /// KEEP IN SYNC with the HUD state-binding prefix in <c>Puck.World.HudBindingVocabulary</c>.</summary>
     public const string StateBindingPrefix = "state.";
+
+    // The 24-bit 0xRRGGBB word as the R8G8B8A8 word the unpacker reads, red in the low byte, alpha zero.
+    private static uint RedLow(int rrggbb) =>
+        ((uint)(((rrggbb >> 16) & 0xff) | (rrggbb & 0xff00) | ((rrggbb & 0xff) << 16)));
 
     /// <summary>Formats an RGB triple (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string.</summary>
     /// <param name="rgb">The RGB color.</param>
@@ -108,10 +113,12 @@ public static class HexColor {
             result: out var packed
         )
         ) {
+            var unpacked = VectorFunctions.UnpackRgba8(packed: RedLow(rrggbb: packed));
+
             rgb = new Vector3(
-                x: (((packed >> 16) & 0xff) / 255f),
-                y: (((packed >> 8) & 0xff) / 255f),
-                z: ((packed & 0xff) / 255f)
+                x: unpacked.X,
+                y: unpacked.Y,
+                z: unpacked.Z
             );
 
             return true;
@@ -163,12 +170,7 @@ public static class HexColor {
             result: out var alpha
         )
         ) {
-            rgba = new Vector4(
-                w: (alpha / 255f),
-                x: (((packed >> 16) & 0xff) / 255f),
-                y: (((packed >> 8) & 0xff) / 255f),
-                z: ((packed & 0xff) / 255f)
-            );
+            rgba = VectorFunctions.UnpackRgba8(packed: (RedLow(rrggbb: packed) | (((uint)alpha) << 24)));
 
             return true;
         }
