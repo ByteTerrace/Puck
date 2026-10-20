@@ -14,7 +14,7 @@ it running, and each names the folder its swappable content comes from in
 | -16 | Humble Gaming Brick, AGB mode | `brick-agb` | `gaming-brick`, `agb` | 2 | `hgb-mirror.cgb` | `../cartridges/cgb` |
 | -19 | Advanced Gaming Brick | `advanced-brick` | `advanced-gaming-brick` | 3 | `pip.agb` | `../cartridges/agb` |
 | -22 | Tune jukebox | `tune-jukebox` | `tune-instrument` | 4 | `arrival-tune.audio.json` | `tunes` |
-| -25 | Humble Gaming Deck | none | none | 5 | the test pattern | none |
+| -25 | Humble Gaming Deck | `gaming-deck` | `humble-gaming-deck` | 5 | `colour-bars.nes` | `../cartridges/deck` |
 
 The `gaming-brick` engine's three hardware families are the three brick devices;
 its other revisions (`mgb`, `sgb`, `cgb0` and the rest) are steppings of those
@@ -25,18 +25,22 @@ white screen instead), and a swap there changes what is mounted but not the
 picture. The AGB
 mode device is the AGB console running brick cartridges; the Advanced Gaming
 Brick is the same console running its own. The jukebox's content is a
-`puck.tune.v1` document, and its screen is the jukebox's transport display. No
-World engine runs the Humble Gaming Deck yet (the World cabinets package of
-[the Deck plan](../../../../docs/plans/humble-gaming-deck.md)), so its set shows
-the World's `testPattern` image producer and nothing can be swapped into it.
+`puck.tune.v1` document, and its screen is the jukebox's transport display. The
+Humble Gaming Deck is the NTSC NES console, a set above it showing the
+cartridge in its slot; its screen route names the controller port an engaged
+seat plays (`controls`, port one), since the console has two.
 
 The shipped cartridges sit one folder per forge target, `cartridges/cgb/` and
 `cartridges/agb/`, each source beside its compiled document. A device lists the
 files in its folder its engine can mount: the `.cartridge.json` documents for a
-brick, every file for the jukebox, whose engine reads its content raw.
-`test-card.agb` is the Advanced Gaming Brick's second cartridge: eight colour
+brick, every file for the jukebox and the deck, whose engines read their content
+raw. `test-card.agb` is the Advanced Gaming Brick's second cartridge: eight colour
 bars drifting one pixel a frame, so a picture that stops drifting is a machine
-that stopped.
+that stopped. The deck's two cartridges in `cartridges/deck/` are built by
+`puck cartridges deck` rather than compiled from a source:
+`colour-bars.nes` shows eight bars that A, B and select tint and start turns
+grey, and `moving-sprite.nes` bounces a ball the d-pad steers
+([the Deck's hosting page](../../../../docs/emulation/hgd/hosting.md#test-cartridges)).
 
 ## Devices
 
@@ -60,7 +64,7 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Frame one device | `view.override camera look <x> 1.1 -4.4 <x> 0.75 -6` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
-`advanced-gaming-brick` or `tune-instrument`. `machine.state <instance>`
+`advanced-gaming-brick`, `tune-instrument` or `humble-gaming-deck`. `machine.state <instance>`
 prints the generation an operation names; a swap, reset or eject replaces the
 machine under a new generation.
 

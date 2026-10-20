@@ -26,7 +26,7 @@ internal sealed class ShippedCartridgesStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: $"moving-sprite: {sprite}");
         }
 
-        return PostStageOutcome.Pass(detail: "colour-bars shows its eight bars and A's blue emphasis; moving-sprite's ball moves one pixel a frame and turns left on the pad");
+        return PostStageOutcome.Pass(detail: "colour-bars shows its eight bars in their hues and A's blue emphasis; moving-sprite's ball moves one pixel a frame and turns left on the pad");
     }
 
     private static string? ColourBars() {
@@ -40,6 +40,9 @@ internal sealed class ShippedCartridgesStage : IPostStage<PostContext> {
 
             if (code != bars[bar]) {
                 return $"bar {bar} shows code ${code:X3}, expected ${bars[bar]:X3}";
+            }
+            if (BarHue(colour: HgdPalette.Colours[code], bar: bar) is { } hue) {
+                return $"bar {bar}'s code ${code:X3} presents as #{HgdPalette.Colours[code]:X6}, {hue}";
             }
         }
 
@@ -55,6 +58,24 @@ internal sealed class ShippedCartridgesStage : IPostStage<PostContext> {
             ? null
             : $"with A held the first bar shows code ${tinted:X3}, expected $130 (blue emphasis on white)"
         );
+    }
+    // Whether a presented bar colour has its bar's hue: which channels lead and which trail. The palette decodes the
+    // composite signal against the colour burst, so a burst reference off by a phase turns every hue.
+    private static string? BarHue(uint colour, int bar) {
+        var red = ((int)((colour >> 16) & 0xFF));
+        var green = ((int)((colour >> 8) & 0xFF));
+        var blue = ((int)(colour & 0xFF));
+
+        return bar switch {
+            0 => (((Math.Min(val1: Math.Min(val1: red, val2: green), val2: blue) > 0xC0)) ? null : "expected white"),
+            1 => (((red > blue) && (green > blue)) ? null : "expected yellow (blue trailing)"),
+            2 => (((green > red) && (blue > red)) ? null : "expected cyan (red trailing)"),
+            3 => (((green > red) && (green > blue)) ? null : "expected green (green leading)"),
+            4 => (((red > green) && (blue > green)) ? null : "expected magenta (green trailing)"),
+            5 => (((red > green) && (red > blue)) ? null : "expected red (red leading)"),
+            6 => (((blue > red) && (blue > green)) ? null : "expected blue (blue leading)"),
+            _ => (((Math.Max(val1: Math.Max(val1: red, val2: green), val2: blue) < 0x20)) ? null : "expected black"),
+        };
     }
     private static string? MovingSprite() {
         using var instance = Boot(image: DeckTestCartridges.MovingSprite());

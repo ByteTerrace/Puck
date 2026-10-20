@@ -116,7 +116,7 @@ public static class DeckTestCartridges {
 
         return program.Build(chr: Patterns());
     }
-    /// <summary>Builds a 16 by 16 orange ball that bounces round a navy sky above a green checkered ground, one pixel a
+    /// <summary>Builds a 16 by 16 orange ball that bounces round a navy sky above a green striped ground, one pixel a
     /// frame on each axis. A held direction on the control pad steers it: left or right, up or down sets its heading on
     /// that axis until it next meets an edge.</summary>
     /// <returns>The iNES image.</returns>
@@ -128,7 +128,7 @@ public static class DeckTestCartridges {
             program: program
         );
         _ = program
-            // Nametable 0: rows 0 to 25 are sky (tile 0) and rows 26 to 29 the checkered ground (tile 3); attributes 0.
+            // Nametable 0: rows 0 to 25 are sky (tile 0) and rows 26 to 29 the striped ground (tile 3); attributes 0.
             .Op(opcode: LdaImmediate, operand: ((byte)0x20)).Op(address: 0x2006, opcode: StaAbsolute)
             .Op(opcode: LdaImmediate, operand: ((byte)0x00)).Op(address: 0x2006, opcode: StaAbsolute)
             .Op(opcode: LdyImmediate, operand: ((byte)0x00))
@@ -246,7 +246,7 @@ public static class DeckTestCartridges {
             .Op(opcode: LdaImmediate, operand: ((byte)0x00)).Op(address: 0x2003, opcode: StaAbsolute)
             .Op(opcode: LdaImmediate, operand: ((byte)0x02)).Op(address: 0x4014, opcode: StaAbsolute)
             .Op(opcode: IncZeroPage, operand: Frame).Bytes(Pla, Rti);
-    // Tile 0 is empty, tile 1 solid colour 1, tile 2 solid colour 2, tile 3 a checker of all four colours, and tile 4 the
+    // Tile 0 is empty, tile 1 solid colour 1, tile 2 solid colour 2, tile 3 vertical stripes of all four colours, and tile 4 the
     // top-left quarter of a 16-pixel disc in colour 1.
     private static byte[] Patterns() {
         var chr = new byte[8192];

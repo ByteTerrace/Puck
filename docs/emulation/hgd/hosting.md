@@ -49,7 +49,7 @@ them (`--check` compares without writing):
 | Cartridge | Picture | Input |
 |---|---|---|
 | `colour-bars.nes` | Eight vertical bars: white, yellow, cyan, green, magenta, red, blue, black. | A, B and Select emphasise blue, green and red; Start turns the picture greyscale. |
-| `moving-sprite.nes` | A 16 by 16 orange ball bouncing round a navy sky above a green checkered ground. | The control pad steers the ball. |
+| `moving-sprite.nes` | A 16 by 16 orange ball bouncing round a navy sky above a green striped ground. | The control pad steers the ball. |
 
 The battery's `shipped-cartridges` stage runs both and reads their pictures from
 the PPU's pixel codes.
@@ -95,6 +95,9 @@ The core converts the PPU's nine-bit pixel codes to `0x00RRGGBB` with
 video signal: each code is a square wave between two of the chip's voltage
 levels at one of twelve hue phases, the emphasis bits attenuate parts of the
 wave, and averaging a colour cycle gives the luma and chroma that convert to RGB.
+Chroma is measured against the colour burst, which is colour 8's phase and decodes
+as a yellow, so `$28` is yellow and `$16` red; the battery's `shipped-cartridges`
+stage checks the colour bars' hues.
 [NESdev's NTSC video page](https://www.nesdev.org/wiki/NTSC_video) gives the
 levels. This is floating-point presentation work, done only when a new frame is
 read, and the machine's state never sees it.

@@ -41,7 +41,7 @@ public sealed class DeckEngineLawTests {
         var catalog = TestMachines.Catalog();
 
         Assert.True(condition: catalog.IsRegistered(engineId: HumbleGamingDeckEngine.EngineId));
-        Assert.False(condition: catalog.ContentProviders.ContainsKey(key: HumbleGamingDeckEngine.EngineId));
+        Assert.False(condition: catalog.HasContentProvider(engineId: HumbleGamingDeckEngine.EngineId));
 
         var document = Fixtures.BuildDocument();
         var deck = new WorldMachine(
