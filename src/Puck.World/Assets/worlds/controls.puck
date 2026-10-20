@@ -306,7 +306,8 @@ bindingOverlays [
           }
         }
       }
-    }  }
+    }
+  }
 
   // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
   // the build toggle again under an id, so its plate carries an icon.

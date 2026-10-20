@@ -143,6 +143,13 @@ vacated range, reuses a body index or jumps reseats its slots
 an edited placement keeps its draw's motion. The mesh pass uses the same
 projection convention.
 
+The previous camera keeps the view's render-grid extent. A shadow cascade can
+record before the camera's mesh pass, but its depth-map dimensions never become
+the camera's pixel coordinates. Every pass prepares temporal history from
+`RenderGraphPackageRecording.RenderWidth` and `RenderHeight`; its own `Width`
+and `Height` describe only that pass's target. This also holds when the camera
+renders below its output resolution.
+
 A scheduled capture's `converge: N` holds presentation at the armed tick's
 first composition and captures the Nth rendered sample. Presentation time,
 animation poses, camera followers and frame values remain fixed, and the

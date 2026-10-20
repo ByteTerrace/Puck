@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Maths;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
@@ -77,7 +78,7 @@ public sealed class DirectXPipelineLayout : IDisposable {
         }
 
         if (hasRootConstants) {
-            layout.RootConstantsCount = ((pushConstantBinding!.Size + 3) / 4);
+            layout.RootConstantsCount = pushConstantBinding!.Size.CeilingDivide(divisor: 4U);
         }
 
         return layout;

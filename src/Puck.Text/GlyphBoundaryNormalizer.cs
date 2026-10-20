@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Text;
 
@@ -73,8 +74,7 @@ public static class GlyphBoundaryNormalizer {
     }
     private static Point Convert(Vector2 point) {
         if (
-            !float.IsFinite(f: point.X) ||
-            !float.IsFinite(f: point.Y) ||
+            !VectorFunctions.IsFinite(vector: point) ||
             (Math.Abs(value: point.X) > 32768) ||
             (Math.Abs(value: point.Y) > 32768)
         ) {

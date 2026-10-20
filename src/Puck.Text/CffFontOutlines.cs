@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Numerics;
+using Puck.Maths;
 using System.Text;
 
 namespace Puck.Text;
@@ -1612,7 +1613,7 @@ internal sealed class CffFontOutlines {
                     case 19:
                     case 20:
                         ReadStems();
-                        var maskByteCount = ((m_stemCount + 7) / 8);
+                        var maskByteCount = m_stemCount.CeilingDivide(divisor: 8);
                         OpenTypeFontFace.EnsureRange(
                             bytes: bytes,
                             context: "CFF hint mask",

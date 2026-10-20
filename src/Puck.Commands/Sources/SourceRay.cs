@@ -10,7 +10,7 @@ public readonly record struct SourceRay(FixedVector3 Origin, FixedVector3 Direct
     /// <summary>Returns the ray a camera casts through a point of its image: the direction
     /// <c>Forward + (2x − 1)·aspect·tan(fov/2)·Right + (1 − 2y)·tan(fov/2)·Up</c>, plus the trailing shear
     /// <c>offset.x·Right + offset.y·Up</c> of the camera's <see cref="CameraSnapshot.FrustumOffset"/>, the pinhole
-    /// projection the SDF view pass's <c>cameraRayDirection</c> in <c>march/sdf-cone.hlsli</c> casts, left unnormalized.
+    /// projection the SDF view pass's <c>cameraRayDirection</c> in <c>frame/sdf-viewport.hlsli</c> casts, left unnormalized.
     /// The ray starts on the camera's near plane: its origin is the camera's position advanced by
     /// <see cref="CameraSnapshot.Near"/> times that direction, whose forward component is one, so nothing nearer than
     /// the plane lies on the ray (a border window's ray starts on the glass). The camera's floats enter fixed point

@@ -67,8 +67,11 @@ thinner than a texel can miss its own shadow.
 
 ## Curvature and stylization
 
-Curvature shading reads the record's curvature, which the surface pass writes
-as zero: the mesh carries no curvature, so authored cavity, rim and ink
-shading draw nothing. Keep diagnostic controls explicit: normal source, AO
-contribution and shadow visibility should be inspectable without changing
-simulation state.
+Curvature shading and edge weathering read the record's mean curvature,
+estimated from the baked triangle's interpolated normal gradient in world
+units. The sign follows the authored outward normal, before camera-facing
+adjustment. Flat normals, meshes without normals and degenerate triangles
+contribute zero. Split normals and bevels unresolved by the bake limit the
+estimate; there is no field query in the surface pass. Keep diagnostic
+controls explicit: normal source, AO contribution and shadow visibility should
+be inspectable without changing simulation state.

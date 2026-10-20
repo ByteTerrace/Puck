@@ -36,6 +36,18 @@ public static class GamepadNormalization {
 
         return ((stick / magnitude) * scaled);
     }
+    /// <summary>Clamps a rumble or trigger-effect intensity to the unit range.</summary>
+    /// <param name="intensity">The requested intensity.</param>
+    /// <returns><paramref name="intensity"/> clamped to zero through one; zero when it is not finite.</returns>
+    public static float NormalizeIntensity(float intensity) =>
+        (float.IsFinite(f: intensity)
+            ? Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: intensity
+            )
+            : 0f
+        );
     /// <summary>Maps a linear trigger value below a threshold to zero and rescales the remaining range.</summary>
     /// <param name="raw">The raw trigger value.</param>
     /// <param name="threshold">The inclusive resting threshold.</param>

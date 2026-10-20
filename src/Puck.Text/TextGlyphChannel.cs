@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Text;
 
@@ -39,10 +40,8 @@ public readonly record struct TextGlyphChannel(
             salt: 91.733f,
             value: (((glyphIndex * 0.173f) + (glyphPhase * 0.019f)) + effectPhase)
         );
-    private static float Fract(float value) =>
-        (value - MathF.Floor(x: value));
     private static float HashWave(float value, float salt) =>
-        Fract(value: (MathF.Sin(x: ((value + salt) * 43758.5453f)) * 143.759f));
+        VectorFunctions.Fract(x: (MathF.Sin(x: ((value + salt) * 43758.5453f)) * 143.759f));
     private static TextGlyphChannel ResolveDissolve(TextEffect effect, float seconds, float glyphPhase, int glyphIndex, IReadOnlyList<TextEnrichmentVariable>? variables) {
         var duration = MathF.Max(
             x: 0.001f,
@@ -60,8 +59,8 @@ public readonly record struct TextGlyphChannel(
             glyphPhase: glyphPhase
         );
         var stagger = ((style == TextEffectDissolveStyle.Sickly)
-            ? Fract(value: (((seed * 0.53f) + (glyphIndex * 0.071f)) + (glyphPhase * 0.0037f)))
-            : Fract(value: (((seed * 0.41f) + (glyphIndex * 0.113f)) + (glyphPhase * 0.0029f)))
+            ? VectorFunctions.Fract(x: (((seed * 0.53f) + (glyphIndex * 0.071f)) + (glyphPhase * 0.0037f)))
+            : VectorFunctions.Fract(x: (((seed * 0.41f) + (glyphIndex * 0.113f)) + (glyphPhase * 0.0029f)))
         );
         var localProgress = ((style == TextEffectDissolveStyle.Sickly)
             ? Math.Clamp(
