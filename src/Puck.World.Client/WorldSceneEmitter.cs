@@ -465,6 +465,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return padded;
     }
+
     /// <summary>Composes a candidate definition's render-relevant sections into <paramref name="builder"/> — World
     /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
     /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
@@ -879,6 +880,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
     /// stamp's mesh at its root this frame. Recomposed only when the static list is a new one or the pool rewrote its own.</remarks>
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
+    /// <inheritdoc/>
+    public IReadOnlyList<SdfSlotClip> SlotClips => m_animator.SlotClips;
     /// <inheritdoc/>
     public long MeshDrawsRevision => m_meshDraws.Revision;
 }

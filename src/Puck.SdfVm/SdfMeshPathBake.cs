@@ -282,7 +282,7 @@ public sealed partial class SdfMeshPathBake {
             Settle(frame: frame);
 
             var finished = 0;
-            var moved = (!ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision));
+            var moved = (!ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(objA: frame.SlotClips, objB: m_slotClips));
 
             foreach (var group in m_groups) {
                 if (group.Mesh is null) { continue; }
@@ -312,6 +312,12 @@ public sealed partial class SdfMeshPathBake {
 
                     m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic });
                 }
+                // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
+                SdfSlotClip.Apply(
+                    clips: frame.SlotClips,
+                    draws: m_draws
+                );
+                m_slotClips = frame.SlotClips;
                 m_frameDraws = frame.MeshDraws;
                 m_frameDrawsRevision = frame.MeshDrawsRevision;
                 m_drawnMeshes = finished;
@@ -324,6 +330,9 @@ public sealed partial class SdfMeshPathBake {
             return m_dressed;
         }
     }
+
+    // The straddling slot runs the dressed draws were last clipped by.
+    private IReadOnlyList<SdfSlotClip> m_slotClips = [];
 
     // The frame Dress last dressed and what it returned, which a still frame source capturing the same frame takes again
     // without a new frame.

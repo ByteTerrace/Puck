@@ -172,6 +172,9 @@ public sealed partial class WorldStampPool {
         // The body's IWorldStampSource.Carries count this registration's world-space state was last carried to; an
         // in-place crossing past it carries the state on (PackRegistration) instead of reseeding it.
         public int RootCarryEpoch = -1;
+        // The creation's reach from its root (CreationGeometry.Reach), measured on the first pack that needs it; -1
+        // before.
+        public float Reach = -1f;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;

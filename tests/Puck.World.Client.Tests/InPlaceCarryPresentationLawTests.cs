@@ -17,9 +17,9 @@ namespace Puck.World.Client.Tests;
 /// than the carry history is cut the same way. A correction easing when a crossing arrives turns with it.
 /// </summary>
 public sealed class InPlaceCarryPresentationLawTests {
+    private const float FallSpeed = (-Step / Frame);
     private const float Frame = (1f / 60f);
     private const float Step = 0.5f;
-    private const float FallSpeed = (-Step / Frame);
     private const float Tolerance = 1e-2f;
 
     private static readonly WorldPoseCarry Up = new(
@@ -66,8 +66,60 @@ public sealed class InPlaceCarryPresentationLawTests {
 
         return rig!.Drivers[0].Phase;
     }
-    // A one-shape creation whose one driver reads the body's vertical speed, ungated and unfollowed.
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage() {
+    // A flat door creation whose glass is shape 0, turned a quarter about +X by `angle` in engine terms.
+    private static WorldPrototype Door(string id, float angle) {
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: CreationFrame.ToAuthor(document: new CreationDocument(
+                Schema: CreationDocument.CurrentSchema,
+                Name: id,
+                Palette: null,
+                Shapes: [new ShapeDocument(
+                    Id: 0,
+                    Name: null,
+                    Type: SdfSolidPrimitive.Box,
+                    Position: Vector3.Zero,
+                    Rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: angle),
+                    Scale: new Vector3(x: 1.25f, y: 1.25f, z: 0.06f),
+                    Material: 0,
+                    Blend: SdfBlendOp.Union,
+                    Smooth: 0f,
+                    Group: 0
+                )],
+                Frames: null,
+                Behavior: new CreationBehaviorDocument(Locomotion: null, Faces: [new CreationFaceDocument(DefaultSource: null, Name: "glass", ShapeId: 0)])
+            )),
+            source: id
+        );
+
+        return new WorldPrototype(Id: id, Document: canonical.Document, HashRaw: canonical.Hash);
+    }
+    private static WorldPlacement Glass(string id, string prototype, float height, float yaw, string counterpart) => new(
+        FaceSources: [new WorldPlacementFace(
+            Face: "glass",
+            Portal: new WorldPlacementPortal(Arrival: WorldPortalArrival.Mapped, Counterpart: counterpart, Destination: "self", Travel: WorldPortalTravel.Body),
+            Source: new WorldScreenSource.None()
+        )],
+        Id: id,
+        Position: new Vector3(x: 0f, y: height, z: 0f),
+        PrototypeId: prototype,
+        Scale: 1f,
+        YawDegrees: yaw
+    );
+    // A shaft in the world itself: a floor door at the origin facing up whose counterpart is a ceiling door six metres
+    // above facing down, through a destination whose reference names the world's own document.
+    private static WorldDefinition Shaft(WorldDefinition definition) => (definition with {
+        CreationsRaw = [.. definition.Creations, Door(angle: (-MathF.PI / 2f), id: "floor-door"), Door(angle: (MathF.PI / 2f), id: "ceiling-door")],
+        Destinations = [new WorldDestination(Durability: WorldDestinationDurability.Persisted, Name: SafeName.Parse(candidate: "self"), Reference: "self", Scope: WorldDestinationScope.Global)],
+        DocumentId = "shaft",
+        PlacementRowsRaw = [
+            Glass(counterpart: "ceiling/glass", height: 0f, id: "floor", prototype: "floor-door", yaw: 0f),
+            Glass(counterpart: "floor/glass", height: 6f, id: "ceiling", prototype: "ceiling-door", yaw: 180f),
+        ],
+        References = [new WorldReference(Document: "shaft", Name: SafeName.Parse(candidate: "self"))],
+    });
+    // A one-shape creation whose one driver reads the body's vertical speed, ungated and unfollowed; with `shaft`, in a
+    // world standing a floor door under its ceiling counterpart.
+    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(bool shaft = false) {
         var creation = CreationFixtures.Prototype(id: "faller", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "faller",
@@ -101,7 +153,7 @@ public sealed class InPlaceCarryPresentationLawTests {
                 Motion: WorldLookMotion.Default
             )],
         });
-        var client = ClientFixtures.Client(definition: definition);
+        var client = ClientFixtures.Client(definition: (shaft ? Shaft(definition: definition) : definition));
         var pool = new WorldStampPool();
 
         pool.Reconcile(
@@ -154,6 +206,33 @@ public sealed class InPlaceCarryPresentationLawTests {
         Assert.Equal(expected: FallSpeed, actual: Pack(client: client, pool: pool, transforms: transforms), tolerance: Tolerance);
         position.Y -= Step;
         Assert.Equal(expected: FallSpeed, actual: Fall(continuity: EntityContinuity.Continuous), tolerance: Tolerance);
+    }
+    [Fact]
+    public void ABodyStraddlingASameWorldDoorIsClippedThereAndCopiedToItsCounterpart() {
+        var (client, pool, transforms) = Stage(shaft: true);
+        var doors = WorldPortalStraddle.Doors(definition: client.Definition);
+
+        Assert.Equal(expected: 2, actual: doors.Count);
+        Assert.Same(expected: doors, actual: WorldPortalStraddle.Doors(definition: client.Definition));
+
+        // Half through the floor glass: clipped above the floor and copied, clipped below the ceiling, six metres up.
+        Deliver(client: client, continuity: EntityContinuity.Continuous, position: new Vector3(x: 0.5f, y: 0.1f, z: 0f), tick: 1UL);
+        _ = Pack(client: client, pool: pool, transforms: transforms);
+
+        var clip = Assert.Single(collection: pool.SlotClips);
+
+        Assert.Equal(expected: (0, WorldStampPool.SlotsPerPlacement), actual: (clip.FirstSlot, clip.SlotCount));
+        Assert.Equal(expected: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f), actual: clip.Plane);
+        Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: clip.CopyPlane);
+        Assert.Equal(expected: 6.1f, actual: (Vector3.Transform(value: new Vector3(x: 0.5f, y: 0.1f, z: 0f), rotation: clip.CopyRotation) + clip.CopyTranslation).Y, tolerance: Tolerance);
+
+        // Clear of every glass: drawn once, unclipped.
+        Deliver(client: client, continuity: EntityContinuity.Teleport, position: new Vector3(x: 0f, y: 3f, z: 0f), tick: 2UL);
+        _ = Pack(client: client, pool: pool, transforms: transforms);
+        Assert.Empty(collection: pool.SlotClips);
+
+        // A world whose doors lead elsewhere has none to straddle.
+        Assert.Empty(collection: WorldPortalStraddle.Doors(definition: (client.Definition with { DocumentId = "elsewhere" })));
     }
     [Fact]
     public void ACorrectionEasingThroughACrossingTurnsWithIt() {

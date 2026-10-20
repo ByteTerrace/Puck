@@ -11,7 +11,8 @@ namespace Puck.Vulkan.Tests;
 /// refused as unavailable, naming each limit it misses; and a device that does not report
 /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading needs, or <c>fragmentStoresAndAtomics</c>,
 /// with which the SDF mesh pass counts its texels, or <c>shaderStorageImageExtendedFormats</c>, which the R8/R8G8 shadow
-/// handoff storage images require, is refused by name
+/// handoff storage images require, or <c>shaderClipDistance</c>, with which the mesh and shadow passes clip a body at a
+/// portal's glass, is refused by name
 /// (<see cref="VulkanLogicalDeviceFactory.FeatureIndicesOf"/>).</summary>
 public sealed class VulkanGroupedBindingFloorLawTests {
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
@@ -54,11 +55,13 @@ public sealed class VulkanGroupedBindingFloorLawTests {
     [InlineData(34, "shaderSampledImageArrayDynamicIndexing")]
     [InlineData(26, "fragmentStoresAndAtomics")]
     [InlineData(29, "shaderStorageImageExtendedFormats")]
+    [InlineData(37, "shaderClipDistance")]
     [Theory]
     public void ADeviceWithoutARequiredBaseFeatureIsRefusedByName(int required, string feature) {
         const int SampledImageArrayDynamicIndexing = 34;
         const int FragmentStoresAndAtomics = 26;
         const int StorageImageExtendedFormats = 29;
+        const int ClipDistance = 37;
         var every = Enumerable.Repeat(count: 55, element: true).ToArray();
         var without = every.ToArray();
 
@@ -74,12 +77,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         }
 
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 3),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 4),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats))]),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or ClipDistance))]),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
     }
 }

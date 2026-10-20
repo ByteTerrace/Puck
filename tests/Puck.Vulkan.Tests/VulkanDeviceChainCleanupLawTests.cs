@@ -342,9 +342,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34).
+        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34) and clip distance (37).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 29 or 34))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 29 or 34 or 37))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -31,6 +32,22 @@ public sealed partial class WorldStampPool {
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: one more for each pack that rewrote it.</summary>
     public long MeshDrawsRevision => m_meshDrawsRevision;
 
+    /// <summary>Gets the slot runs of the body-rooted registrations the last <see cref="PackTransforms"/> found
+    /// straddling a portal whose counterpart stands in the same world (<see cref="WorldPortalStraddle"/>): a new list a
+    /// pack that found any, the one empty list otherwise.</summary>
+    public IReadOnlyList<SdfSlotClip> SlotClips { get; private set; } = [];
+
+    private readonly List<SdfSlotClip> m_slotClipRun = [];
+
+    // A registration's creation's reach from its root, in creation units, measured once.
+    private static float ReachOf(Registration live) {
+        if (live.Reach < 0f) {
+            live.Reach = CreationGeometry.Reach(document: live.Creation.EngineDocument);
+        }
+
+        return live.Reach;
+    }
+
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
     /// (attached), and each shape holds its current frame's snapshot (composed root ∘ per-shape pose, positions scaled by
@@ -54,6 +71,9 @@ public sealed partial class WorldStampPool {
 
         m_packedSlotBase = slotBase;
         m_volumes.Clear();
+        m_slotClipRun.Clear();
+
+        var doors = WorldPortalStraddle.Doors(definition: client.Definition);
 
         var deltaSeconds = m_pendingDeltaSeconds;
 
@@ -158,7 +178,7 @@ public sealed partial class WorldStampPool {
                     transforms: transforms
                 );
                 if (packedSlots > (1 + shapeCount)) {
-                    transforms[rootSlot + TextSlot(shapeCount: shapeCount)] = transforms[rootSlot];
+                    transforms[(rootSlot + TextSlot(shapeCount: shapeCount))] = transforms[rootSlot];
                 }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
@@ -180,6 +200,21 @@ public sealed partial class WorldStampPool {
                 shapeCount: shapeCount
             );
 
+            // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it.
+            if (
+                (live.BodyIndex is not null) &&
+                (doors.Count > 0) &&
+                (WorldPortalStraddle.Clip(
+                    center: transforms[rootSlot].Position,
+                    doors: doors,
+                    firstSlot: rootSlot,
+                    radius: (ReachOf(live: live) * placementScale),
+                    slotCount: SlotsPerPlacement
+                ) is { } clip)
+            ) {
+                m_slotClipRun.Add(item: clip);
+            }
+
             // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
             // repacked it.
             SetMeshDraw(
@@ -196,6 +231,11 @@ public sealed partial class WorldStampPool {
                 index: index
             );
         }
+
+        SlotClips = ((m_slotClipRun.Count == 0)
+            ? []
+            : [.. m_slotClipRun]
+        );
 
         if (m_meshDrawsChanged) {
             m_meshDrawList.Clear();

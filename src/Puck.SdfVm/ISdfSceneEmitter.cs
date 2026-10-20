@@ -149,6 +149,10 @@ public interface ISdfSceneEmitter {
     /// correct for an emitter that draws no mesh.
     /// </para></summary>
     IReadOnlyList<SdfMeshDraw> MeshDraws => [];
+    /// <summary>Gets the slot runs this emitter's last <see cref="PackDynamicTransforms"/> found straddling a portal
+    /// (<see cref="SdfSlotClip"/>), in absolute slots. The host reads it after packing, every frame. The default, an
+    /// empty list, is correct for an emitter whose bodies never straddle one.</summary>
+    IReadOnlyList<SdfSlotClip> SlotClips => [];
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: moved whenever the emitter rewrote its list in
     /// place. An emitter that supplies a new list instead may leave it 0.</summary>
     long MeshDrawsRevision => 0;
