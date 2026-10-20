@@ -20,8 +20,12 @@ public sealed class SdfCompositionFrameSourceLawTests {
 
         var held = Capture(source: source);
 
+        // The frame that found the content moved still carries, and holds, the program before it: a wait for the new
+        // program's bake reads Building and Program, not the frame count alone.
         Assert.True(condition: source.Building);
         Assert.Same(expected: first, actual: held.Program);
+        Assert.Same(expected: first, actual: source.Program);
+        Assert.Equal(expected: 2L, actual: source.Frames);
 
         var adopted = held.Program;
 
@@ -32,6 +36,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
 
         Assert.False(condition: source.Building);
         Assert.Equal(expected: 2f, actual: adopted.Instances[0].Radius);
+        Assert.Same(expected: adopted, actual: source.Program);
 
         emitter.Radius = 3f;
         _ = Capture(source: source);

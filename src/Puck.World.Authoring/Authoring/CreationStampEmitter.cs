@@ -1231,42 +1231,8 @@ public static class CreationStampEmitter {
 
         for (var index = 0; (index < runs.Count); index++) {
             var run = runs[index];
-            var atlas = fontFor(arg: run.Font);
-            var emHeight = (run.EmHeight * scale);
-            var layout = ((textLayouts is not null)
-                ? textLayouts[index]
-                : new TextLayout().Layout(
-                    atlas: atlas,
-                    options: (RunLayoutOptions(
-                        run: run,
-                        scale: scale
-                    ) ?? TextLayoutOptions.Default),
-                    scale: emHeight,
-                    text: run.Text
-                )
-            );
-            var worldPerTexel = (emHeight / atlas.Size);
-            var depth = (MathF.Abs(x: (run.Depth ?? 0.02f)) * scale);
-            var runReach = 0f;
 
-            foreach (var placement in layout.Placements) {
-                var atlasBounds = placement.AtlasBounds;
-                var planeBounds = placement.PlaneBounds;
-                var halfWidth = ((0.5f * MathF.Abs(x: (atlasBounds.Right - atlasBounds.Left))) * worldPerTexel);
-                var halfHeight = ((0.5f * MathF.Abs(x: (atlasBounds.Bottom - atlasBounds.Top))) * worldPerTexel);
-                var centerX = (0.5f * (planeBounds.Left + planeBounds.Right));
-                var centerY = (0.5f * (planeBounds.Bottom + planeBounds.Top));
-                var farX = (MathF.Abs(x: centerX) + halfWidth);
-                var farY = (MathF.Abs(x: centerY) + halfHeight);
-                var glyphReach = MathF.Sqrt(x: (((farX * farX) + (farY * farY)) + (depth * depth)));
-
-                runReach = MathF.Max(
-                    x: runReach,
-                    y: glyphReach
-                );
-            }
-
-            if (layout.Placements.Count > 0) {
+            if (RunGlyphReach(fontFor: fontFor, index: index, run: run, scale: scale, textLayouts: textLayouts) is { } runReach) {
                 reach = MathF.Max(
                     x: reach,
                     y: ((run.Position * scale).Length() + runReach)
@@ -1279,6 +1245,78 @@ public static class CreationStampEmitter {
             ? reach
             : (0.6f * scale)
         );
+    }
+    /// <summary>Measures how far a creation's text runs' glyphs reach from the creation's origin at a uniform stamp scale,
+    /// each run at the frame it is emitted in (on its shape, for a run anchored to one): the radius a bound about that
+    /// origin holding only the text needs, whatever the creation's orientation.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="scale">The uniform stamp scale.</param>
+    /// <param name="fontFor">Resolves a run's optional font name through the owning catalog.</param>
+    /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
+    /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>), indexed like
+    /// <see cref="CreationDocument.TextRuns"/>; <see langword="null"/> lays every run out fresh.</param>
+    /// <returns>The radius, in world units at <paramref name="scale"/>; zero when no run lays out a glyph.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="fontFor"/> is
+    /// <see langword="null"/>.</exception>
+    public static float TextReach(CreationDocument document, float scale, Func<string?, FontAtlas> fontFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(fontFor);
+
+        var reach = 0f;
+        var runs = (document.TextRuns ?? []);
+
+        for (var index = 0; (index < runs.Count); index++) {
+            var run = runs[index];
+
+            if (RunGlyphReach(fontFor: fontFor, index: index, run: run, scale: scale, textLayouts: textLayouts) is { } runReach) {
+                reach = MathF.Max(
+                    x: reach,
+                    y: ((RunFrame(document: document, run: run).Position * scale).Length() + runReach)
+                );
+            }
+        }
+
+        return reach;
+    }
+    // How far a run's glyphs, extruded by its relief, reach from the run's origin in world units at the stamp's scale, or
+    // null when the run lays out no glyph.
+    private static float? RunGlyphReach(TextRunDocument run, int index, float scale, Func<string?, FontAtlas> fontFor, IReadOnlyList<TextLayoutResult>? textLayouts) {
+        var atlas = fontFor(arg: run.Font);
+        var emHeight = (run.EmHeight * scale);
+        var layout = ((textLayouts is not null)
+            ? textLayouts[index]
+            : new TextLayout().Layout(
+                atlas: atlas,
+                options: (RunLayoutOptions(
+                    run: run,
+                    scale: scale
+                ) ?? TextLayoutOptions.Default),
+                scale: emHeight,
+                text: run.Text
+            )
+        );
+        var worldPerTexel = (emHeight / atlas.Size);
+        var depth = (MathF.Abs(x: (run.Depth ?? 0.02f)) * scale);
+        var runReach = 0f;
+
+        foreach (var placement in layout.Placements) {
+            var atlasBounds = placement.AtlasBounds;
+            var planeBounds = placement.PlaneBounds;
+            var halfWidth = ((0.5f * MathF.Abs(x: (atlasBounds.Right - atlasBounds.Left))) * worldPerTexel);
+            var halfHeight = ((0.5f * MathF.Abs(x: (atlasBounds.Bottom - atlasBounds.Top))) * worldPerTexel);
+            var centerX = (0.5f * (planeBounds.Left + planeBounds.Right));
+            var centerY = (0.5f * (planeBounds.Bottom + planeBounds.Top));
+            var farX = (MathF.Abs(x: centerX) + halfWidth);
+            var farY = (MathF.Abs(x: centerY) + halfHeight);
+            var glyphReach = MathF.Sqrt(x: (((farX * farX) + (farY * farY)) + (depth * depth)));
+
+            runReach = MathF.Max(
+                x: runReach,
+                y: glyphReach
+            );
+        }
+
+        return ((layout.Placements.Count > 0) ? runReach : null);
     }
     /// <summary>Returns whether a creation's stamp needs its own field scope: a blend outside the union family
     /// (whose accumulator compose is order-local — see the accumulator rule), an engraving text run, or a noise

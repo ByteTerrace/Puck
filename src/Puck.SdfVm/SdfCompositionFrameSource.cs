@@ -139,6 +139,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public bool BuildsInBackground { get; init; }
     /// <summary>Gets whether a background build is in flight (<see cref="BuildsInBackground"/>).</summary>
     public bool Building => (m_building is not null);
+    /// <summary>Gets how many frames <see cref="CaptureFrame"/> has captured. A frame captured after a reading of it has
+    /// read every emitter's content as it stood then, so once <see cref="Building"/> is false after such a frame,
+    /// <see cref="Program"/> is the program that content calls for.</summary>
+    public long Frames { get; private set; }
+    /// <summary>Gets the program the frames carry, or <see langword="null"/> before the first frame.</summary>
+    public SdfProgram? Program => m_program;
 
     private bool Converging => (m_convergence is { Completion.IsCompleted: false });
 
@@ -565,6 +571,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         dressed.PickMap = ComposePickMap();
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
+        Frames++;
         return dressed;
     }
 }

@@ -38,6 +38,39 @@ public sealed class WorldTextAuthoringLawTests {
         Assert.Equal(3, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.Contains(collection: program.Instructions, filter: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == ((uint)SdfBlendOp.Subtraction))));
     }
+    // Embossed text carves nothing, so a moving creation's shapes keep their own instances and its text is an instance of
+    // its own on the root slot declaring its glyphs' detail, which the bake refines that slot's group toward, as the static
+    // stamper's text group is.
+    [Fact]
+    public void AnEmbossedMovingCreationBakesItsTextAsADetailedInstanceOfItsOwn() {
+        var creation = TextCreationWithFrames();
+        var pool = new WorldStampPool();
+
+        pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
+            new WorldStampPool.BodyStamp(0, creation, 2f, WorldLook.Implicit),
+        ]);
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
+        var builder = new SdfProgramBuilder();
+
+        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 2f,
+            slotBase: 0, textCatalog: fonts);
+        var program = builder.Build();
+
+        Assert.Equal(2, program.Instances.Count);
+        var (box, text) = (program.Instances[0], program.Instances[1]);
+
+        Assert.True(condition: (box.IsDynamic && text.IsDynamic));
+        Assert.Equal(expected: (text.Slot + 1), actual: box.Slot);
+        Assert.Equal(expected: 0f, actual: box.Detail);
+        // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, at the body's scale of 2.
+        Assert.Equal(expected: 0.04f, actual: text.Detail, tolerance: 1e-6f);
+        Assert.Equal(expected: 0, actual: program.Instructions.Count(predicate: static instruction => (instruction.Op == SdfOp.PushField)));
+        // The text's bound is its glyphs' reach about the root, whatever the creation's other shapes reach.
+        var textReach = CreationStampEmitter.TextReach(document: creation.EngineDocument, fontFor: fonts.Resolve, scale: 2f);
+
+        Assert.True(condition: (textReach > 0f));
+        Assert.InRange(actual: text.Radius, high: (textReach + 0.5f), low: textReach);
+    }
 
     private static FontAtlas AtlasForText(string text) => new(
         kind: FontAtlasKind.Sdf,

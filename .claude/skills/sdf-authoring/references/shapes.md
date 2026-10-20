@@ -16,7 +16,7 @@ a magnitude of at least 0.0001.
 | `Box` | half-extents | (1,1,1): `scale` is the half-extent on each axis exactly, its corners filleted inside that box by 0.04 of the smallest axis |
 | `Torus` | uniform multiplier only; non-uniform rides a generic scale | major 1, minor 0.4 — band width is 0.4 × major |
 | `Cylinder` | x/z radius (x must equal z to bake), y half-height | r = 1, half-height 1 |
-| `Capsule` | x/z radius (x must equal z), y the cylindrical section length | total height is 2r + length |
+| `Capsule` | x/z radius (x must equal z), y twice the straight section's length | r = 1 around the segment from the position to 0.5 × y above it: **not centred**, it spans −r to 0.5y + r, a total height of 2r + 0.5y |
 | `Ellipsoid` | per-axis radii | (1,1,1) |
 | `RoundCone` | uniform multiplier | lower r 1, upper r 0.5, height 1 |
 | `Plane` | **scale-invariant**; local +Y is the outward normal | — |

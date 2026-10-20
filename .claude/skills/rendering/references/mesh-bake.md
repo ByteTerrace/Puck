@@ -106,6 +106,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
   an offset and may be zero while its radial extent remains positive.
   The bake caps declared-detail refinement at eight cells per coarse axis.
+  A dynamic instance declares detail too: a pooled creation's embossed text is
+  its own instance on the root slot, bounded by its glyphs' reach and declaring
+  their detail, and a slot's group refines toward the finest detail its
+  instances declare over their bounds (`SdfMeshBakeGroup.Detail`). Engraved
+  text stays in one scoped instance with the shapes it carves.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as

@@ -215,6 +215,13 @@ public sealed class SdfMeshPathBake {
     private bool m_reported;
     private long m_loaded;
 
+    /// <summary>Gets the program the bake meshes: the one the last frame <see cref="Dress"/> took carried, or
+    /// <see langword="null"/> before the first.</summary>
+    public SdfProgram? Program {
+        get {
+            lock (m_gate) { return m_program; }
+        }
+    }
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
     /// (<see cref="Probe"/>) still samples.</summary>
     public bool Pending {
@@ -721,21 +728,23 @@ public sealed class SdfMeshPathBake {
         group.Next = Lattice(group: group, longest: CoarseSamples, minimum: RefineMinimum, gradients: false);
     }
     // The final lattice of a group of one instance, or of a dynamic slot: FinalSamples along its longest axis, no finer than
-    // MinimumCell. A static instance that declares its own detail (SdfInstanceRange.Detail) refines its whole box toward
-    // that spacing wherever the surface can enter a cell, as finely as MaxDetailRefinement allows.
+    // MinimumCell. An instance that declares its own detail (SdfInstanceRange.Detail), static or riding the slot, refines
+    // its bound's part of the box toward that spacing wherever the surface can enter a cell, as finely as
+    // MaxDetailRefinement allows.
     private static FinalLattice OwnFinal(Group group) {
         var lattice = (Lattice(group: group, longest: FinalSamples, minimum: FinalMinimum, gradients: true) with { Gradients = false });
-        var detail = ((group.Members.Count == 1) ? group.Members[0].Detail : 0f);
+        var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
+        var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
 
-        if (!(detail > 0f)) {
+        if (!(group.Detail > 0f) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
             return new FinalLattice(lattice: lattice);
         }
 
         var coarse = MathF.Max(lattice.Cell.X, MathF.Max(lattice.Cell.Y, lattice.Cell.Z));
 
         return new FinalLattice(lattice: lattice) {
-            Factor = Math.Clamp(value: (int)MathF.Ceiling(coarse / detail), min: 2, max: MaxDetailRefinement),
-            Regions = [new SdfLatticeRegion(High: group.High, Low: group.Low)],
+            Factor = Math.Clamp(value: (int)MathF.Ceiling(coarse / group.Detail), min: 2, max: MaxDetailRefinement),
+            Regions = [new SdfLatticeRegion(High: high, Low: low)],
         };
     }
     // The final lattice of a union of static shapes (a copy's run), which keeps each shape at the resolution its own final

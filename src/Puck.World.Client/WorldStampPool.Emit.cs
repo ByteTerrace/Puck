@@ -100,8 +100,8 @@ public sealed partial class WorldStampPool {
         if (ownInstance) { _ = builder.EndInstance(); }
     }
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
-    // creation's text runs. Text and its host shapes share one scoped instance so engraving cannot consume another
-    // placement's accumulator.
+    // creation's text runs. Engraved text and its host shapes share one scoped instance so engraving cannot consume
+    // another placement's accumulator; embossed text is an instance of its own.
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
@@ -184,8 +184,13 @@ public sealed partial class WorldStampPool {
         );
 
         var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
+        // Engraved text carves the shapes, so it couples them into one scoped instance; embossed text only adds relief, so
+        // the shapes keep their own instances and the text bakes as its own detailed instance on the root slot, as the
+        // static stamper bakes a text group apart (its relief inside the shapes' group falls below their lattice).
+        var textApart = (hasText && !document!.TextRuns!.Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)));
+        var coupled = (hasText && !textApart);
 
-        if (hasText) {
+        if (coupled) {
             _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin))
                 .PushField(compose: SdfBlendOp.Union);
         }
@@ -273,7 +278,7 @@ public sealed partial class WorldStampPool {
                 : ((WarpedReach(primitiveReach: tightPrimitiveReach) + dilateWorld) + onionWorld)
             ) + trimMargin);
 
-            if (!hasText) {
+            if (!coupled) {
                 _ = builder.BeginInstanceDynamic(
                 slot: slot,
                 boundOffset: Vector3.Zero,
@@ -325,7 +330,7 @@ public sealed partial class WorldStampPool {
                 exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
                 curve: placed?.Curve?.Parameters()
             );
-            if (!hasText) { _ = builder.EndInstance(); }
+            if (!coupled) { _ = builder.EndInstance(); }
         }
 
         // Pass 2 — one instance per blend group. A group sharing one rigid animation delta can use a member's
@@ -364,7 +369,7 @@ public sealed partial class WorldStampPool {
                 builder: builder,
                 fromIndex: index,
                 groupId: groupId,
-                ownInstance: !hasText,
+                ownInstance: !coupled,
                 paletteIds: paletteIds,
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
@@ -378,6 +383,16 @@ public sealed partial class WorldStampPool {
         // moves the boxes while the lettering holds its authored surface). Emitted after the shapes so an engrave
         // run's Subtraction carves only this creation's scoped geometry, exactly as the static stamper orders it.
         if (hasText) {
+            // The text's own reach bounds its instance, so the region the bake refines toward the glyphs is the text's
+            // rather than the whole creation's, which a blend group riding the root slot beside it would share.
+            if (textApart) {
+                _ = builder.BeginInstanceDynamic(
+                    slot: rootSlot,
+                    boundOffset: Vector3.Zero,
+                    boundRadius: (CreationStampEmitter.TextReach(document: document!, fontFor: textCatalog!.Resolve, scale: placementScale, textLayouts: textLayouts) + GroupBoundMargin),
+                    detail: WorldPlacementStamper.TextDetail(creation: document!, scale: placementScale)
+                );
+            }
             CreationStampEmitter.EmitTextDynamic(
                 builder: builder,
                 document: document!,
@@ -387,7 +402,8 @@ public sealed partial class WorldStampPool {
                 materialFor: run => paletteIds[((run.Material ?? 0) % paletteIds.Length)],
                 textLayouts: textLayouts
             );
-            _ = builder.PopField().EndInstance();
+            if (coupled) { _ = builder.PopField(); }
+            _ = builder.EndInstance();
         }
     }
 }
