@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.HumbleGamingDeck;
 
 // Object memory, per-dot sprite evaluation, and the sprite fetches.
@@ -237,16 +239,7 @@ public sealed partial class HgdPpu {
             return 0;
         }
 
-        return (((m_nextSpriteAttributes[slot] & 0x40) != 0) ? ReverseBits(value: value) : value);
-    }
-    private static byte ReverseBits(byte value) {
-        var reversed = 0;
-
-        for (var bit = 0; (bit < 8); ++bit) {
-            reversed |= (((value >> bit) & 1) << (7 - bit));
-        }
-
-        return ((byte)reversed);
+        return (((m_nextSpriteAttributes[slot] & 0x40) != 0) ? value.ReverseBits() : value);
     }
     // The sprites fetched during a line are the ones the next line shows.
     private void BeginLine() {
