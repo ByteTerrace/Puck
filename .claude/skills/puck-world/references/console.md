@@ -412,6 +412,16 @@ the PNG; failure carries an exception, including disposal before service.
 tick wait alone does not prove a particular request finished. Cancelling an
 await does not cancel the accepted capture or release its output path for reuse.
 
+`world.flag <exhibit> [note…]` (`WorldFlagCommandModule`): Immediate, Bindable;
+writes `<package>/flags/<exhibit>.json` beside the booted document (exhibit,
+note, tick, seat, the seat's `body.where` pose and its render camera) and arms
+a capture to `<package>/flags/<exhibit>.png` through the same
+`ArmUnscheduled` path, with the same stderr `[capture]` lines. The exhibit is
+a file-safe token and the folder is the package's own, so no argument names a
+path; host console or local seat only; headless or with a capture already
+pending, the record is written and the echo says no capture was armed. An
+authored command may call it (`world.screenshot` is Unbindable, so it may not).
+
 ### `world.sdf.dump` — the packed program
 
 `world.sdf.dump <path>` copies the initialized renderer's live packed program

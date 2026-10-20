@@ -268,9 +268,11 @@ public sealed partial class SdfProgram {
         // downstream of a warp widen that warp's input domain by the scale between them. A warp reads its own reach
         // back by dividing by the min axis of the scale accumulated BEFORE it (its MinScale below) — scales upstream of
         // a warp never reach the warp's frame, and the min axis keeps the conversion conservative.
-        // Each warp's |rate|, whether its keyed coordinate lies inside the plane it rotates (see BendOperatorNorm), and
-        // the min-axis scale accumulated before it.
-        var chainWarpRates = new List<(float Rate, bool KeyInRotatedPlane, float MinScale)>();
+        // Each warp's |rate|, whether its keyed coordinate lies inside the plane it rotates (see BendOperatorNorm), the
+        // min-axis scale accumulated before it, and the chain translate reach as of the op: a translate BEFORE a warp
+        // moves the warp's frame and never widens the coordinates it reads, so only the translates after it count
+        // toward its reach, as a cell jitter's containment counts them.
+        var chainWarpRates = new List<(float Rate, bool KeyInRotatedPlane, float MinScale, float TranslateReachAtOp)>();
         var chainShapeReach = 0.0f;       // max local bounding radius among the chain's shapes, outer frame
         var chainTranslateReach = 0.0f;   // sum of |translate offset| accumulated on the chain, outer frame
         var chainLogSphereProduct = 1.0f; // product of the chain's log-spherical shell-fold factors exp(w/2) (1 = none)
@@ -278,7 +280,7 @@ public sealed partial class SdfProgram {
         // Each CellJitter's (min spacing, jitter), the chain translate reach as of the op (its own reach term included),
         // and its min-axis scale — folded at chain-close so only translates AFTER the fold count toward containment.
         var chainCellJitters = new List<(float MinSpacing, float Jitter, float TranslateReachAtOp, float MinScale)>();
-        var chainReachWarps = new List<(SdfInstruction Warp, float MinScale, float MaxScale)>(); // Reversed at chain close to bound each warp's actual input domain.
+        var chainReachWarps = new List<(SdfInstruction Warp, float MinScale, float MaxScale, float TranslateReachAtOp)>(); // Reversed at chain close to bound each warp's actual input domain.
         var chainScale = Vector3.One;     // accumulated local coordinate scale within the chain
 
         for (var index = 0; (index < instructions.Length); index++) {
@@ -291,8 +293,9 @@ public sealed partial class SdfProgram {
                 (index != 0)
             ) {
                 chainFactors.Add(item: (((FoldChainLipschitz(
-                    reach: (chainTranslateReach + chainShapeReach),
                     reachWarps: chainReachWarps,
+                    shapeReach: chainShapeReach,
+                    translateReach: chainTranslateReach,
                     warpRates: chainWarpRates
                 ) * chainLogSphereProduct) * (chainHasShapeBlend
                     ? chainDisplaceWarpProduct
@@ -345,7 +348,7 @@ public sealed partial class SdfProgram {
                             _ => SdfAxis.Y,
                         });
 
-                        chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != ((uint)normalAxis)), MinAxis(scale: chainScale)));
+                        chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != ((uint)normalAxis)), MinAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
                 case SdfOp.ShapeBlend: {
@@ -465,18 +468,18 @@ public sealed partial class SdfProgram {
                         // Reach-DEPENDENT like Bend/Twist (its shear term scales with the chain's XZ reach), unlike
                         // LogSphere/Displace/NoiseDisplace's reach-independent products — so it is stashed here and
                         // folded at chain-close against the FINAL reach, exactly like CellJitter's boundary factor.
-                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
                 case SdfOp.Shear: {
                         // Reach-DEPENDENT like Bend/Twist/AxialProfile (the slope grows with the chain's Y reach) — stashed
                         // here and folded at chain-close against the FINAL reach (SdfProgram.ShearOperatorNorm).
-                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         break;
                     }
                 case SdfOp.GaussianPush: {
                         // The derivative bound is global; its displacement also expands preceding warps' input domains.
-                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale), chainTranslateReach));
                         chainDisplaceWarpProduct *= GaussianPushLipschitz(
                             push: new Vector3(
                                 x: instruction.Data0.W,
@@ -505,8 +508,9 @@ public sealed partial class SdfProgram {
 
         // Fold the final (or only) chain.
         chainFactors.Add(item: (((FoldChainLipschitz(
-            reach: (chainTranslateReach + chainShapeReach),
             reachWarps: chainReachWarps,
+            shapeReach: chainShapeReach,
+            translateReach: chainTranslateReach,
             warpRates: chainWarpRates
         ) * chainLogSphereProduct) * (chainHasShapeBlend
             ? chainDisplaceWarpProduct

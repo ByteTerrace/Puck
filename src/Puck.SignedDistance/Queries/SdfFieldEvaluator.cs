@@ -810,15 +810,14 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: inverseExponent
         )) - FixedQ4816.One) * minRadius);
     }
-    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli — the exact iq polygon SDF (running minimum squared
-    // distance to every edge segment, signed by one even/odd crossing-parity flip per edge).
+    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli — the exact iq polygon SDF (running minimum
+    // distance to every edge segment, signed by one even/odd crossing-parity flip per edge). The kernel keeps the
+    // minimum SQUARED distance and roots it once; here each candidate is rooted as a length, because a squared
+    // millimetre distance is a few Q48.16 ulps and its root would step by whole ulps across a centimetre of field,
+    // flattening the gradient the mesh bake reads near every edge.
     private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) {
         var count = vertices.Length;
-        var firstDelta = (p - vertices[0]);
-        var d = FixedVector2.Dot(
-            left: firstDelta,
-            right: firstDelta
-        );
+        var d = (p - vertices[0]).Length;
         var negate = false;
         var previous = vertices[(count - 1)];
 
@@ -839,14 +838,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 maximum: FixedQ4816.One
             );
             var b = (w - (e * t));
-            var bDotB = FixedVector2.Dot(
-                left: b,
-                right: b
-            );
 
             d = FixedQ4816.Min(
                 x: d,
-                y: bDotB
+                y: b.Length
             );
 
             var c1 = (p.Y >= vertex.Y);
@@ -863,11 +858,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             previous = vertex;
         }
 
-        var distance = FixedQ4816.Sqrt(value: d);
-
         return (negate
-            ? -distance
-            : distance
+            ? -d
+            : d
         );
     }
     // KEEP IN SYNC with sdfConvexPolygonSolid in field/sdf-shapes.hlsli.
@@ -1405,16 +1398,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             : FixedQ4816.One
         );
 
-        return (sign * FixedQ4816.Sqrt(value: FixedQ4816.Min(
-            x: FixedVector2.Dot(
-                left: ca,
-                right: ca
-            ),
-            y: FixedVector2.Dot(
-                left: cb,
-                right: cb
-            )
-        )));
+        // The kernel roots the smaller squared length; each is rooted as a length here (see SdfConvexPolygon2D).
+        return (sign * FixedQ4816.Min(
+            x: ca.Length,
+            y: cb.Length
+        ));
     }
     // capChamfer is Data1Z — a cap-only bevel radius on the extrude's rims (KEEP IN SYNC with sdfTrapezoidSolid's
     // data1.z read in field/sdf-shapes.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.

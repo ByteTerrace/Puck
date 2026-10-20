@@ -94,8 +94,12 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
             pad: in input[0]
         );
     /// <inheritdoc/>
-    public void RunCycles(long cycles) =>
+    /// <exception cref="AgbExecutionFaultException">The program can no longer run at the end of the budget: the CPU sits
+    /// in Undefined or Abort mode or fetches from a region that holds no code.</exception>
+    public void RunCycles(long cycles) {
         _ = m_machine.RunCycles(cycles: cycles);
+        AgbExecutionFaultException.ThrowIfFaulted(cpu: m_machine.Cpu);
+    }
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();

@@ -109,7 +109,7 @@ public sealed class TextCommandSource : ITextCommandSink {
 
             if (
                 session.HasPendingSimulationSubmission &&
-                (session.SettlesResults || (line is null) || !m_registry.RoutesToSimulation(line: line))
+                (session.SettlesResults || (line is null) || !m_registry.RoutesToSimulation(line: line, slot: session.Slot))
             ) {
                 (blockedSessions ??= []).Add(item: session);
                 m_pending.Enqueue(item: session);
@@ -193,7 +193,7 @@ public sealed class TextCommandSource : ITextCommandSink {
             return (
                 !content.IsEmpty &&
                 (content[0] != '#') &&
-                (session.SettlesResults || !m_registry.RoutesToSimulation(line: line))
+                (session.SettlesResults || !m_registry.RoutesToSimulation(line: line, slot: session.Slot))
             );
         }
     }

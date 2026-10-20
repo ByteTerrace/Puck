@@ -7,14 +7,27 @@ public sealed partial class CommandRegistry {
     // bound press on an authored command carries this id and the command's name in its line.
     private const string RunCommandName = "run";
 
+    // Every authored name this registry has resolved, interned past the registered ids in first-resolution order and
+    // never reused, so one name keeps one id for the registry's lifetime whatever sets come and go. A bound press
+    // therefore holds per command: two keys bound to two authored commands are two buttons.
+    private readonly Dictionary<string, ushort> m_authoredIdByName = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> m_authoredNameById = [];
     private readonly CommandDefinition m_runner;
-    private Func<AuthoredCommandSet>? m_authoredSource;
+    private Func<int, AuthoredCommandSet>? m_authoredSource;
+    private Func<string, CommandMetadata?>? m_verbCatalog;
 
-    /// <summary>Gets the authored commands the registry currently answers: the set its source supplies now, or
-    /// <see cref="AuthoredCommandSet.Empty"/> when no source is wired.</summary>
+    /// <summary>Gets the authored commands the registry answers outside any one line: the set its source supplies for
+    /// slot <c>0</c>, which help, bindings and the affordance manifest read.</summary>
+    public AuthoredCommandSet AuthoredCommands => AuthoredCommandsFor(slot: 0);
+
+    /// <summary>Returns the authored commands the registry answers for a line on <paramref name="slot"/>: the set its
+    /// source supplies now, or <see cref="AuthoredCommandSet.Empty"/> when no source is wired.</summary>
+    /// <param name="slot">The slot of the line being resolved; a host whose slots address different documents (the
+    /// silo's rows) answers each its own.</param>
+    /// <returns>The current set for that slot.</returns>
     /// <remarks>Read on every resolution, so a source that follows a live document (a reload, a row edit) changes
     /// what the registry answers without rebuilding it.</remarks>
-    public AuthoredCommandSet AuthoredCommands => (m_authoredSource?.Invoke() ?? AuthoredCommandSet.Empty);
+    public AuthoredCommandSet AuthoredCommandsFor(int slot) => (m_authoredSource?.Invoke(arg: slot) ?? AuthoredCommandSet.Empty);
 
     /// <summary>Returns the facts every authored command declares: a bindable, Simulation-routed, wire-argument verb
     /// that answers anyone, carrying a digital press when bound.</summary>
@@ -35,44 +48,27 @@ public sealed partial class CommandRegistry {
     /// <param name="errors">The list each refusal is appended to, naming the command and line.</param>
     /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="errors"/> is
     /// <see langword="null"/>.</exception>
+    /// <remarks>A verb this registry lacks but the wired verb catalog holds (<see cref="UseVerbCatalog"/>) is one
+    /// another boot shape registers: it is judged by the catalog's facts and admitted, and refused at dispatch as not
+    /// available in this host instead.</remarks>
     public void CheckAuthored(AuthoredCommandSet set, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: set);
-        ArgumentNullException.ThrowIfNull(argument: errors);
 
-        foreach (var command in set.Commands) {
-            if (m_byName.TryGetValue(
-                key: command.Name,
-                value: out var shadowed
-            )) {
-                errors.Add(item: $"command '{command.Name}' takes the name of the engine verb '{shadowed.Name}'; an authored command never shadows a registered verb or alias.");
-            }
-
-            for (var index = 0; (index < command.Lines.Length); index++) {
-                var verb = command.Lines[index].Verb;
-
-                if (set.TryGet(
-                    command: out _,
-                    name: verb
-                )) {
-                    continue;
-                }
-
-                if (!m_byName.TryGetValue(
-                    key: verb,
-                    value: out var called
-                )) {
-                    errors.Add(item: $"command '{command.Name}' line {(index + 1)} calls '{verb}', which no registered verb or authored command answers.");
-                } else if (RefusesAuthoredCall(definition: called) is { } refusal) {
-                    errors.Add(item: $"command '{command.Name}' line {(index + 1)} calls '{verb}', {refusal}.");
-                }
-            }
-        }
-
-        foreach (var command in set.Commands) {
-            if (FindCycle(path: [command.Name], set: set) is { } cycle) {
-                errors.Add(item: $"command '{command.Name}' calls itself: {string.Join(separator: " -> ", values: cycle)}.");
-            }
-        }
+        set.CheckAgainst(
+            errors: errors,
+            refuseUnknown: true,
+            registered: name => (m_byName.TryGetValue(key: name, value: out var definition)
+                ? definition.Metadata
+                : m_verbCatalog?.Invoke(arg: name))
+        );
+    }
+    /// <summary>Wires the engine's full verb catalog: every verb any boot shape registers, so an authored line may
+    /// name a verb only another shape (a rendered World) registers. Such a line passes validation here and is refused
+    /// by name when it runs in a host that lacks the verb.</summary>
+    /// <param name="catalog">Returns a catalogued verb's facts by name, or <see langword="null"/>; <see langword="null"/>
+    /// unwires it, so a verb this registry lacks is refused at validation.</param>
+    public void UseVerbCatalog(Func<string, CommandMetadata?>? catalog) {
+        m_verbCatalog = catalog;
     }
     /// <summary>Whether <paramref name="name"/> names an authored command this registry currently answers.</summary>
     /// <param name="name">The command name.</param>
@@ -84,59 +80,75 @@ public sealed partial class CommandRegistry {
     }
     /// <summary>Wires the source of the authored commands this registry answers, alongside the verbs its modules
     /// register.</summary>
-    /// <param name="source">Returns the current set on every call; <see langword="null"/> answers none.</param>
+    /// <param name="source">Returns the current set for the slot of the line being resolved (<c>0</c> outside any
+    /// line) on every call; <see langword="null"/> answers none.</param>
     /// <remarks>The registry never caches the set, so the source decides when it changes; a host that compiles the
     /// set from a document keeps it for as long as that document is live.</remarks>
-    public void UseAuthoredCommands(Func<AuthoredCommandSet>? source) {
+    public void UseAuthoredCommands(Func<int, AuthoredCommandSet>? source) {
         m_authoredSource = source;
     }
 
-    private static List<string>? FindCycle(List<string> path, AuthoredCommandSet set) {
-        if (!set.TryGet(command: out var command, name: path[^1])) {
-            return null;
+    // The definition an interned id dispatches through: a registered command's own, `run` for an authored id, or
+    // null for an id this registry never issued.
+    private CommandDefinition? DefinitionForId(ushort id) {
+        if (id < m_definitionById.Length) {
+            return m_definitionById[id];
         }
 
-        foreach (var line in command!.Lines) {
-            if (!set.TryGet(command: out var callee, name: line.Verb)) {
-                continue;
-            }
-
-            if (string.Equals(a: callee!.Name, b: path[0], comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return [.. path, callee.Name];
-            }
-
-            if (path.Contains(value: callee.Name, comparer: StringComparer.OrdinalIgnoreCase)) {
-                continue;
-            }
-
-            if (FindCycle(path: [.. path, callee.Name], set: set) is { } cycle) {
-                return cycle;
-            }
-        }
-
-        return null;
+        return (((id - m_definitionById.Length) < m_authoredNameById.Count)
+            ? m_runner
+            : null);
     }
+    // The name an interned id stands for, registered or authored, or null for an id this registry never issued.
+    private string? NameForId(ushort id) {
+        if (id < m_nameById.Length) {
+            return m_nameById[id];
+        }
+
+        var authored = (id - m_nameById.Length);
+
+        return ((authored < m_authoredNameById.Count)
+            ? m_authoredNameById[authored]
+            : null);
+    }
+    // Whether a line injected under an authored command's own id still names that command; a registered id leaves the
+    // check to the definition comparison beside it.
+    private bool LineNamesAuthoredId(ushort id, string line) => ((id < m_nameById.Length) || string.Equals(
+        a: NameForId(id: id),
+        b: LeadingVerb(line: line).ToString(),
+        comparisonType: StringComparison.OrdinalIgnoreCase
+    ));
+    // Interns an authored command's name, issuing the next id past every one already issued the first time it is seen.
+    private bool TryInternAuthored(string name, out ushort id) {
+        if (!AuthoredCommands.TryGet(command: out var command, name: name)) {
+            id = 0;
+
+            return false;
+        }
+
+        if (m_authoredIdByName.TryGetValue(key: command!.Name, value: out id)) {
+            return true;
+        }
+
+        var next = (m_nameById.Length + m_authoredNameById.Count);
+
+        if (next >= MaxCommandCount) {
+            throw new InvalidOperationException(message: $"A command registry supports at most {MaxCommandCount} distinct commands because snapshot command ids are 16-bit; authored command '{command.Name}' would exceed it.");
+        }
+
+        id = ((ushort)next);
+        m_authoredIdByName.Add(key: command.Name, value: id);
+        m_authoredNameById.Add(item: command.Name);
+
+        return true;
+    }
+
     // A line submitted by a macro dispatches in the phase a typed line of its routing would carry when it runs: a
     // Simulation verb applies as the Started edge its queued injection carries, an Immediate one as Completed.
     private static CommandPhase InlinePhase(CommandDefinition definition, bool queue) => ((!queue && (definition.Routing == CommandRouting.Simulation))
         ? CommandPhase.Started
         : CommandPhase.Completed
     );
-    // What an authored line may call is what a binding document may name: a bindable verb answering anyone. The
-    // registry's own `run` is admitted beside them, since it dispatches only authored commands.
-    private string? RefusesAuthoredCall(CommandDefinition definition) {
-        if (ReferenceEquals(objA: definition, objB: m_runner)) {
-            return null;
-        }
-
-        if (definition.Audience != CommandAudience.Anyone) {
-            return "which answers the operator alone; an authored command calls only what a binding may name";
-        }
-
-        return ((definition.Bindability == CommandBindability.Bindable)
-            ? null
-            : "which is not bindable; an authored command calls only what a binding may name");
-    }
     // `run`'s handler: names the authored command (the line's own verb, or run's first argument), expands it, and
     // submits each line under the caller's principal, slot and session policy. The first refused line stops the
     // command and is its verdict.
@@ -158,7 +170,7 @@ public sealed partial class CommandRegistry {
             first = 1;
         }
 
-        if (!AuthoredCommands.TryGet(command: out var command, name: verb)) {
+        if (!AuthoredCommandsFor(slot: context.Slot).TryGet(command: out var command, name: verb)) {
             return CommandResult.Error(output: $"[{RunCommandName}: no authored command is named '{verb}' — help lists the world's commands]");
         }
 
@@ -198,11 +210,15 @@ public sealed partial class CommandRegistry {
     // The dispatch-time half of the authored-call rule, enforced on every expanded line whatever validated the set:
     // the verb must be one a binding may name, and one the caller's session may submit.
     private CommandResult? RefuseNestedLine(in CommandContext context, string line) {
-        if (!TryResolveVerb(definition: out var definition, metadata: out var metadata, verb: LeadingVerb(line: line))) {
-            return null;
+        if (!TryResolveVerb(definition: out _, metadata: out var metadata, slot: context.Slot, verb: LeadingVerb(line: line))) {
+            var verb = LeadingVerb(line: line).ToString();
+
+            return ((m_verbCatalog?.Invoke(arg: verb) is { } absent)
+                ? CommandResult.Error(output: $"[{absent.Name}: not available in this host — another boot shape (a rendered World) registers it]")
+                : null);
         }
 
-        if (RefusesAuthoredCall(definition: definition!) is { } refusal) {
+        if (AuthoredCommandSet.RefusesCall(metadata: metadata) is { } refusal) {
             return CommandResult.Error(output: $"[{metadata.Name}: refused, {refusal}]");
         }
 
@@ -234,7 +250,7 @@ public sealed partial class CommandRegistry {
     }
     // Resolves a verb token to the definition that dispatches it and the facts it declares: a registered verb or
     // alias first, then an authored command, which `run` dispatches under the command's own metadata.
-    private bool TryResolveVerb(ReadOnlySpan<char> verb, out CommandDefinition? definition, out CommandMetadata metadata) {
+    private bool TryResolveVerb(ReadOnlySpan<char> verb, int slot, out CommandDefinition? definition, out CommandMetadata metadata) {
         if (m_byNameAlt.TryGetValue(
             key: verb,
             value: out definition
@@ -244,7 +260,7 @@ public sealed partial class CommandRegistry {
             return true;
         }
 
-        if (!verb.IsEmpty && AuthoredCommands.TryGet(command: out var authored, name: verb)) {
+        if (!verb.IsEmpty && AuthoredCommandsFor(slot: slot).TryGet(command: out var authored, name: verb)) {
             definition = m_runner;
             metadata = AuthoredMetadata(name: authored!.Name);
 

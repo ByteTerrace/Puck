@@ -62,6 +62,11 @@ public readonly record struct SdfMeshAuditShapeCount(string Name, int Count);
 public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float Score, int Samples, int Off, int Turned, int Shaded, int Folded, int Missing, float WorstError, float WorstNormal, IReadOnlyList<SdfMeshAuditShape> Shapes) {
     /// <summary>Gets the position of its most severe sample, in the group's frame.</summary>
     public Vector3 Worst { get; init; }
+    /// <summary>Gets the unit direction the mesh faces at its most severe sample (the wound face normal of a turned
+    /// triangle, the straying corner's shading normal of a shaded one); zero for a sample with no facing.</summary>
+    public Vector3 WorstFacing { get; init; }
+    /// <summary>Gets the field's unit gradient at its most severe sample; zero where the field is flat.</summary>
+    public Vector3 WorstGradient { get; init; }
     /// <summary>Gets the unit direction its samples spread along most: the line an edge defect runs along.</summary>
     public Vector3 Axis { get; init; } = Vector3.UnitX;
     /// <summary>Gets positions of up to sixteen of its samples, spread over them, at which its shapes are named.</summary>
@@ -274,14 +279,21 @@ public static class SdfMeshAudit {
             if (!normals.IsEmpty) {
                 var worst = 0f;
 
+                var straying = Vector3.Zero;
+
                 for (var corner = 0; (corner < 3); corner++) {
                     var normal = normals[(int)indices[(3 * triangle) + corner]];
+                    var unit = ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero);
+                    var angle = Angle(first: unit, second: gradients[triangle]);
 
-                    worst = MathF.Max(worst, Angle(first: ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero), second: gradients[triangle]));
+                    if (angle > worst) {
+                        worst = angle;
+                        straying = unit;
+                    }
                 }
                 shadingErrors[triangle] = worst;
                 if (worst > options.NormalDegrees) {
-                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst));
+                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst) { Facing = straying, Gradient = gradients[triangle] });
                 }
             }
             if (faceNormals[triangle] == Vector3.Zero) {
@@ -294,7 +306,7 @@ public static class SdfMeshAudit {
             normalErrors[triangle] = degrees;
             flipped += ((degrees > 90f) ? 1 : 0);
             if (degrees > options.NormalDegrees) {
-                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees));
+                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
         }
 
@@ -626,6 +638,8 @@ public static class SdfMeshAudit {
                     Axis = Spread(center: center, samples: samples),
                     Probes = [.. Enumerable.Range(start: 0, count: Math.Min(samples.Length, ProbeCount)).Select(selector: probe => samples[(probe * samples.Length) / Math.Min(samples.Length, ProbeCount)].Position)],
                     Worst = samples.MaxBy(keySelector: static sample => sample.Severity).Position,
+                    WorstFacing = samples.MaxBy(keySelector: static sample => sample.Severity).Facing,
+                    WorstGradient = samples.MaxBy(keySelector: static sample => sample.Severity).Gradient,
                 };
             })
             .OrderByDescending(keySelector: static cluster => cluster.Score)
@@ -717,7 +731,10 @@ public static class SdfMeshAudit {
         Folded,
         Missing,
     }
-    private readonly record struct Sample(SampleKind Kind, Vector3 Position, float Severity, float Value);
+    private readonly record struct Sample(SampleKind Kind, Vector3 Position, float Severity, float Value) {
+        public Vector3 Facing { get; init; }
+        public Vector3 Gradient { get; init; }
+    }
     // The triangles that hold an edge: how many, and the first two.
     private readonly record struct Held(int Count, int First, int Second) {
         public Held With(int triangle) => new(Count: (Count + 1), First: First, Second: ((Count == 1) ? triangle : Second));

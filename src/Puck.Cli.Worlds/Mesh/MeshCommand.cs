@@ -301,7 +301,10 @@ public static class MeshCommand {
         if (outcome.Owner is { } owner) {
             builder.Append(provider: CultureInfo.InvariantCulture, handler: $" (author {Point(point: owner.ToAuthor(world: world))})");
         }
-        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg");
+        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg at {Point(point: outcome.ToWorld(arg: cluster.Worst))}");
+        if (cluster.WorstFacing != Vector3.Zero) {
+            builder.Append(provider: CultureInfo.InvariantCulture, handler: $" facing {Direction(direction: cluster.WorstFacing)} against gradient {Direction(direction: cluster.WorstGradient)}");
+        }
         if (cluster.Shapes.Count > 0) {
             builder.Append(value: "; nearest ");
             builder.AppendJoin(separator: ", ", values: cluster.Shapes.Select(selector: static shape => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{shape.Name} {Millimetres(metres: shape.Distance)} mm")));
@@ -313,6 +316,7 @@ public static class MeshCommand {
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {statistic.P50 * scale:0.00} p99 {statistic.P99 * scale:0.00} max {statistic.Max * scale:0.00} over {statistic.Over}/{statistic.Count}");
     private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{metres * 1000f:0.0}");
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
+    private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
     private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu);

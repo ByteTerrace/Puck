@@ -44,7 +44,7 @@ public sealed class AuthoredCommandTests {
         var registry = new CommandRegistry(modules: [probe], observers: [probe]);
         var set = new AuthoredCommandSet(commands: commands);
 
-        registry.UseAuthoredCommands(source: () => set);
+        registry.UseAuthoredCommands(source: _ => set);
 
         return (registry, probe);
     }
@@ -88,8 +88,11 @@ public sealed class AuthoredCommandTests {
         Assert.True(condition: registry.TryGetMetadata(metadata: out var metadata, name: "GX.say"));
         Assert.Equal(actual: metadata, expected: CommandRegistry.AuthoredMetadata(name: "gx.say"));
         Assert.True(condition: registry.TryGetId(id: out var id, name: "gx.say"));
-        Assert.True(condition: registry.TryGetId(id: out var run, name: "run"));
-        Assert.Equal(actual: id, expected: run);
+        Assert.True(condition: registry.TryGetId(id: out var again, name: "GX.SAY"));
+        Assert.Equal(actual: again, expected: id);
+        Assert.True(condition: (id >= registry.CommandCount));
+        Assert.Equal(actual: registry.GetName(id: id), expected: "gx.say");
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => registry.GetName(id: ((ushort)(id + 1))));
         Assert.True(condition: registry.RoutesToSimulation(line: "gx.say"));
         Assert.True(condition: registry.NamesAuthoredCommand(name: "gx.say"));
         Assert.False(condition: registry.TryGetId(id: out _, name: "gx.nope"));
@@ -189,12 +192,16 @@ public sealed class AuthoredCommandTests {
     }
     [Fact]
     public void ATypedOrBoundAuthoredCommandRunsOnTheTickUnderItsCallersPrincipal() {
-        var (registry, probe) = Registry(Command("gx.sim", [Text(name: "word", fallback: "tick")], "probe.sim {word}", "probe.say {word}"));
+        var (registry, probe) = Registry(
+            Command("gx.sim", [Text(name: "word", fallback: "tick")], "probe.sim {word}", "probe.say {word}"),
+            Command("gx.other", [], "probe.say other")
+        );
         var router = new InputRouter(
             bindings: new Bindings(rows: new Dictionary<string, CommandBinding> {
                 ["key.a"] = new(Command: "gx.sim"),
-                ["key.b"] = new(Command: "gx.sim", Text: "bound"),
-                ["key.c"] = new(Command: "run"),
+                ["key.b"] = new(Command: "gx.other"),
+                ["key.c"] = new(Command: "gx.sim", Text: "bound"),
+                ["key.d"] = new(Command: "run"),
             }),
             principalResolver: new SeatPrincipals(),
             registry: registry
@@ -205,17 +212,22 @@ public sealed class AuthoredCommandTests {
         Assert.Equal(actual: registry.Submit(line: "gx.sim typed"), expected: CommandResult.None);
         Assert.Empty(collection: probe.Said);
 
-        // Every authored command shares `run`'s id, and the router folds the controls bound to one id into one logical
-        // button, so each press releases before the next.
+        // Two keys bound to two authored commands are two buttons: held together, both fire. A key bound to `run`
+        // with no line runs nothing.
         var tick = 0UL;
 
-        foreach (var key in new[] { "key.a", "key.b", "key.c" }) {
-            router.Capture(signal: InputSignal.Press(source: key));
+        foreach (var keys in new[] { new[] { "key.a", "key.b" }, ["key.c", "key.d"] }) {
+            foreach (var key in keys) {
+                router.Capture(signal: InputSignal.Press(source: key));
+            }
 
             var pressed = router.SnapshotForTick(tick: ++tick, windowEndTick: ulong.MaxValue);
 
             registry.ApplySnapshot(snapshot: in pressed);
-            router.Capture(signal: InputSignal.Release(source: key));
+
+            foreach (var key in keys) {
+                router.Capture(signal: InputSignal.Release(source: key));
+            }
 
             var released = router.SnapshotForTick(tick: ++tick, windowEndTick: ulong.MaxValue);
 
@@ -224,11 +236,86 @@ public sealed class AuthoredCommandTests {
 
         // Lane order between the console's injection and the seat's presses is the router's business; what each
         // line ran as is this test's.
-        Assert.Equal(actual: probe.Said.Order(comparer: StringComparer.Ordinal), expected: ["bound", "tick", "typed"]);
+        Assert.Equal(actual: probe.Said.Order(comparer: StringComparer.Ordinal), expected: ["bound", "other", "tick", "typed"]);
         Assert.All(collection: probe.Simulated, action: simulated => Assert.Equal(actual: simulated.Phase, expected: CommandPhase.Started));
         Assert.Equal(actual: probe.Principals.Count(predicate: principal => (principal == Principal.Console)), expected: 2);
-        Assert.Equal(actual: probe.Principals.Count(predicate: principal => (principal == Principal.Seat(slot: 0))), expected: 4);
+        Assert.Equal(actual: probe.Principals.Count(predicate: principal => (principal == Principal.Seat(slot: 0))), expected: 5);
         Assert.Contains(collection: probe.Activations, filter: activation => ((activation.Name == "run") && (activation.Text == "gx.sim typed") && activation.Result.Output.Contains(value: "said typed", comparisonType: StringComparison.Ordinal)));
+    }
+    [Fact]
+    public void AVerbAnotherBootShapeRegistersPassesValidationAndIsRefusedWhereItIsAbsent() {
+        var (registry, probe) = Registry(Command("gx.view", [], "probe.say before", "probe.rendered", "probe.say after"));
+        var rendered = new CommandMetadata(Name: "probe.rendered", Bindability: CommandBindability.Bindable, Routing: CommandRouting.Immediate, ValueKind: CommandValueKind.Digital);
+        var hidden = rendered with { Bindability = CommandBindability.Unbindable, Name = "probe.rendered-hidden" };
+        var set = new AuthoredCommandSet(commands: [
+            Command("gx.view", [], "probe.rendered"),
+            Command("gx.hiddenview", [], "probe.rendered-hidden"),
+            Command("gx.typo", [], "probe.nowhere"),
+        ]);
+        var errors = new List<string>();
+
+        registry.UseVerbCatalog(catalog: name => name switch {
+            "probe.rendered" => rendered,
+            "probe.rendered-hidden" => hidden,
+            _ => null,
+        });
+        registry.CheckAuthored(errors: errors, set: set);
+
+        Assert.Equal(actual: errors.Count, expected: 2);
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "'probe.rendered-hidden', which is not bindable", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: error => error.Contains(value: "'probe.nowhere', which no registered verb", comparisonType: StringComparison.Ordinal));
+
+        var result = registry.Submit(line: "gx.view");
+
+        Assert.True(condition: result.IsError);
+        Assert.Contains(actualString: result.Output, expectedSubstring: "[probe.rendered: not available in this host");
+        Assert.Equal(actual: probe.Said, expected: ["before"]);
+        Assert.Contains(actualString: registry.Submit(line: "run gx.view").Output, expectedSubstring: "line 2 'probe.rendered' refused");
+
+        registry.UseVerbCatalog(catalog: null);
+        errors.Clear();
+        registry.CheckAuthored(errors: errors, set: set);
+
+        Assert.Equal(actual: errors.Count, expected: 3);
+    }
+    [Fact]
+    public void ALineHearsTheAuthoredCommandsOfItsOwnSlot() {
+        var (registry, probe) = Registry();
+        var set = new AuthoredCommandSet(commands: [Command("gx.say", [], "probe.say one")]);
+        var source = new TextCommandSource(registry: registry);
+        var results = new List<string>();
+        var others = new List<string>();
+
+        registry.UseAuthoredCommands(source: slot => ((slot == 1) ? set : AuthoredCommandSet.Empty));
+
+        var one = source.CreateSession(onResult: (_, result) => results.Add(item: result.Output), principal: Principal.Console, slot: 1);
+        var two = source.CreateSession(onResult: (_, result) => others.Add(item: result.Output), principal: Principal.Console, slot: 2);
+
+        one.Enqueue(line: "help --names gx.");
+        one.Enqueue(line: "gx.say");
+        two.Enqueue(line: "gx.say");
+        source.Collect();
+
+        Assert.Equal(actual: results, expected: ["gx.say", "said one"]);
+        Assert.Contains(actualString: Assert.Single(collection: others), expectedSubstring: "unknown command 'gx.say'");
+        Assert.True(condition: registry.RoutesToSimulation(line: "gx.say", slot: 1));
+        Assert.False(condition: registry.RoutesToSimulation(line: "gx.say"));
+        Assert.Equal(actual: probe.Slots, expected: [1]);
+    }
+    [Fact]
+    public void AuthoredIdsStopAtTheSixteenBitCeiling() {
+        var probe = Registry().Registry;
+        var room = ((ushort.MaxValue + 1) - probe.CommandCount);
+        var commands = Enumerable.Range(start: 0, count: (room + 1)).Select(selector: index => Command($"gx.c{index}", [], "probe.say")).ToArray();
+        var set = new AuthoredCommandSet(commands: commands);
+
+        probe.UseAuthoredCommands(source: _ => set);
+
+        for (var index = 0; (index < room); index++) {
+            Assert.True(condition: probe.TryGetId(id: out _, name: $"gx.c{index}"));
+        }
+
+        Assert.Throws<InvalidOperationException>(testCode: () => probe.TryGetId(id: out _, name: $"gx.c{room}"));
     }
     [Theory]
     [InlineData("go", "probe.say", "a name is a namespaced token")]

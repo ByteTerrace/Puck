@@ -181,7 +181,9 @@ may name, and never takes an engine verb's name
 code: `Puck.Commands/AuthoredCommand.cs`, `CommandRegistry.Authored.cs`,
 `Puck.World.Schema/WorldConsoleCommand.cs`). Write a C# verb only for what no
 composition of existing verbs expresses. The debug world's `places.puck`
-(`debug.go <place>`) is the live example.
+(`debug.go <place>`) is the live example. Adding, renaming or changing the
+bindability or audience of a C# verb owes `puck verbs` (regenerates the
+catalog `puck compile --validate` checks authored commands against).
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
