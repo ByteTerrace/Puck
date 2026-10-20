@@ -251,7 +251,6 @@ public sealed partial class SdfSurfaceTransportLawTests {
         Assert.Contains(actualString: transport, expectedSubstring: "precise float haze = ");
         Assert.Contains(actualString: transport, expectedSubstring: "precise float medium = ");
         Assert.Contains(actualString: transport, expectedSubstring: "precise float inverseDistance = ");
-        Assert.Matches(actualString: transport, expectedRegexPattern: $@"static const uint SdfTransportSampleBit = 0x{SdfSurfaceTransport.SampleBit:X8}u;");
     }
     [Fact]
     public void TheKernelsCarryTheTransportWithTheColorsWeights() {
@@ -282,11 +281,6 @@ public sealed partial class SdfSurfaceTransportLawTests {
         Assert.Contains(actualString: composite, expectedSubstring: "float volumeCoverage = (geometryOnly ? 1.0 : coverage);");
         Assert.Matches(actualString: composite, expectedRegexPattern: @"shadeVolumes\(volumeSurface, volumeCoverage, \(\(t > 0\.0\) \? t : far\), sky,");
         Assert.Contains(actualString: composite, expectedSubstring: "if (geometryOnly) { color *= coverage; }");
-        // The CPU reference and the kernels hold the inverse distance at one scale.
-        Assert.Matches(
-            actualString: transport,
-            expectedRegexPattern: $@"static const float SdfTransportInverseDistanceScale = {SdfSurfaceTransport.InverseDistanceScale:0}\.0;"
-        );
     }
 
     // A ray through an atmosphere packed as the tables pack it, the far distance the haze is measured over.

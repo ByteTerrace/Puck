@@ -8,18 +8,12 @@
 // in-scatter colour, and counts each kind it evaluates at a pixel in its atmosphere detail row.
 #ifndef SHADE_SDF_ATMOSPHERE_HLSLI
 #define SHADE_SDF_ATMOSPHERE_HLSLI
-
-// The flag the fog's authored colour sets in AirFlags. KEEP IN SYNC with SdfAir.FogColorAuthored.
-static const uint SdfAirFogColorAuthored = 1u;
-// The air lights the block bakes. KEEP IN SYNC with SdfAir.MaxLights.
-static const uint SdfAirMaxLights = 4u;
-// Below this |x| a height medium's share takes its series, so a ray parallel to its base (x = 0) integrates to its
-// length. KEEP IN SYNC with SdfAir.SeriesLimit.
-static const float SdfAirSeriesLimit = 1.0e-3;
-// The largest exponent a height medium's density is raised by. KEEP IN SYNC with SdfAir.ExponentLimit.
-static const float SdfAirExponentLimit = 60.0;
-// The x below which a descending ray folds its two exponentials into one. KEEP IN SYNC with SdfAir.SteepLimit.
-static const float SdfAirSteepLimit = -20.0;
+// SdfAir's guards and flags, generated into sdf-isa.hlsli: SDF_AIR_FOG_COLOR_AUTHORED (the flag the fog's authored colour
+// sets in AirFlags), SDF_AIR_MAX_LIGHTS (the air lights the block bakes), SDF_AIR_SERIES_LIMIT (below this |x| a height
+// medium's share takes its series, so a ray parallel to its base integrates to its length), SDF_AIR_EXPONENT_LIMIT (the
+// largest exponent a height medium's density is raised by) and SDF_AIR_STEEP_LIMIT (the x below which a descending ray
+// folds its two exponentials into one).
+#include "../isa/sdf-isa.hlsli"
 
 // What the atmosphere does along a ray from the eye to one ray distance (SdfAirSpan): the transmittance, and each kind's
 // in-scatter weight, fog in x, haze in y, medium in z.
@@ -30,7 +24,7 @@ struct SdfAir {
 
 // (1 - e^-x) / x, one at x = 0.
 float sdfAirShare(float x) {
-    precise float share = ((abs(x) < SdfAirSeriesLimit) ? (1.0 - (x * (0.5 - (x / 6.0)))) : ((1.0 - exp(-x)) / x));
+    precise float share = ((abs(x) < SDF_AIR_SERIES_LIMIT) ? (1.0 - (x * (0.5 - (x / 6.0)))) : ((1.0 - exp(-x)) / x));
 
     return share;
 }
@@ -49,9 +43,9 @@ float sdfAirDepth(float extinction, float baseHeight, float falloff, float origi
 
     precise float rise = (-((originY + (nearDistance * directionY)) - baseHeight) / falloff);
     precise float x = ((directionY * extent) / falloff);
-    precise float depth = ((x < SdfAirSteepLimit)
-        ? (((extinction * extent) * exp(min((rise - x), SdfAirExponentLimit))) / -x)
-        : (((extinction * extent) * exp(min(rise, SdfAirExponentLimit))) * sdfAirShare(x)));
+    precise float depth = ((x < SDF_AIR_STEEP_LIMIT)
+        ? (((extinction * extent) * exp(min((rise - x), SDF_AIR_EXPONENT_LIMIT))) / -x)
+        : (((extinction * extent) * exp(min(rise, SDF_AIR_EXPONENT_LIMIT))) * sdfAirShare(x)));
 
     return depth;
 }
@@ -145,7 +139,7 @@ void sdfAirLight(SdfSkyBlock sky, uint index, out float3 direction, out float3 r
 // The light-casting bodies' light scattered toward the eye along `direction` by a phase of `anisotropy` (SdfAir.Bodies).
 float3 sdfAirBodies(float3 direction, float anisotropy) {
     SdfSkyBlock sky = sdfSky[0];
-    uint count = min(sky.AirLightCount, SdfAirMaxLights);
+    uint count = min(sky.AirLightCount, SDF_AIR_MAX_LIGHTS);
     float3 light = float3(0.0, 0.0, 0.0);
 
     [loop]
@@ -161,6 +155,6 @@ float3 sdfAirBodies(float3 direction, float anisotropy) {
 }
 // Whether the fog in-scatters the sky (the environment map), not an authored colour.
 bool sdfAirFogReadsSky() {
-    return ((sdfSky[0].AirFlags & SdfAirFogColorAuthored) == 0u);
+    return ((sdfSky[0].AirFlags & SDF_AIR_FOG_COLOR_AUTHORED) == 0u);
 }
 #endif

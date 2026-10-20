@@ -31,15 +31,11 @@
 #include "../shade/sdf-transport.hlsli"
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
-// The words an output pixel holds in the history surface: the identity of the tap nearest the pixel's center, then its ray distance and the
-// gathered weight as two half floats (the distance low; the far limit 8192 and the weight cap stay normal halves, each
-// within a relative 2^-11, far inside SdfHistoryDepthTolerance), then the accumulated transport's two words
-// (sdfPackTransport). KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
-static const uint SdfHistorySurfaceWords = 4u;
-// The relative ray-distance disagreement a reprojected history sample may carry and still describe the same surface.
-// The accumulated weight history saturates at: one jitter period of full-weight samples. KEEP IN SYNC with
-// SdfTemporalHistory.Period.
-static const float SdfHistoryWeightCap = 8.0;
+// The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords): the identity
+// of the tap nearest the pixel's center, then its ray distance and the gathered weight as two half floats (the distance
+// low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
+// SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport). The weight saturates at
+// SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples (SdfTemporalSamples.Period).
 // The falloff of the Gaussian a sample is weighted by, over its squared distance in output pixels from the output
 // pixel's center: 1 / (2 * 0.35^2), a reconstruction about as wide as one output pixel's box.
 static const float SdfResolveFilterFalloff = 4.08;
@@ -84,7 +80,7 @@ void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 tran
             uint2 texel = sdfResolveClamp((corner + int2(x, y)), dims);
 
             rowColor += (wx[x] * historyColor.Load(int3(texel, 0)));
-            uint word = ((SdfHistorySurfaceWords * ((texel.y * dims.x) + texel.x)) + 2u);
+            uint word = ((SDF_HISTORY_SURFACE_WORDS * ((texel.y * dims.x) + texel.x)) + 2u);
 
             rowTransport += (wx[x] * sdfUnpackTransport(uint2(historySurface[word], historySurface[word + 1u])));
         }
@@ -277,7 +273,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             historyPosition = (((float2(id.xy) + 0.5) + (motion * float2(extent))) - 0.5);
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
-                uint word = (SdfHistorySurfaceWords * ((texel.y * extent.x) + texel.x));
+                uint word = (SDF_HISTORY_SURFACE_WORDS * ((texel.y * extent.x) + texel.x));
                 uint historyIdentity = historySurface[word];
                 uint distanceAndWeight = historySurface[word + 1u];
                 float historyT = f16tof32(distanceAndWeight & 0xFFFFu);
@@ -310,7 +306,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
         accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
         if (accepted) {
-            historyWeight = (clamp(historyWeightGathered, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
+            historyWeight = (clamp(historyWeightGathered, 0.0, SDF_HISTORY_WEIGHT_CAP) * (1.0 - reactive));
             history = float4(
                 sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax)),
                 clamp(previous.a, coverageMin, coverageMax)
@@ -322,14 +318,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     total = (historyWeight + weightSum);
     accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
-    uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
+    uint word = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
 
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = centerIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
+    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, SDF_HISTORY_WEIGHT_CAP) : 0.0) << 16u));
     uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
 
     historySurfaceRW[word + 2u] = historyTransportWords.x;

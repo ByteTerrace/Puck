@@ -260,7 +260,7 @@ void sdfSurfaceStage(SdfPixel p) {
     value.visibility.identity = (hit ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_MESH, meshHit.draw) : 0u);
     value.visibility.material = (hit ? sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex) : 0);
     value.triangleIndex = (hit ? meshHit.triangleIndex : 0u);
-    value.frameSlot = (hit ? asint(sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SdfMeshFrameSlotWord]) : SDF_TRANSFORM_SLOT_NONE);
+    value.frameSlot = (hit ? asint(sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SDF_MESH_FRAME_SLOT_WORD]) : SDF_TRANSFORM_SLOT_NONE);
     value.normal = float3(0.0, 0.0, 0.0);
     value.curvature = 0.0;
     value.ambient = 1.0;

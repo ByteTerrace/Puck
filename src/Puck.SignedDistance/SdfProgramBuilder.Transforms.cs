@@ -765,12 +765,11 @@ public sealed partial class SdfProgramBuilder {
         // Data0.w = its min axis): shapes evaluate millions of times per frame while programs build once, and the
         // shader's per-evaluation abs/max/min collapse to one lane read. The min-axis factor is the conservative
         // correction for a non-uniform scale — f(S⁻¹p)·min(s) is 1-Lipschitz, so it can only underestimate true
-        // distance, never overstep. HLSL's abs/max/min agree with MathF's bit-for-bit on every non-NaN input, and
-        // 0.0001f is the shader's clamp value (KEEP IN SYNC with SDF_OP_SCALE in
-        // Assets/Shaders/Sdf/field/sdf-map.hlsli).
+        // distance, never overstep. the floor is
+        // SdfSolidGeometry.MinimumScale, the one the authoring reach charges, so the shader reads no floor of its own.
         var clamped = Vector3.Max(
             value1: Vector3.Abs(value: scale),
-            value2: new Vector3(value: 0.0001f)
+            value2: new Vector3(value: SdfSolidGeometry.MinimumScale)
         );
 
         return Transform(

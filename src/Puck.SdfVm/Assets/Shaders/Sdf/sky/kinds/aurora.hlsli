@@ -26,7 +26,7 @@ float4 sdfSkyAuroraLayer(SdfSkyAurora aurora, SdfSkyLayer layer, SdfSkySample sa
     uint waveOctaves = ((sample.tier >= SDF_SKY_TIER_HIGH) ? 3u : 2u);
     uint rayOctaves = ((sample.tier >= SDF_SKY_TIER_HIGH) ? 2u : ((sample.tier >= SDF_SKY_TIER_MEDIUM) ? 2u : 1u));
     float wave = sdfPeriodicFbm2(((around * (aurora.Waves * 0.15915494)) + float2(drift, 0.0)), aurora.Seed, waveOctaves);
-    float rays = sdfPeriodicFbm2(((around * (aurora.Rays * 0.15915494)) + float2(0.0, drift)), (aurora.Seed ^ 0x85EBCA77u), rayOctaves);
+    float rays = sdfPeriodicFbm2(((around * (aurora.Rays * 0.15915494)) + float2(0.0, drift)), (aurora.Seed ^ SDF_NOISE_SEED_STREAM_Z), rayOctaves);
 
     sdfCountSky(layer.Detail, 0u, 0u, 0u, (4u * (waveOctaves + rayOctaves)), 0u);
 

@@ -32,14 +32,6 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// old one keeps drawing. The dynamic draws (moving bodies) receive the volume's light and do not cast into it.</para>
 /// </summary>
 public sealed class SdfMeshIrradiance {
-    /// <summary>The words one probe takes in the volume table: its key, the sky visibility cube as six halves, and the
-    /// radiance cube as eighteen halves (red, green and blue of +X, -X, +Y, -Y, +Z and -Z). KEEP IN SYNC with
-    /// <c>shade/sdf-mesh-irradiance.hlsli</c>.</summary>
-    public const int ProbeWords = 13;
-    /// <summary>The key flag a written probe carries; a slot without it holds no probe.</summary>
-    public const uint WrittenFlag = (1u << 30);
-    /// <summary>The key flag of a probe inside geometry, which views never read.</summary>
-    public const uint InvalidFlag = (1u << 31);
     /// <summary>The most probes a volume holds, the High tier's.</summary>
     public const int MaxProbes = ((48 * 16) * 48);
 
@@ -49,13 +41,11 @@ public sealed class SdfMeshIrradiance {
     private const float InsideShare = 0.25f;
     // The probes one batch of the trace takes before it looks again at the camera and the lighting.
     private const int BatchProbes = 384;
-    // The share of a cell the sample point is pushed along the surface normal before the probes around it are read.
-    private const float NormalBias = 0.35f;
 
     private readonly Lock m_gate = new();
     private readonly ConcurrentDictionary<(int X, int Y, int Z), Probe> m_cache = new();
     private readonly ConcurrentQueue<((int X, int Y, int Z) Cell, Probe Probe)> m_landed = new();
-    private readonly uint[] m_volume = new uint[MaxProbes * ProbeWords];
+    private readonly uint[] m_volume = new uint[MaxProbes * SdfMeshIrradianceProbe.ProbeWords];
     private readonly Stopwatch m_clock = new();
 
     private SdfMeshIrradianceScene? m_scene;
@@ -138,7 +128,7 @@ public sealed class SdfMeshIrradiance {
                 m_worker = Task.Run(action: Trace);
             }
             if (m_dirty) {
-                tables.WriteMeshIrradiance(words: m_volume.AsSpan(length: (layout.Count * ProbeWords), start: 0));
+                tables.WriteMeshIrradiance(words: m_volume.AsSpan(length: (layout.Count * SdfMeshIrradianceProbe.ProbeWords), start: 0));
                 m_dirty = false;
                 m_wrote = true;
             }
@@ -218,16 +208,16 @@ public sealed class SdfMeshIrradiance {
                 for (var x = m_low.X; (x < (m_low.X + dims.X)); x++) {
                     var slot = SlotOf(x: x, y: y, z: z, dims: dims);
 
-                    if ((m_volume[(slot * ProbeWords)] & ~InvalidFlag) == (KeyOf(x: x, y: y, z: z) | WrittenFlag)) { continue; }
+                    if ((m_volume[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag)) { continue; }
                     if (m_cache.TryGetValue(key: (x, y, z), value: out var probe)) { Store(cell: (x, y, z), probe: probe); }
                 }
             }
         }
     }
     private void Store((int X, int Y, int Z) cell, Probe probe) {
-        var words = m_volume.AsSpan(length: ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * ProbeWords));
+        var words = m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * SdfMeshIrradianceProbe.ProbeWords));
 
-        words[0] = ((KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | WrittenFlag) | (probe.Invalid ? InvalidFlag : 0u));
+        words[0] = ((KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag) | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u));
         for (var pair = 0; (pair < 3); pair++) {
             words[(1 + pair)] = Pack(low: probe.Sky[(2 * pair)], high: probe.Sky[((2 * pair) + 1)]);
         }
@@ -416,7 +406,7 @@ public sealed class SdfMeshIrradiance {
     // front of the surface; the sky visibility and the reflected light fade to the open sky and to none across the
     // window's last cell, and the open sky answers where no probe takes part.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
-        var sample = ((point + (normal * (NormalBias * layout.Spacing))) / layout.Spacing) - new Vector3(value: 0.5f);
+        var sample = ((point + (normal * (SdfMeshIrradianceProbe.NormalBias * layout.Spacing))) / layout.Spacing) - new Vector3(value: 0.5f);
         var floor = new Vector3(x: MathF.Floor(sample.X), y: MathF.Floor(sample.Y), z: MathF.Floor(sample.Z));
         var fraction = (sample - floor);
         var squared = (normal * normal);

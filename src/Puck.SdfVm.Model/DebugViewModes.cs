@@ -1,11 +1,9 @@
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The SDF debug view modes, by name and index. The index <em>is</em> the mode value packed into the camera
-/// push constant and decoded by the shader's <c>switch</c>, so the order here must match the shader — KEEP IN SYNC
-/// with <c>DebugViewModeCount</c>/<c>DebugViewModeNormals</c> in
-/// <c>src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-debug-modes.hlsli</c> and the <c>viewMode</c> switch in
-/// <c>src/Puck.SdfVm/Assets/Shaders/Sdf/debug/sdf-debug-views.hlsli</c> when adding or reordering modes.
+/// The SDF debug view modes, by name and index. The index <em>is</em> the mode value the pass block's debug mode carries,
+/// and <see cref="SdfIsaHlsl"/> writes the count and every mode's index into the kernels (<c>SDF_DEBUG_VIEW_COUNT</c>,
+/// <c>SDF_DEBUG_VIEW_NORMALS</c>, ...), so a mode is appended here and the kernels' switches read it by name.
 /// </summary>
 public static class DebugViewModes {
     /// <summary>The mode names, indexed by mode value (0 = final image).</summary>

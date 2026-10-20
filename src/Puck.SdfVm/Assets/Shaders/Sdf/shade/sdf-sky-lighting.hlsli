@@ -24,7 +24,7 @@ float3 sdfSkyMapRadiance(float3 direction, uint plane) {
     sdfSkyEnvironmentTaps(direction, taps, weights);
     float3 result = 0.0.xxx;
     [unroll] for (uint i = 0u; i < 4u; i++) {
-        result += weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i] + (plane * (uint)(SdfSkyEnvironmentSize * SdfSkyEnvironmentSize))]);
+        result += weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i] + (plane * (uint)(SDF_SKY_ENVIRONMENT_SIZE * SDF_SKY_ENVIRONMENT_SIZE))]);
     }
     return result;
 }

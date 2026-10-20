@@ -85,11 +85,11 @@ public readonly record struct SdfMediumSpan(float Begin, float End, float Extinc
 /// </summary>
 public static class SdfSurfaceTransport {
     /// <summary>The scale the coverage over the ray distance is held at, so a half float keeps it normal over every
-    /// distance a march reaches. KEEP IN SYNC with <c>SdfTransportInverseDistanceScale</c> in
+    /// distance a march reaches. SdfIsaHlsl generates it into the kernels as <c>SDF_TRANSPORT_INVERSE_DISTANCE_SCALE</c>, read by
     /// <c>shade/sdf-transport.hlsli</c>.</summary>
     public const float InverseDistanceScale = 1024f;
     /// <summary>The top bit of a transport word's low word, set on a word that carries one render sample's ray distance
-    /// whole and clear on a reconstruction's half floats. KEEP IN SYNC with <c>SdfTransportSampleBit</c> in
+    /// whole and clear on a reconstruction's half floats. SdfIsaHlsl generates it into the kernels as <c>SDF_TRANSPORT_SAMPLE_BIT</c>, read by
     /// <c>shade/sdf-transport.hlsli</c>.</summary>
     public const uint SampleBit = 0x8000_0000u;
 

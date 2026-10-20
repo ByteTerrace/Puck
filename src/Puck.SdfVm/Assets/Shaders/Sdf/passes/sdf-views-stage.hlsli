@@ -86,9 +86,9 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
 
     // The pass block's levers and the view's mode are uniform across the group, so every lane reaches the gather's
     // barrier or none does.
-    bool ambientFilter = (!worldAoDisabled() && (worldFinalShadingMode(p.viewMode) || (p.viewMode == DebugViewModeAo)));
+    bool ambientFilter = (!worldAoDisabled() && (worldFinalShadingMode(p.viewMode) || (p.viewMode == SDF_DEBUG_VIEW_AO)));
     bool shadowFilter = ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()
-        && (worldFinalShadingMode(p.viewMode) || (p.viewMode == DebugViewModeShadow)));
+        && (worldFinalShadingMode(p.viewMode) || (p.viewMode == SDF_DEBUG_VIEW_SHADOW)));
 
     if (ambientFilter || shadowFilter) {
         sdfViewsGatherFilter(p, shadowFilter);
@@ -116,7 +116,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
-    if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {
+    if ((p.viewMode != 0) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {
         coverage = 1.0;
 
         return viewColor;

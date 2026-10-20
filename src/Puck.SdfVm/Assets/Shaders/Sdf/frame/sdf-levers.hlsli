@@ -9,7 +9,7 @@
 // Whether a pixel of `viewMode` takes the final shading: the final image, and the sky-cost view, which tallies what the
 // sky really costs beside it.
 bool worldFinalShadingMode(int viewMode) {
-    return ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeSkyCost));
+    return ((viewMode <= 0) || (viewMode >= SDF_DEBUG_VIEW_COUNT) || (viewMode == SDF_DEBUG_VIEW_SKY_COST));
 }
 // The per-view shader-feature levers (World's world.shadows drives the shadows; world.ao drives ambient occlusion): each
 // defaults to the shipped behavior, every feature on.

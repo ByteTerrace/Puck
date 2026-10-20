@@ -180,7 +180,7 @@ public sealed partial class SdfWorldTables {
             }
 
             var offset = (draw * SdfMeshRegion.DrawBytes);
-            var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.Slice(length: 16, start: (draw * SdfMeshRegion.DrawWords)));
+            var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.Slice(length: 16, start: (draw * SdfMeshRecord.DrawWords)));
 
             if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
                 m_changedMeshMatrices.Add(length: 1, start: draw);

@@ -18,11 +18,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    uint texel = id.y * (uint)SdfSkyEnvironmentSize + id.x;
+    uint texel = id.y * (uint)SDF_SKY_ENVIRONMENT_SIZE + id.x;
     float3 reflection;
     float3 color = sdfSkyEnvironmentColor(sdfSkyEnvironmentDirection(id.xy), reflection);
     sdfSkyEnvironmentRW[texel] = sdfSkyEnvironmentPack(color);
-    sdfSkyEnvironmentRW[texel + (uint)(SdfSkyEnvironmentSize * SdfSkyEnvironmentSize)] = sdfSkyEnvironmentPack(reflection);
+    sdfSkyEnvironmentRW[texel + (uint)(SDF_SKY_ENVIRONMENT_SIZE * SDF_SKY_ENVIRONMENT_SIZE)] = sdfSkyEnvironmentPack(reflection);
     sdfWorkTexels = 2u;
 
     puckCountWork(sdfWorkSteps, sdfWorkTexels);

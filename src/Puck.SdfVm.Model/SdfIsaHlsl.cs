@@ -3,8 +3,10 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 
 namespace Puck.SdfVm;
 
@@ -245,6 +247,68 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).");
         declarations.Count(name: "SDF_TRANSFORM_SLOT_STATIC_WORD", value: SdfProgram.StaticTransformSlotWord);
         declarations.Expression(name: "SDF_TRANSFORM_SLOT_UNPACK(word)", value: "((int)(word) + SDF_TRANSFORM_SLOT_NONE)");
+        declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
+        declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfVisibility.NormalScale);
+        declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
+        declarations.Section(title: "The field's shared constants: the chamfer bevel's scale (SdfProgram.SqrtHalf), the smooth blends' radius floor (SdfProgram.SmoothRadiusMin) and the sweep search (SdfFieldEvaluator).");
+        declarations.Real(name: "SDF_SQRT_HALF", value: SdfProgram.SqrtHalf);
+        declarations.Real(name: "SDF_SMOOTH_RADIUS_MIN", value: SdfProgram.SmoothRadiusMin);
+        declarations.Count(name: "SDF_SWEEP_SAMPLES", value: SdfFieldEvaluator.SweepSamples);
+        declarations.Count(name: "SDF_SWEEP_ROUNDS", value: SdfFieldEvaluator.SweepRounds);
+        declarations.Section(title: "The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).");
+        declarations.Bits(name: "SDF_PCG_MULTIPLIER", value: Pcg3dLatticeNoise.PcgMultiplier);
+        declarations.Bits(name: "SDF_PCG_INCREMENT", value: Pcg3dLatticeNoise.PcgIncrement);
+        declarations.Bits(name: "SDF_HASH_STREAM_A", value: Pcg3dLatticeNoise.HashStreamA);
+        declarations.Bits(name: "SDF_HASH_STREAM_B", value: Pcg3dLatticeNoise.HashStreamB);
+        declarations.Bits(name: "SDF_HASH_TUMBLE", value: Pcg3dLatticeNoise.HashTumble);
+        declarations.Bits(name: "SDF_NOISE_SEED_STREAM_Y", value: Pcg3dLatticeNoise.NoiseSeedStreamY);
+        declarations.Bits(name: "SDF_NOISE_SEED_STREAM_Z", value: Pcg3dLatticeNoise.NoiseSeedStreamZ);
+        declarations.Bits(name: "SDF_R2_ALPHA1", value: LowDiscrepancy.R2AlphaXQ32);
+        declarations.Bits(name: "SDF_R2_ALPHA2", value: LowDiscrepancy.R2AlphaYQ32);
+        declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).");
+        declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
+        declarations.Count(name: "SDF_MESH_MATERIAL_WORD", value: SdfMeshRecord.MaterialWord);
+        declarations.Count(name: "SDF_MESH_INDEX_WORD", value: SdfMeshRecord.IndexWord);
+        declarations.Count(name: "SDF_MESH_INDEX_COUNT_WORD", value: SdfMeshRecord.IndexCountWord);
+        declarations.Count(name: "SDF_MESH_VERTEX_WORD", value: SdfMeshRecord.VertexWord);
+        declarations.Count(name: "SDF_MESH_FLAGS_WORD", value: SdfMeshRecord.FlagsWord);
+        declarations.Count(name: "SDF_MESH_TRIANGLE_MATERIAL_WORD", value: SdfMeshRecord.TriangleMaterialWord);
+        declarations.Count(name: "SDF_MESH_NORMAL_MATRIX_WORD", value: SdfMeshRecord.NormalMatrixWord);
+        declarations.Count(name: "SDF_MESH_FRAME_SLOT_WORD", value: SdfMeshRecord.FrameSlotWord);
+        declarations.Count(name: "SDF_MESH_SKIN_WORD", value: SdfMeshRecord.SkinWord);
+        declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
+        declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
+        declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
+        declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
+        declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
+        declarations.Count(name: "SDF_MESH_VIEW_SHIFT", value: SdfKernelInterfaces.MeshViewShift);
+        declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
+        declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
+        declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords) and the weight its history saturates at, one period of samples (SdfTemporalSamples.Period).");
+        declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
+        declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfTemporalSamples.Period);
+        declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
+        declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
+        declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);
+        declarations.Real(name: "SDF_SKY_ENVIRONMENT_MAX_RADIANCE", value: SdfSkyEnvironment.MaxRadiance);
+        declarations.Count(name: "SDF_MAX_VOLUMES", value: SdfProgramBuilder.MaxVolumes);
+        declarations.Real(name: "SDF_VOLUME_SCATTER_ANISOTROPY", value: SdfVolume.ScatterAnisotropy);
+        declarations.Section(title: "The surface transport's word (SdfSurfaceTransport) and the atmosphere's guards and flags (SdfAir).");
+        declarations.Real(name: "SDF_TRANSPORT_INVERSE_DISTANCE_SCALE", value: SdfSurfaceTransport.InverseDistanceScale);
+        declarations.Bits(name: "SDF_TRANSPORT_SAMPLE_BIT", value: SdfSurfaceTransport.SampleBit);
+        declarations.Bits(name: "SDF_AIR_FOG_COLOR_AUTHORED", value: SdfAir.FogColorAuthored);
+        declarations.Count(name: "SDF_AIR_MAX_LIGHTS", value: SdfAir.MaxLights);
+        declarations.Real(name: "SDF_AIR_SERIES_LIMIT", value: SdfAir.SeriesLimit);
+        declarations.Real(name: "SDF_AIR_EXPONENT_LIMIT", value: SdfAir.ExponentLimit);
+        declarations.Real(name: "SDF_AIR_STEEP_LIMIT", value: SdfAir.SteepLimit);
+        declarations.Section(title: "The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.");
+        declarations.Signed(name: "SDF_DEBUG_VIEW_COUNT", value: DebugViewModes.Count);
+
+        for (var mode = 0; (mode < DebugViewModes.Count); mode++) {
+            declarations.Signed(name: $"SDF_DEBUG_VIEW_{DebugViewModes.Names[mode].Replace(oldChar: '-', newChar: '_').ToUpperInvariant()}", value: mode);
+        }
 
         return declarations.Text();
     }
@@ -372,20 +436,25 @@ public static class SdfIsaHlsl {
                 provider: CultureInfo.InvariantCulture
             );
 
+            var literal = ((spelling.AsSpan().IndexOfAny(values: ".E") < 0)
+                ? (spelling + ".0")
+                : spelling);
+
             Define(
                 name: name,
-                value: ((spelling.AsSpan().IndexOfAny(values: ".E") < 0)
-                    ? (spelling + ".0")
-                    : spelling)
+                value: ((value < 0f) ? $"({literal})" : literal)
             );
         }
         public void Section(string title) {
             Line(line: "");
             Line(line: $"// {title}");
         }
+        // A negative literal is parenthesized, so a macro use after a minus or a multiply reads as the value.
         public void Signed(string name, int value) => Define(
             name: name,
-            value: value.ToString(provider: CultureInfo.InvariantCulture)
+            value: ((value < 0)
+                ? $"({value.ToString(provider: CultureInfo.InvariantCulture)})"
+                : value.ToString(provider: CultureInfo.InvariantCulture))
         );
         public string Text() {
             Line(line: "");

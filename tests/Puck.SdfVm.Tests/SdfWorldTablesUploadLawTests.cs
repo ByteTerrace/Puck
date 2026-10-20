@@ -701,11 +701,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // records, and each
         // mesh lies whole there in the order the list first names it: the quad's four vertices and six indices, then the
         // triangle's three vertices, its one triangle material and its three indices.
-        var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRegion.DrawWords);
+        var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRecord.DrawWords);
         var quadVertices = ((uint)arena);
-        var quadIndices = (quadVertices + (4u * SdfMeshRegion.VertexWords));
+        var quadIndices = (quadVertices + (4u * SdfMeshRecord.VertexWords));
         var triangleVertices = (quadIndices + 6u);
-        var triangleMaterials = (triangleVertices + (3u * SdfMeshRegion.VertexWords));
+        var triangleMaterials = (triangleVertices + (3u * SdfMeshRecord.VertexWords));
         var triangleIndices = (triangleMaterials + 1u);
         var words = ((int)(triangleIndices + 3u));
         var bytes = (((ulong)words) * sizeof(uint));
@@ -739,7 +739,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         }
 
         Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices);
-        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
+        Record(flags: SdfMeshRecord.NormalsFlag | SdfMeshRecord.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
         Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices);
         expected.AddRange(collection: new uint[(arena - expected.Count)]);
         Vertices(mesh: quad);
@@ -785,12 +785,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         Assert.Equal(
             expected: BitConverter.SingleToUInt32Bits(value: 7f),
-            actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRegion.DrawWords) + 14) * sizeof(uint))), value: shiftedWords)
+            actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRecord.DrawWords) + 14) * sizeof(uint))), value: shiftedWords)
         );
 
         // A list that moves draws over the meshes the region holds repacks only the draw records, and the meshes it kept
         // are the ones a whole repack writes.
-        expected[((2 * SdfMeshRegion.DrawWords) + 14)] = BitConverter.SingleToUInt32Bits(value: 7f);
+        expected[((2 * SdfMeshRecord.DrawWords) + 14)] = BitConverter.SingleToUInt32Bits(value: 7f);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
             actual: shiftedWords
@@ -809,7 +809,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         Assert.InRange(
             actual: rig.Gpu.HostBytes(),
-            high: (((stillBytes + HeaderBytes) + (2 * RunEntryBytes)) + ((SdfMeshRegion.DrawWords + SdfMeshRegion.WordsOf(mesh: landed)) * sizeof(uint))),
+            high: (((stillBytes + HeaderBytes) + (2 * RunEntryBytes)) + ((SdfMeshRecord.DrawWords + SdfMeshRegion.WordsOf(mesh: landed)) * sizeof(uint))),
             low: (stillBytes + HeaderBytes)
         );
 
@@ -819,7 +819,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray()[(arena * sizeof(uint))..],
             actual: landedWords[(arena * sizeof(uint))..((int)bytes)]
         );
-        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: ((words + SdfMeshRegion.VertexWords + 1) * sizeof(uint)), value: landedWords));
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: ((words + SdfMeshRecord.VertexWords + 1) * sizeof(uint)), value: landedWords));
     }
 
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.

@@ -555,13 +555,10 @@ public sealed partial class SdfProgramBuilder {
                     x: MathF.Abs(x: halfWidth),
                     y: MathF.Abs(x: halfHeight)
                 ),
-                y: (((MathF.Abs(x: halfWidth) + MathF.Abs(x: halfHeight)) - chamfer) * SqrtHalf)
+                y: (((MathF.Abs(x: halfWidth) + MathF.Abs(x: halfHeight)) - chamfer) * SdfProgram.SqrtHalf)
             )
         );
     }
-
-    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/field/sdf-program.hlsli and SdfProgram's private copy.
-    private const float SqrtHalf = 0.70710678f;
 
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
     /// never past the profile's own inradius, and — for <see cref="SdfLift.Extrude"/> — never past the lift

@@ -110,7 +110,7 @@ public sealed partial class SdfWorldTables {
             staged = m_meshLanded;
         }
 
-        var drawWords = (staged.Count * SdfMeshRegion.DrawWords);
+        var drawWords = (staged.Count * SdfMeshRecord.DrawWords);
 
         if (drawWords > m_meshDrawWords.Length) {
             m_meshDrawWords = new uint[drawWords];

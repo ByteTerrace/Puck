@@ -3,76 +3,58 @@
 // index sits at, its index count, the word its first vertex sits at, its attribute flags, the word its first triangle
 // material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
 // slot whose frame its mesh is stored in, or -1, and the word its mesh's members sit at), then the vertices, six words
-// each (position, normal), then the triangle materials, then the indices, then each mesh's members. KEEP IN SYNC with
-// SdfMeshRegion.Write. The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
+// each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
+// flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-isa.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
 // sdfDynamicTransforms: sdf-world and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
+#include "../isa/sdf-isa.hlsli"
 
-static const uint SdfMeshDrawWords = 33u;
-static const uint SdfMeshFrameSlotWord = 31u;
-static const uint SdfMeshSkinWord = 32u;
-static const uint SdfMeshMemberWords = 8u;
-static const uint SdfMeshMaterialWord = 16u;
-static const uint SdfMeshIndexWord = 17u;
-static const uint SdfMeshIndexCountWord = 18u;
-static const uint SdfMeshVertexWord = 19u;
-static const uint SdfMeshFlagsWord = 20u;
-static const uint SdfMeshTriangleMaterialWord = 21u;
-static const uint SdfMeshNormalMatrixWord = 22u;
-static const uint SdfMeshVertexWords = 6u;
-// A record's attribute flags: its mesh carries a normal per vertex, a palette entry per triangle and a member per vertex.
-// KEEP IN SYNC with SdfMeshRegion.NormalsFlag, MaterialsFlag and SkinFlag.
-static const uint SdfMeshNormalsFlag = 1u;
-static const uint SdfMeshMaterialsFlag = 2u;
-static const uint SdfMeshSkinFlag = 4u;
-// The bit the view starts at in the index a mesh draw call pushes; the bits below it name the draw. KEEP IN SYNC with
-// SdfKernelInterfaces.MeshViewShift.
-static const uint SdfMeshViewShift = 24u;
-static const uint SdfMeshDrawMask = ((1u << SdfMeshViewShift) - 1u);
+// The bits below the view (SDF_MESH_VIEW_SHIFT) in the index a mesh draw call pushes: the draw.
+static const uint SdfMeshDrawMask = ((1u << SDF_MESH_VIEW_SHIFT) - 1u);
 
 // The first word of a draw's record.
 uint sdfMeshRecord(uint draw) {
-    return (draw * SdfMeshDrawWords);
+    return (draw * SDF_MESH_DRAW_WORDS);
 }
 
 // The material a draw's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh
 // carries one.
 int sdfMeshMaterial(uint draw, uint triangleIndex) {
     uint record = sdfMeshRecord(draw);
-    int material = asint(sdfMeshRegion[(record + SdfMeshMaterialWord)]);
+    int material = asint(sdfMeshRegion[(record + SDF_MESH_MATERIAL_WORD)]);
 
-    if ((sdfMeshRegion[(record + SdfMeshFlagsWord)] & SdfMeshMaterialsFlag) != 0u) {
-        material += asint(sdfMeshRegion[(sdfMeshRegion[(record + SdfMeshTriangleMaterialWord)] + triangleIndex)]);
+    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_MATERIALS_FLAG) != 0u) {
+        material += asint(sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_TRIANGLE_MATERIAL_WORD)] + triangleIndex)]);
     }
 
     return material;
 }
 // The vertex a draw's index `k` names.
 uint sdfMeshIndexAt(uint record, uint k) {
-    return sdfMeshRegion[(sdfMeshRegion[(record + SdfMeshIndexWord)] + k)];
+    return sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_INDEX_WORD)] + k)];
 }
 // The first word of the vertex a draw's index `k` names.
 uint sdfMeshVertexAt(uint record, uint k) {
-    return (sdfMeshRegion[(record + SdfMeshVertexWord)] + (SdfMeshVertexWords * sdfMeshIndexAt(record, k)));
+    return (sdfMeshRegion[(record + SDF_MESH_VERTEX_WORD)] + (SDF_MESH_VERTEX_WORDS * sdfMeshIndexAt(record, k)));
 }
 // The first word of the member a draw's vertex rides (its slot offset, then its baked position and orientation), or zero
 // for a vertex that rides the draw's matrix: a baked group's shape on a slot of its own moves its vertices as that slot
 // moves, so they follow it from where it stood when the mesh was baked (SdfMesh.Members).
 uint sdfMeshMemberEntry(uint record, uint vertex) {
-    if ((sdfMeshRegion[(record + SdfMeshFlagsWord)] & SdfMeshSkinFlag) == 0u) {
+    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_SKIN_FLAG) == 0u) {
         return 0u;
     }
 
-    uint skin = sdfMeshRegion[(record + SdfMeshSkinWord)];
-    uint member = sdfMeshRegion[(((skin + 1u) + (SdfMeshMemberWords * sdfMeshRegion[skin])) + vertex)];
+    uint skin = sdfMeshRegion[(record + SDF_MESH_SKIN_WORD)];
+    uint member = sdfMeshRegion[(((skin + 1u) + (SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin])) + vertex)];
 
-    return ((member == 0xFFFFFFFFu) ? 0u : ((skin + 1u) + (SdfMeshMemberWords * member)));
+    return ((member == 0xFFFFFFFFu) ? 0u : ((skin + 1u) + (SDF_MESH_MEMBER_WORDS * member)));
 }
 // The slot a member rides: the draw's frame slot plus the member's offset.
 uint sdfMeshMemberSlot(uint record, uint entry) {
-    return (uint)(asint(sdfMeshRegion[(record + SdfMeshFrameSlotWord)]) + asint(sdfMeshRegion[entry]));
+    return (uint)(asint(sdfMeshRegion[(record + SDF_MESH_FRAME_SLOT_WORD)]) + asint(sdfMeshRegion[entry]));
 }
 // A point or direction in a mesh's object space carried into the frame of the member at `entry`, by the inverse of where
 // the member stood when the mesh was baked.
@@ -114,7 +96,7 @@ float3 sdfMeshWorldPosition(uint record, uint k) {
 // An object-space normal under a draw's normal matrix (the inverse transpose of its matrix, so a nonuniform scale keeps
 // the normal perpendicular to the surface).
 float3 sdfMeshNormalToWorld(uint record, float3 n) {
-    uint rows = (record + SdfMeshNormalMatrixWord);
+    uint rows = (record + SDF_MESH_NORMAL_MATRIX_WORD);
     float3 row0 = asfloat(uint3(sdfMeshRegion[rows], sdfMeshRegion[(rows + 1u)], sdfMeshRegion[(rows + 2u)]));
     float3 row1 = asfloat(uint3(sdfMeshRegion[(rows + 3u)], sdfMeshRegion[(rows + 4u)], sdfMeshRegion[(rows + 5u)]));
     float3 row2 = asfloat(uint3(sdfMeshRegion[(rows + 6u)], sdfMeshRegion[(rows + 7u)], sdfMeshRegion[(rows + 8u)]));
@@ -222,7 +204,7 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 
-    if (((sdfMeshRegion[(record + SdfMeshFlagsWord)] & SdfMeshNormalsFlag) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
+    if (((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_NORMALS_FLAG) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
         float3 na = sdfMeshWorldNormal(record, first);
         float3 nb = sdfMeshWorldNormal(record, first + 1u);
         float3 nc = sdfMeshWorldNormal(record, first + 2u);

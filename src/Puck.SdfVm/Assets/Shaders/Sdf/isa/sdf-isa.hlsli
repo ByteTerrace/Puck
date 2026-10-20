@@ -217,7 +217,7 @@
 // The visibility record's identity fields, frame-slot lane and the record passes' workgroup edge (SdfVisibility).
 #define SDF_VISIBILITY_KIND_SHIFT  30u
 #define SDF_VISIBILITY_SOURCE_MASK 0x3FFFFFFFu
-#define SDF_TRANSFORM_SLOT_NONE    -1
+#define SDF_TRANSFORM_SLOT_NONE    (-1)
 #define SDF_VISIBILITY_GROUP_EDGE  8u
 #define SDF_SHADOW_BITS            8u
 #define SDF_SHADOW_MASK            0x000000FFu
@@ -227,5 +227,82 @@
 // The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
 #define SDF_TRANSFORM_SLOT_STATIC_WORD  0u
 #define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)
+
+// The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
+#define SDF_VISIBILITY_NORMAL_SCALE 32767.0
+#define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
+
+// The field's shared constants: the chamfer bevel's scale (SdfProgram.SqrtHalf), the smooth blends' radius floor (SdfProgram.SmoothRadiusMin) and the sweep search (SdfFieldEvaluator).
+#define SDF_SQRT_HALF         0.70710677
+#define SDF_SMOOTH_RADIUS_MIN 0.0001
+#define SDF_SWEEP_SAMPLES     32u
+#define SDF_SWEEP_ROUNDS      12u
+
+// The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).
+#define SDF_PCG_MULTIPLIER      0x0019660Du
+#define SDF_PCG_INCREMENT       0x3C6EF35Fu
+#define SDF_HASH_STREAM_A       0x9E3779B9u
+#define SDF_HASH_STREAM_B       0x85EBCA6Bu
+#define SDF_HASH_TUMBLE         0x27D4EB2Fu
+#define SDF_NOISE_SEED_STREAM_Y 0x9E3779B9u
+#define SDF_NOISE_SEED_STREAM_Z 0x85EBCA77u
+#define SDF_R2_ALPHA1           0xC13FA9A9u
+#define SDF_R2_ALPHA2           0x91E10DA6u
+
+// The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).
+#define SDF_MESH_DRAW_WORDS             33u
+#define SDF_MESH_MATERIAL_WORD          16u
+#define SDF_MESH_INDEX_WORD             17u
+#define SDF_MESH_INDEX_COUNT_WORD       18u
+#define SDF_MESH_VERTEX_WORD            19u
+#define SDF_MESH_FLAGS_WORD             20u
+#define SDF_MESH_TRIANGLE_MATERIAL_WORD 21u
+#define SDF_MESH_NORMAL_MATRIX_WORD     22u
+#define SDF_MESH_FRAME_SLOT_WORD        31u
+#define SDF_MESH_SKIN_WORD              32u
+#define SDF_MESH_VERTEX_WORDS           6u
+#define SDF_MESH_MEMBER_WORDS           8u
+#define SDF_MESH_NORMALS_FLAG           0x00000001u
+#define SDF_MESH_MATERIALS_FLAG         0x00000002u
+#define SDF_MESH_SKIN_FLAG              0x00000004u
+#define SDF_MESH_VIEW_SHIFT             24u
+
+// The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS 13u
+#define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
+#define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.35
+
+// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords) and the weight its history saturates at, one period of samples (SdfTemporalSamples.Period).
+#define SDF_HISTORY_SURFACE_WORDS 4u
+#define SDF_HISTORY_WEIGHT_CAP    8.0
+
+// The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
+#define SDF_SKY_ENVIRONMENT_SIZE         64
+#define SDF_SKY_ENVIRONMENT_COEFFICIENTS 9u
+#define SDF_SKY_ENVIRONMENT_MAX_RADIANCE 65504.0
+#define SDF_MAX_VOLUMES                  64u
+#define SDF_VOLUME_SCATTER_ANISOTROPY    0.3
+
+// The surface transport's word (SdfSurfaceTransport) and the atmosphere's guards and flags (SdfAir).
+#define SDF_TRANSPORT_INVERSE_DISTANCE_SCALE 1024.0
+#define SDF_TRANSPORT_SAMPLE_BIT             0x80000000u
+#define SDF_AIR_FOG_COLOR_AUTHORED           0x00000001u
+#define SDF_AIR_MAX_LIGHTS                   4u
+#define SDF_AIR_SERIES_LIMIT                 0.001
+#define SDF_AIR_EXPONENT_LIMIT               60.0
+#define SDF_AIR_STEEP_LIMIT                  (-20.0)
+
+// The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
+#define SDF_DEBUG_VIEW_COUNT       10
+#define SDF_DEBUG_VIEW_OFF         0
+#define SDF_DEBUG_VIEW_DEPTH       1
+#define SDF_DEBUG_VIEW_NORMALS     2
+#define SDF_DEBUG_VIEW_RAYDIR      3
+#define SDF_DEBUG_VIEW_MATERIAL_ID 4
+#define SDF_DEBUG_VIEW_VISIBILITY  5
+#define SDF_DEBUG_VIEW_MOTION      6
+#define SDF_DEBUG_VIEW_SKY_COST    7
+#define SDF_DEBUG_VIEW_AO          8
+#define SDF_DEBUG_VIEW_SHADOW      9
 
 #endif // SDF_ISA_HLSLI

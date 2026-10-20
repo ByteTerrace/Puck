@@ -20,7 +20,7 @@
 #define SKY_KINDS_CLOUDS_HLSLI
 
 float sdfSkyCloudThickness(SdfSkyClouds clouds, SdfSkyLayer layer, float2 p, float threshold, uint octaves) {
-    float warp = sdfPeriodicFbm2((p + clouds.ShearOffset), (clouds.Seed ^ 0x9E3779B9u), octaves);
+    float warp = sdfPeriodicFbm2((p + clouds.ShearOffset), (clouds.Seed ^ SDF_NOISE_SEED_STREAM_Y), octaves);
     float density = sdfPeriodicFbm2((p + (clouds.Warp * (warp - 0.5))), clouds.Seed, octaves);
 
     sdfCountSky(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);

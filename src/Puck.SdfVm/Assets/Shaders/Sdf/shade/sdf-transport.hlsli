@@ -13,9 +13,8 @@
 
 // The scale the coverage over the ray distance is held at, so a half float keeps it normal over every distance a view
 // reaches: from SDF_MINIMUM_NEAR (1024 / 0.02 = 51200, below the half's 65504) to the far limit 8192 at a coverage of
-// one thousandth (1.25e-4, above its smallest normal 6.1e-5), each within a relative 2^-11. KEEP IN SYNC with
-// SdfSurfaceTransport.InverseDistanceScale.
-static const float SdfTransportInverseDistanceScale = 1024.0;
+// one thousandth (1.25e-4, above its smallest normal 6.1e-5), each within a relative 2^-11:
+// SDF_TRANSPORT_INVERSE_DISTANCE_SCALE, SdfSurfaceTransport.InverseDistanceScale.
 
 // The fraction of a surface's light the atmosphere lets through over a ray distance from the eye at `origin` along the
 // unit `direction`. The transport is `precise` (sdf-atmosphere.hlsli), so no compiler contracts or reorders it: every
@@ -35,14 +34,14 @@ float4 sdfSampleTransport(float coverage, float t, float3 origin, float3 directi
     precise float fog = (coverage * air.weights.x);
     precise float haze = (coverage * air.weights.y);
     precise float medium = (coverage * air.weights.z);
-    precise float inverseDistance = ((coverage * SdfTransportInverseDistanceScale) / t);
+    precise float inverseDistance = ((coverage * SDF_TRANSPORT_INVERSE_DISTANCE_SCALE) / t);
 
     return float4(fog, inverseDistance, haze, medium);
 }
 // The ray distance the surface share of a pixel is clipped at: its coverage over its resolved coverage over the
 // distance, the harmonic mean of its samples' distances, each weighted as its color is. Zero for a pixel with no surface.
 float sdfTransportDistance(float coverage, float4 transport) {
-    return (((coverage > 0.0) && (transport.y > 0.0)) ? ((coverage * SdfTransportInverseDistanceScale) / transport.y) : 0.0);
+    return (((coverage > 0.0) && (transport.y > 0.0)) ? ((coverage * SDF_TRANSPORT_INVERSE_DISTANCE_SCALE) / transport.y) : 0.0);
 }
 // A transport is two words, of one of two kinds, told apart by the top bit of the first. Clear: a reconstruction's
 // transport, four half floats, the fog's weight and the scaled inverse distance in the first word (the inverse distance's
@@ -50,7 +49,6 @@ float sdfTransportDistance(float coverage, float4 transport) {
 // the resolve copied whole, its ray distance's float bits below the top bit (zero for a sample with no surface) and a
 // zero second word, from which the composite derives the transport with the arithmetic a native view's composite runs on
 // the same sample.
-static const uint SdfTransportSampleBit = 0x80000000u;
 
 uint2 sdfPackTransport(float4 transport) {
     return uint2(
@@ -59,13 +57,13 @@ uint2 sdfPackTransport(float4 transport) {
     );
 }
 uint2 sdfTransportSampleWord(float t) {
-    return uint2(((asuint(t) & ~SdfTransportSampleBit) | SdfTransportSampleBit), 0u);
+    return uint2(((asuint(t) & ~SDF_TRANSPORT_SAMPLE_BIT) | SDF_TRANSPORT_SAMPLE_BIT), 0u);
 }
 bool sdfTransportIsSample(uint2 word) {
-    return ((word.x & SdfTransportSampleBit) != 0u);
+    return ((word.x & SDF_TRANSPORT_SAMPLE_BIT) != 0u);
 }
 float sdfTransportSampleDistance(uint2 word) {
-    return asfloat(word.x & ~SdfTransportSampleBit);
+    return asfloat(word.x & ~SDF_TRANSPORT_SAMPLE_BIT);
 }
 float4 sdfUnpackTransport(uint2 packed) {
     return float4(f16tof32(packed.x & 0xFFFFu), f16tof32(packed.x >> 16u), f16tof32(packed.y & 0xFFFFu), f16tof32(packed.y >> 16u));

@@ -46,10 +46,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
     private static readonly FixedQ4816 FarDistance = FixedQ4816.FromInteger(value: 1_000_000_000L);
-    // SDF_SMOOTH_RADIUS_MIN / SDF_SQRT_HALF (field/sdf-program.hlsli) — the same epsilon floors the
-    // shader's blend/shape math uses, transcribed to fixed point so a zero/degenerate radius behaves identically.
-    private static readonly FixedQ4816 SmoothRadiusMin = FixedQ4816.FromDouble(value: 0.0001);
-    private static readonly FixedQ4816 SqrtHalf = FixedQ4816.FromDouble(value: 0.70710678118654752440);
+    // SdfProgram.SmoothRadiusMin and SqrtHalf, the kernels' generated SDF_SMOOTH_RADIUS_MIN and SDF_SQRT_HALF, converted
+    // to fixed point once, so a zero or degenerate radius behaves as the shader's blend and shape math does.
+    private static readonly FixedQ4816 SmoothRadiusMin = FixedQ4816.FromDouble(value: SdfProgram.SmoothRadiusMin);
+    private static readonly FixedQ4816 SqrtHalf = FixedQ4816.FromDouble(value: SdfProgram.SqrtHalf);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
     // The central-difference probe offset for TryFieldGradient, in RAW world units. Two failure modes
@@ -903,8 +903,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // three-real-root branch needs acos, which FixedQ4816 does not carry. Any other sweep takes the least gap over t by
     // the shader's own samples and golden-section rounds. The two sides answer the same question, so they agree to the
     // search's resolution, not bit for bit.
-    private const int SweepSamples = 32;
-    private const int SweepRounds = 12;
+    /// <summary>The samples a sweep's distance search takes along its curve before its golden-section rounds (a power of
+    /// two, so every sample's parameter is exact); <c>SdfIsaHlsl</c> writes it into the kernels as
+    /// <c>SDF_SWEEP_SAMPLES</c>.</summary>
+    public const int SweepSamples = 32;
+    /// <summary>The golden-section rounds a sweep's distance search takes about its nearest sample; <c>SdfIsaHlsl</c>
+    /// writes it into the kernels as <c>SDF_SWEEP_ROUNDS</c>.</summary>
+    public const int SweepRounds = 12;
     private static readonly FixedQ4816 SweepBulgeExponent = FixedQ4816.FromDouble(value: 0.65);
     private static readonly FixedQ4816 SweepPi = FixedQ4816.FromDouble(value: Math.PI);
     private static readonly FixedQ4816 SweepGoldenLow = FixedQ4816.FromDouble(value: 0.381966);
