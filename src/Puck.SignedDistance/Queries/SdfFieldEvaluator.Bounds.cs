@@ -802,8 +802,8 @@ public sealed partial class SdfFieldEvaluator {
                 for (var x = -1; (x <= 1); x++) {
                     var h = Pcg3dLatticeNoise.Pcg3d(
                         x: unchecked((uint)(cx + x)) ^ seed,
-                        y: unchecked((uint)(cy + y)) ^ (seed ^ 0x9E3779B9u),
-                        z: unchecked((uint)(cz + z)) ^ (seed ^ 0x85EBCA77u)
+                        y: unchecked((uint)(cy + y)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamY),
+                        z: unchecked((uint)(cz + z)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamZ)
                     );
                     var feature = new IntervalVector3(
                         X: (Point(value: (FixedQ4816.FromInteger(value: x) + Half)) + (Point(value: randomness) * (Point(value: FixedQ4816.FromRawBits(value: (h.X >> 16))) - Point(value: Half)))),
@@ -994,6 +994,12 @@ public sealed partial class SdfFieldEvaluator {
             Z: Lerp(amount: t, from: Lerp(amount: t, from: Point(value: a.Z), to: Point(value: b.Z)), to: Lerp(amount: t, from: Point(value: b.Z), to: Point(value: c.Z)))
         );
     }
+    private static FixedInterval SphereBounds(IntervalVector3 p, FixedInterval radius) => (p.Length - radius);
+    private static FixedInterval TorusBounds(IntervalVector3 p, FixedInterval majorRadius, FixedInterval minorRadius) =>
+        (FixedInterval.Magnitude(x: (FixedInterval.Magnitude(x: p.X, y: p.Z) - majorRadius), y: p.Y) - minorRadius);
+    private static FixedInterval PlaneBounds(IntervalVector3 p, IntervalVector3 normal, FixedInterval offset) =>
+        ((((p.X * normal.X) + (p.Y * normal.Y)) + (p.Z * normal.Z)) + offset);
+    private static IntervalVector3 Interval(FixedVector3 value) => new(X: Point(value: value.X), Y: Point(value: value.Y), Z: Point(value: value.Z));
     private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) =>
         SuperellipsoidSphereBounds(p: p, radii: Interval(value: radii), inverseRadii: Interval(value: inverseRadii));
     private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, IntervalVector3 radii, IntervalVector3 inverseRadii) =>
