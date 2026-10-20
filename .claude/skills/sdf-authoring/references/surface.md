@@ -98,7 +98,7 @@ sphere.
 
 | Field | Range |
 |---|---|
-| `origin` | finite point in world space for static geometry, or the winning dynamic slot's local frame |
+| `origin` | finite point in world space for static geometry, or the local frame of the slot of the shape the surface belongs to (see [paints](#paints), Frames) |
 | `rotation` | finite quaternion |
 | `depth` | ≥ 0 — the plane sits at local `z = −depth` |
 | `ior` | > 0; 1 samples the plane without bending the ray |
@@ -176,10 +176,14 @@ parented paint colours only the surface near it, two parts can share a slot
 (the Moth's two shins share `shinCream`); a projected paint still colours every surface of
 its slot the projection crosses, so a part takes its own slot when a neighbour of
 the same colour lies in the projection (the shins' rings would paint the boots). A
-paint without a parent is in the frame of
-the slot that owns the hit: the slot its baked group rides, which sits at the
-group's first shape's authored position with that shape's axes, or world space
-for static geometry. A static placement shares one palette across its
+paint without a parent, an inset and weathering are in the frame of the slot
+that won the hit: on an animated or body placement, the slot of the shape the
+surface belongs to, centred on that shape's position with its axes (a shape
+with a domain fold: its parent's delta frame), grouped or not (each baked vertex
+rides its own shape's slot), or world space for static geometry. On an
+animated or body placement, the lengths of each (a paint's placement and size,
+an inset's origin, depth and stop radii, weathering's `reach` and the inverse
+of its `scale`) follow the placement scale. A static placement shares one palette across its
 placements and draws no parented paint. To find a frame, paint a test stripe and
 look before trusting the numbers.
 
