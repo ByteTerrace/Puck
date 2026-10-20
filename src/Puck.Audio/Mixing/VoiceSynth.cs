@@ -95,7 +95,7 @@ public sealed class VoiceSynth {
     private const long MaxPitchMillihertz = 24_000_000L;
     private const long PeakQ32 = (65536L << 16);
     // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.
-    private const long TwoPiRawQ16 = 411775L;
+    private static readonly long TwoPiRawQ16 = FixedQ4816.Tau.Value;
 
     /// <summary>The control-rate interval in samples: pitch/rotor updates and rotor renormalization run once per
     /// interval — vibrato and sweeps move at millihertz scales, so 64 samples (1.33 ms) is inaudibly coarse and

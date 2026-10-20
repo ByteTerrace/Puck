@@ -1,5 +1,5 @@
-using System.Numerics;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 using Puck.State;
 
 namespace Puck.Transpiler.Lowering;
@@ -9,79 +9,6 @@ namespace Puck.Transpiler.Lowering;
 /// computed double. Each is an exact rational, and ordering, equality and hashing are decided on that rational, so
 /// what two numbers compare as never depends on which way either is held.</remarks>
 public static class DocumentNumbers {
-    // A number as the ratio it is, in lowest terms with a positive denominator, so equal values are equal fields.
-    private readonly record struct Rational(BigInteger Numerator, BigInteger Denominator) {
-        public static Rational Of(BigInteger numerator, BigInteger denominator) {
-            var divisor = BigInteger.GreatestCommonDivisor(
-                left: numerator,
-                right: denominator
-            );
-
-            return (divisor.IsZero
-                ? new Rational(
-                    Denominator: BigInteger.One,
-                    Numerator: BigInteger.Zero
-                )
-                : new Rational(
-                    Denominator: (denominator / divisor),
-                    Numerator: (numerator / divisor)
-                )
-            );
-        }
-        public static Rational Of(decimal value) {
-            Span<int> bits = stackalloc int[4];
-
-            _ = decimal.GetBits(
-                d: value,
-                destination: bits
-            );
-
-            var magnitude = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((uint)bits[0]);
-
-            return Of(
-                denominator: BigInteger.Pow(
-                    exponent: (bits[3] >> 16) & 0xFF,
-                    value: 10
-                ),
-                numerator: ((bits[3] < 0)
-                    ? -magnitude
-                    : magnitude
-                )
-            );
-        }
-        // IEEE 754 binary64: a sign, eleven exponent bits biased by 1023, and fifty-two fraction bits. A finite
-        // value is its significand times a power of two, exactly.
-        public static Rational Of(double value) {
-            var bits = BitConverter.DoubleToInt64Bits(value: value);
-            var biased = ((int)((bits >> 52) & 0x7FF));
-            var fraction = bits & 0xFFFFFFFFFFFFFL;
-            var significand = ((BigInteger)((biased == 0)
-                ? fraction
-                : fraction | (1L << 52)
-            ));
-            var exponent = (((biased == 0)
-                ? 1
-                : biased
-            ) - 1075);
-
-            if (bits < 0) {
-                significand = -significand;
-            }
-
-            return ((exponent >= 0)
-                ? Of(
-                    denominator: BigInteger.One,
-                    numerator: (significand << exponent)
-                )
-                : Of(
-                    denominator: (BigInteger.One << -exponent),
-                    numerator: significand
-                )
-            );
-        }
-        public int CompareTo(Rational other) => (Numerator * other.Denominator).CompareTo(other: (other.Numerator * Denominator));
-    }
-
     private static bool TryRational(JsonNode? node, out Rational number) {
         number = default;
 
@@ -89,7 +16,7 @@ public static class DocumentNumbers {
             node: node,
             number: out var exact
         )) {
-            number = Rational.Of(value: exact);
+            number = Rational.FromDecimal(value: exact);
 
             return true;
         }
@@ -98,7 +25,7 @@ public static class DocumentNumbers {
             value.TryGetValue<double>(value: out var real) &&
             double.IsFinite(d: real)
         ) {
-            number = Rational.Of(value: real);
+            number = Rational.FromDouble(value: real);
 
             return true;
         }
@@ -157,13 +84,6 @@ public static class DocumentNumbers {
             node: right,
             number: out var rightRatio
         );
-
-        if (leftRatio.Denominator.IsZero) {
-            leftRatio = Rational.Of(value: 0m);
-        }
-        if (rightRatio.Denominator.IsZero) {
-            rightRatio = Rational.Of(value: 0m);
-        }
 
         return leftRatio.CompareTo(other: rightRatio);
     }
@@ -227,24 +147,15 @@ public static class DocumentNumbers {
             return false;
         }
 
-        var first = Rational.Of(value: left);
-        var second = Rational.Of(value: right);
+        var first = Rational.FromDecimal(value: left);
+        var second = Rational.FromDecimal(value: right);
         var expected = (operation switch {
-            ExpressionOp.Add => Rational.Of(
-                denominator: (first.Denominator * second.Denominator),
-                numerator: ((first.Numerator * second.Denominator) + (second.Numerator * first.Denominator))
-            ),
-            ExpressionOp.Subtract => Rational.Of(
-                denominator: (first.Denominator * second.Denominator),
-                numerator: ((first.Numerator * second.Denominator) - (second.Numerator * first.Denominator))
-            ),
-            _ => Rational.Of(
-                denominator: (first.Denominator * second.Denominator),
-                numerator: (first.Numerator * second.Numerator)
-            ),
+            ExpressionOp.Add => (first + second),
+            ExpressionOp.Subtract => (first - second),
+            _ => (first * second),
         });
 
-        return (Rational.Of(value: result) == expected);
+        return (Rational.FromDecimal(value: result) == expected);
     }
     /// <summary>Reads a number held exactly: an integer, or a decimal an author wrote and exact arithmetic
     /// kept.</summary>

@@ -174,11 +174,41 @@ float3 sdfMeshFaceCamera(float3 normal, float3 face, float3 rayDirection) {
 
     return ((along > 0.0) ? normalize(normal - (rayDirection * (along + 1.0e-3))) : normal);
 }
+// Half the surface divergence of the interpolated unit normal. The barycentric gradients are in world units, so
+// a sphere of radius r reports 1/r, a flat plate zero, and a cavity negative curvature. Derive this from the baked
+// triangle's normals, before facing them toward the camera: no field query or neighbouring screen pixel is needed.
+float sdfMeshMeanCurvature(float3 a, float3 b, float3 c, float3 na, float3 nb, float3 nc, float3 weights) {
+    float3 ab = b - a;
+    float3 ac = c - a;
+    float d00 = dot(ab, ab);
+    float d01 = dot(ab, ac);
+    float d11 = dot(ac, ac);
+    float determinant = d00 * d11 - d01 * d01;
+    if (determinant <= max(1.0e-20, d00 * d11 * 1.0e-6)) return 0.0;
+
+    na *= rsqrt(max(dot(na, na), 1.0e-20));
+    nb *= rsqrt(max(dot(nb, nb), 1.0e-20));
+    nc *= rsqrt(max(dot(nc, nc), 1.0e-20));
+    float3 n = weights.x * na + weights.y * nb + weights.z * nc;
+    float lengthSquared = dot(n, n);
+    if (lengthSquared <= 1.0e-12) return 0.0;
+
+    float inverseLength = rsqrt(lengthSquared);
+    n *= inverseLength;
+    float3 gradientB = (d11 * ab - d01 * ac) / determinant;
+    float3 gradientC = (d00 * ac - d01 * ab) / determinant;
+    float3 deltaB = nb - na;
+    float3 deltaC = nc - na;
+    // Differentiating normalize(n) removes the derivative along n and divides by its original length.
+    return 0.5 * inverseLength * (dot(deltaB, gradientB) - dot(n, deltaB) * dot(n, gradientB)
+        + dot(deltaC, gradientC) - dot(n, deltaC) * dot(n, gradientC));
+}
+
 // The surface normal of a draw's triangle at a world point on it, seen along `rayDirection`: the vertex normals
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise, facing the
 // camera (sdfMeshFaceCamera). `faceNormal` is the triangle's own unit normal on the camera's side, the plane the
-// rasterized surface lies in.
-float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal) {
+// rasterized surface lies in. Curvature retains the authored outward orientation, independent of the viewing side.
+float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature) {
     uint record = sdfMeshRecord(draw);
     uint first = (3u * triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
@@ -187,15 +217,20 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     float3 face = cross((b - a), (c - a));
     float3 normal = face;
     float3 weights;
+    curvature = 0.0;
 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 
     if (((sdfMeshRegion[(record + SdfMeshFlagsWord)] & SdfMeshNormalsFlag) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
-        float3 interpolated = (((weights.x * sdfMeshWorldNormal(record, first)) + (weights.y * sdfMeshWorldNormal(record, (first + 1u)))) + (weights.z * sdfMeshWorldNormal(record, (first + 2u))));
+        float3 na = sdfMeshWorldNormal(record, first);
+        float3 nb = sdfMeshWorldNormal(record, first + 1u);
+        float3 nc = sdfMeshWorldNormal(record, first + 2u);
+        float3 interpolated = weights.x * na + weights.y * nb + weights.z * nc;
 
         if (dot(interpolated, interpolated) > 1.0e-20) {
             normal = interpolated;
+            curvature = sdfMeshMeanCurvature(a, b, c, na, nb, nc, weights);
         }
     }
 

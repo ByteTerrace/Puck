@@ -80,8 +80,8 @@ public sealed class AudioMixer {
     private const int ClipLimit = 49151;
     // Below this local-plane raw magnitude (~0.01 units) azimuth is meaningless; pan snaps to center.
     private const long PanEpsilonRaw = 655L;
-    // Pan constants: π/4 in Q16 raw (the equal-power quarter arc), and cos(π/4) for the bed's center pan.
-    private const long QuarterPiRawQ16 = 51472L;
+    // Pan constants: π/4 in Q16 raw (the equal-power quarter arc, half of HalfPi), and cos(π/4) for the bed's center pan.
+    private static readonly long QuarterPiRawQ16 = (FixedQ4816.HalfPi.Value >> 1);
 
     /// <summary>The largest block <see cref="MixBlock"/> renders — the device pump's own real-time quantum ceiling,
     /// unrelated to any simulation rate. A sim step's frame total is not bounded by this: at 90 Hz a step is ~533⅓
@@ -291,26 +291,32 @@ public sealed class AudioMixer {
         ));
     }
     private void ComputeTargets(in AudioListener listener, in AudioEmitter emitter, int frames, out int left, out int right) {
-        var dxRaw = (emitter.Position.X.Value - listener.Position.X.Value);
-        var dyRaw = (emitter.Position.Y.Value - listener.Position.Y.Value);
-        var dzRaw = (emitter.Position.Z.Value - listener.Position.Z.Value);
-
-        // Distance is 3D; azimuth ignores elevation. Every square stays exact in Int128, saturated to long — a raw Q16
-        // long product overflows above a ~46 340-unit radius, so the radius squares saturate the same
-        // way the distance square does rather than wrapping into a spurious attenuation.
-        var d2Wide = ((((((Int128)dxRaw) * dxRaw) + (((Int128)dyRaw) * dyRaw)) + (((Int128)dzRaw) * dzRaw)) >> 16);
-        var d2Q16 = ((d2Wide > long.MaxValue)
-            ? long.MaxValue
-            : ((long)d2Wide)
+        var offset = new FixedVector3(
+            X: FixedQ4816.FromRawBits(value: (emitter.Position.X.Value - listener.Position.X.Value)),
+            Y: FixedQ4816.FromRawBits(value: (emitter.Position.Y.Value - listener.Position.Y.Value)),
+            Z: FixedQ4816.FromRawBits(value: (emitter.Position.Z.Value - listener.Position.Z.Value))
         );
-        var min2Q16 = SaturatingSquareQ16(valueRaw: emitter.MinRadius.Value);
-        var max2Q16 = SaturatingSquareQ16(valueRaw: emitter.MaxRadius.Value);
+        var dxRaw = offset.X.Value;
+        var dzRaw = offset.Z.Value;
+
+        // Distance is 3D; azimuth ignores elevation. The squares are exact and saturate at the carrier rather than
+        // wrapping: a raw Q16 long product overflows above a ~46 340-unit radius, which would read as a spurious
+        // attenuation.
+        var d2Q16 = offset.LengthSquared.Value;
+        var min2Q16 = FixedSaturate.Multiply(
+            left: emitter.MinRadius,
+            right: emitter.MinRadius
+        ).Value;
+        var max2Q16 = FixedSaturate.Multiply(
+            left: emitter.MaxRadius,
+            right: emitter.MaxRadius
+        ).Value;
 
         int attenuationQ16;
 
         if (emitter.Curve == AudioAttenuationCurve.Linear) {
             LinearAttenuation(
-                d2Q16: d2Q16,
+                distanceRaw: offset.Length.Value,
                 minRaw: emitter.MinRadius.Value,
                 maxRaw: emitter.MaxRadius.Value,
                 attenuationQ16: out attenuationQ16
@@ -465,9 +471,7 @@ public sealed class AudioMixer {
 
         return -1;
     }
-    private static void LinearAttenuation(long d2Q16, long minRaw, long maxRaw, out int attenuationQ16) {
-        var distanceRaw = FixedQ4816.Sqrt(value: FixedQ4816.FromRawBits(value: d2Q16)).Value;
-
+    private static void LinearAttenuation(long distanceRaw, long minRaw, long maxRaw, out int attenuationQ16) {
         if (distanceRaw >= maxRaw) {
             attenuationQ16 = 0;
 
@@ -499,16 +503,6 @@ public sealed class AudioMixer {
                 frames: frames
             )
             : 0
-        );
-    }
-    // One Q16 raw value squared back into a Q16 quantity ((r·2^16)^2 >> 16 = r^2·2^16), computed in Int128 and
-    // saturated to long — the overflow-safe form of `raw * raw >> 16`.
-    private static long SaturatingSquareQ16(long valueRaw) {
-        var wide = ((((Int128)valueRaw) * valueRaw) >> 16);
-
-        return ((wide > long.MaxValue)
-            ? long.MaxValue
-            : ((long)wide)
         );
     }
     private static void SmoothstepAttenuation(long d2Q16, long min2Q16, long max2Q16, out int attenuationQ16) {
@@ -607,13 +601,14 @@ public sealed class AudioMixer {
     /// <param name="curve">The attenuation law.</param>
     /// <returns>The attenuation at half radius, Q16.</returns>
     public static int HalfRadiusAttenuationQ16(AudioAttenuationCurve curve) {
+        const long HalfDistanceQ16 = 32768;
         const long HalfDistanceSquaredQ16 = 16384;
         const long UnitRadiusQ16 = 65536;
 
         if (curve == AudioAttenuationCurve.Linear) {
             LinearAttenuation(
                 attenuationQ16: out var linear,
-                d2Q16: HalfDistanceSquaredQ16,
+                distanceRaw: HalfDistanceQ16,
                 maxRaw: UnitRadiusQ16,
                 minRaw: 0
             );

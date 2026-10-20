@@ -381,6 +381,64 @@ public static class WorldPlacementStamper {
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
     private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+        // A bound measures a shape's reach, not its smallest curved feature. Thin strands, shells and warped edges
+        // need their own spacing even when the unwarped primitive or the containing creation has a large bound.
+        private static float ShapeDetail(ShapeDocument shape, float scale) {
+            var detail = float.PositiveInfinity;
+            Vector3 size = shape.Scale ?? Vector3.One;
+
+            if (shape.Cells is { } cells) {
+                detail = MathF.Min(detail, (1f / (32f * cells.Frequency)));
+            }
+            if (shape.Curve is { } curve) {
+                detail = MathF.Min(detail, ((MathF.Min(curve.RadiusStart, curve.RadiusEnd) * size.X) / 8f));
+            }
+            if (shape.Onion is > 0f) {
+                detail = MathF.Min(detail, (shape.Onion.Value / 4f));
+            }
+            if (shape.Profile is { CornerRadius: > 0f, Kind: SdfPrismProfileKind.Convex or SdfPrismProfileKind.RoundedRectangle } profile) {
+                var radius = (profile.CornerRadius * MathF.Min(size.X, size.Y));
+
+                if (profile.Kind == SdfPrismProfileKind.Convex) {
+                    var vertices = new Vector2[profile.Vertices!.Count];
+
+                    for (var index = 0; (index < vertices.Length); index++) {
+                        vertices[index] = (profile.Vertices[index] * new Vector2(x: size.X, y: size.Y));
+                    }
+                    var inradius = SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices);
+
+                    radius = SdfProgramBuilder.ClampRounding(
+                        rounding: ((profile.CornerRadius * inradius) + (shape.Rounding ?? 0f)),
+                        profileInradius: inradius,
+                        lift: (shape.Lift ?? SdfLift.Extrude),
+                        liftAmount: size.Z
+                    );
+                }
+                if (radius > 0f) { detail = MathF.Min(detail, (radius / 4f)); }
+            }
+            if ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Twist is not null) || (shape.Bend is not null) || (shape.Bumps is { Count: > 0 })) {
+                var lift = (shape.Lift ?? SdfLift.Extrude);
+                var x = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitX);
+                var y = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitY);
+                var z = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitZ);
+                var extent = MathF.Min(x, MathF.Min(y, z));
+
+                if (extent > 0f) { detail = MathF.Min(detail, (extent / 32f)); }
+            }
+
+            return (float.IsFinite(detail) ? (detail * scale) : 0f);
+        }
+        private static float CreationDetail(CreationDocument document, float scale) {
+            var detail = float.PositiveInfinity;
+
+            foreach (var shape in (document.Shapes ?? [])) {
+                var own = ShapeDetail(shape: shape, scale: scale);
+
+                if (own > 0f) { detail = MathF.Min(detail, own); }
+            }
+
+            return (float.IsFinite(detail) ? detail : 0f);
+        }
         // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke,
         // about a tenth of its em.
         private static float TextDetail(CreationDocument creation, float scale) {
@@ -475,9 +533,7 @@ public static class WorldPlacementStamper {
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin),
-                        // Cellular relief creases along every cell wall, so it declares a thirty-second of its cell as
-                        // the detail its whole surface bakes at.
-                        detail: ((shape.Cells is { } cells) ? ((placement.Scale / cells.Frequency) / 32f) : 0f)
+                        detail: ShapeDetail(shape: shape, scale: placement.Scale)
                     );
                     CreationStampEmitter.EmitShapeStamp(
                         builder: builder,
@@ -512,7 +568,8 @@ public static class WorldPlacementStamper {
 
             _ = builder.BeginInstance(
                 boundCenter: instance.Origin,
-                boundRadius: (reach + PlacementBoundMargin)
+                boundRadius: (reach + PlacementBoundMargin),
+                detail: CreationDetail(document: creation, scale: placement.Scale)
             );
             if (scoped) {
                 _ = builder.PushField(compose: SdfBlendOp.Union);

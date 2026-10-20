@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Recording.Matroska;
 
@@ -78,7 +79,7 @@ internal static class EbmlWriter {
     /// <param name="stream">The destination stream.</param>
     /// <param name="id">The canonical encoded identifier.</param>
     public static void WriteId(Stream stream, uint id) {
-        var length = (((32 - BitOperations.LeadingZeroCount(value: id)) + 7) / 8);
+        var length = (32 - BitOperations.LeadingZeroCount(value: id)).CeilingDivide(divisor: 8);
         Span<byte> buffer = stackalloc byte[4];
 
         BinaryPrimitives.WriteUInt32BigEndian(

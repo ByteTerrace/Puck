@@ -189,8 +189,8 @@ public sealed class GamepadDevice : IGamepadConnection {
     private bool RumbleSent => ((0f < m_rumbleSentLeft.PeakAmplitude) || (0f < m_rumbleSentRight.PeakAmplitude));
 
     private static HdRumbleSide Normalize(HdRumbleSide side) => new(
-        High: (side.High with { Amplitude = NormalizeIntensity(intensity: side.High.Amplitude), }),
-        Low: (side.Low with { Amplitude = NormalizeIntensity(intensity: side.Low.Amplitude), })
+        High: (side.High with { Amplitude = GamepadNormalization.NormalizeIntensity(intensity: side.High.Amplitude), }),
+        Low: (side.Low with { Amplitude = GamepadNormalization.NormalizeIntensity(intensity: side.Low.Amplitude), })
     );
     // Records a requested rumble: an ordinary one is both actuators at their default carriers. The write itself
     // happens in ServiceRumbleAsync, which owns the controller's cadence.
@@ -251,15 +251,6 @@ public sealed class GamepadDevice : IGamepadConnection {
             // The pad may already be gone; there is nothing left to stop.
         }
     }
-    private static float NormalizeIntensity(float intensity) =>
-        (float.IsFinite(f: intensity)
-            ? Math.Clamp(
-                max: 1f,
-                min: 0f,
-                value: intensity
-            )
-            : 0f
-        );
     // The earliest instant rumble work falls due: a duration's expiry, a held update's write, or a refresh.
     private long NextRumbleDeadline() {
         var deadline = (m_rumbleActive

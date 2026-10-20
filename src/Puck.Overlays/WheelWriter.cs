@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.Overlays;
 
 /// <summary>
@@ -165,7 +167,11 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                 // Layout policy is authored with the radial. The host uses the identical transform for selection:
                 // piece k is CENTERED (k + offset) sectors clockwise from north, so it starts half a span before.
-                var angle = ((sectorIndex + seat.SectorOffset) * span);
+                var angle = BindingWheelGeometry.SectorCenterAngle(
+                    count: sectorCount,
+                    offset: seat.SectorOffset,
+                    sector: sectorIndex
+                );
                 var sector = sectors[sectorIndex];
                 var isHovered = (isActive && (sectorIndex == seat.HoveredSector));
                 var isOutcome = (isActive && (seat.Outcome != OverlayWheelOutcome.None) && (sectorIndex == seat.OutcomeSector));
