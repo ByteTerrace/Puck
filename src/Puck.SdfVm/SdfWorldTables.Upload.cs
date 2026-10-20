@@ -68,9 +68,15 @@ public sealed partial class SdfWorldTables {
             m_work.SkipPass(pass: BricksPass);
         }
         m_work.EnterPass(pass: UploadPass);
-        RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
+        var keepsMotion = KeepsMotion;
+
+        if (!keepsMotion) {
+            RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
+        }
         RecordRegionCopies();
-        CompletePreviousTables(commandBuffer: commandBuffer);
+        if (!keepsMotion) {
+            CompletePreviousTables(commandBuffer: commandBuffer);
+        }
         m_work.LeavePass();
         RecordSkyEnvironmentDecision();
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
