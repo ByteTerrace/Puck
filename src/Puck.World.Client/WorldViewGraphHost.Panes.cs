@@ -41,6 +41,19 @@ public interface IWorldViewScenes {
     /// <param name="view">The session view's instance name.</param>
     /// <returns><see langword="true"/> when the view's world has a residency whose bake is pending.</returns>
     bool Bakes(string view);
+    /// <summary>Finds the extent of what a source instance's image shows, when that differs from the extent the instance
+    /// renders at: a window capture scales the captured window into its profile extent, and shows the window's own
+    /// pixels at the window's own aspect ratio. A pane's published mapping is in these pixels.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <param name="width">The width, in pixels, when this returns <see langword="true"/>.</param>
+    /// <param name="height">The height, in pixels, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the instance shows a captured window that has reported its extent.</returns>
+    bool TrySourceExtent(string instance, out int width, out int height) {
+        width = 0;
+        height = 0;
+
+        return false;
+    }
 }
 /// <summary>Where a session view stands in the world of an instance that reads it.</summary>
 public enum WorldPortalGlass : byte {
@@ -392,8 +405,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             return;
         }
 
+        var fit = FitOf(instance: instance);
         var mapping = MappingOf(
             cached: m_mappings.GetValueOrDefault(key: pass),
+            fit: fit,
             instance: instance,
             latest: latest,
             region: new NormalizedRect(
@@ -413,10 +428,47 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
 
         m_mappings[pass] = mapping;
         m_panes.Add(item: mapping);
+
+        // A contained image is drawn over the part of its slot the mapping maps onto it, so the bars beside it show what
+        // lies beneath the slot and a point on them maps onto no source pixel.
+        if (fit != SourceFit.Stretch) {
+            var drawn = mapping.PaneDrawRegion(
+                displayHeight: m_displayHeight,
+                displayWidth: m_displayWidth
+            );
+
+            m_placements[pass] = (placement with {
+                Height = drawn.Height,
+                Left = drawn.X,
+                Top = drawn.Y,
+                Width = drawn.Width,
+            });
+        }
+    }
+    // How a views.graphs row fits its image to the slots showing it; a view, and a row that authors no fit, stretches.
+    private SourceFit FitOf(string instance) {
+        var rows = m_lastViews?.Graphs;
+
+        for (var index = 0; (index < (rows?.Count ?? 0)); index++) {
+            var row = rows![index];
+
+            if (string.Equals(
+                a: row.Name,
+                b: instance,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return ((row.Fit == WorldHudFrameFit.Contain)
+                    ? SourceFit.Contain
+                    : SourceFit.Stretch);
+            }
+        }
+
+        return SourceFit.Stretch;
     }
     // The mapping of an instance's whole image over a region of the display once the instance has rendered at an extent:
-    // the cached one while its region, extent, source and destination hold, so a steady frame allocates nothing.
-    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached) {
+    // the cached one while its region, extent, fit, source and destination hold, so a steady frame allocates nothing. Its
+    // pixels are the source's own (IWorldViewScenes.TrySourceExtent) where they differ from the rendered extent.
+    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached, SourceFit fit = SourceFit.Stretch) {
         var index = set.IndexOf(name: instance);
 
         if (
@@ -436,24 +488,33 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             ? SourceDestination.Passthrough
             : SourceDestination.Presentation
         );
+        var (width, height) = (((ViewScenes is { } scenes) && scenes.TrySourceExtent(
+            height: out var sourceHeight,
+            instance: instance,
+            width: out var sourceWidth
+        ))
+            ? (sourceWidth, sourceHeight)
+            : (row.Width, row.Height));
         var mapping = cached;
 
         if (
             (mapping is null) ||
             (mapping.Placement is not SourcePlacement.Pane { Region: var shown }) ||
             (shown != region) ||
-            (mapping.SourceWidth != row.Width) ||
-            (mapping.SourceHeight != row.Height) ||
+            (mapping.SourceWidth != width) ||
+            (mapping.SourceHeight != height) ||
+            (mapping.Fit != fit) ||
             (mapping.Source != source) ||
             (mapping.Destination != destination)
         ) {
             mapping = SourceMapping.WholePane(
-                height: row.Height,
+                height: height,
                 region: region,
                 source: source,
-                width: row.Width
+                width: width
             ) with {
                 Destination = destination,
+                Fit = fit,
                 Opener = ((destination == SourceDestination.Passthrough)
                     ? SourceOpener.LocalUser
                     : SourceOpener.Document

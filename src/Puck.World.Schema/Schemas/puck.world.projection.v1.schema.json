@@ -22121,6 +22121,10 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "passThrough": {
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "additionalProperties": false,
@@ -25531,6 +25535,17 @@
                   "high",
                   null
                 ]
+              },
+              "fit": {
+                "description": "How a layout slot showing the instance fits its image: Stretch fills the slot whatever the two aspect ratios, and Contain shows the whole image at its own aspect ratio, centred, with letterbox bars where it does not reach the slot\u0027s edges, which a pointer passes through to the game. A window capture\u0027s aspect ratio is the captured window\u0027s, whatever its profile extent. A pane is never cropped, so Cover is refused. null stretches.",
+                "enum": [
+                  "Cover",
+                  "Contain",
+                  "Stretch",
+                  null
+                ],
+                "default": null,
+                "title": "WorldHudFrameFit"
               }
             },
             "required": [

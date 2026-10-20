@@ -24,6 +24,69 @@ namespace Puck.Commands;
 /// <param name="Filter">The filter the source is sampled with (<see cref="SourceMapping.Filter"/>).</param>
 public readonly record struct SourceDraw(Matrix3x2 Warp, Matrix3x2 Image, NormalizedRect Crop, Vector2 Texel, bool Letterboxes, GpuSamplerFilter Filter);
 public sealed partial record SourceMapping {
+    /// <summary>Returns the rectangle of the display a pane placement's crop is drawn over, unturned, on a display of the
+    /// given extent: the pane's region for <see cref="SourceFit.Stretch"/>, and for <see cref="SourceFit.Contain"/> the
+    /// centred part of it at the crop's aspect ratio, outside which <see cref="MapDisplayPoint"/> answers
+    /// <see cref="SourceHitOutcome.Letterbox"/>. It scales one axis about the region's centre by the ratio
+    /// <see cref="MapDisplayPoint"/> fits by, in double precision, so a point the rectangle holds maps onto the crop and a
+    /// point the rest of the region holds maps onto a bar. A transposing layout fits the crop turned.</summary>
+    /// <param name="displayWidth">The display's width, in pixels; positive.</param>
+    /// <param name="displayHeight">The display's height, in pixels; positive.</param>
+    /// <returns>The rectangle, in normalized display coordinates; for <see cref="SourceFit.Cover"/> it reaches past the
+    /// region on one axis.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="displayWidth"/> or <paramref name="displayHeight"/>
+    /// is not positive.</exception>
+    /// <exception cref="InvalidOperationException">The placement is not a <see cref="SourcePlacement.Pane"/>, or the
+    /// mapping's shape is invalid.</exception>
+    public NormalizedRect PaneDrawRegion(int displayWidth, int displayHeight) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: displayWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: displayHeight);
+        RequireShape();
+
+        if (Placement is not SourcePlacement.Pane pane) {
+            throw new InvalidOperationException(message: $"The source '{Source.Name}' is placed on a world surface, which is drawn from its mapping's draw form, not over a display rectangle.");
+        }
+
+        var region = pane.Region;
+
+        if (Fit == SourceFit.Stretch) {
+            return region;
+        }
+
+        var aspect = ((((double)region.Width) * displayWidth) / (((double)region.Height) * displayHeight));
+        var ratio = (IsTransposing(layout: Layout)
+            ? ((Crop.Width * aspect) / Crop.Height)
+            : (Crop.Width / (Crop.Height * aspect))
+        );
+        var horizontal = ((Fit == SourceFit.Contain)
+            ? (ratio < 1d)
+            : (ratio > 1d)
+        );
+        // The fit scales the image's x by the ratio or its y by the inverse; a transposing layout lays the image's x
+        // along the face's height.
+        var fraction = (horizontal
+            ? ratio
+            : (1d / ratio)
+        );
+        var alongWidth = (horizontal != IsTransposing(layout: Layout));
+        var centreX = (region.X + (0.5d * region.Width));
+        var centreY = (region.Y + (0.5d * region.Height));
+        var width = (alongWidth
+            ? (region.Width * fraction)
+            : region.Width
+        );
+        var height = (alongWidth
+            ? region.Height
+            : (region.Height * fraction)
+        );
+
+        return new NormalizedRect(
+            Height: ((float)height),
+            Width: ((float)width),
+            X: ((float)(centreX - (0.5d * width))),
+            Y: ((float)(centreY - (0.5d * height)))
+        );
+    }
     /// <summary>Returns the chain a surface placement's face is drawn through, in single precision: the form the SDF
     /// screen shading reads. It composes the layout, fit and crop in double precision and rounds each coefficient
     /// once.</summary>

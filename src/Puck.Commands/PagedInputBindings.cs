@@ -399,8 +399,11 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                 }
 
                 fired = (fired || (
-                    row.Held.AsSpan().Contains(value: signalModifierIndex) ||
-                    row.Chord.AsSpan().Contains(value: signalModifierIndex)
+                    !command.PassThrough &&
+                    (
+                        row.Held.AsSpan().Contains(value: signalModifierIndex) ||
+                        row.Chord.AsSpan().Contains(value: signalModifierIndex)
+                    )
                 ));
                 state.ArmedRows[rowIndex] = true;
                 AppendEdge(

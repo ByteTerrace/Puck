@@ -108,6 +108,31 @@ public sealed partial class Win32PointerTests {
         Assert.Equal(WindowInputKind.PointerLeft, dragged[^1].Kind);
     }
 
+    // The host's cursor requests: the system arrow applies at once to a pointer resting over the client area and
+    // WM_SETCURSOR keeps answering for the client area, and a window that is not in the foreground never locks the
+    // pointer, so it never moves the user's cursor.
+    [Fact]
+    public void The_system_arrow_follows_the_host_and_a_background_window_never_locks_the_pointer() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Requires Win32."); return; }
+        using var services = new ServiceCollection().AddWindowsPlatformWindowing().BuildServiceProvider();
+        using var window = Create(services: services);
+        var handle = window.CreateSurfaceBinding().Win32!.Value.WindowHandle;
+        var cursor = Assert.IsAssignableFrom<INativeWindowCursor>(@object: window);
+
+        SendMessage(handle, 0x0200, 0, Position(x: 40, y: 50));
+        cursor.ShowsSystemCursor = true;
+        cursor.ShowsSystemCursor = true;
+        Assert.True(condition: cursor.ShowsSystemCursor);
+        Assert.Equal(1, SendMessage(lParam: 1, message: 0x0020, wParam: handle, window: handle));
+        cursor.ShowsSystemCursor = false;
+        Assert.False(condition: cursor.ShowsSystemCursor);
+
+        cursor.LocksPointer = true;
+        Assert.False(condition: cursor.LocksPointer);
+        cursor.LocksPointer = false;
+        Assert.False(condition: cursor.LocksPointer);
+    }
+
     private static INativeWindow Create(ServiceProvider services) => services.GetServices<INativeWindowBackend>()
         .Single(predicate: x => (x.Kind == NativeDisplayKind.Win32)).Create(options: new NativeWindowOptions { Height = 240, Title = "Puck pointer verification", Width = 320 });
     private static nint Position(int x, int y) => unchecked((nint)(((ushort)x) | (((uint)((ushort)y)) << 16)));

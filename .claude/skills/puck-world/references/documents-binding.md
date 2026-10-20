@@ -18,7 +18,12 @@ member is a modifier id, or a raw source id (`"held": ["mouse.button1",
 `modifiers` remains for thresholds and named multi-source groups. A page row
 applies when its members are satisfied (deepest wins), a command row fires
 when the down set is exactly its members; a row with neither list is the
-group's resting page. A command row targeting a channel may author
+group's resting page. A command row takes the press that completes it (and
+that press's release) from the source's own page binding, so the most specific
+match wins; `passThrough: true` leaves the press to its own binding too, so the
+row adds its destination beside what each member does alone (the Moth's
+`held [mouse.button1, mouse.button2]` row walks forward while each button keeps
+its own drag, in either press order). A command row targeting a channel may author
 `mode: Toggle`: each chord completion flips the input-side channel latch, and
 breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a

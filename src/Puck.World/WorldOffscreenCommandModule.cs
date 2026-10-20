@@ -1,18 +1,18 @@
 using Puck.Commands;
 using Puck.Launcher;
-using Puck.World.Client;
 
 namespace Puck.World;
 
 /// <summary>
 /// The offscreen presentation's own console surface, <c>world.resize</c>: an offscreen host has no window whose size
-/// could change, so a script resizes its display here. The next produced frame composes its cameras for the new extent:
-/// the offscreen host asks its render root for it, the root schedules every instance's footprint against it, and every
-/// camera and session view fits its declared extent to it. The root presents its last image until its graph installs
-/// the new extent, so no frame shows a projection composed for another, and a capture armed meanwhile lands on the first
-/// frame at the new extent. Registered only by <c>AddWorldOffscreenPresentation</c>.
+/// could change, so a script resizes its display here. The next produced frame asks the render root for the new extent,
+/// and the display follows it as a windowed display follows its window (<see cref="WorldDisplayExtent"/>): the root
+/// schedules every instance's footprint against it and every camera and session view fits its declared extent to it. The
+/// root presents its last image until its graph installs the new extent, so no frame shows a projection composed for
+/// another, and a capture armed meanwhile lands on the first frame at the new extent. Registered only by
+/// <c>AddWorldOffscreenPresentation</c>.
 /// </summary>
-internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options, WorldRenderProbe probe, WorldScreenBinder binder, WorldFramePresenter presenter) : ICommandModule {
+internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options) : ICommandModule {
     private const string Verb = "world.resize";
 
     private CommandResult Handler(CommandContext context, WireArgs args) {
@@ -40,25 +40,7 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
             return CommandResult.Error(output: $"[{Verb}: expected a width and a height, each 1..{WorldHostDefaults.MaxDisplayExtent} pixels — world.resize <width> <height>]");
         }
 
-        if (probe.Root is not { } root) {
-            return CommandResult.Error(output: $"[{Verb}: renderer not ready]");
-        }
-
         options.Resize(
-            height: ((uint)height),
-            width: ((uint)width)
-        );
-        root.Resize(
-            height: ((uint)height),
-            width: ((uint)width)
-        );
-        binder.ResizeDisplay(
-            displayHeight: height,
-            displayWidth: width
-        );
-        // The presenter prepares the next frame's panes and cameras before that frame reports its extent, so it learns
-        // the new one here rather than one frame late.
-        presenter.ResizeDisplay(
             height: ((uint)height),
             width: ((uint)width)
         );
@@ -71,7 +53,7 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: "Resizes the offscreen display live: world.resize <width> <height>, each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display keeps its document extent, which the swap chain scales to the window.",
+            description: "Resizes the offscreen display live: world.resize <width> <height>, each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display follows its window's client area.",
             handler: Handler
         );
     }

@@ -418,20 +418,23 @@ and a capture's frame reprojects from the frame of the tick before. The wall
 clock only keeps the host from running faster than the world's rate
 ([host pacing](../../docs/reference/hosting.md#host-pacing)).
 
-An offscreen display has no window whose size could change, so
-`world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
-in this shape) resizes it live, each side 1 to 16384 pixels: the host's
-`OffscreenRenderOptions` asks the next frame for the new extent, the render
-root (`RenderGraphRuntimeNode.Resize`) schedules every instance against it, and
-every camera and session view fits its declared extent to it
-(`WorldScreenBinder.ResizeDisplay`). The cameras are composed for the new
-extent from the next frame on, while the root's graph rebuilds at it beside the
-installed one, so until that graph installs the display shows its last image
-and a capture waits: a screenshot armed on the tick of the resize lands at the
-new extent, never as a frame projected for one extent and shown at another. It
-refuses until the renderer is ready, and with no argument it echoes the current
-extent. A windowed display keeps its document extent, which
-presentation scales to the window.
+The display follows the extent its host asks each frame to fill
+(`WorldDisplayExtent`): a windowed display follows the window's client area, so
+a resize or a maximize renders at the window's own pixels, and the document's
+`host.width` and `host.height` are only the window's first client size. A
+minimized window keeps the display as it was. On the frame that reports a new
+extent, the render root (`RenderGraphRuntimeNode.Resize`) schedules every
+instance against it, every camera and session view fits its declared extent to
+it (`WorldScreenBinder.ResizeDisplay`), and the panes are placed and published
+over it (`world.view.panes` echoes the display extent). The cameras are
+composed for the new extent from that frame on, while the root's graph rebuilds
+at it beside the installed one, so until that graph installs the display shows
+its last image and a capture waits: a screenshot armed on the tick of the
+resize lands at the new extent, never as a frame projected for one extent and
+shown at another. An offscreen display has no window whose size could change,
+so `world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered
+only in this shape) sets the extent its host asks for, each side 1 to 16384
+pixels; with no argument it echoes the current extent.
 
 Both rendered hosts, windowed and offscreen, hold their clock for captures:
 neither steps past an armed capture's tick, a scheduled row's or a
@@ -1729,7 +1732,15 @@ opener, which `world.view.panes` shows. On a windowed host,
 reach the window at the pane's mapped client point, a click there gives the
 window the keyboard, keys and text then go to it instead of the game, every
 release goes where its press went, and Control+Alt+Escape returns the keyboard
-to the game. `source.passthrough close <instance>` closes one, and
+to the game. The World hides the system cursor over its window and draws its
+own, which follows only pointer motion the game sees; over the captured window
+that motion is the window's, so the World shows the system arrow there instead,
+until the pointer leaves the pane's image (`INativeWindowCursor`, set from
+`WorldSourcePassthrough.HoldsPointer` after each batch of events). A row's
+`fit: Contain` shows a capture at the captured window's own aspect ratio,
+centred in its slot with bars beside it; its mapping is in the window's own
+pixels (`IWorldViewScenes.TrySourceExtent`), so a click lands where the window
+is drawn, and a pointer on a bar is the game's. `source.passthrough close <instance>` closes one, and
 `source.passthrough` with no argument echoes where the keyboard is and each
 open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator

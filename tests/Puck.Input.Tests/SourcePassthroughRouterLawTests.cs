@@ -158,6 +158,61 @@ public sealed class SourcePassthroughRouterLawTests {
         Assert.Empty(collection: notes.Deliveries);
     }
     [Fact]
+    public void ThePointerBelongsToAWindowOverItsSourceAndWhileAPressOnItIsHeld() {
+        // The editor's pane contains its image: 512x256 in a 1024x512 rect is already 2:1, so a 1:1 window leaves bars
+        // beside a 512x512 image from display x 256 to 768.
+        var contained = (Pane(
+            source: EditorSource,
+            x: 0f
+        ) with {
+            Crop = SourcePixelRect.Whole(
+                height: 256,
+                width: 256
+            ),
+            Fit = SourceFit.Contain,
+            SourceHeight = 256,
+            SourceWidth = 256,
+        });
+        var declared = (Pane(
+            source: NotesSource,
+            x: 0.5f
+        ) with {
+            Destination = SourceDestination.Presentation,
+            Opener = SourceOpener.Document,
+        });
+        var (router, _, _) = Build(contained, declared);
+
+        Assert.False(condition: router.HoldsPointer);
+
+        _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 512f, y: 256f)));
+        Assert.True(condition: router.HoldsPointer);
+
+        // A letterbox bar, a document's pane and the rest of the display are the game's.
+        foreach (var point in new[] { new Vector2(x: 128f, y: 256f), OnNotes, new Vector2(x: 512f, y: 900f) }) {
+            _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: point));
+            Assert.False(condition: router.HoldsPointer);
+        }
+
+        // A press on the source keeps the pointer with its window until its release, wherever the drag goes.
+        _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 512f, y: 256f)));
+        _ = router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Started
+        ));
+        _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: OnNotes));
+        Assert.True(condition: router.HoldsPointer);
+        _ = router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Completed
+        ));
+        Assert.False(condition: router.HoldsPointer);
+
+        // A pointer that left the display belongs to nobody.
+        _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 512f, y: 256f)));
+        _ = router.Route(inputEvent: WindowInputEvent.PointerLeft());
+        Assert.False(condition: router.HoldsPointer);
+    }
+    [Fact]
     public void TheReservedChordReturnsFocusToTheGame() {
         var (router, editor, _) = Build();
 

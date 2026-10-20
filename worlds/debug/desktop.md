@@ -24,9 +24,14 @@ the bottom two fifths, with its mapping.
 To move or resize the pane, change `paneHeight` in `desktop.puck` (the pane's
 share of the display, measured from the bottom edge) or the layout's slots. A
 slot's `x`, `y`, `width` and `height` are fractions of the display, origin top
-left. To capture another window, change `claudeTitle`. The capture scales the
-window into its `profile` extent and the pane stretches that extent over its
-slot, so a window shaped like the pane reads undistorted.
+left. To capture another window, change `claudeTitle`. The `claude` row's
+`fit: Contain` shows the window at its own aspect ratio, centred in the slot
+with dark bars beside it, whatever the slot's shape, the display's size or the
+capture's `profile` extent (which sets only how many pixels the capture keeps;
+the pane and the wall screen share `claudeCapture`, at the window's own size).
+`world.view.panes` lists the pane's source at the window's own size (`source
+2560x1392` for a maximized window) with `fit Contain`. The display follows the
+World's window, so maximizing it re-lays the pane over the larger display.
 
 ## Use the window from inside the World
 
@@ -41,7 +46,9 @@ window to carry; the verb refuses if the pane is not shown or the window's title
 does not contain it. Once open, `world.view.panes` ends the pane's mapping
 with `destination Passthrough` in place of `destination Presentation`. A click on the pane gives the window the keyboard;
 pointer events over the pane reach the window at the matching point, and keys
-and text go to it instead of the game.
+and text go to it instead of the game. Over the window the World shows the
+system arrow in place of its own drawn cursor; on the bars beside it and
+everywhere else the pointer is the game's.
 
 - **Control+Alt+Escape** returns the keyboard to the game. The source stays
   open, and another click on the pane gives the window the keyboard again.
