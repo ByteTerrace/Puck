@@ -96,14 +96,20 @@ world validation precede runtime commit; a successful configuration change becom
 the canonical machine declaration. `screen.insert` and `forge.play` resolve their
 named producer and use this same operation path. `screen.eject` detaches the display.
 
-A declaration's optional `contentFolder` names the folder, beside the declaring
-document, that holds what the machine can swap to. `machine.content <instance>`
-lists the files directly in it that the machine's engine can mount (the files its
-content provider recognizes, or every file for an engine that mounts raw bytes)
-and marks the one mounted; `machine.swap <instance> <name>` mounts one by file
-name, or by the part before its first `.` when only one listed file has it,
-through the same `content.insert` operation. Nothing outside the folder is
-listed or mounted by name (`WorldMachineContentFolder`).
+A declaration's optional `contentFolders` lists the folders, each beside the
+declaring document, that hold what the machine can swap to; a listed folder
+need not exist on every machine. `machine.content <instance>` lists every file
+directly in them, folder by folder, as mountable or refused with the reason:
+mountable when the engine's content provider prepares it or the engine judges
+the raw image runnable by its header (`IMachineImageRecognizer`), and every
+file for a raw-content engine with neither. It names each folder present or
+absent and marks the one mounted, or `no cartridge`. `machine.swap <instance>
+<name>` mounts one by file name, `<folder>/<file>`, or the part before its first
+`.`, through the same `content.insert` operation, and refuses an unknown,
+ambiguous or unmountable name by name. Nothing outside the folders is listed or
+mounted by name (`WorldMachineContentFolder`). A declaration whose content file
+is absent boots its machine with no cartridge rather than refusing the world;
+an operation naming absent content is refused.
 
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;

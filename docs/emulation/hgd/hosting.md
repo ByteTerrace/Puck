@@ -11,8 +11,12 @@ is particular to the Deck.
 `HumbleGamingDeckExtension` registers it; the World and the CLI compose it as a
 built-in, and the silo installs the forge as an extension. Its configuration,
 `puck.humble-gaming-deck.configuration.v1`, has one field, `content.path`: an
-iNES or NES 2.0 image on an NROM, MMC1 or MMC3 board, mounted as raw bytes, so no content provider registers
-with it and a machine's `contentFolder` offers every file it holds. The engine
+iNES or NES 2.0 image on an NROM, MMC1 or MMC3 board, mounted as raw bytes, so
+no content provider registers with it. The engine judges a file in a machine's
+`contentFolders` by its header (`IMachineImageRecognizer`): an image with the
+iNES signature and a board and memory layout the Deck implements is mountable,
+and any other file is listed as refused with the loader's reason, so an image
+of an unimplemented mapper is refused by name rather than started. The engine
 takes no options and no firmware: the cartridge starts through its reset vector
 with the default power-on profile. Its operations are `content.insert`,
 `content.eject` and `machine.reset`, each a host replacement. The engine parses

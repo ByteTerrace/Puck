@@ -16,6 +16,7 @@ public sealed class CartridgeHeader {
     // The region the companion console's boot ROM forwards, one bit at a time: 0x0104 through 0x014F inclusive.
     private const int ForwardedEnd = 0x014F;
     private const int ForwardedStart = 0x0104;
+    private const int HeaderChecksumOffset = 0x014D;
     private const int NewLicenseeOffset = 0x0144;
     private const byte NewLicenseeSentinel = 0x33;
     private const int OldLicenseeOffset = 0x014B;
@@ -24,6 +25,8 @@ public sealed class CartridgeHeader {
     private const int TitleEnd = 0x0143;
     private const int TitleStart = 0x0134;
 
+    /// <summary>The length of the header region, <c>0x0000</c>–<c>0x014F</c>: an image shorter than this has no header.</summary>
+    public const int Length = 0x0150;
     /// <summary>The header offset of the 48-byte boot logo bitmap the boot program forwards and compares.</summary>
     public const int LogoOffset = 0x0104;
 
@@ -95,6 +98,8 @@ public sealed class CartridgeHeader {
     public bool SupportsColor { get; }
     /// <summary>Gets the cartridge title as printable ASCII.</summary>
     public string Title { get; }
+    /// <summary>Gets the header's cartridge-type byte (<c>0x0147</c>), which <see cref="Mapper"/> decodes.</summary>
+    public byte TypeCode { get; }
     /// <summary>Gets the 8-bit sum of the sixteen title-region bytes (<c>0x0134</c>–<c>0x0143</c>), the hash the Color
     /// boot ROM uses to pick a compatibility palette and that steers its header-dependent timing.</summary>
     public byte TitleChecksum { get; }
@@ -114,7 +119,8 @@ public sealed class CartridgeHeader {
         byte oldLicenseeCode,
         byte newLicenseeCode0,
         byte newLicenseeCode1,
-        int forwardedSetBitCount
+        int forwardedSetBitCount,
+        byte typeCode
     ) {
         ColorOnly = colorOnly;
         ForwardedSetBitCount = forwardedSetBitCount;
@@ -131,6 +137,7 @@ public sealed class CartridgeHeader {
         SupportsColor = supportsColor;
         Title = title;
         TitleChecksum = titleChecksum;
+        TypeCode = typeCode;
     }
 
     // The boot ROM's title hash: the 8-bit sum of every byte from 0x0134 through 0x0143 (the color flag included).
@@ -198,7 +205,7 @@ public sealed class CartridgeHeader {
             0xFC => (MapperKind.Camera, true, true, false),
             0xFE => (MapperKind.HuC3, true, true, false),
             0xFF => (MapperKind.HuC1, true, true, false),
-            _ => (MapperKind.RomOnly, false, false, false),
+            _ => (MapperKind.Unimplemented, false, false, false),
         };
     }
     private static string ReadTitle(byte[] rom) {
@@ -259,7 +266,39 @@ public sealed class CartridgeHeader {
             oldLicenseeCode: rom[OldLicenseeOffset],
             newLicenseeCode0: rom[NewLicenseeOffset],
             newLicenseeCode1: rom[(NewLicenseeOffset + 1)],
-            forwardedSetBitCount: CountForwardedSetBits(rom: rom)
+            forwardedSetBitCount: CountForwardedSetBits(rom: rom),
+            typeCode: typeCode
         );
     }
+    /// <summary>Computes the header checksum the boot program verifies: <c>x = x - byte - 1</c> over
+    /// <c>0x0134</c>–<c>0x014C</c>, starting from zero.</summary>
+    /// <param name="rom">The image's leading bytes, through <c>0x014C</c> at least.</param>
+    /// <returns>The checksum the image's byte at <c>0x014D</c> must equal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rom"/> ends before <c>0x014D</c>.</exception>
+    public static byte ComputeHeaderChecksum(ReadOnlySpan<byte> rom) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rom.Length,
+            other: HeaderChecksumOffset,
+            paramName: nameof(rom)
+        );
+
+        byte checksum = 0;
+
+        for (var offset = TitleStart; (offset < HeaderChecksumOffset); ++offset) {
+            checksum = ((byte)((checksum - rom[offset]) - 1));
+        }
+
+        return checksum;
+    }
+    /// <summary>Determines whether an image carries a brick cartridge header: it is at least <see cref="Length"/>
+    /// bytes long and its byte at <c>0x014D</c> holds <see cref="ComputeHeaderChecksum"/>, the check every boot
+    /// program makes before it hands the cartridge control.</summary>
+    /// <param name="header">The image's leading bytes, at least <see cref="Length"/> of them when the image has that
+    /// many.</param>
+    /// <param name="imageLength">The whole image's length in bytes.</param>
+    /// <returns><see langword="true"/> when the header checksum holds.</returns>
+    public static bool IsCartridgeImage(ReadOnlySpan<byte> header, long imageLength) =>
+        ((imageLength >= Length) &&
+        (header.Length >= Length) &&
+        (header[HeaderChecksumOffset] == ComputeHeaderChecksum(rom: header)));
 }

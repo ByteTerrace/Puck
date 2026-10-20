@@ -6549,9 +6549,9 @@ export type WorldMachine = {
    */
   cable?: WorldMachineCable | null;
   /**
-   * The folder holding the content this device can swap to, relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. machine.content lists the files in it the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folder is listed. Omitted from the wire when null.
+   * The folders holding the content this device can swap to, in the order they are listed and searched, each relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. A folder that does not exist on this machine is listed as absent, never refused, so a world can name a local folder that only some machines hold. machine.content lists the files in them the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folders is listed. Omitted from the wire when null.
    */
-  contentFolder?: string | null;
+  contentFolders?: (string | null)[] | null;
 };
 
 export type WorldMachineCable = {

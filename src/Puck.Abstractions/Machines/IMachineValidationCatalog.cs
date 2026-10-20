@@ -27,4 +27,16 @@ public interface IMachineValidationCatalog {
     /// file the provider does not recognize is not content for it.</summary>
     /// <param name="engineId">The ordinal engine identifier.</param>
     bool HasContentProvider(string engineId);
+    /// <summary>Gets how many leading bytes the selected engine reads to recognize a raw image it mounts
+    /// (<see cref="IMachineImageRecognizer"/>), or 0 when the engine recognizes no image by its header.</summary>
+    /// <param name="engineId">The ordinal engine identifier.</param>
+    int ImageHeaderLength(string engineId);
+    /// <summary>Returns why the selected engine's machines do not run a raw image, judged by the image's header
+    /// (<see cref="IMachineImageRecognizer.RefuseImage"/>).</summary>
+    /// <param name="engineId">The ordinal engine identifier.</param>
+    /// <param name="header">The image's leading bytes, <see cref="ImageHeaderLength"/> of them or the whole image.</param>
+    /// <param name="imageLength">The whole image's length in bytes.</param>
+    /// <returns>The reason, or <see langword="null"/> when the engine's machines run the image; an engine that judges
+    /// no image by its header refuses every one.</returns>
+    string? RefuseImage(string engineId, ReadOnlySpan<byte> header, long imageLength);
 }

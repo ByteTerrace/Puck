@@ -140,12 +140,18 @@
         "default": null,
         "title": "WorldMachineCable"
       },
-      "contentFolder": {
-        "description": "The folder holding the content this device can swap to, relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. machine.content lists the files in it the device\u0027s engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folder is listed. Omitted from the wire when null.",
+      "contentFolders": {
+        "description": "The folders holding the content this device can swap to, in the order they are listed and searched, each relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. A folder that does not exist on this machine is listed as absent, never refused, so a world can name a local folder that only some machines hold. machine.content lists the files in them the device\u0027s engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folders is listed. Omitted from the wire when null.",
         "type": [
-          "string",
+          "array",
           "null"
         ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "default": null
       }
     },

@@ -895,7 +895,13 @@ out through the slot's transform in the frame, the previous frame's for motion,
 so a hinged part blended into a group swings with its slot. A cut or
 intersection face rides the shape it shapes rather than the cutter. A seam
 between two members that move far apart stretches, since each vertex follows one
-slot rigidly.
+slot rigidly, until the members hold still: once their poses in the group's frame
+have drifted past a centimetre or two degrees from the baked pose and then held
+for half a second, the group is planned again at that pose, snapped to 7.8 mm
+steps so poses that settle near one another share one stored mesh, and its new
+mesh replaces the skinned one when it lands (`SdfMeshSettle`). A pose still
+changing never rebakes, and a residency starts at most two such rebakes at once
+and four a second; `world.counters sdf.mesh-settle` counts them.
 
 The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a

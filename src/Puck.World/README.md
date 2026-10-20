@@ -1788,7 +1788,7 @@ boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert`, `forge.play` and `machine.swap` (a file from the
-machine's authored `contentFolder`, which `machine.content` lists) use that
+machine's authored `contentFolders`, which `machine.content` lists) use that
 executor for named producers, while `screen.eject` detaches the display. The debug
 world's device row runs one of each machine
 ([`devices.md`](Assets/worlds/devices.md)). The screen operations (insert, eject,
@@ -2219,7 +2219,11 @@ client registers `presentation.mirror`, the cells its state mirror read. A
 presented host registers `sdf.transforms`: pacing counts of the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the
 frame source each session view composes for itself. A released session view's
-totals stay in the sum. The
+totals stay in the sum. It also registers `sdf.mesh-settle`, the settle rebakes
+of skinned blend groups (`SdfMeshSettle`) over every residency sharing the
+presentation's mesh library: groups queued, done and reused from the library,
+frames a drifted group waited while it moved or for the caps, and rebakes
+refused for meshing no surface. The
 `allocation` section names the GC mode and the fewest managed bytes one read of
 every count allocated (`world.counters.read`, measured with
 `AllocationWindow.Measure`); only zero or not zero is meaningful. A render host

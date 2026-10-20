@@ -803,6 +803,8 @@ public sealed class MachineConfigurationLawTests {
 
         public bool CanPrepare(string engineId, string contentPath) => false;
         public bool HasContentProvider(string engineId) => false;
+        public int ImageHeaderLength(string engineId) => 0;
+        public string? RefuseImage(string engineId, ReadOnlySpan<byte> header, long imageLength) => "test";
         public static MachineEngineDescriptor Engine(MachineObjectDescriptor configuration) =>
             new(
                 AudioOutputs: [],

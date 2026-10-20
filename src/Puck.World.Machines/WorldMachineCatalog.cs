@@ -90,6 +90,27 @@ public sealed class WorldMachineCatalog : IMachineValidationCatalog {
         ) && provider.Recognizes(contentPath: contentPath));
     /// <inheritdoc/>
     public bool HasContentProvider(string engineId) => ContentProviders.ContainsKey(key: engineId);
+    /// <inheritdoc/>
+    public int ImageHeaderLength(string engineId) =>
+        ((Engines.TryGetValue(
+            key: engineId,
+            value: out var engine
+        ) && (engine is IMachineImageRecognizer recognizer))
+            ? recognizer.ImageHeaderLength
+            : 0
+        );
+    /// <inheritdoc/>
+    public string? RefuseImage(string engineId, ReadOnlySpan<byte> header, long imageLength) =>
+        ((Engines.TryGetValue(
+            key: engineId,
+            value: out var engine
+        ) && (engine is IMachineImageRecognizer recognizer))
+            ? recognizer.RefuseImage(
+                header: header,
+                imageLength: imageLength
+            )
+            : $"engine '{engineId}' judges no image by its header"
+        );
     /// <summary>Returns whether this host can construct the named engine.</summary>
     /// <param name="engineId">The ordinal engine identifier.</param>
     public bool IsRegistered(string engineId) => Engines.ContainsKey(key: engineId);
