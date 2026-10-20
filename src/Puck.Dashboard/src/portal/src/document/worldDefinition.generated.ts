@@ -8552,10 +8552,6 @@ export type WorldPrototype = {
          * The pose orientation.
          */
         rotation: unknown;
-        /**
-         * The pose scale.
-         */
-        scale: unknown;
       } | null)[];
     } | null)[] | null;
     /**

@@ -138,8 +138,7 @@ public sealed class WorldTextAuthoringLawTests {
                     Transforms: [new FrameTransformDocument(
                             Id: 1,
                             Position: Vector3.UnitY,
-                            Rotation: Quaternion.Identity,
-                            Scale: Vector3.One
+                            Rotation: Quaternion.Identity
                         )]
                 )],
             TextRuns: [new TextRunDocument(

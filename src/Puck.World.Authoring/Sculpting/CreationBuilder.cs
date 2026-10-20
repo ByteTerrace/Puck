@@ -126,8 +126,7 @@ public sealed class CreationBuilder {
     private readonly Dictionary<string, int> m_shapeIndexByName = new(comparer: StringComparer.Ordinal);
     private int m_nextId = 100;
 
-    /// <summary>The declared frames, keyed by name — populate directly (a sculpt authors these as plain
-    /// <see cref="FrameDocument"/> values, or through <see cref="Frame"/>).</summary>
+    /// <summary>Gets the declared frames, keyed by name; a sculpt adds plain <see cref="FrameDocument"/> values.</summary>
     public List<FrameDocument> Frames { get; } = [];
     /// <summary>The declared cameras.</summary>
     public List<CreationCameraDocument> Cameras { get; } = [];
@@ -354,34 +353,6 @@ public sealed class CreationBuilder {
         m_fixedIds[name] = id;
 
         return this;
-    }
-    /// <summary>Authors one <see cref="FrameDocument"/> from a snapshot of named shapes' CURRENT transforms, with
-    /// per-shape scale overrides — the blink-frame primitive (collapse an eye's Y scale to read closed).</summary>
-    /// <param name="name">The frame's name.</param>
-    /// <param name="scaleOverrides">Each entry's shape (by name) and the scale it carries in this frame; a shape
-    /// named here must already be declared.</param>
-    public FrameDocument Frame(string name, IEnumerable<(string ShapeName, Vector3 Scale)> scaleOverrides) {
-        var transforms = new List<FrameTransformDocument>();
-
-        foreach (var (shapeName, scale) in scaleOverrides) {
-            var shape = Find(name: shapeName);
-
-            transforms.Add(item: new FrameTransformDocument(
-                Id: shape.Id,
-                Position: new DocumentVector3(value: shape.Position),
-                Rotation: new DocumentQuaternion(value: shape.Rotation),
-                Scale: new DocumentVector3(value: scale)
-            ));
-        }
-
-        var frame = new FrameDocument(
-            Name: name,
-            Transforms: transforms
-        );
-
-        Frames.Add(item: frame);
-
-        return frame;
     }
     /// <summary>Runs <paramref name="both"/> once for <see cref="Left"/> then once for <see cref="Right"/> — the
     /// L/R pair-emission helper: <c>builder.Mirror(side => builder.Shape($"arm{side.Suffix}", ..., side.Sign * x, ...))</c>.</summary>

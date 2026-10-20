@@ -1908,20 +1908,15 @@
                       "rotation": {
                         "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
                         "description": "The pose orientation."
-                      },
-                      "scale": {
-                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
-                        "description": "The pose scale."
                       }
                     },
                     "required": [
                       "id",
                       "position",
-                      "rotation",
-                      "scale"
+                      "rotation"
                     ],
                     "additionalProperties": false,
-                    "description": "One shape\u0027s transform inside a timeline frame."
+                    "description": "One shape\u0027s rigid pose inside a timeline frame. A frame carries no scale: a frame pose rides the shape\u0027s dynamic slot, which holds a position and an orientation, while a shape\u0027s scale is baked into its geometry."
                   },
                   "description": "The per-shape transform snapshots, keyed by shape id."
                 }

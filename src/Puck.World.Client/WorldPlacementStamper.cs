@@ -847,9 +847,9 @@ public static class WorldPlacementStamper {
         );
     }
     /// <summary>Whether a creation row animates — the static/animated fork every consumer shares. A driver or an
-    /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its shape's authored position, rotation or
-    /// scale (a state-bound value always differs from a literal). A creation whose frames carry no transforms, or only
-    /// its shapes' authored poses, moves nothing, so it stamps statically.</summary>
+    /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its
+    /// shape's authored position or rotation (a state-bound value always differs from a literal). A creation whose frames
+    /// carry no transforms, or only its shapes' authored poses, moves nothing, so it stamps statically.</summary>
     /// <param name="creation">The creation row.</param>
     /// <returns><see langword="true"/> when the creation's drivers, effectors or frames move a shape.</returns>
     public static bool IsAnimated(WorldPrototype creation) {
@@ -869,7 +869,7 @@ public static class WorldPlacementStamper {
                 foreach (var shape in shapes) {
                     if (
                         (shape.Id == transform.Id) &&
-                        (!Equals(objA: shape.Position, objB: transform.Position) || !Equals(objA: shape.Rotation, objB: transform.Rotation) || !Equals(objA: shape.Scale, objB: transform.Scale))
+                        (!Equals(objA: shape.Position, objB: transform.Position) || !Equals(objA: shape.Rotation, objB: transform.Rotation))
                     ) {
                         return true;
                     }

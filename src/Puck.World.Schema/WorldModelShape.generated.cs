@@ -1607,7 +1607,6 @@ public static partial class WorldModelShape {
                 M("id", typeof(global::System.Int32), typeof(global::Puck.World.Authoring.FrameTransformDocument), "Id", Read | Write, static value => ((global::Puck.World.Authoring.FrameTransformDocument)value).Id),
                 M("position", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.FrameTransformDocument), "Position", Read | Write, static value => ((global::Puck.World.Authoring.FrameTransformDocument)value).Position),
                 M("rotation", typeof(global::Puck.Assets.Documents.DocumentQuaternion), typeof(global::Puck.World.Authoring.FrameTransformDocument), "Rotation", Read | Write, static value => ((global::Puck.World.Authoring.FrameTransformDocument)value).Rotation),
-                M("scale", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.FrameTransformDocument), "Scale", Read | Write, static value => ((global::Puck.World.Authoring.FrameTransformDocument)value).Scale),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.PaletteEntryDocument), true, JsonTypeInfoKind.Object, null,

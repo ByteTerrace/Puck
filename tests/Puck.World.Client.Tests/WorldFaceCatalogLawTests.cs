@@ -103,8 +103,7 @@ public sealed class WorldFaceCatalogLawTests {
                         Transforms: [new FrameTransformDocument(
                                 Id: 0,
                                 Position: ShapeOffset,
-                                Rotation: Quaternion.Identity,
-                                Scale: ShapeScale
+                                Rotation: Quaternion.Identity
                             )]
                     )]
             : null),

@@ -99,8 +99,7 @@ public sealed class WorldStampPoolCompactionLawTests {
                                 y: 0f,
                                 z: 0f
                             ),
-                            Rotation: Quaternion.Identity,
-                            Scale: second.Scale
+                            Rotation: Quaternion.Identity
                         )]
                 )],
             },
@@ -185,8 +184,7 @@ public sealed class WorldStampPoolCompactionLawTests {
                     Transforms: [new FrameTransformDocument(
                             Id: 0,
                             Position: Vector3.UnitY,
-                            Rotation: Quaternion.Identity,
-                            Scale: new Vector3(value: .1f)
+                            Rotation: Quaternion.Identity
                         )]
                 )],
             }

@@ -492,8 +492,7 @@ public sealed class CreationDomainParentLawTests {
                     Transforms: [new FrameTransformDocument(
                             Id: 1,
                             Position: Vector3.Zero,
-                            Rotation: Quaternion.Identity,
-                            Scale: Vector3.One
+                            Rotation: Quaternion.Identity
                         )]
                 )],
             torso: Torso(swings: null)
@@ -516,8 +515,7 @@ public sealed class CreationDomainParentLawTests {
                     Transforms: [new FrameTransformDocument(
                             Id: 0,
                             Position: Vector3.Zero,
-                            Rotation: Quaternion.Identity,
-                            Scale: Vector3.One
+                            Rotation: Quaternion.Identity
                         )]
                 )],
             torso: Torso(swings: null)

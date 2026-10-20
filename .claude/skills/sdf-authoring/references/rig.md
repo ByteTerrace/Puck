@@ -193,10 +193,13 @@ Chain refusals worth recognizing:
 ## Frames
 
 `frames` is a list of `{ name, transforms }` where each transform is
-`{ id, position, rotation, scale }` addressing a shape by id. A frame snapshots
+`{ id, position, rotation }` addressing a shape by id. A frame snapshots
 **base** poses, replacing the parent's base pose rather than joining the delta
 chain. There is no interpolation between frames; `rest` is the live pose. A
-transform naming a missing shape id is refused, not dropped.
+transform naming a missing shape id is refused, not dropped. A frame carries no
+scale: its pose rides the shape's dynamic slot, which holds a position and an
+orientation only, while scale is baked into the shape's geometry, so nothing in
+the motion vocabulary scales a shape over time.
 
 ## The remaining sections
 

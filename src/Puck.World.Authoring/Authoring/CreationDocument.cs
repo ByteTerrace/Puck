@@ -359,12 +359,12 @@ public sealed record ChainDocument(
 /// <param name="Name">The frame's name (<c>rest</c> is the live pose).</param>
 /// <param name="Transforms">The per-shape transform snapshots, keyed by shape id.</param>
 public sealed record FrameDocument(string Name, IReadOnlyList<FrameTransformDocument> Transforms);
-/// <summary>One shape's transform inside a timeline frame.</summary>
+/// <summary>One shape's rigid pose inside a timeline frame. A frame carries no scale: a frame pose rides the shape's
+/// dynamic slot, which holds a position and an orientation, while a shape's scale is baked into its geometry.</summary>
 /// <param name="Id">The shape id the snapshot belongs to.</param>
 /// <param name="Position">The pose position.</param>
 /// <param name="Rotation">The pose orientation.</param>
-/// <param name="Scale">The pose scale.</param>
-public sealed record FrameTransformDocument(int Id, DocumentVector3 Position, DocumentQuaternion Rotation, DocumentVector3 Scale);
+public sealed record FrameTransformDocument(int Id, DocumentVector3 Position, DocumentQuaternion Rotation);
 /// <summary>
 /// One camera eye a creation carries — a posed viewpoint anchored to one of the creation's own shapes (a
 /// <see cref="ShapeDocument.Id"/>), so the eye rides that shape's live pose through IK/animation frames. This is the

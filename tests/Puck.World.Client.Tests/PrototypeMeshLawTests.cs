@@ -73,7 +73,7 @@ public sealed class PrototypeMeshLawTests {
             name: PrototypeId,
             palette: CreationFixtures.GreyAndBlue,
             shapes: [CreationFixtures.UnitSphereShape]
-        ) with { Frames = [new FrameDocument(Name: "lift", Transforms: [new FrameTransformDocument(Id: CreationFixtures.UnitSphereShape.Id, Position: (CreationFixtures.UnitSphereShape.Position.Value + Vector3.UnitY), Rotation: CreationFixtures.UnitSphereShape.Rotation, Scale: CreationFixtures.UnitSphereShape.Scale)])] })) with { Mesh = mesh })],
+        ) with { Frames = [new FrameDocument(Name: "lift", Transforms: [new FrameTransformDocument(Id: CreationFixtures.UnitSphereShape.Id, Position: (CreationFixtures.UnitSphereShape.Position.Value + Vector3.UnitY), Rotation: CreationFixtures.UnitSphereShape.Rotation)])] })) with { Mesh = mesh })],
     });
     // The slab's placement attached to body 0, one unit above it.
     private static WorldDefinition Attached(WorldPrototypeMesh? mesh) {

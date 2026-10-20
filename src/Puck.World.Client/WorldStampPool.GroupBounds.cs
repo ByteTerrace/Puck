@@ -72,13 +72,7 @@ public sealed partial class WorldStampPool {
             foreach (var frame in (document.Frames ?? [])) {
                 var anchorPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == anchor.Id));
                 var memberPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == shape.Id));
-                // Changing geometry scale needs a larger envelope than the rest primitive below provides.
-                if (
-                    ((anchorPose is not null) && (anchorPose.Scale.Value != anchor.Scale.Value)) ||
-                    ((memberPose is not null) && (memberPose.Scale.Value != shape.Scale.Value))
-                ) {
-                    return false;
-                }
+
                 separation = MathF.Max(
                     x: separation,
                     y: Vector3.Distance(

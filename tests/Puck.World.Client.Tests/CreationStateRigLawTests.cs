@@ -181,12 +181,7 @@ public sealed class CreationStateRigLawTests {
                         y: -1f,
                         z: 0f
                     ),
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(
-                        x: 0.05f,
-                        y: 0.001f,
-                        z: 0.05f
-                    )
+                    Rotation: Quaternion.Identity
                 )]
         );
         var creation = (CreationFixtures.Rig(

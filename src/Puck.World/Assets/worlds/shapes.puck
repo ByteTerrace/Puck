@@ -1544,7 +1544,6 @@ template motionPrototypesB() {
               id: 0
               position [-0.25, 1.2, 0]
               rotation [0, 0, 0, 1]
-              scale [0.15, 0.15, 0.15]
             }
           ]
         }
@@ -1555,7 +1554,6 @@ template motionPrototypesB() {
               id: 0
               position [0, 1.45, 0]
               rotation [0, 0, 0.382683, 0.92388]
-              scale [0.15, 0.15, 0.15]
             }
           ]
         }
@@ -1566,7 +1564,6 @@ template motionPrototypesB() {
               id: 0
               position [0.25, 1.2, 0]
               rotation [0, 0, 0, 1]
-              scale [0.15, 0.15, 0.15]
             }
           ]
         }
@@ -1577,7 +1574,6 @@ template motionPrototypesB() {
               id: 0
               position [0, 0.95, 0]
               rotation [0, 0.382683, 0, 0.92388]
-              scale [0.15, 0.15, 0.15]
             }
           ]
         }

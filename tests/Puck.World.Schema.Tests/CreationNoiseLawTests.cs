@@ -96,8 +96,7 @@ public sealed class CreationNoiseLawTests {
                             new FrameTransformDocument(
                                 Id: 0,
                                 Position: Vector3.Zero,
-                                Rotation: Quaternion.Identity,
-                                Scale: Vector3.One
+                                Rotation: Quaternion.Identity
                             ),
                         ]
                     ),
@@ -288,8 +287,7 @@ public sealed class CreationNoiseLawTests {
                                 new FrameTransformDocument(
                                     Id: 0,
                                     Position: Vector3.Zero,
-                                    Rotation: Quaternion.Identity,
-                                    Scale: Vector3.One
+                                    Rotation: Quaternion.Identity
                                 ),
                             ]
                         ),

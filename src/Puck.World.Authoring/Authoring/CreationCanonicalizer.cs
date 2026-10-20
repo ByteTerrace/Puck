@@ -1372,12 +1372,6 @@ public static partial class CreationCanonicalizer {
                         Path: $"frames[{i}].transforms[{j}].position"
                     ));
                 }
-                if (!VectorFunctions.IsFinite(vector: transform.Scale)) {
-                    errors.Add(item: new(
-                        Message: "scale is non-finite.",
-                        Path: $"frames[{i}].transforms[{j}].scale"
-                    ));
-                }
                 ValidateRotation(
                     errors: errors,
                     path: $"frames[{i}].transforms[{j}].rotation",
