@@ -536,6 +536,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         WorldAffordances.Validate(
             channels: channels,
+            commands: null,
             document: document,
             errors: errors,
             seatModes: seatModes
@@ -1650,6 +1651,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
             WorldAffordances.Validate(
                 channels: channels,
+                commands: null,
                 document: document,
                 seatModes: m_definitions[slot].SeatModes,
                 errors: errors
@@ -1719,6 +1721,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             WorldAffordances.Validate(
                 document: document,
                 channels: m_channels[slot],
+                commands: null,
                 seatModes: m_definitions[slot].SeatModes,
                 errors: errors
             );

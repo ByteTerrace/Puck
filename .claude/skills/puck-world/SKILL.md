@@ -169,6 +169,20 @@ document) hands its `let`s and templates to the compile; anything else is a
 document composed into the importer at load. A library imports only libraries
 ([composition](references/documents-composition.md#document-composition-basis-and-imports)).
 
+**A composed console operation is a `commands` row, not a C# verb.** The
+owner's ruling: console commands are easy to author and compose for safe
+operations, without C# work for each. A document's `commands` section names a
+command (`debug.go`), its typed parameters and the console lines it runs; the
+registry answers it beside the engine's verbs (`help`, bindings, wheel
+sectors, `run <name>`) and `world.reload` swaps the set. It runs each line
+under the caller's own principal and session policy, calls only what a binding
+may name, and never takes an engine verb's name
+([reference](../../../docs/reference/commands.md#document-authored-commands);
+code: `Puck.Commands/AuthoredCommand.cs`, `CommandRegistry.Authored.cs`,
+`Puck.World.Schema/WorldConsoleCommand.cs`). Write a C# verb only for what no
+composition of existing verbs expresses. The debug world's `places.puck`
+(`debug.go <place>`) is the live example.
+
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
 the composition root.

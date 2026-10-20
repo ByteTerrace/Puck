@@ -133,7 +133,7 @@ adjusts the resolved theme, resolved in `WorldBindingBarControl.Status`.
 every text run the bar writes — every badge whose authored icon row carries a
 `label` (`LB`/`RB`, `LT`/`RT`, `LS`/`RS`, the menu trio, the exotics), the
 active page's name under the modifier
-indicators, and the chord-hint lines above them — leaving a purely pictographic
+indicators, and a chord hint's label badges and label — leaving a purely pictographic
 bar: the plates, the PROCEDURAL badge glyphs (the d-pad arrows and the
 face-position diamonds), the bound actions' icons, and the indicators all still
 draw. The policy resolves ONCE

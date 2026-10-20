@@ -3138,3 +3138,5 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `ruleGroups[].trigger[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
+| `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
+| `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |

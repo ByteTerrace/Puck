@@ -12,10 +12,12 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
     private const float MinRegionExtent = 0.05f;
 
-    /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
-    /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
+    /// <summary>The chord hints one seat's bar draws, one row each. A seat publishing more draws the first
+    /// <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
-    /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike).</summary>
+    /// <summary>The members one chord hint draws; a chord with more stays off the bar.</summary>
+    public const int MaxHintMembers = 4;
+    /// <summary>The character clamp on every text run the bar writes (the page label and a hint's label alike).</summary>
     public const int MaxLineChars = 46;
     /// <summary>One full march of the latched-toggle border, seconds.</summary>
     public const float TogglePeriodSeconds = 1.6f;
@@ -209,8 +211,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
         }
 
-        // The chord hints stack above the modifiers: one small centered line per command-chord row of the active group
-        // (ASCII only — the glyph pack is ASCII-95), quiet alpha so the bar's chips stay dominant.
+        // The chord hints stack above the modifiers, one row per hint, at quiet alpha so the bar's chips stay dominant.
         var hints = seat.Hints.Span;
 
         if (hints.Length == 0) {
@@ -235,45 +236,98 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         );
 
         if (hintCount < hints.Length) {
+            var refusedElements = 0;
             var refusedWords = 0;
 
             for (var index = hintCount; (index < hints.Length); index++) {
+                refusedElements += (Math.Min(
+                    val1: hints[index].Members.Length,
+                    val2: MaxHintMembers
+                ) + 1);
                 refusedWords += Math.Min(
-                    val1: hints[index].Length,
+                    val1: hints[index].Label.Length,
                     val2: MaxLineChars
                 );
             }
 
             builder.NoteRefused(
-                elements: (hints.Length - hintCount),
+                elements: refusedElements,
                 textWords: refusedWords
             );
         }
 
+        // Each hint is a centred row of chips at the hint cell's height, pitched as the modifier row pitches its own
+        // plates: the members' badges, then the action's icon chip or its label.
+        var chipHalf = (hintCell * 0.5f);
+        var chipPitch = (chipHalf * (layout.ModifierSpacingRatio / layout.ModifierHalfRatio));
+
         for (var index = 0; (index < hintCount); index++) {
             var hint = hints[index];
-
-            if (string.IsNullOrEmpty(value: hint)) {
-                continue;
-            }
-
-            var hintChars = Math.Min(
-                val1: hint.Length,
+            var members = hint.Members.Span[..Math.Min(
+                val1: hint.Members.Length,
+                val2: MaxHintMembers
+            )];
+            var hasIcon = (hint.Action != OverlayResolvedGlyph.None);
+            var labelChars = Math.Min(
+                val1: hint.Label.Length,
                 val2: MaxLineChars
             );
-
-            builder.WriteText(
-                alpha: chrome.BarHintAlpha,
-                cellHeight: hintCell,
-                maxChars: MaxLineChars,
-                role: OverlayColorRole.TextDim,
-                text: hint,
-                x: (anchorX - (builder.TextWidth(
+            var chips = (members.Length + (hasIcon
+                ? 1
+                : 0));
+            var labelWidth = ((hasIcon || (labelChars == 0))
+                ? 0f
+                : ((chipPitch - (chipHalf * 2f)) + builder.TextWidth(
                     cellHeight: hintCell,
-                    chars: hintChars
-                ) * 0.5f)),
-                y: ((hintBaseY - (((hintCount - 1) - index) * hintLineStep)) - hintCell)
-            );
+                    chars: labelChars
+                )));
+            var rowWidth = ((((chips > 0)
+                ? (((chips - 1) * chipPitch) + (chipHalf * 2f))
+                : 0f)) + labelWidth);
+            var lineBottom = (hintBaseY - (((hintCount - 1) - index) * hintLineStep));
+            var centerY = (lineBottom - chipHalf);
+            var left = (anchorX - (rowWidth * 0.5f));
+
+            for (var chip = 0; (chip < chips); chip++) {
+                var badge = ((chip < members.Length)
+                    ? members[chip]
+                    : OverlayResolvedGlyph.None);
+                var icon = ((chip < members.Length)
+                    ? OverlayResolvedGlyph.None
+                    : hint.Action);
+
+                builder.WriteIcon(
+                    accent: false,
+                    alpha: chrome.BarHintAlpha,
+                    badgeGlyph0: badge.Glyph0,
+                    badgeGlyph1: badge.Glyph1,
+                    bound: true,
+                    centerX: ((left + chipHalf) + (chip * chipPitch)),
+                    centerY: centerY,
+                    glyphHalf: (chipHalf * layout.ModifierGlyphRatio),
+                    glyphOffsetX: 0f,
+                    glyphOffsetY: 0f,
+                    iconGlyph0: icon.Glyph0,
+                    iconGlyph1: icon.Glyph1,
+                    plateHalf: chipHalf,
+                    pressed: false
+                );
+            }
+
+            if (labelWidth > 0f) {
+                builder.WriteText(
+                    alpha: chrome.BarHintAlpha,
+                    cellHeight: hintCell,
+                    maxChars: MaxLineChars,
+                    role: OverlayColorRole.TextDim,
+                    text: hint.Label,
+                    x: ((left + rowWidth) - builder.TextWidth(
+                        cellHeight: hintCell,
+                        chars: labelChars
+                    )),
+                    y: (lineBottom - hintCell)
+                );
+            }
         }
 
         builder.EndClip();

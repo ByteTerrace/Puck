@@ -32,7 +32,7 @@ module hits the analyzer complexity ceiling, carve by SUBJECT into more
 modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
 X>()` in `WorldBootComposition`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
-its built-ins `help`, `wire.ack`, `wire.errors`).
+its built-ins `help`, `run`, `wire.ack`, `wire.errors`).
 
 A shared module in `Puck.World.Console` never takes a link at construction: a verb
 that submits resolves the instance the console addresses on each call

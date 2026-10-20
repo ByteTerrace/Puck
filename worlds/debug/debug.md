@@ -85,6 +85,40 @@ It uses the same platform pose and hidden-overlay commands.
 floor glass falls through the shaft forever. [loop.md](loop.md) says how to get
 in, what to watch and how to get out.
 
+## Going places
+
+[places.puck](places.puck) names a spot a few metres from each feature and
+authors `debug.go`, a console command composed from existing verbs, that goes
+there from anywhere:
+
+```text
+debug.go [place] [body]
+```
+
+It poses the body (0 unless named) at the place's spawn point, then returns
+the view to the `play` layout's chase camera (`view.override camera auto`,
+`view.override layout play`). `place` is any spawn point, matched ignoring
+case, `stage` when omitted:
+
+| Place | Where | Facing |
+|---|---|---|
+| `stage` | The spawn, (0, 0, 0) | -Z, toward the portal frame |
+| `devices` | (-13, 0, -1), in front of the device row | -Z, toward the screens |
+| `chess` | (-6, 0, -7.5), Black's side of the table | -Z, across the board |
+| `loop` | (-20, 0, -15), short of the floor glass | -Z; walk ahead to drop in |
+| `screen` | (8, 0, -3), in front of the wall screen | -Z, toward the screen |
+| `gallery` | (14, 0, 9), the shape gallery's near corner | +Z, up its rows |
+| `hero` | (48, 0, -48), the avatar studio | -Z |
+
+The chase camera keeps its world heading when a body is posed, so a place
+facing -Z frames from behind the body as the boot view does, and `gallery`
+(facing +Z) frames it from the front until the camera is turned. `help
+debug.go` prints the usage and the lines it runs, `run debug.go chess` is the
+same line, and a binding row or wheel sector names it like any verb
+(`command: "debug.go", text: "chess"`). An argument that is not a spawn point
+is refused with the list of places. How a command like it is authored is in
+the [commands reference](../../docs/reference/commands.md#document-authored-commands).
+
 ## The layout
 
 | Where | What | Portal |

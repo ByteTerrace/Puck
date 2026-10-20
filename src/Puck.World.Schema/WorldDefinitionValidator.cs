@@ -1663,6 +1663,10 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
+        ValidateCommands(
+            definition: definition,
+            errors: errors
+        );
         ValidateVerdicts(
             definition: definition,
             errors: errors

@@ -751,13 +751,20 @@ unverified when no device run exists.
   as absolute raw input, which the window turns into relative motion; the
   pointer position, the pane hit and the passthrough client point come from
   `WM_MOUSEMOVE` either way. An absolute position stops at the edge of the
-  session's screen, so a camera drag that read the difference ended there; the
-  window's pointer lock (`INativeWindowCursor.LocksPointer`) moves the cursor
-  back to the window's centre each pump. A Remote Desktop client that follows
-  the session's pointer-position updates moves its own cursor there too; one
-  that does not keeps reporting from its own cursor, which the window detects
-  after a few reports and reads as before, so the drag still ends at the screen
-  edge. Only the foreground window locks, and a test World an agent drives with
+  session's screen, so a camera drag holds the window's pointer lock
+  (`INativeWindowCursor.LocksPointer`), which moves the cursor back to the
+  window's centre once it wanders a quarter of the client away. The Remote
+  Desktop client the development machine is reached through follows the
+  session's pointer-position updates: World of Warcraft's mouse look spins
+  freely over that same session, so a mouse-look limit in Puck is Puck's own
+  defect, never the remote session's. The client moves its cursor to a warp
+  some reports late, and the window tells the first report from the warp's
+  target by its distance (`Win32AbsolutePointer`), which only a far warp makes
+  unambiguous: a warp on every pump would make steady motion read as almost
+  none, turning the camera by one pump's motion and then stopping.
+  `Win32AbsolutePointerTests` models such a client, since nothing on a test
+  machine reports like one. Only the
+  foreground window locks, and a test World an agent drives with
   `player.signal` locks the session's real mouse while it is foreground:
   minimize it first (a minimized window has no client area to lock to). The
   Remote Display Adapter reports its own signal
