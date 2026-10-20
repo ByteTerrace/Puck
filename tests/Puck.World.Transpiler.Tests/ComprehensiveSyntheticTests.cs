@@ -103,8 +103,7 @@ public class ComprehensiveSyntheticTests {
             let accentColor = #ffaa00ff
             let doubleFps = 60 * 2
 
-            // Module imports
-            import "extensions/rules.world.puck" as rules
+            // A document import
             import "modules/arcade"
 
             // Facet exports
@@ -375,10 +374,6 @@ public class ComprehensiveSyntheticTests {
         Assert.Contains(
             actualString: decompiledPuck,
             expectedSubstring: "documentId: \"comprehensive-synthetic-v1\""
-        );
-        Assert.DoesNotContain(
-            actualString: decompiledPuck,
-            expectedSubstring: "import \"extensions/rules.world.puck\" as rules"
         );
         Assert.Contains(
             actualString: decompiledPuck,

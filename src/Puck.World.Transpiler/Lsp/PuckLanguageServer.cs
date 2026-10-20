@@ -149,7 +149,7 @@ public sealed partial class PuckLanguageServer {
         "template" => "**`template` Definition**\n\nDeclares a reusable parametric template block expanded at compile time with default and named arguments.",
         "module" => "**`module` Definition**\n\nDeclares a typed compile-time module. Parameters may require points, angles, assets, modules, pools, rows, or gates.",
         "use" => "**`use` Instantiation**\n\nExpands a module at compile time; an `as` alias prefixes its declarations and internal references.",
-        "import" => "**`import` Declaration**\n\nLoads compile-time declarations from a `.puck` module, or composes a runtime world document named without a file extension (`import \"games/klondike\"`).",
+        "import" => "**`import` Declaration**\n\nNames a source or document beside this one, never its file (`import \"games/klondike\"`): a module library hands over its `let`s and templates, and anything else is a document composed into this one.",
         "export" => "**`export` Declaration**\n\nDeclares exported world facets (`action`, `binding`, `read`) exposed across the network and to client sessions.",
         "orbit" => "**`orbit(pitch:, yaw:, distance:)`**\n\nConfigures spherical orbit camera positioning relative to the focus target.",
         "fieldOfView" => "**`fieldOfView(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
@@ -769,8 +769,8 @@ public sealed partial class PuckLanguageServer {
             label: "use"
         );
         LspJson.AddCompletion(
-            detail: "Keyword: Module import",
-            insertText: "import \"${1:path}\" as ${2:alias}",
+            detail: "Keyword: Import",
+            insertText: "import \"${1:name}\" as ${2:alias}",
             items: items,
             kind: 14,
             label: "import"

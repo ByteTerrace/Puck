@@ -105,7 +105,7 @@ public sealed class PuckMigrationLawTests {
         // Two blank lines stand above this one.
         let lanes = [1, 2, 3]
 
-        import "shared.puck"
+        import "shared"
 
         // A template stays a template rather than its expansion.
         template lane(index, width = 2) {
@@ -230,7 +230,7 @@ public sealed class PuckMigrationLawTests {
         foreach (var construct in new[] {
             "let pace = 4",
             "let lanes = [1, 2, 3]",
-            "import \"shared.puck\"",
+            "import \"shared\"",
             "template lane(index, width = 2)",
             "sql {",
             "for index in lanes {",

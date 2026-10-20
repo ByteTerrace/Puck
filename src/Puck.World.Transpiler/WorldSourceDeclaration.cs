@@ -11,9 +11,10 @@ namespace Puck.World.Transpiler;
 /// never disagree.</summary>
 /// <param name="EmitsDocument">Whether the source emits a document. A module library does not: it names no schema and
 /// no basis, declares no world, and every statement at its top level is a <c>let</c>, a <c>template</c> or
-/// <c>module</c>, an import of another <c>.puck</c> source, or a <c>test</c>, none of which reaches the document it is
-/// written in; the sources importing it carry what it defines. Every other source emits a document: each world it
-/// declares, or else the one document its top level lowers to.</param>
+/// <c>module</c>, an <c>import</c>, or a <c>test</c>, none of which reaches the document it is written in; the
+/// sources importing it carry what it defines. A library may import only other libraries: a document it imported would
+/// compose into nothing, and the import walk refuses it (<see cref="Puck.Transpiler.Modules.ModuleResolver"/>). Every
+/// other source emits a document: each world it declares, or else the one document its top level lowers to.</param>
 /// <param name="Worlds">The names of the worlds the source declares at its top level, in declaration order.</param>
 public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<string> Worlds) {
     /// <summary>Reads what a parsed source declares.</summary>
@@ -36,8 +37,7 @@ public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<st
 
                         break;
                     }
-                case ImportNode import when ImportsModule(import: import):
-                case LetNode or TemplateNode or TestDeclarationNode or ErrorStatementNode:
+                case ImportNode or LetNode or TemplateNode or TestDeclarationNode or ErrorStatementNode:
                     break;
                 default:
                     emits = true;
@@ -63,15 +63,6 @@ public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<st
             LiteralExpressionNode { Value: string text, Unit: null } => text,
             _ => null,
         };
-    }
-    /// <summary>Returns whether an import names another <c>.puck</c> source, whose compile-time declarations it brings
-    /// in, rather than a document the composed world imports.</summary>
-    /// <param name="import">The import.</param>
-    /// <returns><see langword="true"/> when the import's path is a <c>.puck</c> source.</returns>
-    public static bool ImportsModule(ImportNode import) {
-        ArgumentNullException.ThrowIfNull(argument: import);
-
-        return WorldDocumentName.IsSourceFile(path: import.Path);
     }
     /// <summary>Returns the document names the source emits (<see cref="WorldCompilation.EmittedNames"/>).</summary>
     /// <param name="sourcePath">The source's path, spelled as the file system spells its file name.</param>

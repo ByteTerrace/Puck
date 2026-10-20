@@ -898,6 +898,96 @@ public sealed class ShapePanelLawTests {
             );
         }
     }
+    // A Capsule and a RoundCone stand up from their origin, so each face sits where the emitted zero set does, not at
+    // a half-height either side: measured by marching the evaluator's field in from outside along the axis.
+    [Theory]
+    [InlineData(SdfSolidPrimitive.Capsule, 0.3f, 0.8f, 0.3f)]
+    [InlineData(SdfSolidPrimitive.Capsule, 0.15f, 0.4f, 0.15f)]
+    [InlineData(SdfSolidPrimitive.RoundCone, 0.3f, 0.3f, 0.3f)]
+    public void SupportReadsTheFaceTheEmittedZeroSetSitsAt(SdfSolidPrimitive type, float x, float y, float z) {
+        var scale = new Vector3(
+            x: x,
+            y: y,
+            z: z
+        );
+        var program = EmitStatic(shape: Shape(type, scale));
+
+        foreach (var axis in new[] { Vector3.UnitY, -Vector3.UnitY, Vector3.UnitX, -Vector3.UnitZ }) {
+            var t = 0.9f;
+
+            for (var step = 0; (step < 256); step++) {
+                var distance = ((float)DistanceAt(
+                    point: (axis * t),
+                    program: program
+                ));
+
+                if (distance < 1e-5f) {
+                    break;
+                }
+
+                t -= distance;
+            }
+
+            Assert.Equal(
+                t,
+                SdfSolidGeometry.Support(
+                    axis: axis,
+                    lift: SdfLift.Extrude,
+                    scale: scale,
+                    type: type
+                ),
+                precision: 3
+            );
+        }
+    }
+    [Fact]
+    public void AStretchedCapsulesSupportIsTheUnitCapsulesUnderItsScale() {
+        // Scaled apart in X and Z, the unit capsule (radius 1, segment to 0.5) rides a Scale: it spans y from −scale.y
+        // to 1.5·scale.y, and x across ±scale.x.
+        var scale = new Vector3(
+            x: 0.2f,
+            y: 0.4f,
+            z: 0.3f
+        );
+
+        Assert.Equal(0.6f, SdfSolidGeometry.Support(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal(0.4f, SdfSolidGeometry.Support(axis: -Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal(0.2f, SdfSolidGeometry.Support(axis: -Vector3.UnitX, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal(0.5f, SdfSolidGeometry.HalfExtent(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+    }
+    [Fact]
+    public void ARecessOnACapsulesUnderFaceCarvesItsOwnDepth() {
+        var down = -Vector3.UnitY;
+        var shape = Shape(
+            SdfSolidPrimitive.Capsule,
+            new Vector3(
+                x: 0.3f,
+                y: 0.8f,
+                z: 0.3f
+            ),
+            new ShapePanelDocument(
+                Depth: 0.03f,
+                Face: down,
+                Inset: 0.05f,
+                Material: 1
+            )
+        );
+        var face = MeasuredPlateFace(
+            axis: down,
+            shape: shape
+        );
+        var probe = ((float)(face - 0.015));
+
+        CreationFixtures.AssertAccepts(document: Document(shape));
+        Assert.Equal(
+            0.03,
+            (face - (probe - DistanceAt(
+                program: EmitStatic(shape: shape),
+                point: (down * probe)
+            ))),
+            precision: 3
+        );
+    }
     [Fact]
     public void HalfExtentRefusesAZeroOrNonFiniteAxisByName() {
         var zero = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SdfSolidGeometry.HalfExtent(

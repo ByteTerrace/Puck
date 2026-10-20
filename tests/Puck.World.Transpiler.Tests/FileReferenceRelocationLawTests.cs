@@ -84,9 +84,9 @@ public sealed class FileReferenceRelocationLawTests {
 
         _ = directory.WriteText(name: "modules/board.puck", text: Module);
         var graph = directory.WriteBytes(bytes: "{}"u8, name: "modules/board.graph.json");
-        var near = CompileRoot(directory: directory, import: "../modules/board.puck", name: "near/world.puck");
-        var far = CompileRoot(directory: directory, import: "../../modules/board.puck", name: "far/deeper/world.puck");
-        var beside = CompileRoot(directory: directory, import: "board.puck", name: "modules/world.puck");
+        var near = CompileRoot(directory: directory, import: "../modules/board", name: "near/world.puck");
+        var far = CompileRoot(directory: directory, import: "../../modules/board", name: "far/deeper/world.puck");
+        var beside = CompileRoot(directory: directory, import: "board", name: "modules/world.puck");
 
         Assert.Equal(expected: "../modules/board.graph.json", actual: GraphSource(json: near.Json));
         Assert.Equal(expected: "../../modules/board.graph.json", actual: GraphSource(json: far.Json));
@@ -109,7 +109,7 @@ public sealed class FileReferenceRelocationLawTests {
         _ = directory.WriteText(name: "modules/board.puck", text: CarriedModule);
         var graph = directory.WriteBytes(bytes: "{}"u8, name: "modules/board.graph.json");
 
-        var (path, json) = CompileRoot(directory: directory, import: "../modules/board.puck", name: "root/world.puck", use: use);
+        var (path, json) = CompileRoot(directory: directory, import: "../modules/board", name: "root/world.puck", use: use);
 
         Assert.Equal(expected: "../modules/board.graph.json", actual: GraphSource(json: json));
         Assert.Equal(
@@ -132,7 +132,7 @@ public sealed class FileReferenceRelocationLawTests {
         using var directory = new TemporaryDirectory();
 
         _ = directory.WriteText(name: "modules/board.puck", text: CarriedModule);
-        var (_, json) = CompileRoot(directory: directory, import: "../modules/board.puck", name: "root/world.puck", use: "use named(graphFile: \"local.graph.json\")");
+        var (_, json) = CompileRoot(directory: directory, import: "../modules/board", name: "root/world.puck", use: "use named(graphFile: \"local.graph.json\")");
 
         Assert.Equal(expected: "local.graph.json", actual: GraphSource(json: json));
     }
@@ -142,7 +142,7 @@ public sealed class FileReferenceRelocationLawTests {
 
         _ = directory.WriteText(name: "modules/board.puck", text: Module);
         _ = directory.WriteBytes(bytes: "{}"u8, name: "modules/board.graph.json");
-        var (path, json) = CompileRoot(directory: directory, import: "../modules/board.puck", name: "root/world.puck");
+        var (path, json) = CompileRoot(directory: directory, import: "../modules/board", name: "root/world.puck");
         var printed = WorldDecompiler.Decompile(root: json);
         var recompiled = WorldCompiler.Compile(
             source: printed,

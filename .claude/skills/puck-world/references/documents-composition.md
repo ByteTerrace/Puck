@@ -194,10 +194,13 @@ its own directory) is a DELTA over that document — templates/prefabs for simil
 is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
 each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
 several documents each own one disjoint slice of a world (the debug world imports `theme` and `controls`) rather
-than forcing every slice through the single-parent basis chain. In `.puck`, `import "name"` lowers to an `imports`
-entry, while `import "name.puck"` (a path naming a `.puck` source, `WorldSourceDeclaration.ImportsModule`) only brings
-that source's `let`s and templates into the compile: its own top-level sections are never composed, so a module such
-as `shapes.puck` hands its rows over through templates the importing file expands. A keyed
+than forcing every slice through the single-parent basis chain. In `.puck`, `import "name"` always names, never
+spells a file (`import "name.puck"` is PUCK121), and the named file decides what it brings
+(`WorldDocumentVocabulary.TryResolveImport`): a module library, a source emitting no document
+(`WorldSourceDeclaration.EmitsDocument` false), brings its `let`s and templates into the compile and lowers to
+nothing, so a library such as `shapes.puck` hands its rows over through templates the importing file expands; any
+other source or `.world.json` lowers to an `imports` entry. A library that imports a document is refused by name
+(PUCK017), since that document would compose into nothing. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
 preserved across a split, only content is; compare two composed trees by canonicalizing each keyed list (sort by
@@ -279,9 +282,9 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
 `theme.puck` (the standard theme) and `controls.puck` (cursor, key hints, icons,
-binding bar, play wheel) as documents; `quality.puck`, `skies.puck` and
-`shapes.puck` beside them are source modules whose templates the importing
-file expands. The quarantined
+binding bar, play wheel) as documents, as the Moth imports `quality.puck`;
+`skies.puck`, `shapes.puck` and `studio.puck` beside them are module libraries
+whose templates the importing file expands. The quarantined
 `standard.puck` library and the island built on it are prior art. Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),

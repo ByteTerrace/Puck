@@ -52,6 +52,10 @@ public static class PuckDiagnosticCodes {
     public const string ForSequenceRefused = "PUCK044";
     /// <summary>An import graph defect (cycle, duplicate alias).</summary>
     public const string ImportGraph = "PUCK017";
+    /// <summary>PUCK121: an import spelling a file (<c>import "skies.puck"</c>, <c>import "theme.world.json"</c>)
+    /// rather than the name it carries. An import has one spelling, the name (<c>import "skies"</c>), and what it
+    /// brings in follows from what the name names, never from how it is spelled.</summary>
+    public const string ImportNamesFile = "PUCK121";
     /// <summary>An import target that does not exist.</summary>
     public const string ImportTargetMissing = "PUCK016";
     /// <summary>PUCK043: an index read that cannot be resolved at compile time — a non-array, a fractional or

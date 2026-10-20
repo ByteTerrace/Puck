@@ -163,6 +163,12 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 **Paths resolve beside the document** that names them (`WorldDocumentPaths`);
 shipped engine content resolves through `PuckPaths.Shipped`.
 
+**An import names; the named file decides what it brings.** `import "skies"`,
+never `import "skies.puck"` (PUCK121). A module library (a source emitting no
+document) hands its `let`s and templates to the compile; anything else is a
+document composed into the importer at load. A library imports only libraries
+([composition](references/documents-composition.md#document-composition-basis-and-imports)).
+
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
 the composition root.

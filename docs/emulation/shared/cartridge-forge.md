@@ -88,13 +88,14 @@ slot with the same message `forge.check` would print; an engine with no
 compiler refuses the path when the world document validates. The shipped
 cartridges under `src/Puck.World/Assets/cartridges/` are the worked examples.
 
-A source may `import` a `.puck` module beside it for the templates and constants
-it declares; nothing else in the module becomes part of the cartridge. That is
-how one game serves several targets: `cartridges/shared/tetromino.puck` holds
-the game as `template tetromino()`, and `cgb/tetromino.cgb.puck` and
-`dmg/tetromino.dmg.puck` each import it, declare their `target` and `palettes`,
-and call `tetromino()`. `puck compile` resolves imports beside the source; a
-module compiles to no document of its own.
+A source may `import` a module library, named without its `.puck` suffix, for
+the templates and constants it declares; nothing else in the module becomes part
+of the cartridge. That is how one game serves several targets:
+`cartridges/shared/tetromino.puck` holds the game as `template tetromino()`, and
+`cgb/tetromino.cgb.puck` and `dmg/tetromino.dmg.puck` each
+`import "../shared/tetromino"`, declare their `target` and `palettes`, and call
+`tetromino()`. `puck compile` resolves imports beside the source; a module
+compiles to no document of its own.
 
 ## Source contract
 

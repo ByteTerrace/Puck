@@ -146,7 +146,7 @@ public class OperandAtomLawTests {
 
         var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\n\nimport \"library.puck\" as lib\n\nuse lib.bump as first()\n", path: rootPath);
+        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\n\nimport \"library\" as lib\n\nuse lib.bump as first()\n", path: rootPath);
 
         var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 

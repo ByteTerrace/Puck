@@ -1,0 +1,11 @@
+// A module library: it emits no document, so `import "extensions/rules"` brings its template into the importer, which
+// expands `resetTable()` where its own rules stand. The template reads `tableState` from the importer's own `state`
+// section.
+template resetTable() {
+  rule "reset-table" {
+    when tableState[activeRound] > 8
+    mode: Edge
+    tableState[activeRound] = 1
+    tableState[busy] = 0
+  }
+}

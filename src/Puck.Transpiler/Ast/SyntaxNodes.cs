@@ -87,8 +87,10 @@ public sealed record ExpressionStatementNode(
     /// <summary>Gets the optional namespace applied to a <c>use</c> expansion.</summary>
     public string? UseAlias { get; init; }
 }
-/// <summary>A module import declaration: <c>import "path" [as alias]</c>.</summary>
-/// <param name="Path">The relative path to the imported fragment document.</param>
+/// <summary>An import declaration: <c>import "name" [as alias]</c>. The name names another source or document
+/// beside the importer, never one of its files, and the import brings in what that names offers an importer
+/// (<see cref="Modules.ModuleResolver"/>, <see cref="Lowering.IDocumentVocabulary.TryResolveImport"/>).</summary>
+/// <param name="Path">The imported name, relative to the importing source's directory.</param>
 /// <param name="Alias">The optional alias prefix for declared symbols.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
@@ -106,7 +108,23 @@ public sealed record ImportNode(
     Length,
     Line,
     Column
-);
+) {
+    // The suffixes of the files a name is carried in, the longest first, so a document file's whole suffix is the one
+    // a spelling sheds.
+    private static readonly string[] FileSuffixes = [".world.json", ".json", ".puck"];
+
+    /// <summary>Gets whether the import spells a file (<c>"skies.puck"</c>, <c>"theme.world.json"</c>) rather than
+    /// the name it carries. An import has one spelling, the name, so a file spelling is refused by name
+    /// (<see cref="Diagnostics.PuckDiagnosticCodes.ImportNamesFile"/>) and resolves nothing.</summary>
+    public bool NamesFile => (Suffix.Length > 0);
+    /// <summary>Gets the name the import means: its spelling less any file suffix.</summary>
+    public string Name => Path[..^Suffix.Length];
+
+    private string Suffix => (FileSuffixes.FirstOrDefault(predicate: suffix => Path.EndsWith(
+        comparisonType: StringComparison.OrdinalIgnoreCase,
+        value: suffix
+    )) ?? string.Empty);
+}
 /// <summary>An export declaration exposing named symbols under a specific facet.</summary>
 /// <param name="Facet">The export facet ('read', 'action', or 'binding').</param>
 /// <param name="Names">The declared export names.</param>

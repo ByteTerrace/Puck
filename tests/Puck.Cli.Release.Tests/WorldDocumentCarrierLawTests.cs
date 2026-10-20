@@ -15,6 +15,7 @@ namespace Puck.Cli.Release.Tests;
 /// <c>Foo.puck</c> beside <c>foo.world.json</c> published two documents for what a Windows checkout resolves as one.</remarks>
 public sealed class WorldDocumentCarrierLawTests {
     private static readonly string NoRootRefusal = $"no document named '{Puck.Cli.Azure.AzureCommand.HostedWorldName}'";
+
     private const string Refusal = "whose names differ only in letter case; a document name is unique ignoring case";
     private const string RepeatedRefusal = "both carry the document 'beacons/north'; a document name is unique ignoring case";
     // A composition that declares the worlds north and south beside it: two documents no file carries.
@@ -120,7 +121,7 @@ public sealed class WorldDocumentCarrierLawTests {
     // A composition whose worlds expand a module a sibling library declares, the shape of worlds/rulepush: the library
     // is named like the world it backs and declares no world of its own.
     private const string ImportingComposition = """
-        import "north.puck"
+        import "north"
         world north = north(1)
         world south = north(2)
         """;
@@ -202,7 +203,7 @@ public sealed class WorldDocumentCarrierLawTests {
     public void TheOfficialBuildAuthorsTheDocumentNamedLikeAModuleLibrary() {
         using var directory = new TemporaryDirectory();
 
-        directory.WriteText(name: "worlds/beacons/beacons.puck", text: "import \"hub.puck\"\nworld Hub = hub(1)\n");
+        directory.WriteText(name: "worlds/beacons/beacons.puck", text: "import \"hub\"\nworld Hub = hub(1)\n");
         directory.WriteText(name: "worlds/beacons/hub.puck", text: "module hub(value) { state { world { slot charge = value } } }\n");
         directory.WriteText(name: "worlds/beacons/hub.world.json", text: "{ \"schema\": \"puck.world.definition.v1\" }");
 

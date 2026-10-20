@@ -20,7 +20,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         File.Copy(destFileName: Path.Combine(path1: scratch.RootPath, path2: "skies.puck"), sourceFileName: RepositoryPaths.Resolve(relativePath: SkiesSource));
         File.WriteAllText(
-            contents: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"probe\"\n\nimport \"skies.puck\"\n\nrender {{\n  {section} {{\n    {call}\n  }}\n}}\n",
+            contents: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"probe\"\n\nimport \"skies\"\n\nrender {{\n  {section} {{\n    {call}\n  }}\n}}\n",
             path: source
         );
 

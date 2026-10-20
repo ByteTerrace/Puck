@@ -15,14 +15,11 @@ namespace Puck.World.Transpiler;
 /// <see cref="Ignore"/> also reads the enums the source's <c>basis</c> declares, so the source lowers an enum member
 /// it writes as the basis reads it.</summary>
 public enum ImportHandling {
-    /// <summary>Walk the import graph, reporting an unresolvable path or a cycle, and lower the root alone —
-    /// <c>puck compile</c>'s own default.</summary>
+    /// <summary>Walk the import graph, reporting a name that resolves to nothing or a cycle, bring every module
+    /// library's declarations into the root, and lower it — <c>puck compile</c>'s own default.</summary>
     Validate = 0,
-    /// <summary>Walk the graph and inline every imported statement into one standalone document
-    /// (<c>puck compile --bundle</c>).</summary>
-    Bundle = 1,
-    /// <summary>Lower the document as it stands, without touching the file system. The only mode a source with no
-    /// path of its own can use.</summary>
+    /// <summary>Lower the document as it stands, without walking its imports. The only mode a source with no path of
+    /// its own can use.</summary>
     Ignore = 2,
 }
 /// <summary>One <c>.puck</c> world source compiled: the tree it parsed to, the document it lowered to, the map from
@@ -238,19 +235,7 @@ public static class WorldCompiler {
             : imports
         );
 
-        if (effectiveImports == ImportHandling.Bundle) {
-            var bundled = ModuleResolver.BundleDocument(
-                cancellationToken: cancellationToken,
-                diagnostics: diagnostics,
-                rootDoc: document,
-                rootPath: sourcePath!,
-                vocabulary: vocabulary
-            );
-
-            if (bundled is not null) {
-                document = bundled;
-            }
-        } else if (effectiveImports == ImportHandling.Validate) {
+        if (effectiveImports == ImportHandling.Validate) {
             var withModules = ModuleResolver.ImportModules(
                 cancellationToken: cancellationToken,
                 diagnostics: diagnostics,

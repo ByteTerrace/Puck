@@ -121,7 +121,7 @@ public class OperandTreeLawTests {
             """);
         var path = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\nimport \"library.puck\" as lib\nuse lib.emit as first()\n", path: path);
+        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\nimport \"library\" as lib\nuse lib.emit as first()\n", path: path);
         var compilation = WorldCompiler.CompileFile(path, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));

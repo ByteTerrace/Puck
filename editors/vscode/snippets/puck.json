@@ -106,7 +106,7 @@
     "Import Module": {
         "prefix": "import",
         "body": [
-            "import \"${1:modules/rules.world.puck}\" as ${2:alias}"
+            "import \"${1:modules/rules}\" as ${2:alias}"
         ],
         "description": "Import an external Puck world module"
     },

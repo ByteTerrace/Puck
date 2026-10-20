@@ -23,7 +23,7 @@ public static partial class CompileCommand {
     // write belongs to a source that was renamed or deleted, and is removed so nothing can load it. Which documents a
     // source emits is not its file name, so the
     // run reports what it wrote rather than leaving a build to derive it from the sources' names.
-    private static int RunTree(string tree, string output, string? report, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
+    private static int RunTree(string tree, string output, string? report, IReadOnlyList<string> paths, bool strict, bool validate) {
         var root = Path.GetFullPath(path: tree);
         var directory = Path.GetFullPath(path: output);
         // Each file this run wrote and the source that wrote it, so a second source claiming a document is refused.
@@ -114,7 +114,6 @@ public static partial class CompileCommand {
                     written: written
                 )
                 : Run(
-                    bundle: bundle,
                     output: Path.Combine(
                         path1: directory,
                         path2: Path.ChangeExtension(
@@ -184,7 +183,7 @@ public static partial class CompileCommand {
         // function of, which the build holds the next run's need against (build/WorldAssets.targets). An assembly the run
         // never loaded cannot move what it wrote, so a change to one reruns nothing.
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(predicate: static assembly => (!assembly.IsDynamic && (assembly.GetName().Name is { } name) && name.StartsWith(value: "Puck.", comparisonType: StringComparison.Ordinal) && (assembly.Location.Length != 0)))
+            .Where(predicate: static assembly => (!assembly.IsDynamic && (assembly.GetName().Name is { } name) && name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.") && (assembly.Location.Length != 0)))
             .Select(selector: static assembly => (assembly.Location.Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar) + "\n"))
             .Order(comparer: StringComparer.Ordinal);
 

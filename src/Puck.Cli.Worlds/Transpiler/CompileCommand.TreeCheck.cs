@@ -9,7 +9,7 @@ public static partial class CompileCommand {
     // file of a kind the run owns (documents, compiled worlds, stored packages) is present that the run
     // did not write. A shipped catalog built from the same sources is therefore a proof that the tree compile is
     // deterministic across processes, and a catalog that disagrees names every file that does.
-    private static int RunTreeCheck(string tree, string output, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
+    private static int RunTreeCheck(string tree, string output, IReadOnlyList<string> paths, bool strict, bool validate) {
         var catalog = Path.GetFullPath(path: output);
 
         if (!Directory.Exists(path: catalog)) {
@@ -25,7 +25,6 @@ public static partial class CompileCommand {
         var fresh = Path.Combine(path1: scratch, path2: "output");
         var report = Path.Combine(path1: scratch, path2: "written");
         var ran = RunTree(
-            bundle: bundle,
             output: fresh,
             paths: paths,
             report: report,

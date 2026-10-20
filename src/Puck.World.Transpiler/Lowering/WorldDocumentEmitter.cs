@@ -309,9 +309,11 @@ public static partial class WorldDocumentEmitter {
                 }
 
             case ImportNode importNode: {
-                    // Source imports contribute compile-time module/template/let declarations through
-                    // ModuleResolver. They are not runtime document composition requests.
-                    if (WorldSourceDeclaration.ImportsModule(import: importNode)) { break; }
+                    // The import walk (ModuleResolver.ImportModules) brings a module library's declarations in and
+                    // removes its import, so every import left names a document and is a composition entry. A file
+                    // spelling was refused where it parsed. A compile that walks no imports (ImportHandling.Ignore)
+                    // reads no file, so it lowers every name it holds as a document.
+                    if (importNode.NamesFile) { break; }
                     if (target["imports"] is not JsonArray importsArray) {
                         importsArray = [];
                         target["imports"] = importsArray;

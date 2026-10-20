@@ -10,8 +10,8 @@ namespace Puck.SignedDistance;
 /// reads as a direct multiple of it. Sphere r=1; Box half-extents (1,1,1); Capsule r=1 around the segment from the
 /// origin to (0, 0.5, 0) — the straight section is <c>0.5·scale.y</c> long and runs up from the shape's position,
 /// <c>scale.x</c>/<c>z</c> is the radius, so the capsule spans y from <c>-radius</c> to
-/// <c>0.5·scale.y + radius</c>, a total height of 2·radius + 0.5·scale.y, and is not centred on its position (its
-/// bound, <see cref="HalfExtent"/>, is the symmetric half-height <c>0.5·scale.y + radius</c>); Cylinder r=1,
+/// <c>0.5·scale.y + radius</c>, a total height of 2·radius + 0.5·scale.y, and is not centred on its position
+/// (<see cref="Support"/> reads each face where it stands); Cylinder r=1,
 /// half-height 1; Cone base r=1, half-height 1 (apex radius 0); Ellipsoid radii
 /// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4; Prism bottom half-width,
 /// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
@@ -163,7 +163,7 @@ public static class SdfSolidGeometry {
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(profile)),
         };
     }
-    private static Vector2[] RegularVertices(int sides, Vector2 scale) => [.. Enumerable.Range(start: 0, count: sides)
+    private static Vector2[] RegularVertices(int sides, Vector2 scale) => [.. Enumerable.Range(count: sides, start: 0)
         .Select(selector: vertex => {
             var (sin, cos) = MathF.SinCos(x: ((vertex * MathF.Tau) / sides));
 
@@ -853,14 +853,10 @@ public static class SdfSolidGeometry {
         ),
         };
     }
-    /// <summary>A primitive's local support half-extent along a unit local axis — how far its emitted zero set reaches
-    /// from its center in that direction, the panel trait's erode/translate input (see <c>ShapePanelDocument</c>).
-    /// Reads the same zero set <see cref="AppendScaledPrimitive"/> emits: a Box's face sits at its half-extents lane
-    /// in both its spellings (the corner fillet is an inset), <c>scaleᵢ</c> per axis. Exact along a principal axis for every primitive; off-axis, a Sphere or Ellipsoid
-    /// reads its true support (<c>|radii ⊙ axis|</c>), and every other primitive reads the support of its canonical
-    /// unit-scale half-extent box (<see cref="GetLocalBounds"/>'s dimension table, <c>Σ|axisᵢ|·extentᵢ</c>). Support
-    /// (the farthest reach) rather than the ray-exit distance is what keeps a raised panel's bound widening sound:
-    /// eroding every axis by <c>i</c> moves the support by at most <c>i</c>.</summary>
+    /// <summary>A primitive's local half-extent along a unit local axis: half its emitted zero set's full extent along
+    /// that line, <c>(Support(axis) + Support(−axis)) / 2</c>. For a primitive centred on its origin this is its
+    /// support in either direction; a Capsule or RoundCone, which stands up from its origin, reads half its full
+    /// height along Y. Twice it is the full depth a panel copy can carve or stand (see <c>ShapePanelDocument</c>).</summary>
     /// <param name="type">The primitive. A <see cref="SdfSolidPrimitive.Plane"/> has no meaningful face; callers
     /// refuse it before reaching here.</param>
     /// <param name="scale">The authored per-axis scale.</param>
@@ -869,7 +865,29 @@ public static class SdfSolidGeometry {
     /// <returns>The half-extent, at least zero.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is non-finite or zero-length: a face
     /// that names no direction is refused rather than silently read as some default axis.</exception>
-    public static float HalfExtent(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, Vector3 axis) {
+    public static float HalfExtent(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, Vector3 axis) => (0.5f * (
+        Support(axis: axis, lift: lift, scale: scale, type: type) +
+        Support(axis: -axis, lift: lift, scale: scale, type: type)
+    ));
+    /// <summary>A primitive's local support along a unit local axis: how far its emitted zero set reaches from the
+    /// primitive's own origin in that direction, the panel trait's face position (see <c>ShapePanelDocument</c>).
+    /// Reads the same zero set <see cref="AppendScaledPrimitive"/> emits: a Box's face sits at its half-extents lane
+    /// in both its spellings (the corner fillet is an inset), <c>scaleᵢ</c> per axis; a Capsule's segment runs from
+    /// the origin up to <c>0.5·scale.y</c> and a RoundCone's base sphere sits at the origin with its tip sphere above,
+    /// so each reaches farther up +Y than down −Y. Exact along a principal axis for every primitive; off-axis, a
+    /// Sphere, Ellipsoid, Capsule or RoundCone reads its true support, and every other primitive reads the support of
+    /// its canonical unit-scale half-extent box (<see cref="GetLocalBounds"/>'s dimension table,
+    /// <c>Σ|axisᵢ|·extentᵢ</c>). Support (the farthest reach) rather than the ray-exit distance is what keeps a raised
+    /// panel's bound widening sound: eroding every axis by <c>i</c> moves the support by at most <c>i</c>.</summary>
+    /// <param name="type">The primitive. A <see cref="SdfSolidPrimitive.Plane"/> has no meaningful face; callers
+    /// refuse it before reaching here.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <param name="lift">Prism only: extrude or revolve.</param>
+    /// <param name="axis">The local direction (normalized on entry).</param>
+    /// <returns>The signed support; at least zero for every primitive, whose origin lies inside it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is non-finite or zero-length: a face
+    /// that names no direction is refused rather than silently read as some default axis.</exception>
+    public static float Support(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, Vector3 axis) {
         var effectiveScale = EffectiveScale(scale: scale);
 
         if (
@@ -886,6 +904,32 @@ public static class SdfSolidGeometry {
         }
 
         var direction = Vector3.Normalize(value: axis);
+
+        // KEEP IN SYNC with AppendScaledPrimitive's Capsule arms. Scaled alike in X and Z the capsule bakes its
+        // dimensions (radius scale.x around the segment to 0.5·scale.y); otherwise it is the unit capsule under a
+        // Scale, whose support along d is the unit capsule's along scale ⊙ d. A capsule is the segment's support plus
+        // its radius times the direction's length.
+        if (type == SdfSolidPrimitive.Capsule) {
+            if (effectiveScale.X == effectiveScale.Z) {
+                return (MathF.Max(x: 0f, y: ((CapsuleEndpoint.Y * effectiveScale.Y) * direction.Y)) + (CapsuleRadius * effectiveScale.X));
+            }
+
+            var stretched = (effectiveScale * direction);
+
+            return (MathF.Max(x: 0f, y: (CapsuleEndpoint.Y * stretched.Y)) + (CapsuleRadius * stretched.Length()));
+        }
+
+        // A RoundCone rides the generic Scale arm: the hull of its base sphere at the origin and its tip sphere at the
+        // height, whose support is the larger of the two spheres' along scale ⊙ d.
+        if (type == SdfSolidPrimitive.RoundCone) {
+            var stretched = (effectiveScale * direction);
+            var length = stretched.Length();
+
+            return MathF.Max(
+                x: (RoundConeLowerRadius * length),
+                y: ((RoundConeHeight * stretched.Y) + (RoundConeUpperRadius * length))
+            );
+        }
 
         if (
             (type == SdfSolidPrimitive.Prism) &&
@@ -940,22 +984,6 @@ public static class SdfSolidGeometry {
             x: ConeRadius,
             y: ConeHalfHeight,
             z: ConeRadius
-        ),
-            SdfSolidPrimitive.Capsule => new Vector3(
-            x: CapsuleRadius,
-            y: (CapsuleEndpoint.Y + CapsuleRadius),
-            z: CapsuleRadius
-        ),
-            SdfSolidPrimitive.RoundCone => new Vector3(
-            x: MathF.Max(
-                x: RoundConeLowerRadius,
-                y: RoundConeUpperRadius
-            ),
-            y: (((RoundConeHeight + RoundConeUpperRadius) + RoundConeLowerRadius) * 0.5f),
-            z: MathF.Max(
-                x: RoundConeLowerRadius,
-                y: RoundConeUpperRadius
-            )
         ),
             SdfSolidPrimitive.Torus => new Vector3(
             x: (TorusMajor + TorusMinor),

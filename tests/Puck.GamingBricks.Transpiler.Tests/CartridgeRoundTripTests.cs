@@ -319,7 +319,7 @@ public class CartridgeRoundTripTests {
         var parsed = PuckParser.ParseDocumentWithDiagnostics(
             source: """
                 schema: "puck.cartridge.v1"
-                import "missing-module.puck"
+                import "missing-module"
                 target: "dmg"
                 """,
             diagnostics: diagnostics

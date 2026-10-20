@@ -7,7 +7,6 @@ using Puck.GamingBricks.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
-using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler;
 using Puck.World;
@@ -27,7 +26,6 @@ public static partial class CompileCommand {
         bool watch,
         bool strict,
         bool validate,
-        bool bundle,
         bool updateAssets = false,
         IDictionary<string, string>? written = null
     ) {
@@ -58,7 +56,6 @@ public static partial class CompileCommand {
 
         if (!watch) {
             return ExecuteCompilation(
-                bundle: bundle,
                 outputPath: outputPath,
                 sourcePath: fullPath,
                 strict: strict,
@@ -69,7 +66,6 @@ public static partial class CompileCommand {
         }
 
         return RunWatchMode(
-            bundle: bundle,
             outputPath: outputPath,
             sourcePath: fullPath,
             strict: strict,
@@ -83,7 +79,6 @@ public static partial class CompileCommand {
         string? outputPath,
         bool strict,
         bool validate,
-        bool bundle,
         bool updateAssets = false,
         IDictionary<string, string>? written = null
     ) {
@@ -105,10 +100,7 @@ public static partial class CompileCommand {
             objB: CartridgeVocabulary.Instance
         );
         var sourceMap = new SourceMap();
-        var imports = (bundle
-            ? ImportHandling.Bundle
-            : ImportHandling.Validate
-        );
+        var imports = ImportHandling.Validate;
 
         if (!isCartridge) {
             return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
@@ -268,28 +260,7 @@ public static partial class CompileCommand {
             return null;
         }
 
-        if (imports == ImportHandling.Bundle) {
-            var bundledDoc = ModuleResolver.BundleDocument(
-                diagnostics: diagnostics,
-                rootDoc: documentNode,
-                rootPath: sourcePath,
-                vocabulary: vocabulary
-            );
-
-            if (bundledDoc is not null) {
-                documentNode = bundledDoc;
-            }
-
-            json = CartridgeDocumentEmitter.LowerWithDiagnostics(
-                diagnostics: diagnostics,
-                document: documentNode,
-                sourceMap: sourceMap
-            ).Value;
-
-            return documentNode;
-        }
-
-        json = ((imports == ImportHandling.Ignore)
+        json =((imports == ImportHandling.Ignore)
             ? CartridgeDocumentEmitter.LowerWithDiagnostics(
                 diagnostics: diagnostics,
                 document: documentNode,
@@ -321,14 +292,12 @@ public static partial class CompileCommand {
         string? outputPath,
         bool strict,
         bool validate,
-        bool bundle,
         bool updateAssets = false
     ) {
         Console.WriteLine(value: $"[puck watch] Monitoring '{CliPaths.ToDisplay(fullPath: sourcePath)}' for changes (Ctrl+C to stop)...");
 
         // Initial run
         ExecuteCompilation(
-            bundle: bundle,
             outputPath: outputPath,
             sourcePath: sourcePath,
             strict: strict,
@@ -359,7 +328,6 @@ public static partial class CompileCommand {
 
             Console.WriteLine(value: $"[{DateTime.Now:HH:mm:ss}] Change detected ({e.Name}), recompiling...");
             ExecuteCompilation(
-                bundle: bundle,
                 outputPath: outputPath,
                 sourcePath: sourcePath,
                 strict: strict,
@@ -400,7 +368,6 @@ public static partial class CompileCommand {
         ) { Description = "Watch the source file and its imported dependencies for changes and recompile automatically." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
-        var bundleOption = new Option<bool>(name: "--bundle") { Description = "Inline and bundle all imported .puck module ASTs into a single standalone document." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
         var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory. With no source paths, select every .puck and .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb and stored package under --output is removed, so the output holds exactly this run's worlds." };
         var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world or stored package --output holds that the run does not write. Writes nothing under --output." };
@@ -415,7 +382,6 @@ public static partial class CompileCommand {
             watchOption,
             strictOption,
             validateOption,
-            bundleOption,
             assetsOption,
             treeOption,
             writtenOption,
@@ -453,7 +419,6 @@ public static partial class CompileCommand {
 
             if ((parseResult.GetValue(option: treeOption) is { } checkedTree) && parseResult.GetValue(option: checkOption)) {
                 return RunTreeCheck(
-                    bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetRequiredValue(option: outputOption)!,
                     paths: paths,
                     strict: parseResult.GetValue(option: strictOption),
@@ -464,7 +429,6 @@ public static partial class CompileCommand {
 
             if (parseResult.GetValue(option: treeOption) is { } tree) {
                 return RunTree(
-                    bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetRequiredValue(option: outputOption)!,
                     paths: paths,
                     report: parseResult.GetValue(option: writtenOption),
@@ -476,7 +440,6 @@ public static partial class CompileCommand {
 
             foreach (var path in paths) {
                 var exitCode = Run(
-                    bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetValue(option: outputOption),
                     path: path,
                     strict: parseResult.GetValue(option: strictOption),

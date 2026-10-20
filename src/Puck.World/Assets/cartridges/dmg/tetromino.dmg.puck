@@ -1,6 +1,6 @@
 schema: "puck.cartridge.v1"
 
-import "../shared/tetromino.puck"
+import "../shared/tetromino"
 
 target: "dmg"
 
