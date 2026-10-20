@@ -135,6 +135,31 @@ public static class WorldAffordances {
         }
     }
 
+    // A document's own authored commands answer for it; with them supplied, the live world's authored names answer
+    // nothing, so a document that drops a command is judged without it.
+    private static CommandMetadata? Lookup(AuthoredCommandSet? commands, string name, CommandRegistry registry) {
+        if (commands is not null) {
+            if (commands.TryGet(command: out var authored, name: name)) {
+                return CommandRegistry.AuthoredMetadata(name: authored!.Name);
+            }
+
+            if (registry.NamesAuthoredCommand(name: name)) {
+                return null;
+            }
+        }
+
+        return (registry.TryGetMetadata(metadata: out var metadata, name: name)
+            ? metadata
+            : null);
+    }
+
+    /// <summary>Runs the registry half of <c>commands</c> validation (<see cref="CommandRegistry.CheckAuthored"/>)
+    /// over a document's authored set, appending each refusal. A no-op while no registry is installed.</summary>
+    /// <param name="commands">The document's compiled authored commands.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    public static void ValidateCommands(AuthoredCommandSet commands, List<string> errors) {
+        Registry?.CheckAuthored(errors: errors, set: commands);
+    }
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
     /// after the container is built.</summary>
     /// <param name="registry">The live command registry.</param>
@@ -174,9 +199,11 @@ public static class WorldAffordances {
     /// compiled table, never another world's.</param>
     /// <param name="seatModes">The AUTHORED per-seat mode families THIS document's world declares — the same
     /// per-document rule as <paramref name="channels"/>.</param>
+    /// <param name="commands">The authored commands THIS document declares, which its rows may name in place of the
+    /// live world's; <see langword="null"/> resolves an authored name against the live world's set.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
-    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, List<string> errors) {
+    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: channels);
         ValidateContexts(
             document: document,
@@ -195,12 +222,7 @@ public static class WorldAffordances {
             lookups: new BindingVocabularyLookups(
                 Command: ((registry is null)
             ? null
-            : name => (registry.TryGetMetadata(
-                        metadata: out var metadata,
-                        name: name
-                    )
-                ? metadata
-                : null)),
+            : name => Lookup(commands: commands, name: name, registry: registry)),
                 SourceKind: SourceKind,
                 Channel: reference => channels.TryGetOrdinal(
                     ordinal: out _,

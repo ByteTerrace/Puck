@@ -30,7 +30,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
 
         return value;
     }
-    private static void Deliver(WorldClient client, ulong tick, Func<int, Vector3> position) {
+    private static void Deliver(WorldClient client, ulong tick, Func<int, Vector3> position, EntityContinuity? continuity = null) {
         var entries = new EntitySnapshot[Bodies];
 
         for (var body = 0; (body < Bodies); body++) {
@@ -38,7 +38,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
                 Active: true,
                 BodyColor: Vector3.One,
                 CatalogRig: 0,
-                Continuity: EntityContinuity.Continuous,
+                Continuity: (continuity ?? EntityContinuity.Continuous),
                 Generation: 1,
                 Index: (FirstBody + body),
                 Kit: 0,
@@ -98,6 +98,34 @@ public sealed class WorldSceneMovedTransformsLawTests {
         return scene;
     }
 
+    [Fact]
+    public void ACarriedBodyRepacksAsMovedWhetherItsHistoryCarriesItOrCutsIt() {
+        var scene = Settled();
+        var up = new WorldPoseCarry(
+            Rotation: Quaternion.Identity,
+            Translation: new Vector3(x: 0f, y: 6f, z: 0f)
+        );
+        var rows = (((long)Bodies) * WorldRigCatalog.TransformSlotsPerBody);
+        var epoch = scene.Client.PoseEpoch(index: FirstBody);
+        var tick = 1UL;
+        var lifted = 0f;
+
+        // One in-place crossing each, carried; then more crossings between two frames than the history holds, cut.
+        foreach (var crossings in new[] { 1, 5 }) {
+            for (var crossing = 0; (crossing < crossings); crossing++) {
+                lifted += up.Translation.Y;
+
+                var height = lifted;
+
+                Deliver(client: scene.Client, continuity: EntityContinuity.Carry(carried: up), position: body => (Rest(body: body) + new Vector3(x: 0f, y: height, z: 0f)), tick: ++tick);
+            }
+
+            Assert.Equal(expected: rows, actual: Frame(scene: scene).Packed);
+        }
+
+        Assert.Equal(expected: epoch, actual: scene.Client.PoseEpoch(index: FirstBody));
+        Assert.Equal(expected: 6, actual: scene.Client.Carries.Epoch(index: FirstBody));
+    }
     [Fact]
     public void AStillFramePacksNoRowsComparesNoBytesAndOwesNothing() {
         var scene = Settled();

@@ -118,15 +118,14 @@ machine under a new generation.
 
 Walk up to a device and press the context button, E on a keyboard or X on a
 pad (the Moth's `interact` channel, which every screen route here names as its
-`engageChannel`). Within 2.8 m of a device an `E / X  ENGAGE` prompt shows
-(the `device-engage` HUD panel); a press within the route's 3 m engages the
-first device in document order that is free. Engaging captures the seat, so the
+`engageChannel`). A press within the route's 3 m engages the first device in
+document order that is free; no prompt shows, since the controller bar is the
+debug world's only on-screen UI. Engaging captures the seat, so the
 Moth stands still, and brings up the emulator view: the camera eases in until
 the device's screen fills the window's limiting axis, square-on, with
 everything between the camera and the screen (the Moth included) left out, and
-the binding bar and the cursor step aside. An `E / X  LEAVE` chip shows in the
-bottom-left corner; the same button leaves the device and the camera eases back
-to the Moth. The device's pad does not play the context button, so it never
+the binding bar and the cursor step aside. The same button leaves the device
+and the camera eases back to the Moth. The device's pad does not play the context button, so it never
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,

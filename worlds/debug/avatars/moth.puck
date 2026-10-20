@@ -342,6 +342,7 @@ bindingOverlays [
                 sources [
                   "keyboard.w"
                   "keyboard.arrowUp"
+                  "gamepad.dpadUp"
                 ]
               }
               {
@@ -351,6 +352,7 @@ bindingOverlays [
                 sources [
                   "keyboard.s"
                   "keyboard.arrowDown"
+                  "gamepad.dpadDown"
                 ]
               }
               {
@@ -359,6 +361,7 @@ bindingOverlays [
                 scale: -1
                 sources [
                   "keyboard.a"
+                  "gamepad.dpadLeft"
                 ]
               }
               {
@@ -367,6 +370,7 @@ bindingOverlays [
                 scale: 1
                 sources [
                   "keyboard.d"
+                  "gamepad.dpadRight"
                 ]
               }
               {
@@ -404,6 +408,7 @@ bindingOverlays [
                 id: "recenter"
                 label: "Recenter"
                 sources [
+                  "keyboard.r"
                   "gamepad.rightStickPress"
                 ]
               }

@@ -32,6 +32,8 @@ public sealed class InPlacePortalCrossingLawTests {
         TurnedCeiling,
         /// <summary>A wall door, which no fall can cross into.</summary>
         Wall,
+        /// <summary>A placement the world does not hold.</summary>
+        Missing,
     }
 
     private const float CeilingHeight = 6f;
@@ -124,7 +126,11 @@ public sealed class InPlacePortalCrossingLawTests {
         )],
         PlacementRowsRaw = [
             Placement(
-                counterpart: ((counterpart == Counterpart.Wall) ? $"wall/{Face}" : $"ceiling/{Face}"),
+                counterpart: (counterpart switch {
+                    Counterpart.Wall => $"wall/{Face}",
+                    Counterpart.Missing => $"missing/{Face}",
+                    _ => $"ceiling/{Face}",
+                }),
                 id: "floor",
                 position: new Vector3(x: 0f, y: 0f, z: DoorZ),
                 prototype: "floor-door",
@@ -158,8 +164,11 @@ public sealed class InPlacePortalCrossingLawTests {
         private readonly TemporaryDirectory m_tapeRoot;
         private readonly IDisposable m_narrationLease;
         private readonly IDisposable m_mirrorLease;
+        private readonly ViewSeats? m_seats;
 
-        public Scenario(Counterpart counterpart) {
+        // A row admitted as an ordinary instance, or, with `seats`, as the host's boot row with those seats routed to it.
+        public Scenario(Counterpart counterpart, ViewSeats? seats = null) {
+            m_seats = seats;
             m_files = new TemporaryDirectory(prefix: "puck-in-place-files-");
             m_hostRoot = new TemporaryDirectory(prefix: "puck-in-place-host-");
             m_tapeRoot = new TemporaryDirectory(prefix: "puck-in-place-tape-");
@@ -180,15 +189,19 @@ public sealed class InPlacePortalCrossingLawTests {
                 machineHostFactory: Fixtures.MachineHostFactory,
                 machineId: Guid.NewGuid(),
                 resolver: new WorldSessionResolver(),
-                seats: WorldEmbodiedSeats.None,
+                seats: ((IWorldEmbodiedSeats?)seats ?? WorldEmbodiedSeats.None),
                 stateRoot: new WorldStateRoot(path: m_hostRoot.RootPath)
             );
             (Instance, Server, m_rowState) = FileBackedRows.Build(
                 definition: definition,
-                name: "shaft",
+                name: ((seats is null) ? "shaft" : WorldInstanceHost.BootInstanceName),
                 path: path
             );
-            Host.Admit(row: Instance);
+            if (seats is null) {
+                Host.Admit(row: Instance);
+            } else {
+                Host.AdmitBoot(row: Instance);
+            }
             m_narrationLease = Host.AttachNarrationSink(sink: Narration);
             Mirror = new WorldSessionMirror(placeholder: definition);
             m_mirrorLease = Server.AttachSink(sink: Mirror);
@@ -244,9 +257,17 @@ public sealed class InPlacePortalCrossingLawTests {
             YawRadians: 0f
         ));
         // One master step: the host's transfer drain, then the row's step.
+        // One master step: the host's transfer drain, then the row's step and its portal scan — the boot row steps and
+        // scans as the host's own step drives it.
         public void Step() {
             Host.DrainPendingTransfers();
-            Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+
+            if (m_seats is null) {
+                Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+            } else {
+                Server.Advance(stepTicks: Fixtures.StepTicks);
+                Host.ScanBootBoundaryTriggers();
+            }
         }
     }
 
@@ -360,9 +381,11 @@ public sealed class InPlacePortalCrossingLawTests {
             expected: CrossingsWanted
         );
     }
-    [Fact]
-    public void AFloorDoorLeadingToAWallDoorRefusesByName_AndTheBodyFallsOnThroughTheFloor() {
-        using var scenario = new Scenario(counterpart: Counterpart.Wall);
+    [InlineData(Counterpart.Wall, "do not map world up onto itself")]
+    [InlineData(Counterpart.Missing, "names no placement 'missing'")]
+    [Theory]
+    public void AFloorDoorWhoseCounterpartCannotTakeAFallRefusesByName_AndTheBodyFallsOnThroughTheFloor(Counterpart counterpart, string refusal) {
+        using var scenario = new Scenario(counterpart: counterpart);
 
         scenario.DropOverFloor();
 
@@ -370,7 +393,7 @@ public sealed class InPlacePortalCrossingLawTests {
             scenario.Step();
         }
 
-        Assert.True(condition: (scenario.Count(text: "do not map world up onto itself") > 0));
+        Assert.True(condition: (scenario.Count(text: refusal) > 0));
         Assert.Equal(
             actual: scenario.Count(text: "in place"),
             expected: 0
@@ -395,5 +418,51 @@ public sealed class InPlacePortalCrossingLawTests {
             Slot: -1,
             Source: frame
         ))));
+    }
+    [Fact]
+    public void ATurningPairTurnsTheViewOfTheSeatRoutedToTheBody() {
+        var seats = new ViewSeats();
+
+        using var scenario = new Scenario(
+            counterpart: Counterpart.TurnedCeiling,
+            seats: seats
+        );
+
+        scenario.DropOverFloor();
+
+        for (var tick = 0; ((tick < LoopBound) && (scenario.Count(text: "in place") < CrossingsWanted)); tick++) {
+            scenario.Step();
+        }
+
+        Assert.Equal(
+            actual: seats.Turns,
+            expected: Enumerable.Repeat(count: CrossingsWanted, element: (0, FixedQ4816.Pi))
+        );
+    }
+
+    // One local seat, occupied and routed wherever the host publishes it, recording each view turn the host asks for.
+    public sealed class ViewSeats : IWorldEmbodiedSeats {
+        private WorldAuthorityEndpoint? m_endpoint;
+        private WorldEntityAddress m_entity;
+
+        public List<(int Slot, FixedQ4816 Turn)> Turns { get; } = [];
+        public int SeatCount => 1;
+
+        public void AdvanceSeatViews(float deltaSeconds) { }
+        public void ClearAnalog() { }
+        public void ClearHeld(int slot) { }
+        public void ConfigureLeave(Func<int, Principal, bool> leave) { }
+        public void CrossView(int slot, FixedQ4816 yawDelta, WorldSeatYawReference yawReference) => Turns.Add(item: (slot, yawDelta));
+        public bool IsOccupied(int slot) => true;
+        public bool OccupySeat(int slot, WorldIdentity? profile) => true;
+        public void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity) {
+            m_endpoint = endpoint;
+            m_entity = entity;
+        }
+        public WorldAuthorityEndpoint? RoutedEndpoint(int slot) => m_endpoint;
+        public WorldEntityAddress RoutedEntity(int slot) => m_entity;
+        public void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick) { }
+        public bool TryUpdateRoutedEntity(int slot, WorldAuthorityEndpoint expectedEndpoint, in WorldEntityAddress replacement) => false;
+        public bool VacateSeat(int slot) => false;
     }
 }

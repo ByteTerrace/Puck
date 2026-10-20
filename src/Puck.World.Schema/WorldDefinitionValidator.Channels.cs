@@ -624,6 +624,7 @@ public static partial class WorldDefinitionValidator {
                         overlay.Document,
                         table,
                         seatModes,
+                        WorldConsoleCommands.For(definition: definition),
                         vocabularyErrors
                     );
 

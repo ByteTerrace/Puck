@@ -502,12 +502,12 @@
             "default": true
           },
           "text": {
-            "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+            "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and a chord hint\u0027s label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
             "type": "boolean",
             "default": true
           },
           "modifiers": {
-            "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+            "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.",
             "type": "boolean",
             "default": true
           },

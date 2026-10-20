@@ -207,6 +207,9 @@
     "timeline": {
       "$ref": "./schema/timeline.schema.json"
     },
+    "commands": {
+      "$ref": "./schema/commands.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

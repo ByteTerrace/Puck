@@ -239,7 +239,8 @@ public sealed class OverlayChannelLeases {
         var hudWorldElements = (((UInt128)((uint)capacity.HudPanels)) * ((uint)capacity.HudElementsPerPanel));
         var hudSeatElements = ((seats * ((uint)capacity.HudSeatPanelsPerSeat)) * ((uint)capacity.HudElementsPerSeatPanel));
         var hudPanels = (((UInt128)((uint)capacity.HudPanels)) + (((UInt128)((uint)capacity.HudSeatPanelsPerSeat)) * seats));
-        var bindingBarFixedElementsPerSeat = ((((UInt128)1) + ((uint)capacity.BindingBarMaxModifiers)) + BindingBarWriter.MaxHintLines);
+        // A chord hint is its member chips and one action chip or label run.
+        var bindingBarFixedElementsPerSeat = ((((UInt128)1) + ((uint)capacity.BindingBarMaxModifiers)) + (BindingBarWriter.MaxHintLines * (BindingBarWriter.MaxHintMembers + 1)));
         var bindingBarElementsPerSeat = (bindingBarFixedElementsPerSeat + (((UInt128)((uint)capacity.BindingBarMaxBanks)) * ((uint)capacity.BindingBarMaxSlotsPerBank)));
         // Markers, per seat — each admitted chip writes its presence ring and its icon chip, all inside the seat's
         // one clip scope. No text, no panel. Schema-derived (OverlayCapacity.MarkerMaxChipsPerSeat), never a

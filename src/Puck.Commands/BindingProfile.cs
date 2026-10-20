@@ -1645,6 +1645,9 @@ public static class BindingProfile {
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
+                    Action: ((command.Channel is ChannelRef.Name named)
+                    ? named.Value
+                    : command.Command),
                     Chord: rowChords[rowIndex].Select(selector: index => modifiers[index].Id).ToImmutableArray(),
                     Command: effectiveCommand,
                     Held: rowHelds[rowIndex].Select(selector: index => modifiers[index].Id).ToImmutableArray(),

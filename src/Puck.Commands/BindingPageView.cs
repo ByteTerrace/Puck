@@ -86,6 +86,8 @@ public sealed record BindingModifierView(
 /// <param name="Icon">The row's display icon id, if any; opaque to the engine.</param>
 /// <param name="HoldRelease">Whether the command dispatches on both edges (see <see cref="BindingCommandDefinition.HoldRelease"/>).</param>
 /// <param name="Held">The modifier ids that must be down, in any order.</param>
+/// <param name="Action">The AUTHORED action the row names — its <c>command</c>, else its named <c>channel</c> — the key a
+/// binding bar's icon row looks the row up by, as it looks a page entry up by its action.</param>
 public sealed record BindingChordCommandView(
     IReadOnlyList<string> Chord,
     IReadOnlyList<string> Sources,
@@ -93,5 +95,6 @@ public sealed record BindingChordCommandView(
     string? Label,
     string? Icon,
     bool HoldRelease,
-    IReadOnlyList<string>? Held = null
+    IReadOnlyList<string>? Held = null,
+    string? Action = null
 );

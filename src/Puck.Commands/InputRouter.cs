@@ -1800,7 +1800,9 @@ public sealed partial class InputRouter : IDisposable {
             Slot: slot,
             Text: ((activation.Text is { Length: > 0 } text)
             ? $"{activation.Command} {text}"
-            : null)
+            : (m_registry.NamesAuthoredCommand(name: activation.Command)
+                ? activation.Command
+                : null))
         ));
 
         return true;
@@ -2266,12 +2268,23 @@ public sealed partial class InputRouter : IDisposable {
 
     // A bound row's authored text payload rides the PRESS as a submitted line — "<command> <text>", dispatched by
     // the registry exactly as a typed line under the pressing seat's principal — so a wire-args verb is bindable
-    // with authored arguments. A release, or a row with no payload, carries no line.
-    private static string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) =>
-        (((text is { Length: > 0 }) && dispatch && (phase == CommandPhase.Started))
-            ? $"{command} {text}"
+    // with authored arguments. A row naming a document-authored command carries its line even without a payload,
+    // since that line is how the registry's `run` learns which command was pressed. A release, or an engine verb's
+    // row with no payload, carries no line.
+    private string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) {
+        if (!dispatch || (phase != CommandPhase.Started)) {
+            return null;
+        }
+
+        if (text is { Length: > 0 }) {
+            return $"{command} {text}";
+        }
+
+        return (m_registry.NamesAuthoredCommand(name: command)
+            ? command
             : null
         );
+    }
     private static bool IsActivity(in InputSignal signal) {
         if (signal.Posture) {
             return false;

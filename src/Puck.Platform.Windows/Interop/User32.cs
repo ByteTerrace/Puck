@@ -179,13 +179,6 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetCursorPos(int x, int y);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ClipCursor(in Rectangle rectangle);
-    // ClipCursor with a null rectangle (pass 0), which frees the cursor.
-    [LibraryImport("user32.dll", EntryPoint = "ClipCursor", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool FreeCursor(nint rectangle);
     [LibraryImport("user32.dll", EntryPoint = "SendNotifyMessageW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SendNotifyMessage(nint windowHandle, uint message, nint wParam, nint lParam);
