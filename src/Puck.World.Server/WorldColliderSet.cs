@@ -189,10 +189,8 @@ internal sealed class WorldColliderSet : IContactField {
         );
     }
 
-    private static long AddSaturated(long left, long right) => ((left > (long.MaxValue - right))
-        ? long.MaxValue
-        : (left + right)
-    );
+    private static long AddSaturated(long left, long right) =>
+        left.AddSaturating(right: right);
     private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
         hash.Add(value: ((byte)collider.Kind));
         hash.Add(value: collider.Center.X.Value);

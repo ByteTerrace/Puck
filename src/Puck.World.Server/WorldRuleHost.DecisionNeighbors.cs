@@ -240,8 +240,12 @@ public sealed partial class WorldRuleHost {
                     ? state.Reconsiderations
                     : state.Reconsiderations.AlignDown(alignment: width) | (state.Reconsiderations.ReverseBits() >> (64 - bits))
                 );
-                var phase = unchecked((((ordinal + (((ulong)((uint)key)) * 0x9E3779B9UL)) +
-                    (((ulong)((uint)state.Generation)) << 32)) + (((ulong)index) * 0x85EBCA6BUL)));
+                var phase = FixedFlockSteering.IndexPhase(
+                    generation: ((uint)state.Generation),
+                    index: ((uint)index),
+                    key: ((uint)key),
+                    ordinal: ordinal
+                );
                 var work = grid.Neighborhood.Query(
                     image.Positions[key],
                     neighbors.Range,

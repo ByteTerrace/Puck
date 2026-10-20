@@ -44,7 +44,12 @@ public static class FixedFlockSteering {
             val1: self,
             val2: other
         );
-        var axis = (unchecked(((((uint)lower) * 0x9E3779B9u) + (((uint)upper) * 0x85EBCA6Bu))) % 3);
+        var axis = (unchecked((uint)IndexPhase(
+            generation: 0U,
+            index: ((uint)upper),
+            key: ((uint)lower),
+            ordinal: 0UL
+        )) % 3);
         var direction = axis switch {
             0 => new FixedVector3(
             X: FixedQ4816.One,
@@ -107,6 +112,15 @@ public static class FixedFlockSteering {
         );
     }
 
+    /// <summary>Mixes a sampling ordinal with a body's key, generation and a second index into one phase word, the
+    /// golden-ratio index mix every neighbour sampler shares so two observers never share a phase.</summary>
+    /// <param name="ordinal">The observer's own sample ordinal.</param>
+    /// <param name="key">The observer's slot index.</param>
+    /// <param name="generation">The observer's slot generation, placed in the high word.</param>
+    /// <param name="index">A second index, or zero.</param>
+    /// <returns><c>ordinal + key·0x9E3779B9 + (generation &lt;&lt; 32) + index·0x85EBCA6B</c>, wrapping.</returns>
+    public static ulong IndexPhase(ulong ordinal, uint key, uint generation, uint index) =>
+        unchecked((((ordinal + (((ulong)key) * 0x9E3779B9UL)) + (((ulong)generation) << 32)) + (((ulong)index) * 0x85EBCA6BUL)));
     /// <summary>Blends cached neighbor influence with the current goal and heading, then caps speed at one.</summary>
     /// <param name="neighborPreference">Unclamped weighted separation, alignment, and cohesion; magnitude at most three.</param>
     /// <param name="velocity">Current world-space travel direction.</param>

@@ -46,12 +46,7 @@ internal sealed class WorldHistoryChunkStore {
 
         for (var index = 0; (index < gear.Length); index++) {
             state = unchecked((state + 0x9E37_79B9_7F4A_7C15UL));
-
-            var z = state;
-
-            z = unchecked(((z ^ (z >> 30)) * 0xBF58_476D_1CE4_E5B9UL));
-            z = unchecked(((z ^ (z >> 27)) * 0x94D0_49BB_1331_11EBUL));
-            gear[index] = z ^ (z >> 31);
+            gear[index] = InvertibleBitMix.Mix64(value: state);
         }
 
         return gear;

@@ -367,13 +367,7 @@ public sealed partial class WorldPopulation {
             return 0L;
         }
 
-        next %= totalLengthRaw;
-
-        if (next < 0L) {
-            next += totalLengthRaw;
-        }
-
-        return next;
+        return next.FloorModulo(modulus: totalLengthRaw);
     }
 
     /// <summary>Counts active bodies whose currently selected producer follows a <c>curves</c> row — the

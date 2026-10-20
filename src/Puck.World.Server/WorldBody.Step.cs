@@ -1155,18 +1155,9 @@ public sealed partial class WorldBody {
             var rotatedVelocity = transport.Rotate(vector: m_planarFollower.Velocity);
 
             m_planarFollower = new SecondOrderState3(
-                X: new SecondOrderState(
-                    PositionRaw: m_planarFollower.X.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.X.Value << 16)
-                ),
-                Y: new SecondOrderState(
-                    PositionRaw: m_planarFollower.Y.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.Y.Value << 16)
-                ),
-                Z: new SecondOrderState(
-                    PositionRaw: m_planarFollower.Z.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.Z.Value << 16)
-                )
+                X: m_planarFollower.X.WithVelocity(velocity: rotatedVelocity.X),
+                Y: m_planarFollower.Y.WithVelocity(velocity: rotatedVelocity.Y),
+                Z: m_planarFollower.Z.WithVelocity(velocity: rotatedVelocity.Z)
             );
             m_planarPreviousTarget = transport.Rotate(vector: m_planarPreviousTarget);
         }
@@ -1858,10 +1849,8 @@ public sealed partial class WorldBody {
     // action-track lanes are then overlaid, so a wire body.press jumps a tape-driven runner.
     // Whether an intent source names a server-side producer whose staged image fills gaps.
     private static bool SourceNamesProducer(IntentSource source) => source.IsProducer;
-    private static ulong SubtractSaturating(ulong value, ulong amount) => ((value > amount)
-        ? (value - amount)
-        : 0UL
-    );
+    private static ulong SubtractSaturating(ulong value, ulong amount) =>
+        value.SubtractSaturating(right: amount);
     /// <summary>Updates the latched <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
     /// fresh non-walkable push always (re)latches immediately and refills the grace window. Absent one, the
     /// existing latch clears immediately the instant either releasing condition holds — the raw planar move intent

@@ -218,7 +218,12 @@ public sealed partial class WorldPopulation {
             range,
             index,
             flock.Source.CandidateBudget,
-            unchecked(((state.FlockSampleOrdinal++ + (((ulong)index) * 0x9E3779B9UL)) + (((ulong)((uint)entry.Generation)) << 32))),
+            FixedFlockSteering.IndexPhase(
+                generation: ((uint)entry.Generation),
+                index: 0U,
+                key: ((uint)index),
+                ordinal: state.FlockSampleOrdinal++
+            ),
             m_neighborScratch.AsSpan(
                 0,
                 flock.Source.CandidateBudget
