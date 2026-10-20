@@ -17,10 +17,11 @@ public sealed class WorldBootCompositionLawTests {
         );
         var extensions = Puck.Abstractions.PuckExtensionSet.Compose(extensions: []);
         var definition = Fixtures.BuildDocument();
-        var services = new ServiceCollection();
+        // The host builder supplies what a boot reads from its host (logging, the application lifetime), as Program's does.
+        var builder = Microsoft.Extensions.Hosting.Host.CreateEmptyApplicationBuilder(settings: new());
 
-        services.AddLogging();
-        services.AddWorldBoot(inputs: new WorldBootInputs(
+        builder.Services.AddLogging();
+        builder.Services.AddWorldBoot(inputs: new WorldBootInputs(
             Authenticator: new InertAuthenticator(),
             Caches: new WorldCacheRoots(
                 compilations: Path.Join(path1: scratch.RootPath, path2: "compilations"),
@@ -46,9 +47,16 @@ public sealed class WorldBootCompositionLawTests {
             StateRoot: new Puck.World.Server.WorldStateRoot(path: Path.Join(path1: scratch.RootPath, path2: "state"))
         ));
 
-        using var provider = services.BuildServiceProvider();
+        using var host = builder.Build();
 
-        Assert.NotEmpty(collection: provider.GetServices<Puck.Commands.ICommandModule>());
+        var registry = new Puck.Commands.CommandRegistry(modules: host.Services.GetServices<Puck.Commands.ICommandModule>());
+
+        // A drag command still applies with no seat camera to turn.
+        foreach (var line in (string[])["player.orbit", "player.steer"]) {
+            var result = registry.Submit(line: line);
+
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+        }
     }
     // world.counters reads both backends alike: each backend's presenter registration carries its own
     // presentation.skipped source, registered without resolving a device or a presenter.
