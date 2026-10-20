@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Text;
@@ -18,47 +19,17 @@ public static class WorldScreenTextDecal {
     private static readonly Vector3 DefaultForeground = Vector3.One;
 
     // RGB in [0, 1] → rgba8 with R in the low byte and opaque alpha, matching the shader's unpack.
-    private static uint PackColor(Vector3 rgb) {
-        var r = ((uint)MathF.Round(x: (Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: rgb.X
-        ) * 255f)));
-        var g = ((uint)MathF.Round(x: (Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: rgb.Y
-        ) * 255f)));
-        var b = ((uint)MathF.Round(x: (Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: rgb.Z
-        ) * 255f)));
-
-        return r | (g << 8) | (b << 16) | 0xFF000000;
-    }
-    // Host-side unorm2x16 pack, u in the low half — the same encoding SdfProgramBuilder.PackUv and the console decal
-    // bake use (KEEP IN SYNC with sdfGlyphUnpackUv in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
-    private static uint PackUv(float u, float v) {
-        var packedU = ((uint)Math.Clamp(
-            value: ((int)MathF.Round(x: (MathF.Max(
-                x: 0f,
-                y: u
-            ) * 65535f))),
-            min: 0,
-            max: 65535
-        ));
-        var packedV = ((uint)Math.Clamp(
-            value: ((int)MathF.Round(x: (MathF.Max(
-                x: 0f,
-                y: v
-            ) * 65535f))),
-            min: 0,
-            max: 65535
-        ));
-
-        return packedU | (packedV << 16);
-    }
+    private static uint PackColor(Vector3 rgb) => VectorFunctions.PackRgba8(rgba: new Vector4(
+        w: 1f,
+        x: rgb.X,
+        y: rgb.Y,
+        z: rgb.Z
+    ));
+    // The unorm2x16 word sdfGlyphUnpackUv in Assets/Shaders/Sdf/field/sdf-shapes.hlsli decodes.
+    private static uint PackUv(float u, float v) => VectorFunctions.PackUnorm2x16(uv: new Vector2(
+        x: u,
+        y: v
+    ));
 
     /// <summary>Bakes the authored lines into a decal frame against the resolved catalog font.</summary>
     /// <param name="colors">The colors the bake resolves a state-bound foreground or background through.</param>
