@@ -8362,7 +8362,7 @@ export type WorldPrototype = {
          */
         material: number;
         /**
-         * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only HalfExtent along the axis, never the primitive's curvature.
+         * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only Support along the axis, never the primitive's curvature.
          */
         face?: unknown;
       } | null;

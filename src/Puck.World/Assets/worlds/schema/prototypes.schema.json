@@ -1529,7 +1529,7 @@
                     },
                     "face": {
                       "default": null,
-                      "description": "The local direction the panel erodes and offsets against, read in the primitive\u0027s own local frame \u2014 before its placement transform, the same frame Domain ops read. Null defaults to \u002BZ (the Prism extrude axis / a Box\u0027s front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op\u0027s own normal. Any primitive may author a curved face (a Cylinder\u0027s \u002BX rim, say) \u2014 the erode/translate/blend recipe reads only HalfExtent along the axis, never the primitive\u0027s curvature."
+                      "description": "The local direction the panel erodes and offsets against, read in the primitive\u0027s own local frame \u2014 before its placement transform, the same frame Domain ops read. Null defaults to \u002BZ (the Prism extrude axis / a Box\u0027s front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op\u0027s own normal. Any primitive may author a curved face (a Cylinder\u0027s \u002BX rim, say) \u2014 the erode/translate/blend recipe reads only Support along the axis, never the primitive\u0027s curvature."
                     }
                   },
                   "required": [

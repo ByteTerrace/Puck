@@ -35,7 +35,7 @@ namespace Puck.World.Authoring;
 /// to <c>+Z</c> (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by
 /// name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any
 /// primitive may author a curved face (a Cylinder's <c>+X</c> rim, say) — the erode/translate/blend recipe reads only
-/// <see cref="SdfSolidGeometry.HalfExtent"/> along the axis, never the primitive's curvature.</param>
+/// <see cref="SdfSolidGeometry.Support"/> along the axis, never the primitive's curvature.</param>
 /// <remarks>
 /// <para>Render-only, like <see cref="ShapeDocument.Domain"/>: the deterministic fixed-point contact evaluator
 /// (<c>CreationStampEmitter.EmitFixed</c>/<c>VisitFixedPrimitiveCopies</c>) never reads this member, so a panelled
@@ -85,29 +85,33 @@ public sealed record ShapePanelDocument(
     /// raises.</param>
     /// <returns>The normalized face axis, the copy's eroded scale, the translation along the face axis the copy is
     /// emitted at, and the blend that composes it with the plate.</returns>
-    /// <remarks>With <c>h</c> the plate's half-extent along the face and <c>h′</c> the eroded copy's: a recess
-    /// translates by <c>h + h′ − depth</c>, so the copy's near face (<c>offset − h′</c>) is the floor at
-    /// <c>h − depth</c>; a raise translates by <c>|depth| + (h − h′)</c>, so the copy's far face (<c>offset + h′</c>)
-    /// stands at <c>h + |depth|</c>. Either way the authored depth is exact regardless of the inset.</remarks>
+    /// <remarks>With <c>s(d)</c> a primitive's support along <c>d</c> (<see cref="SdfSolidGeometry.Support"/>), the
+    /// plate's face standing at <c>s(d)</c> and <c>s′</c> the eroded copy's: a recess translates by
+    /// <c>s(d) + s′(−d) − depth</c>, so the copy's near face (<c>offset − s′(−d)</c>) is the floor at
+    /// <c>s(d) − depth</c>; a raise translates by <c>|depth| + s(d) − s′(d)</c>, so the copy's far face
+    /// (<c>offset + s′(d)</c>) stands at <c>s(d) + |depth|</c>. Either way the authored depth is exact regardless of the
+    /// inset, and for a primitive that is not centred on its origin (a Capsule's −Y face sits at its radius, not its
+    /// half-height) the face is where the primitive's surface is.</remarks>
     public static ShapePanelPlacement Resolve(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, Vector3 faceAxis, float inset, float depth) {
         var direction = Vector3.Normalize(value: faceAxis);
         var erodedScale = Vector3.Max(
             value1: (Vector3.Abs(value: scale) - new Vector3(value: inset)),
             value2: new Vector3(value: SdfSolidGeometry.MinimumScale)
         );
-        var plateHalfExtent = SdfSolidGeometry.HalfExtent(
+        var plateFace = SdfSolidGeometry.Support(
             axis: direction,
             lift: lift,
             scale: scale,
             type: type
         );
-        var copyHalfExtent = SdfSolidGeometry.HalfExtent(
-            axis: direction,
+        var recess = (depth >= 0f);
+        // A recess places the copy's near face (its support against the face) at the floor; a raise its far face.
+        var copyFace = SdfSolidGeometry.Support(
+            axis: (recess ? -direction : direction),
             lift: lift,
             scale: erodedScale,
             type: type
         );
-        var recess = (depth >= 0f);
 
         return new ShapePanelPlacement(
             Blend: (recess
@@ -116,8 +120,8 @@ public sealed record ShapePanelDocument(
             ErodedScale: erodedScale,
             FaceAxis: direction,
             Offset: (recess
-            ? ((plateHalfExtent + copyHalfExtent) - depth)
-            : (-depth + (plateHalfExtent - copyHalfExtent)))
+            ? ((plateFace + copyFace) - depth)
+            : (-depth + (plateFace - copyFace)))
         );
     }
 }
