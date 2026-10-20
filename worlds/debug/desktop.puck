@@ -15,6 +15,13 @@ let claudeCapture = {
   profile { width: 1920, height: 480, refreshRateHz: 30 }
 }
 
+// The wall screen's capture: the window at its own size and shape (2560 by 1392 here), so its text stays sharp on the
+// wall. A window of another shape reads stretched until `wallCapture.profile` and the slab follow it.
+let wallCapture = {
+  windowTitle: claudeTitle
+  profile { width: 2560, height: 1392, refreshRateHz: 30 }
+}
+
 // The pane's share of the display, from the bottom edge. Two fifths leave the play view the top three fifths.
 let paneHeight = 0.4
 
@@ -36,19 +43,20 @@ views {
   }
 }
 
-// The same window on a 4 m by 1 m glass slab eight metres ahead of the spawn and eight to the right, facing +Z,
-// beside the portal frame. It is its own capture of the window, at the same settings.
+// The same window as a wall screen: a 4 m wide glass slab, its height following the window's 2560 by 1392 shape, eight
+// metres ahead of the spawn and eight to the right, facing +Z, beside the portal frame. It is its own capture of the
+// window, at `wallCapture`'s full size.
 screens [
   {
     index: 16
-    origin [8, 1.4, -8]
+    origin [8, 1.2, -8]
     right [1, 0, 0]
     up [0, 1, 0]
     halfWidth: 2
-    halfHeight: 0.5
+    halfHeight: 1.0875
     halfDepth: 0.02
     round: 0
-    source: producer(id: "capture", settings: claudeCapture)
+    source: producer(id: "capture", settings: wallCapture)
     filter: Linear
     route {
       engageable: false
