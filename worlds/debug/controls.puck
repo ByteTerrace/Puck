@@ -127,8 +127,9 @@ icons {
     { name: "act.where", glyph { font: mono, glyph: "U+25C8" } }
     { name: "act.channels", glyph { font: mono, glyph: "U+2261" } }
     { name: "act.respawn", glyph { font: mono, glyph: "U+23CE" } }
-    { name: "act.disengage", glyph { font: mono, glyph: "U+238B" } }
-    { name: "act.interact", glyph { font: mono, glyph: "U+25A3" } }
+    { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
+    { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
+    { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -234,7 +235,8 @@ state {
       channels = "Channels"
       annotate = "Annotate"
       respawn = "Respawn"
-      disengage = "Disengage"
+      desktop = "Desktop"
+      play = "Play"
       cancel = "Cancel"
     }
 
@@ -245,7 +247,8 @@ state {
       channels = "act.channels"
       annotate = "act.annotate"
       respawn = "act.respawn"
-      disengage = "act.disengage"
+      desktop = "act.desktop"
+      play = "act.play"
     }
   }
 }
@@ -410,7 +413,9 @@ bindingOverlays [
                 { id: "channels", command: "body.channels", sources: null }
                 { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
                 { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
-                { id: "disengage", command: "body.disengage", sources: null }
+                // view.override takes an Axis1D from a binding; its text names the layout, so the value is never read.
+                { id: "desktop", command: "view.override", text: "layout desktop", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
+                { id: "play", command: "view.override", text: "layout play", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
               ]
             }
           ]

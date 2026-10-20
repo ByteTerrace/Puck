@@ -307,9 +307,9 @@ hud {
     {
       id: "device-engage"
       rect {
-        x: 0.42
+        x: 0.4
         y: 0.6
-        width: 0.16
+        width: 0.2
         height: 0.045
       }
       layer: Over
@@ -338,7 +338,7 @@ hud {
       rect {
         x: 0.02
         y: 0.93
-        width: 0.12
+        width: 0.17
         height: 0.04
       }
       layer: Over

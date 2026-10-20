@@ -1898,6 +1898,15 @@ currency, translated once into a neutral pad image through the named kit's
 `WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
 rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
+A screen whose route names an `engageChannel` is also engaged from the
+controls: that channel's press within `engageRadius` composes the application,
+and the same press leaves it (the debug world's devices use the Moth's
+`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
+While a seat is captured on a screen, its camera eases into the emulator view:
+the screen's glass fills the viewport's limiting axis, square-on, derived from
+the row's own frame, with nothing between the camera and the glass drawn
+([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen)).
+
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
 instrument: its content is a `puck.tune.v1` document rather than a
