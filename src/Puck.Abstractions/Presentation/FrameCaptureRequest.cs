@@ -25,7 +25,9 @@ public sealed class FrameCaptureRequest {
 
     /// <summary>Creates an unserved request. The caller owns directory creation and path policy.</summary>
     /// <param name="path">The PNG path.</param>
-    /// <param name="converge">The number of frozen rendered samples to capture; zero captures the next frame normally.</param>
+    /// <param name="converge">The number of rendered samples to capture; zero captures one render with no extra
+    /// samples. Either way the capture holds presentation from the frame it is armed in until it is served: the
+    /// renderer keeps rendering that held frame, with no presentation time passing, and serves a render of it.</param>
     public FrameCaptureRequest(string path, int converge = 0) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: converge);
         Converge = converge;

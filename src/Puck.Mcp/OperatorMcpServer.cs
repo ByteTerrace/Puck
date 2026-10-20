@@ -211,7 +211,7 @@ public static class OperatorMcpServer {
     }
     internal static Tool CaptureTool() => new() {
         Name = "puck_capture_frame",
-        Description = "Await the next completed composed frame, ordered after this attachment's prior commands and waits. Returns PNG directly, including overlays, up to 16 MiB. Requires a renderer; busy and capture failures are tool errors. No output path or exact-tick guarantee.",
+        Description = "Capture the composed frame, ordered after this attachment's prior commands and waits. The capture holds presentation from the frame it is armed in until it is served: the World keeps rendering that held frame, with no presentation time passing, and the PNG is a render of it. Returns PNG directly, including overlays, up to 16 MiB. Requires a renderer; busy and capture failures are tool errors. No output path or exact-tick guarantee.",
         InputSchema = CaptureInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = false, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = true },
