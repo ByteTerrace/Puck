@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
+using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
 
@@ -129,25 +130,20 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         };
     }
 
-    // The visibility record's normal: two signed-normalized 16-bit octahedral coordinates, X in bits 0..15 and Y in bits
-    // 16..31, a sync pair with the visibility record's packing in frame/sdf-visibility.hlsli. The reserved pair (-32768, -32768) means no
-    // normal and decodes as zero; any other unfolds the lower half across the diagonals and normalizes.
+    // The visibility record's normal word (SdfVisibility.NormalScale): two signed-normalized 16-bit octahedral
+    // coordinates unpacked and decoded through SdfOctahedral, the C# statement of the kernels' sdfOctDecode. The reserved
+    // pair (SdfVisibility.ZeroNormal) means no normal and decodes as zero.
     private static (double X, double Y, double Z) DecodeNormal(uint packed) {
-        if (packed == 0x80008000U) {
+        if (packed == SdfVisibility.ZeroNormal) {
             return (0.0, 0.0, 0.0);
         }
 
-        var x = (((short)packed) / 32767.0);
-        var y = (((short)(packed >> 16)) / 32767.0);
-        var z = ((1.0 - Math.Abs(value: x)) - Math.Abs(value: y));
+        var normal = SdfOctahedral.Decode(
+            x: (((short)packed) / ((double)SdfVisibility.NormalScale)),
+            y: (((short)(packed >> 16)) / ((double)SdfVisibility.NormalScale))
+        );
 
-        if (z < 0.0) {
-            (x, y) = (((1.0 - Math.Abs(value: y)) * ((x >= 0.0) ? 1.0 : -1.0)), ((1.0 - Math.Abs(value: x)) * ((y >= 0.0) ? 1.0 : -1.0)));
-        }
-
-        var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-        return ((x / length), (y / length), (z / length));
+        return (normal.X, normal.Y, normal.Z);
     }
 
     private sealed class Slot {

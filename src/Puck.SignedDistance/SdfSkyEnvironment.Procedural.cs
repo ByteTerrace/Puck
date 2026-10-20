@@ -139,8 +139,8 @@ public static partial class SdfSkyEnvironment {
         if ((d.Y <= 0f) || (stars.Brightness <= 0f)) { return Vector4.Zero; }
         var density = MathF.Max(x: stars.Density, y: 1f);
 
-        var (u, v) = SdfOctahedral.Encode(direction: new Double3(X: d.X, Y: d.Z, Z: d.Y));
-        var x = MathF.Floor(x: (((float)u) * density)); var y = MathF.Floor(x: (((float)v) * density));
+        var point = SdfOctahedral.Encode(direction: new Double3(X: d.X, Y: d.Y, Z: d.Z));
+        var x = MathF.Floor(x: (((float)((point.X * 0.5) + 0.5)) * density)); var y = MathF.Floor(x: (((float)((point.Y * 0.5) + 0.5)) * density));
         var h = Pcg3dLatticeNoise.Pcg3d(x: BitConverter.SingleToUInt32Bits(value: x), y: BitConverter.SingleToUInt32Bits(value: y), z: stars.Seed);
         const float Unit = (1f / 4294967296f);
 
@@ -160,8 +160,10 @@ public static partial class SdfSkyEnvironment {
 
             luminosity *= (1f - (stars.TwinkleDepth * flicker));
         }
-        var star = SdfOctahedral.Decode(u: ((x + float.Lerp(amount: (h.Y * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density), v: ((y + float.Lerp(amount: (h.Z * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density));
-        var starDirection = new Vector3(x: ((float)star.X), y: ((float)star.Z), z: ((float)star.Y));
+        var starX = ((x + float.Lerp(amount: (h.Y * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density);
+        var starY = ((y + float.Lerp(amount: (h.Z * Unit), value1: stars.Inset, value2: (1f - stars.Inset))) / density);
+        var star = SdfOctahedral.Decode(x: ((starX * 2.0) - 1.0), y: ((starY * 2.0) - 1.0));
+        var starDirection = new Vector3(x: ((float)star.X), y: ((float)star.Y), z: ((float)star.Z));
         var radius = (((stars.RadiusFraction * 3.14159265f) / density) * float.Lerp(amount: MathF.Sqrt(x: luminosity), value1: 0.6f, value2: 1f));
         // Half the squared chord equals 1 - cos(angle), without subtracting a rounded dot product from one.
         var chord = (d - starDirection);

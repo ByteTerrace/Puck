@@ -1,42 +1,35 @@
 namespace Puck.SignedDistance.Illumination;
 
-/// <summary>The octahedral map of directions the sky's environment map is laid out in: the upper hemisphere is the inner
-/// diamond and the lower one folds into the corners. Scalar double arithmetic in a written order, so the bytes do not
-/// depend on the machine.</summary>
+/// <summary>The octahedral map of unit directions onto [-1, 1] squared (Meyer et al., "On Floating-Point Normal
+/// Vectors"), the C# authority of the kernels' <c>sdfOctEncode</c> and <c>sdfOctDecode</c>
+/// (<c>field/sdf-octahedral.hlsli</c>), in their convention: the pole is +z, the upper hemisphere is the inner diamond
+/// and the lower one folds into the corners. A caller whose pole is another axis swizzles at its call, as the sky's
+/// environment map does (+y pole: x, z, y). Scalar double arithmetic in a written order, so the bytes do not depend on
+/// the machine.</summary>
 public static class SdfOctahedral {
-    /// <summary>Encodes a unit direction as octahedral coordinates in [0, 1] squared.</summary>
+    /// <summary>Encodes a unit direction as octahedral coordinates in [-1, 1] squared (<c>sdfOctEncode</c>).</summary>
     /// <param name="direction">The unit direction.</param>
     /// <returns>The coordinates.</returns>
-    public static (double U, double V) Encode(Double3 direction) {
+    public static (double X, double Y) Encode(Double3 direction) {
         var sum = ((Math.Abs(value: direction.X) + Math.Abs(value: direction.Y)) + Math.Abs(value: direction.Z));
-        var u = (direction.X / sum);
-        var v = (direction.Z / sum);
+        var x = (direction.X / sum);
+        var y = (direction.Y / sum);
 
-        if (direction.Y < 0.0) {
-            var foldedU = ((1.0 - Math.Abs(value: v)) * ((u >= 0.0) ? 1.0 : -1.0));
-            var foldedV = ((1.0 - Math.Abs(value: u)) * ((v >= 0.0) ? 1.0 : -1.0));
-
-            u = foldedU;
-            v = foldedV;
+        if (direction.Z < 0.0) {
+            (x, y) = (((1.0 - Math.Abs(value: y)) * ((x >= 0.0) ? 1.0 : -1.0)), ((1.0 - Math.Abs(value: x)) * ((y >= 0.0) ? 1.0 : -1.0)));
         }
 
-        return (((u * 0.5) + 0.5), ((v * 0.5) + 0.5));
+        return (x, y);
     }
-    /// <summary>Decodes octahedral coordinates in [0, 1] squared to a unit direction.</summary>
-    /// <param name="u">The first coordinate.</param>
-    /// <param name="v">The second coordinate.</param>
+    /// <summary>Decodes octahedral coordinates in [-1, 1] squared to a unit direction (<c>sdfOctDecode</c>).</summary>
+    /// <param name="x">The first coordinate.</param>
+    /// <param name="y">The second coordinate.</param>
     /// <returns>The unit direction.</returns>
-    public static Double3 Decode(double u, double v) {
-        var x = ((u * 2.0) - 1.0);
-        var z = ((v * 2.0) - 1.0);
-        var y = ((1.0 - Math.Abs(value: x)) - Math.Abs(value: z));
+    public static Double3 Decode(double x, double y) {
+        var z = ((1.0 - Math.Abs(value: x)) - Math.Abs(value: y));
 
-        if (y < 0.0) {
-            var foldedX = ((1.0 - Math.Abs(value: z)) * ((x >= 0.0) ? 1.0 : -1.0));
-            var foldedZ = ((1.0 - Math.Abs(value: x)) * ((z >= 0.0) ? 1.0 : -1.0));
-
-            x = foldedX;
-            z = foldedZ;
+        if (z < 0.0) {
+            (x, y) = (((1.0 - Math.Abs(value: y)) * ((x >= 0.0) ? 1.0 : -1.0)), ((1.0 - Math.Abs(value: x)) * ((y >= 0.0) ? 1.0 : -1.0)));
         }
 
         return new Double3(X: x, Y: y, Z: z).Normalize();

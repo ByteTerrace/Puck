@@ -54,11 +54,11 @@ public static partial class SdfSkyEnvironment {
     /// <returns>The direction.</returns>
     public static Vector3 Direction(int x, int y) {
         var direction = SdfOctahedral.Decode(
-            u: ((x + 0.5) / Size),
-            v: ((y + 0.5) / Size)
+            x: ((((x + 0.5) / Size) * 2.0) - 1.0),
+            y: ((((y + 0.5) / Size) * 2.0) - 1.0)
         );
 
-        return new Vector3(x: ((float)direction.X), y: ((float)direction.Y), z: ((float)direction.Z));
+        return new Vector3(x: ((float)direction.X), y: ((float)direction.Z), z: ((float)direction.Y));
     }
     /// <summary>Returns a texel's solid angle in steradians: its area in the projection, (2 / <see cref="Size"/>)², times
     /// the cube of the L1 norm of its centre's unit direction, the projection's exact density there, since the
@@ -68,8 +68,8 @@ public static partial class SdfSkyEnvironment {
     /// <returns>The solid angle.</returns>
     public static double SolidAngle(int x, int y) {
         var direction = SdfOctahedral.Decode(
-            u: ((x + 0.5) / Size),
-            v: ((y + 0.5) / Size)
+            x: ((((x + 0.5) / Size) * 2.0) - 1.0),
+            y: ((((y + 0.5) / Size) * 2.0) - 1.0)
         );
         var norm = ((Math.Abs(value: direction.X) + Math.Abs(value: direction.Y)) + Math.Abs(value: direction.Z));
         var side = (2.0 / Size);
@@ -143,7 +143,9 @@ public static partial class SdfSkyEnvironment {
     /// <param name="direction">The unit direction.</param>
     /// <returns>The colour.</returns>
     public static Vector3 Sample(ReadOnlySpan<Vector3> map, Vector3 direction) {
-        var (u, v) = SdfOctahedral.Encode(direction: new Double3(X: direction.X, Y: direction.Y, Z: direction.Z));
+        var point = SdfOctahedral.Encode(direction: new Double3(X: direction.X, Y: direction.Z, Z: direction.Y));
+        var u = ((point.X * 0.5) + 0.5);
+        var v = ((point.Y * 0.5) + 0.5);
         var positionX = ((u * Size) - 0.5);
         var positionY = ((v * Size) - 0.5);
         var originX = ((int)Math.Floor(d: positionX));
