@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Sources;
 
@@ -45,7 +46,7 @@ public static class ImageSourceUploadLayout {
     /// <summary>An indexed image's palette length in entries.</summary>
     public const int PaletteEntries = 256;
 
-    private static uint AlignWord(uint bytes) => (bytes + 3U) & ~3U;
+    private static uint AlignWord(uint bytes) => bytes.AlignUp(alignment: 4U);
     // The chroma plane's extent along an axis: half the luma extent, rounded up.
     private static uint Half(uint extent) => ((extent + 1U) / 2U);
 
