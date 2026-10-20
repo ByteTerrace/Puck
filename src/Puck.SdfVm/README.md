@@ -387,15 +387,10 @@ float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
 follower (`Puck.World.Client`) share—document-blind, allocation-free, never
 feeding back into simulation state. `SdfCameraProgram.cs`'s `path` op samples
 a named `curves` row by arc-length fraction and re-seeds the subject/eye
-there, facing the sampled tangent; `Views/SdfCurvePath.cs` is the same kind of
-presentation twin, but of `Puck.Maths.CurvatureSpline`—it converts an
-already-solved `CompiledCurvatureSpline`'s Q32 raws once at construction, so
-it carries no solver of its own and cannot diverge from the fixed-point
-primitive's tangent-length branch pick. Every intermediate (converted control
-points, arc table, wrap/clamp/lookup) is carried in `double`, not `float`—a
-legal curve can accumulate arc well past `2^24` units, where a `float` ULP
-already exceeds a legal short segment; `float` appears only at the two public
-seams, the total length and `Sample`'s returned position/yaw.
+there, facing the sampled tangent. It samples the row's
+`CompiledCurvatureSpline` directly (`Evaluate` at the fraction of its arc
+length), so the camera path and the simulation's curve follow share one solver
+and one arc table, and `float` appears only at the returned position and yaw.
 
 A camera view a probe reads is exported by its instance's node, not by this
 project: the render graph's node renders its output into its own images, which
