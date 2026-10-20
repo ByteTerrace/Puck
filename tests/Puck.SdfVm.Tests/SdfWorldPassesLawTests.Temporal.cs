@@ -66,6 +66,47 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: SdfTemporalHistory.Sample(index: (first + 1u)), actual: rig.Jitter());
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
     }
+    // A capture holds the frame it serves, and every render of the held frame under the motion view reads the motion
+    // that frame was presented with: its previous view stays valid and the tables keep both pose revisions, rather than
+    // settling to still on the hold's first upload. The hold's end settles them as a still frame does.
+    [Fact]
+    public void AnOrdinaryCaptureOfTheMotionViewKeepsTheHeldFramesMotion() {
+        using var rig = new TemporalRig(views: 1);
+        var moved = new SdfMovedTransforms();
+        var transforms = new[] { new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero) };
+
+        void Step() {
+            moved.Begin(everything: false, tableRows: transforms.Length);
+            transforms[0] = (transforms[0] with { Position = (transforms[0].Position + Vector3.UnitX) });
+            moved.Owe(count: 1, start: 0);
+            rig.SourceFrame = (rig.SourceFrame with { DynamicTransforms = transforms, MovedTransforms = moved });
+        }
+
+        rig.Selected.DebugMode = DebugViewModes.Motion;
+        for (var frame = 0; (frame < 3); frame++) {
+            Step();
+            rig.Produce();
+        }
+        var tables = rig.Selected.Tables!;
+        var presented = (tables.PreviousPoseRevision, tables.PoseRevision);
+
+        Assert.True(condition: rig.PreviousValid());
+        Assert.NotEqual(expected: presented.PreviousPoseRevision, actual: presented.PoseRevision);
+
+        var request = new FrameCaptureRequest(path: "unused-motion-capture-law.png");
+
+        rig.Passes.BeginConvergence(convergence: new RenderGraphConvergence(request: request), instance: "world");
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+            Assert.True(condition: rig.Selected.HoldsFrame);
+            Assert.True(condition: rig.PreviousValid());
+            Assert.Equal(expected: presented, actual: (tables.PreviousPoseRevision, tables.PoseRevision));
+        }
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
+        rig.Produce();
+        Assert.Equal(expected: (presented.PoseRevision, presented.PoseRevision), actual: (tables.PreviousPoseRevision, tables.PoseRevision));
+        Assert.True(condition: rig.PreviousValid());
+    }
     [Fact]
     public void FollowingAViewOrCrossingToAnotherResidencyRestartsTheSequenceWithoutARebuild() {
         using var rig = new TemporalRig(views: 2, secondResidency: true);

@@ -23,24 +23,28 @@ public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopD
     float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0);
 /// <summary>A paint plane in the winning dynamic frame, or world space when no slot owns the hit.</summary>
 public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuaternion Rotation, float Depth, float Ior, PaletteRadialPaintDocument Paint) {
-    /// <summary>Resolves the generic engine layer.</summary>
-    public SdfInset ToInset(Func<string, Vector3> resolve) => new(
-        new(
+    /// <summary>Resolves the generic engine layer at a placement scale.</summary>
+    /// <param name="resolve">The color resolver.</param>
+    /// <param name="scale">The placement scale the layer's lengths (its origin, depth and stop radii) multiply by;
+    /// positive.</param>
+    /// <returns>The inset.</returns>
+    public SdfInset ToInset(Func<string, Vector3> resolve, float scale = 1f) => new(
+        (new Vector3(
             x: Origin.X,
             y: Origin.Y,
             z: Origin.Z
-        ),
+        ) * scale),
         new(
             Rotation.X,
             Rotation.Y,
             Rotation.Z,
             Rotation.W
         ),
-        Depth,
+        (Depth * scale),
         Ior,
         new(
             Paint.Stops.Select(selector: s => new SdfRadialStop(
-                s.Radius,
+                (s.Radius * scale),
                 resolve(s.Color)
             )).ToArray(),
             Paint.Softness,
@@ -117,14 +121,18 @@ public sealed record PalettePaintDocument(
 public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
     IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null) {
-    /// <summary>Resolves the generic engine response.</summary>
-    public SdfWeathering ToWeathering(Func<string, Vector3> resolve) => new(
+    /// <summary>Resolves the generic engine response at a placement scale.</summary>
+    /// <param name="resolve">The color resolver.</param>
+    /// <param name="scale">The placement scale: the curvature reach, a length, multiplies by it, and the pattern
+    /// frequency divides by it, so the pattern keeps its place and size on the scaled surface; positive.</param>
+    /// <returns>The weathering.</returns>
+    public SdfWeathering ToWeathering(Func<string, Vector3> resolve, float scale = 1f) => new(
         Edge,
         Lines,
         Settle,
-        Reach,
+        (Reach * scale),
         Seed,
-        Scale,
+        (Scale / scale),
         Floor,
         Lane,
         Under?.Select(selector: s => new SdfRevealStage(

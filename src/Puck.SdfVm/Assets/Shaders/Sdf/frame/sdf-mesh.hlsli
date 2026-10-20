@@ -190,7 +190,11 @@ float sdfMeshMeanCurvature(float3 a, float3 b, float3 c, float3 na, float3 nb, f
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise, facing the
 // camera (sdfMeshFaceCamera). `faceNormal` is the triangle's own unit normal on the camera's side, the plane the
 // rasterized surface lies in. Curvature retains the authored outward orientation, independent of the viewing side.
-float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature) {
+// `frameSlot` is the dynamic-transform slot whose frame the point's material layers shade in (an inset, weathering, a
+// paint riding the winning frame) and whose lanes they read: the slot of the shape that won there, as the field's
+// winning frame is. A vertex riding a member rides its own shape's slot (SdfMesh.Members), so the point takes the slot
+// of the triangle's nearest vertex; any other point takes the draw's frame slot, or -1.
+float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature, out int frameSlot) {
     uint record = sdfMeshRecord(draw);
     uint first = (3u * triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
@@ -200,6 +204,20 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     float3 normal = face;
     float3 weights;
     curvature = 0.0;
+    frameSlot = asint(sdfMeshRegion[(record + SDF_MESH_FRAME_SLOT_WORD)]);
+
+    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_SKIN_FLAG) != 0u) {
+        float3 toA = (surfacePoint - a);
+        float3 toB = (surfacePoint - b);
+        float3 toC = (surfacePoint - c);
+        float nearA = dot(toA, toA);
+        float nearB = dot(toB, toB);
+        float nearC = dot(toC, toC);
+        uint nearest = (((nearA <= nearB) && (nearA <= nearC)) ? first : ((nearB <= nearC) ? (first + 1u) : (first + 2u)));
+        uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, nearest));
+
+        frameSlot = ((entry != 0u) ? (int)sdfMeshMemberSlot(record, entry) : frameSlot);
+    }
 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);

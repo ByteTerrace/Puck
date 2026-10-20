@@ -547,6 +547,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (!m_submitted) {
             m_submitted = true;
+            tables.HoldsFrame = HoldsFrame;
             tables.SubmitUpload();
         }
 
@@ -683,6 +684,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
+    /// <summary>Gets whether the residency holds its frame for a capture (<see cref="BeginConvergence"/>): until the
+    /// capture completes, every frame renders the frame the capture's first frame took.</summary>
+    public bool HoldsFrame => (m_convergence is { Completion.IsCompleted: false });
+
     /// <summary>Freezes the presentation source for a capture.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
@@ -707,7 +712,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return;
         }
 
-        var converging = (m_convergence is { Completion.IsCompleted: false });
+        var converging = HoldsFrame;
 
         if (converging && (m_frozenFrame is { } frozen)) {
             m_frame = frozen with { ProgramChanged = false };

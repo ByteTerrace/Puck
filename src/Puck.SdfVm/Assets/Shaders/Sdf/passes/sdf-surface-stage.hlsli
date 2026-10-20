@@ -1,6 +1,6 @@
 // The surface pass's stage (SDF_SURFACE_PASS), which reads no field. From the mesh target the mesh pass rasterized it
-// writes every pixel's whole visibility record (frame/sdf-visibility.hlsli), misses included: the mesh hit, its draw's
-// frame slot and its normal, the screen-space ambient occlusion, and the key light's and the second shadow slot's
+// writes every pixel's whole visibility record (frame/sdf-visibility.hlsli), misses included: the mesh hit, the frame
+// slot of the shape that won there (its draw's, or the member slot a skinned vertex rides) and its normal, the screen-space ambient occlusion, and the key light's and the second shadow slot's
 // visibility from the shadow cascades into K's first two slots. Views then shades the record.
 #ifndef PASSES_SDF_SURFACE_STAGE_HLSLI
 #define PASSES_SDF_SURFACE_STAGE_HLSLI
@@ -269,7 +269,7 @@ void sdfSurfaceStage(SdfPixel p) {
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
         float3 face;
-        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face, value.curvature);
+        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face, value.curvature, value.frameSlot);
 
         value.normal = normal;
         if (!worldAoDisabled()) {

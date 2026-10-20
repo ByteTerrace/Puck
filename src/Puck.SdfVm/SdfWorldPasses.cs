@@ -237,6 +237,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 camera: SnapshotOf(view: view).Camera,
                 counted: ((entry.Convergence is { IsActive: true } convergence) ? convergence.Samples : null),
                 currentPoses: tables.PoseRevision,
+                held: view.Residency.HoldsFrame,
                 epoch: EpochOf(
                     debug: debug,
                     entry: entry,
