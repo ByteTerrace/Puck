@@ -172,7 +172,7 @@ placements {
     solid
   }
 
-  // The shape gallery (shapes.puck): every primitive, profile, lift and facet on the open ground at +X/+Z.
+  // The shape gallery (shapes.puck): every authorable construct on the open ground at +X/+Z.
   galleryPlacements()
   studioPlacements()
 }
