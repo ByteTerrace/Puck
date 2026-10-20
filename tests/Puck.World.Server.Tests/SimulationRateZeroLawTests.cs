@@ -493,40 +493,26 @@ public sealed class SimulationRateZeroLawTests {
             expectedSubstring: "ceilingSeconds"
         );
     }
-    /// <summary>The adversarial review's finding 5, at the positive rate its own concrete case names: 240 Hz,
-    /// lowerAfterSeconds 0.000001f. The comment above <c>WorldDefinitionValidator.ValidateInputHold</c> used to
-    /// claim every positive lowerAfterSeconds compiles to at least one tick — false, because the float overload
-    /// quantizes through Q48.16 BEFORE the tick math runs, and this value rounds to fixed-point zero first. The old
-    /// (pre-seconds-domain) <c>LowerAfterTicks &lt; 1</c> check caught this; the bare <c>&gt; 0f</c> seconds check
-    /// did not.</summary>
+    /// <summary>A positive duration never compiles to zero ticks: the conversion rounds the exact decimal up, so 240 Hz
+    /// with lowerAfterSeconds 0.000001f holds for one tick and the document validates.</summary>
     [Fact]
-    public void PositiveRateDocument_SubRepresentableLowerAfterSeconds_Refuses() {
+    public void PositiveRateDocument_SubRepresentableLowerAfterSeconds_RoundsUpToOneTick() {
         var baseDocument = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
         var document = (baseDocument with {
             InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
         });
 
         Assert.Equal(
-            expected: 240,
-            actual: document.SimulationRateHz
-        );
-        Assert.Equal(
-            expected: 0,
+            expected: 1,
             actual: document.InputHold.Compile(ratePerSecond: ((uint)document.SimulationRateHz)).LowerAfterTicks
         );
-
-        Assert.False(
+        Assert.True(
             condition: WorldDefinitionValidator.TryValidate(
                 definition: document,
                 neighbours: null,
                 reason: out var reason
             ),
-            userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse at 240 Hz"
-        );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "lowerAfterSeconds"
+            userMessage: reason
         );
     }
     /// <summary>The other half of the same discriminator: a non-finite authored value evades every ordered
@@ -559,16 +545,14 @@ public sealed class SimulationRateZeroLawTests {
     /// <summary>The discriminator <see cref="RateZeroDocument_WithOrdinaryInputHold_StillValidates"/> itself cannot
     /// provide: that test would pass identically if input-hold validation were deleted wholesale, since it only ever
     /// asserts SUCCESS. This proves the section is genuinely still checked at rate 0 — and proves it rate-
-    /// independently, per the adversarial review's finding 5: a positive lowerAfterSeconds that quantizes to
-    /// FixedQ4816.Zero is sub-representable as a duration at ANY rate, including 0 (where there is no compiled tick
-    /// count to overflow at all — the failure is purely in the authored-domain quantization, before any rate is
-    /// even consulted).</summary>
+    /// independently: a lowerAfterSeconds that is not positive is refused at rate 0, where there is no compiled
+    /// tick count to overflow at all.</summary>
     [Fact]
-    public void RateZeroDocument_SubRepresentableLowerAfterSeconds_Refuses() {
+    public void RateZeroDocument_NonPositiveLowerAfterSeconds_Refuses() {
         var baseDocument = Fixtures.BuildDocument();
         var document = (baseDocument with {
             Simulation = new WorldSimulationDefaults(RateHz: 0),
-            InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
+            InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0f }),
         });
 
         Assert.False(
@@ -577,7 +561,7 @@ public sealed class SimulationRateZeroLawTests {
                 neighbours: null,
                 reason: out var reason
             ),
-            userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse even at rate 0"
+            userMessage: "a non-positive lowerAfterSeconds was expected to refuse even at rate 0"
         );
         Assert.Contains(
             actualString: reason,
