@@ -71,9 +71,13 @@ ports must agree with the provider descriptor. `machine.state` reports this stat
 mutation and undo authority.
 
 Screens and speakers reference an instance and a provider output name. Removing a
-consumer does not remove or restart its machine. Engaged display inputs fold into
-the instance's single normalized input port; machines with multiple input ports
-can run headlessly, while display routing requires the later explicit port model.
+consumer does not remove or restart its machine. An engaged display's input
+reaches the input port its route names (`route.port`); a route that names none
+reaches the machine's sole port, so an engageable display of a machine with
+several ports (the Humble Gaming Deck's `controls` and `controls-2`) is refused
+by name until its route names one. A port no engaged display routes to holds
+neutral input, a passive display routes none, and a screen-owned machine
+follows the same rule at insertion.
 Named screen inspection, output selection, symbol lookup, and memory access
 resolve directly against the named runtime instance. An aliased screen or speaker
 source rewrites its producer name under import aliasing, and provider asset paths
@@ -91,6 +95,15 @@ and includes the provider operation's schema identifier. Preparation and complet
 world validation precede runtime commit; a successful configuration change becomes
 the canonical machine declaration. `screen.insert` and `forge.play` resolve their
 named producer and use this same operation path. `screen.eject` detaches the display.
+
+A declaration's optional `contentFolder` names the folder, beside the declaring
+document, that holds what the machine can swap to. `machine.content <instance>`
+lists the files directly in it that the machine's engine can mount (the files its
+content provider recognizes, or every file for an engine that mounts raw bytes)
+and marks the one mounted; `machine.swap <instance> <name>` mounts one by file
+name, or by the part before its first `.` when only one listed file has it,
+through the same `content.insert` operation. Nothing outside the folder is
+listed or mounted by name (`WorldMachineContentFolder`).
 
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;

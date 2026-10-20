@@ -15,6 +15,7 @@ import "shapes"
 import "studio"
 import "theme"
 import "controls"
+import "devices"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA

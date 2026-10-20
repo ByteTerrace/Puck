@@ -401,6 +401,23 @@ source); and the Immediate read-backs `screen.state`, `screen.peek`,
 auto-insert submits `WorldScreenOp.Select` from a verb; `SetOptions`, `Link` and
 `Unlink` have codec arms but no console verb.
 
+**Swappable content comes from an authored folder (the owner's ruling).** The
+cartridges a device can swap to are the files in the folder its world author
+points to, one folder per device type: `machines[].contentFolder`, a
+portable relative path resolved beside the declaring document
+(`WorldDocumentPaths`, relocated through imports like every file field),
+refused by name in `WorldDefinitionValidator.Machines.cs` when it is rooted or
+not spelled with `/`. `machine.content <instance>` reads it back (folder,
+resolved path, mounted content, one segment per file the engine can mount:
+what its content provider recognizes, or every file for a raw-content engine,
+`WorldMachineContentFolder`); `machine.swap <instance> <name>` mounts one
+through `content.insert`. No verb lists a hard-coded set or scans outside the
+authored folder. The shipped cartridges sit one folder per forge target
+(`Assets/cartridges/cgb/`, `Assets/cartridges/agb/`), and the debug world's
+device row (`worlds/devices.puck`, `devices.md`) points each device at its
+folder. Provider operations, a swap among them, are refused while
+`replay.record` runs (`WhileRecording`).
+
 ## Read-backs
 
 `screen.state`/`world.screens` tag a mirrored participant `p<n>(mirror)` (both
@@ -419,10 +436,10 @@ hit.
 Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
-(`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
-the screen path needs a declared engageable screen, and no live world declares
-one, so author it in a scratch world (the quarantined arcade district's
-cabinet screens, kit `arcadePad`, are the pattern). Remember actor ≠ target: every seat holds wide grants by default, so
+(`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
+world's device row declares engageable machine screens 0 to 4 (kit
+`devicePad`, engage radius 3; `devices.md` has the stand-there `body.pose`
+lines), so the screen path runs in the live world. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:
 `world.grant … control body:<n>`/`drive body:<n>` is 0-based; `player.*` verbs are

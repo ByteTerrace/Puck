@@ -92,6 +92,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
+| [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds or verifies the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)` and `creation.shape`: list registered sculpts, apply one to a world file, report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
@@ -265,6 +266,18 @@ the count and the cost model's units for the largest sustained probe. A `CLIPPED
 rather than the machine's. Cost per iteration is inversely proportional to that capacity, so the rows are what
 `CartridgeCost`'s weights and `CartridgeCostProfile`'s reservations are folded from; see
 the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run boots several hundred images.
+
+## `puck cartridges`—tool-built cartridges
+
+```sh
+puck cartridges deck --output src/Puck.World/Assets/cartridges/deck
+puck cartridges deck --output src/Puck.World/Assets/cartridges/deck --check
+```
+
+`deck` writes one `.nes` image per Humble Gaming Deck test cartridge, each assembled by `DeckProgram` in
+`Puck.HumbleGamingDeck.Forge` (see the [Deck's hosting page](../emulation/hgd/hosting.md#test-cartridges)), and
+reports its SHA-256 hash. `--check` rebuilds and compares bytes without creating or repairing the output; missing
+files or different bytes exit 1.
 
 ## Automation commands
 

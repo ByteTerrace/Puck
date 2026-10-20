@@ -355,12 +355,17 @@ public enum WorldPadElement : byte {
 /// (<see cref="WorldScreenMappings"/>). <c>Passthrough</c> is refused by name: host passthrough exists only for a source
 /// the local user opened on their own machine, and a world document can never create one or send it input.
 /// <see langword="null"/> (the default) is <c>Presentation</c>. Omitted from the wire when null.</param>
+/// <param name="Port">The machine input port, by the provider's port name (<c>controls-2</c>), that a seat engaged on this
+/// screen drives; the machine's other ports hold neutral input unless another screen routes to them.
+/// <see langword="null"/> (the default) resolves only a machine with a sole input port, and a screen showing a machine
+/// with several is refused by name until its route names one. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Channels = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,

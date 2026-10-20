@@ -1791,8 +1791,11 @@ on the next demand, exactly like the first open).
 boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
-authority; `screen.insert` and `forge.play` use that executor for named producers,
-while `screen.eject` detaches the display. The screen operations (insert, eject,
+authority; `screen.insert`, `forge.play` and `machine.swap` (a file from the
+machine's authored `contentFolder`, which `machine.content` lists) use that
+executor for named producers, while `screen.eject` detaches the display. The debug
+world's device row runs one of each machine
+([`devices.md`](Assets/worlds/devices.md)). The screen operations (insert, eject,
 select, options, link, unlink) remain their own ordered payload kind beside the
 generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a

@@ -87,7 +87,7 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
         _ = Directory.CreateDirectory(path: cartridges);
         File.Copy(
             destFileName: Path.Combine(path1: cartridges, path2: Path.GetFileName(path: ContentPath)),
-            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/hgb-mirror.cgb.cartridge.json")
+            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/cgb/hgb-mirror.cgb.cartridge.json")
         );
         File.WriteAllBytes(keyFile, key.ExportPkcs8PrivateKey());
 

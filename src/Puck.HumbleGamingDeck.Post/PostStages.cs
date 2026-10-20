@@ -9,7 +9,7 @@ internal static class PostStages {
             new SnapshotStage(), new LoaderStage(), new CpuTimingStage(), new ThroughputStage(),
             new EmbeddingStage(), new QueuedHostCheckpointStage(), new QueuedHostBackpressureStage(),
             new QueuedHostFramePublicationStage(), new QueuedHostAudioStage(), new QueuedHostTimeTravelStage(),
-            new QueuedHostMemoryAccessStage(), new PictureStage(),
+            new QueuedHostMemoryAccessStage(), new PictureStage(), new ShippedCartridgesStage(),
             new ControllerStage(), new OamDmaStage(), new ApuStage(),
             new Nes6502SstStage(), new NestestStage(), new NestestBootStage(), new AccuracyCoinStage()];
     }

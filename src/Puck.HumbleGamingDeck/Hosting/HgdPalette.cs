@@ -77,8 +77,11 @@ public static class HgdPalette {
                     signal *= Attenuation;
                 }
 
+                // Each sample is taken mid-phase. The demodulator's reference is the colour burst, which is colour 8's
+                // phase and decodes at 300 degrees (-U, a yellow); colour 8's samples centre on phase 6.5, so every
+                // sample angle is offset by 3.5 phases to hold the burst there.
                 var normalized = ((signal - Black) / (White - Black));
-                var angle = ((Math.PI * (phase + 0.5)) / 6.0);
+                var angle = ((Math.PI * (phase + 4.0)) / 6.0);
 
                 y += normalized;
                 i += (normalized * Math.Cos(d: angle));

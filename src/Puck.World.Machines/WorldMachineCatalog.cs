@@ -88,6 +88,8 @@ public sealed class WorldMachineCatalog : IMachineValidationCatalog {
             key: engineId,
             value: out var provider
         ) && provider.Recognizes(contentPath: contentPath));
+    /// <inheritdoc/>
+    public bool HasContentProvider(string engineId) => ContentProviders.ContainsKey(key: engineId);
     /// <summary>Returns whether this host can construct the named engine.</summary>
     /// <param name="engineId">The ordinal engine identifier.</param>
     public bool IsRegistered(string engineId) => Engines.ContainsKey(key: engineId);

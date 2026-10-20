@@ -9410,6 +9410,13 @@
                   null
                 ],
                 "title": "SourceDestination"
+              },
+              "port": {
+                "description": "The machine input port, by the provider\u0027s port name (controls-2), that a seat engaged on this screen drives; the machine\u0027s other ports hold neutral input unless another screen routes to them. null (the default) resolves only a machine with a sole input port, and a screen showing a machine with several is refused by name until its route names one. Omitted from the wire when null.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "additionalProperties": false,

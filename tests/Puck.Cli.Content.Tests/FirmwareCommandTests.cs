@@ -103,32 +103,32 @@ public sealed class FirmwareCommandTests {
         );
         byte[] expected = [3, 1, 4, 1, 5];
 
-        Assert.False(condition: FirmwareArtifact.WriteOrVerify(
+        Assert.False(condition: GeneratedArtifact.WriteOrVerify(
             bytes: expected,
-            machine: "test",
             path: image,
+            verb: "test",
             verify: true
         ));
         Assert.False(condition: Directory.Exists(path: missingDirectory));
-        Assert.True(condition: FirmwareArtifact.WriteOrVerify(
+        Assert.True(condition: GeneratedArtifact.WriteOrVerify(
             bytes: expected,
-            machine: "test",
             path: image,
+            verb: "test",
             verify: false
         ));
-        Assert.True(condition: FirmwareArtifact.WriteOrVerify(
+        Assert.True(condition: GeneratedArtifact.WriteOrVerify(
             bytes: expected,
-            machine: "test",
             path: image,
+            verb: "test",
             verify: true
         ));
 
         byte[] different = [3, 1, 4, 1, 6];
 
-        Assert.False(condition: FirmwareArtifact.WriteOrVerify(
+        Assert.False(condition: GeneratedArtifact.WriteOrVerify(
             bytes: different,
-            machine: "test",
             path: image,
+            verb: "test",
             verify: true
         ));
         Assert.Equal(

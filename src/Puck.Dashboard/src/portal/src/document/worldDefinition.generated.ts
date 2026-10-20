@@ -6548,6 +6548,10 @@ export type WorldMachine = {
    * The optional standing cable endpoint owned by this machine instance.
    */
   cable?: WorldMachineCable | null;
+  /**
+   * The folder holding the content this device can swap to, relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. machine.content lists the files in it the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folder is listed. Omitted from the wire when null.
+   */
+  contentFolder?: string | null;
 };
 
 export type WorldMachineCable = {
@@ -10720,6 +10724,10 @@ export type WorldScreenRoute = {
    * Where a pointer hit on the screen's source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, which a $pointer: rule read sees and which aims the screen machine's light gun for a seat applied to the screen (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.
    */
   input?: SourceDestination | null;
+  /**
+   * The machine input port, by the provider's port name (controls-2), that a seat engaged on this screen drives; the machine's other ports hold neutral input unless another screen routes to them. null (the default) resolves only a machine with a sole input port, and a screen showing a machine with several is refused by name until its route names one. Omitted from the wire when null.
+   */
+  port?: string | null;
 };
 
 /**

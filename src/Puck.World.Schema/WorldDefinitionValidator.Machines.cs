@@ -80,6 +80,12 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name: duplicate instance '{machine.Name}'.");
             }
             path = $"{path} ({machine.Name})";
+            if (
+                (machine.ContentFolder is { } folder) &&
+                !WorldDocumentPaths.IsPortableRelativeFilePath(path: folder)
+            ) {
+                errors.Add(item: $"{path}.contentFolder '{folder}' must be a relative folder spelled with '/', with no root, drive, trailing '/', or empty or '.' segment.");
+            }
             ValidateMachineBindings(
                 definition: definition,
                 errors: errors,

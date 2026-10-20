@@ -17,6 +17,7 @@
         <ProjectReference Include="../Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="../Puck.Embeddings/Puck.Embeddings.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
         <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
         <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
         <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />

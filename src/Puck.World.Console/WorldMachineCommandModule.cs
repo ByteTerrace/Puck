@@ -167,6 +167,170 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             description: "Submits one generic provider operation through the ordered domain: machine.operation <instance> <generation> <operationId> <json>. The detached payload completes as Applied, Unsupported, Refused, or Faulted.",
             handler: Operation
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "machine.content",
+            description: "Lists the content a named machine can swap to: machine.content <instance>. Echoes the machine's authored contentFolder, the folder it resolves to, the content mounted now, and one segment per file in that folder the machine's engine can mount (mounted=true on the one it runs). A query (always echoes).",
+            handler: Content
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "machine.swap",
+            description: "Mounts a file from a named machine's contentFolder: machine.swap <instance> <name>, where <name> is a file name machine.content lists, or the part of one before its first '.' when only one listed file has it. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
+            handler: Swap
+        );
+    }
+    private CommandResult Content(CommandContext context, WireArgs args) {
+        if (args.Count != 1) {
+            return CommandResult.Error(output: "[machine.content: expected <instance>]");
+        }
+        if (!authority.TryResolveServer(
+            context: context,
+            error: out var error,
+            server: out var server,
+            verb: "machine.content"
+        )) {
+            return error;
+        }
+        if (!TryListContent(
+            entries: out var entries,
+            failure: out var failure,
+            instance: args[0].ToString(),
+            machine: out var machine,
+            server: server,
+            verb: "machine.content"
+        )) {
+            return failure;
+        }
+
+        var mounted = MountedContent(machine: machine);
+        var echo = CommandEcho.Open(verb: "machine.content").Head(head: machine.Name)
+            .Field(
+            key: "engine",
+            value: machine.Engine
+        )
+            .Field(
+            key: "folder",
+            value: machine.ContentFolder!
+        )
+            .Field(
+            key: "resolved",
+            value: WorldDocumentPaths.Resolve(
+                documentDirectory: server.Definition.DocumentDirectory,
+                path: machine.ContentFolder!
+            )
+        )
+            .Field(
+            key: "mounted",
+            value: (mounted ?? "none")
+        )
+            .Field(
+            key: "entries",
+            value: entries.Count
+        );
+
+        foreach (var entry in entries) {
+            echo = echo.Segment().Head(head: entry.Name).Field(
+                key: "mounted",
+                value: string.Equals(
+                    a: entry.ContentPath,
+                    b: mounted,
+                    comparisonType: StringComparison.Ordinal
+                )
+            );
+        }
+        return new CommandResult(Output: echo.Close());
+    }
+    // The content path a live declaration mounts, as every engine's content.insert payload spells it.
+    private static string? MountedContent(WorldMachine machine) =>
+        ((machine.Configuration.ValueKind == JsonValueKind.Object) &&
+        machine.Configuration.TryGetProperty(
+            propertyName: "content",
+            value: out var content
+        ) &&
+        (content.ValueKind == JsonValueKind.Object) &&
+        content.TryGetProperty(
+            propertyName: "path",
+            value: out var path
+        ) &&
+        (path.ValueKind == JsonValueKind.String)
+            ? path.GetString()
+            : null
+        );
+    private CommandResult Swap(CommandContext context, WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[machine.swap: expected <instance> <name>]");
+        }
+        if (!authority.TryResolveServer(
+            context: context,
+            error: out var error,
+            server: out var server,
+            verb: "machine.swap"
+        )) {
+            return error;
+        }
+        if (!TryListContent(
+            entries: out var entries,
+            failure: out var failure,
+            instance: args[0].ToString(),
+            machine: out var machine,
+            server: server,
+            verb: "machine.swap"
+        )) {
+            return failure;
+        }
+        if (!WorldMachineContentFolder.TryFind(
+            entries: entries,
+            entry: out var entry,
+            name: args[1].ToString(),
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[machine.swap: {machine.Name} {reason}]");
+        }
+        if (!authority.TryResolveLink(
+            context: context,
+            error: out var linkError,
+            link: out var link,
+            verb: "machine.swap"
+        )) {
+            return linkError;
+        }
+        return InsertContent(
+            contentPath: entry.ContentPath,
+            host: server.Machines,
+            instance: machine.Name,
+            link: link,
+            principal: context.Principal,
+            verb: "machine.swap"
+        );
+    }
+    // Lists a live machine's folder: the host's current declaration, so a swap lists against the content it runs.
+    private static bool TryListContent(WorldServer server, string instance, string verb, out WorldMachine machine,
+        out IReadOnlyList<WorldMachineContentFolder.Entry> entries, out CommandResult failure) {
+        entries = [];
+        failure = CommandResult.None;
+
+        if (server.Machines.CaptureInstances().FirstOrDefault(predicate: row => string.Equals(
+            a: row.Name,
+            b: instance,
+            comparisonType: StringComparison.Ordinal
+        )) is not { } live) {
+            machine = null!;
+            failure = CommandResult.Error(output: $"[{verb}: no machine '{instance}']");
+            return false;
+        }
+        machine = live;
+        if (!WorldMachineContentFolder.TryList(
+            catalog: server.Machines.ValidationCatalog,
+            documentDirectory: server.Definition.DocumentDirectory,
+            entries: out entries,
+            machine: live,
+            reason: out var reason
+        )) {
+            failure = CommandResult.Error(output: $"[{verb}: {reason}]");
+            return false;
+        }
+        return true;
     }
     /// <summary>Inserts content into a live named instance using its provider's versioned operation descriptor.</summary>
     /// <param name="link">The ordered console submission link.</param>

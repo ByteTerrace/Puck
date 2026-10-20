@@ -129,9 +129,12 @@ mid-instruction replay, loader and bus cases, and original reset, interrupt,
 and RDY fixtures. Throughput reports actual elapsed master ticks and never
 gates correctness. The shared host-contract probes run against the Deck host
 (see [Hosting](hosting.md#verification)). Original fixture cartridges, built by
-a small assembler in the battery, check the rest of the machine against
+`DeckProgram`, the forge's small assembler, check the rest of the machine against
 independent oracles: `ppu-picture` compares every pixel of a rendered picture
 with a reference renderer that maps each pixel straight from the same tables,
+`shipped-cartridges` reads the pictures of the
+[test cartridges](hosting.md#test-cartridges) worlds mount and checks that they
+answer the pad,
 `controllers` reads both ports through the pad mapping, `oam-dma` times the DMA
 on both cycle parities and checks the copy with unused attribute bits cleared,
 and `apu` checks a pulse waveform, length counters, delayed frame-counter

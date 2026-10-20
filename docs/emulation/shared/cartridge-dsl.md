@@ -11,7 +11,7 @@ committed document, so the two can never drift apart quietly.
 ## Round trip
 
 ```bash
-puck decompile src/Puck.World/Assets/cartridges/tetromino.cgb.cartridge.json --output tetromino.cgb.puck
+puck decompile src/Puck.World/Assets/cartridges/cgb/tetromino.cgb.cartridge.json --output tetromino.cgb.puck
 puck compile tetromino.cgb.puck --output tetromino.cgb.cartridge.json --validate
 ```
 

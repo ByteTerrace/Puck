@@ -139,6 +139,14 @@
         "additionalProperties": false,
         "default": null,
         "title": "WorldMachineCable"
+      },
+      "contentFolder": {
+        "description": "The folder holding the content this device can swap to, relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. machine.content lists the files in it the device\u0027s engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folder is listed. Omitted from the wire when null.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [

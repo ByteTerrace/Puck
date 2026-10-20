@@ -104,7 +104,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
 
         foreach (var screen in screens) {
-            var slot = new MachineSlot { DeclaredSource = screen.Source, Index = screen.Index, Magazine = screen.Magazine, SelectedEntry = (screen.Magazine?.Selected ?? 0) };
+            var slot = new MachineSlot { DeclaredSource = screen.Source, Index = screen.Index, Magazine = screen.Magazine, Route = screen.Route, SelectedEntry = (screen.Magazine?.Selected ?? 0) };
 
             m_slots[screen.Index] = slot;
         }
@@ -349,6 +349,20 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             // Still pin the hash: content WAS read and hashed even though construction rejected it (bad options),
             // so a replay whose file now hashes differently is still caught, never silently retried unpinned.
             return (Ok: false, Message: exception.Message, ContentHash: contentHash);
+        }
+        if (InputRouteRefusal(
+            index: index,
+            machine: $"{engine.Id} machine",
+            route: slot.Route,
+            runtime: created
+        ) is { } routeRefusal) {
+            created.Dispose();
+            MachineLifecycleTap?.Invoke(
+                arg1: index,
+                arg2: true
+            );
+
+            return (Ok: false, Message: routeRefusal, ContentHash: contentHash);
         }
 
         LeaveLink(index: index);
@@ -716,12 +730,17 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
             AnyEverPumped = true;
 
+            // Insertion refused a multi-port machine on an engageable route naming none of its ports, so a route without
+            // a port here drives the machine's sole port, and a named one drives that port alone.
             if (machine is IMachineInputPorts ports) {
-                if (ports.InputPorts.Count > 1) {
-                    throw new InvalidOperationException(message: $"Screen {slot.Index} requires an explicit machine input port.");
-                }
-                foreach (var port in ports.InputPorts.Values) {
-                    port.SetState(state: in input);
+                foreach (var (name, port) in ports.InputPorts) {
+                    port.SetState(state: (((slot.Route.Port is not { } routedPort) || string.Equals(
+                        a: routedPort,
+                        b: name,
+                        comparisonType: StringComparison.Ordinal
+                    ))
+                        ? input
+                        : MachinePadState.Neutral));
                 }
             }
 
@@ -1005,6 +1024,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             }
 
             slot.Magazine = screen.Magazine;
+            slot.Route = screen.Route;
 
             if (screen.Magazine is { } magazine) {
                 slot.SelectedEntry = Math.Clamp(
@@ -1592,6 +1612,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         public string? MachineOptions { get; set; }
         public string? MachineSourceEngine { get; set; }
         public WorldScreenMagazine? Magazine { get; set; }
+        public WorldScreenRoute Route { get; set; }
         public int SelectedEntry { get; set; }
 
         public void ClearMachine() {
