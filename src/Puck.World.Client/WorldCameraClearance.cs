@@ -80,7 +80,7 @@ public static class WorldCameraClearance {
         material: out _,
         position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: eye))
     )
-        ? ((float)((double)distance))
+        ? ((float)distance)
         : float.NegativeInfinity
     );
     private static Vector3 Lifted(Vector3 level, Vector3 up, float elevation) =>

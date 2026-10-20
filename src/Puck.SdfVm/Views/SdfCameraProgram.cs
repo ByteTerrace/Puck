@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SdfVm.Views;
 
@@ -100,13 +101,14 @@ public abstract record SdfCameraOp {
     public sealed record Orbit(SdfCameraScalar Distance, SdfCameraScalar Yaw, SdfCameraScalar Pitch, Vector3 PivotOffset, bool AppliesLook) : SdfCameraOp;
     /// <summary>Establishes the CURRENT subject at a point sampled from <paramref name="Curve"/> by arc-length
     /// fraction, and re-seeds the eye there — <see cref="Anchor"/>'s subject-seeding role, played by a curve sample
-    /// instead of a resolved subject slot. The sampled subject's orientation faces the curve's own tangent direction
-    /// (see <see cref="SdfCurvePath.Sample"/>), so a following <see cref="LookAt"/> with no subject of its own looks
-    /// ahead along the curve.</summary>
-    /// <param name="Curve">The float twin of the compiled curve to sample.</param>
+    /// instead of a resolved subject slot. The sampled subject's orientation faces the curve's own tangent under the
+    /// −Z-forward convention (<see cref="VectorFunctions.YawOf(Vector3)"/>), so a following <see cref="LookAt"/> with
+    /// no subject of its own looks ahead along the curve.</summary>
+    /// <param name="Curve">The compiled curve to sample, through <see cref="CompiledCurvatureSpline.Evaluate"/>.</param>
     /// <param name="Fraction">The curve's arc-length fraction to resolve this frame, wrapped (a closed curve) or
-    /// clamped to <c>[0, 1]</c> (an open one) before sampling (see <see cref="SdfCurvePath.SampleFraction"/>).</param>
-    public sealed record Path(SdfCurvePath Curve, SdfCameraScalar Fraction) : SdfCameraOp;
+    /// clamped to <c>[0, 1]</c> (an open one) in fraction space before it scales the curve's length, so any finite
+    /// fraction samples a point; a fraction that is not a number samples the start.</param>
+    public sealed record Path(CompiledCurvatureSpline Curve, SdfCameraScalar Fraction) : SdfCameraOp;
     /// <summary>Sets the second-order response reported as <see cref="SdfCameraPose.Dynamics"/>;
     /// <see cref="SdfCameraDynamics.None"/> reports no easing. It never moves the resolved pose — the eased result is
     /// the CALLER's to apply (see <see cref="SdfCameraBoomFollower"/>), because where in a host's pipeline the ease
@@ -292,7 +294,10 @@ public static class SdfCameraProgramEvaluator {
 
                     break;
                 case SdfCameraOp.Path pathOp:
-                    var (pathPosition, pathTangentYaw) = pathOp.Curve.SampleFraction(fraction: pathOp.Fraction.Resolve(scalars: scalars));
+                    var (pathPosition, pathTangentYaw) = SamplePath(
+                        curve: pathOp.Curve,
+                        fraction: pathOp.Fraction.Resolve(scalars: scalars)
+                    );
 
                     subject = new SdfAnchor(
                         Orientation: Quaternion.CreateFromYawPitchRoll(
@@ -466,6 +471,20 @@ public static class SdfCameraProgramEvaluator {
         rotation: orientation,
         value: -Vector3.UnitZ
     );
+    private static (Vector3 Position, float TangentYaw) SamplePath(CompiledCurvatureSpline curve, float fraction) {
+        var wrapped = (curve.Closed
+            ? VectorFunctions.Fract(x: ((double)fraction))
+            : Math.Clamp(
+                max: 1d,
+                min: 0d,
+                value: fraction
+            ));
+        var sample = curve.Evaluate(arcLength: FixedQ4816.FromDouble(value: (double.IsNaN(d: wrapped)
+            ? 0d
+            : (wrapped * ((double)curve.TotalLength)))));
+
+        return (sample.Position.ToVector3(), VectorFunctions.YawOf(facing: sample.Tangent.ToVector3()));
+    }
     private static Vector3 Place(in SdfAnchor subject, Vector3 value, bool worldAxes, float scale) {
         var scaled = (value * scale);
 

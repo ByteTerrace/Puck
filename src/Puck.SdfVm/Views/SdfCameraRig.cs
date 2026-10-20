@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SdfVm.Views;
 
@@ -67,16 +68,11 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// <param name="pitch">The tilt, radians (positive = up).</param>
     /// <param name="distance">The scale to apply to the resulting direction.</param>
     /// <returns>The offset vector from the orbit target to the orbit eye.</returns>
-    public static Vector3 Offset(float yaw, float pitch, float distance) {
-        var cosPitch = MathF.Cos(x: pitch);
-        var forward = new Vector3(
-            x: (MathF.Sin(x: yaw) * cosPitch),
-            y: MathF.Sin(x: pitch),
-            z: (MathF.Cos(x: yaw) * cosPitch)
-        );
-
-        return (forward * distance);
-    }
+    public static Vector3 Offset(float yaw, float pitch, float distance) =>
+        (-VectorFunctions.Heading(
+            pitch: -pitch,
+            yaw: yaw
+        ) * distance);
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
         var target = anchor.Position;

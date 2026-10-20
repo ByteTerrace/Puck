@@ -116,22 +116,6 @@ public static class InfinityViewFit {
             WholeFrustum: whole
         );
     }
-    /// <summary>Returns the ray a camera casts through an image point, as the view pass's <c>cameraRayDirection</c> sums it:
-    /// the forward axis, the point scaled by the half-extents on the right and up axes, then the frustum offset as a
-    /// trailing term. The reference the laws hold the instance's rays to.</summary>
-    /// <param name="camera">The camera.</param>
-    /// <param name="ndc">The point in <c>[-1, 1]²</c>, up positive.</param>
-    /// <returns>The unnormalized direction.</returns>
-    public static Vector3 RayThrough(CameraSnapshot camera, Vector2 ndc) {
-        var direction = (
-            (camera.Forward +
-            (((ndc.X * camera.AspectRatio) * camera.TanHalfFieldOfView) * camera.Right)) +
-            ((ndc.Y * camera.TanHalfFieldOfView) * camera.Up)
-        );
-
-        return (direction + ((camera.FrustumOffset.X * camera.Right) + (camera.FrustumOffset.Y * camera.Up)));
-    }
-
     // The pixels a share of the viewer's extent takes at a scale of its density: at least one, never above the viewer's
     // own extent.
     private static uint Pixels(uint viewerPixels, double share, float scale) {

@@ -335,10 +335,7 @@ public static class WorldPlacementStamper {
             // lattice a finite shape clips is as finite as that shape.
             composeBlends: scoped
         );
-        var rotation = Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitY,
-            angle: (frame.YawDegrees * (MathF.PI / 180f))
-        );
+        var rotation = frame.Rotation;
         var perShape = (
             !scoped &&
             (creation.Shapes is { Count: > 0 })

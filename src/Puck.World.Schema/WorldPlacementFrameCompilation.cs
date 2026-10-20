@@ -9,7 +9,14 @@ namespace Puck.World;
 /// composed over the parent's own resolved frame otherwise. See <see cref="WorldPlacementFrameCompilation"/>.</summary>
 /// <param name="Position">The resolved world position.</param>
 /// <param name="YawDegrees">The resolved world yaw about +Y, degrees, wrapped to [0, 360).</param>
-public readonly record struct CompiledPlacementFrame(Vector3 Position, float YawDegrees);
+public readonly record struct CompiledPlacementFrame(Vector3 Position, float YawDegrees) {
+    /// <summary>Gets the frame's presentation rotation: <see cref="YawDegrees"/> about +Y, in single precision. The
+    /// deterministic composition rotates through <see cref="WorldPlacementFrameCompilation.RotateY"/> instead.</summary>
+    public Quaternion Rotation => Quaternion.CreateFromAxisAngle(
+        angle: float.DegreesToRadians(degrees: YawDegrees),
+        axis: Vector3.UnitY
+    );
+}
 /// <summary>Compiles every placement's <see cref="WorldPlacement.Parent"/> chain into one <see cref="CompiledPlacementFrame"/>
 /// per placement, resolved ONCE, statically, from the document's own placement rows — never per tick.
 /// <see cref="WorldDefinition.PlacementFrames"/> is the cached, document-wide result every consumer of a placement's
@@ -137,9 +144,9 @@ public static class WorldPlacementFrameCompilation {
     /// <param name="degrees">Yaw in degrees.</param>
     /// <returns>The rotated vector at the document boundary.</returns>
     public static Vector3 RotateY(Vector3 vector, float degrees) {
-        // The same degrees-to-fixed-radians yaw about the Y axis WorldColliderSet and WorldPlacementAttachment use for
-        // a placement's yaw, kept once here so a chain of composed rotations reads identically to a single one.
-        var angle = FixedQ4816.FromDouble(value: (degrees * (Math.PI / 180.0)));
+        // The placement yaw every fixed-point reader takes (FixedQ4816.FromDegrees, one rounding of the exact
+        // radians), so a chain of composed rotations reads identically to a single one.
+        var angle = FixedQ4816.FromDegrees(degrees: degrees);
         var rotation = FixedQuaternion.FromAxisAngle(
             angle: angle,
             axis: FixedVector3.UnitY

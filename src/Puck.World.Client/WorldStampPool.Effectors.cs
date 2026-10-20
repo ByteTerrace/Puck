@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Authoring;
 
@@ -556,7 +557,7 @@ public sealed partial class WorldStampPool {
             min: 0f,
             value: progress
         );
-        var eased = ((t * t) * (3f - (2f * t)));
+        var eased = VectorFunctions.Smoothstep(t: t);
 
         return (Vector3.Lerp(
             amount: eased,

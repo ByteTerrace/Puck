@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 
@@ -154,7 +155,7 @@ public sealed class WorldEditorSeats {
     /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="pitch"/> is not finite and
     /// positive.</exception>
     public void SetGridPitch(int slot, Vector3 pitch) {
-        if (!(float.IsFinite(f: pitch.X) && float.IsFinite(f: pitch.Y) && float.IsFinite(f: pitch.Z) && (pitch.X > 0f) && (pitch.Y > 0f) && (pitch.Z > 0f))) {
+        if (!(VectorFunctions.IsFinite(vector: pitch) && (pitch.X > 0f) && (pitch.Y > 0f) && (pitch.Z > 0f))) {
             throw new ArgumentOutOfRangeException(
                 actualValue: pitch,
                 message: "A grid pitch is finite and positive on every axis.",

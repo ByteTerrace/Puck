@@ -82,11 +82,13 @@ internal sealed partial class PlayerCommandModule {
         if (!playerWritable) {
             return CommandResult.Error(output: $"[body.state-load: state '{name}' is not player-writable]");
         }
+        // A timer's authored seconds round up to engine ticks from their decimal value, the rule every compiled
+        // duration takes; the bound keeps the tick count inside its 64-bit carrier.
         if (
             (kind == ActionStateKind.Timer) &&
-            (authored < 0f)
+            ((authored < 0f) || (authored > (ulong.MaxValue / FixedTickConversion.TicksPerSecond)))
         ) {
-            return CommandResult.Error(output: "[body.state-load: timer seconds must be non-negative]");
+            return CommandResult.Error(output: $"[body.state-load: timer seconds must be non-negative and at most {(ulong.MaxValue / FixedTickConversion.TicksPerSecond)}]");
         }
 
         var value = ((kind == ActionStateKind.Counter)
@@ -98,7 +100,7 @@ internal sealed partial class PlayerCommandModule {
             : new DurableStateValue(
                 Name: name,
                 Value: FixedQ4816.Zero,
-                TimerTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: authored))
+                TimerTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)authored))
             )
         );
         var tick = m_server.NextInputTick;

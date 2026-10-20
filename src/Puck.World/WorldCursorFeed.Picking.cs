@@ -65,7 +65,7 @@ internal sealed partial class WorldCursorFeed : IDisposable {
             } else if (m_pointerOverride.HasValue && (m_panes.DisplayView is { } display)) {
                 var point = DisplayPosition(position: position);
                 var hit = display.MapDisplayPoint(
-                    point: new FixedVector2(X: FixedQ4816.FromDouble(value: point.X), Y: FixedQ4816.FromDouble(value: point.Y)),
+                    point: FixedVector2.FromVector2(value: point),
                     displayWidth: m_panes.DisplayWidth, displayHeight: m_panes.DisplayHeight);
 
                 if (hit.IsOnSource) {

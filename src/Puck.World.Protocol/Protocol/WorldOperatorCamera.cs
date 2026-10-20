@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
@@ -28,24 +29,15 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
     /// <summary>The nearest a swing may bring the eye to its pivot, in metres.</summary>
     public const float MinDistance = 0.05f;
 
-    private const float DegreesToRadians = (MathF.PI / 180f);
-    private const float RadiansToDegrees = (180f / MathF.PI);
-
-    private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
     private static float ClampPitch(float radians) => Math.Clamp(
         value: radians,
         min: -MaxPitchRadians,
         max: MaxPitchRadians
     );
-    private static Vector3 Heading(float yaw, float pitch) => new(
-        x: (-MathF.Sin(x: yaw) * MathF.Cos(x: pitch)),
-        y: MathF.Sin(x: pitch),
-        z: (-MathF.Cos(x: yaw) * MathF.Cos(x: pitch))
-    );
     private static WorldOperatorCamera Place(Vector3 pivot, float yaw, float pitch, float distance, float fieldOfView) {
-        var wrapped = Wrap(radians: yaw);
+        var wrapped = VectorFunctions.WrapAngle(radians: yaw);
         var clamped = ClampPitch(radians: pitch);
-        var eye = (pivot - (Heading(
+        var eye = (pivot - (VectorFunctions.Heading(
             pitch: clamped,
             yaw: wrapped
         ) * distance));
@@ -70,7 +62,7 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
     );
     /// <summary>Gets the unit direction the camera faces.</summary>
     /// <returns>The forward vector.</returns>
-    public Vector3 Forward() => Heading(
+    public Vector3 Forward() => VectorFunctions.Heading(
         pitch: PitchRadians,
         yaw: YawRadians
     );
@@ -86,10 +78,10 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
     public static WorldOperatorCamera FromPose(Vector3 eye, float yawDegrees, float pitchDegrees, float fieldOfViewRadians) => new(
         Distance: DefaultDistance,
         FieldOfViewRadians: fieldOfViewRadians,
-        PitchRadians: ClampPitch(radians: (pitchDegrees * DegreesToRadians)),
+        PitchRadians: ClampPitch(radians: float.DegreesToRadians(degrees: pitchDegrees)),
         X: eye.X,
         Y: eye.Y,
-        YawRadians: Wrap(radians: (yawDegrees * DegreesToRadians)),
+        YawRadians: VectorFunctions.WrapAngle(radians: float.DegreesToRadians(degrees: yawDegrees)),
         Z: eye.Z
     );
     /// <summary>Returns the pose at <paramref name="eye"/> looking at <paramref name="target"/>, or
@@ -109,17 +101,10 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
         return new WorldOperatorCamera(
             Distance: distance,
             FieldOfViewRadians: fieldOfViewRadians,
-            PitchRadians: ClampPitch(radians: MathF.Asin(x: Math.Clamp(
-                value: (ray.Y / distance),
-                min: -1f,
-                max: 1f
-            ))),
+            PitchRadians: ClampPitch(radians: VectorFunctions.PitchOf(facing: ray)),
             X: eye.X,
             Y: eye.Y,
-            YawRadians: MathF.Atan2(
-                x: -ray.Z,
-                y: -ray.X
-            ),
+            YawRadians: VectorFunctions.YawOf(facing: ray),
             Z: eye.Z
         );
     }
@@ -137,9 +122,9 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
             val2: distance
         ),
         fieldOfView: fieldOfViewRadians,
-        pitch: (pitchDegrees * DegreesToRadians),
+        pitch: float.DegreesToRadians(degrees: pitchDegrees),
         pivot: target,
-        yaw: (yawDegrees * DegreesToRadians)
+        yaw: float.DegreesToRadians(degrees: yawDegrees)
     );
     /// <summary>Returns the pose moved by an offset in the camera's own axes, the pivot carried with it.</summary>
     /// <param name="right">Metres along the camera's right.</param>
@@ -181,8 +166,8 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
     /// <param name="pitchDegrees">The elevation change; positive looks up.</param>
     /// <returns>The turned pose.</returns>
     public WorldOperatorCamera Turn(float yawDegrees, float pitchDegrees) => (this with {
-        PitchRadians = ClampPitch(radians: (PitchRadians + (pitchDegrees * DegreesToRadians))),
-        YawRadians = Wrap(radians: (YawRadians + (yawDegrees * DegreesToRadians))),
+        PitchRadians = ClampPitch(radians: (PitchRadians + float.DegreesToRadians(degrees: pitchDegrees))),
+        YawRadians = VectorFunctions.WrapAngle(radians: (YawRadians + float.DegreesToRadians(degrees: yawDegrees))),
     });
     /// <summary>Returns the pose swung about its pivot by a delta in degrees, the pivot fixed and the camera still
     /// facing it; the distance may change too.</summary>
@@ -196,9 +181,9 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
             val2: (Distance + distance)
         ),
         fieldOfView: FieldOfViewRadians,
-        pitch: (PitchRadians + (pitchDegrees * DegreesToRadians)),
+        pitch: (PitchRadians + float.DegreesToRadians(degrees: pitchDegrees)),
         pivot: Pivot(),
-        yaw: (YawRadians + (yawDegrees * DegreesToRadians))
+        yaw: (YawRadians + float.DegreesToRadians(degrees: yawDegrees))
     );
     /// <summary>Returns the pose with another field of view.</summary>
     /// <param name="fieldOfViewRadians">The vertical field of view.</param>
@@ -212,7 +197,7 @@ public sealed record WorldOperatorCamera(float X, float Y, float Z, float YawRad
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"eye=({Clean(value: X, digits: 3):0.###},{Clean(value: Y, digits: 3):0.###},{Clean(value: Z, digits: 3):0.###}) yaw={Clean(value: (YawRadians * RadiansToDegrees), digits: 3):0.###} pitch={Clean(value: (PitchRadians * RadiansToDegrees), digits: 3):0.###} fov={Clean(value: (FieldOfViewRadians * RadiansToDegrees), digits: 3):0.###} distance={Clean(value: Distance, digits: 3):0.###} forward=({Clean(value: ahead.X, digits: 4):0.####},{Clean(value: ahead.Y, digits: 4):0.####},{Clean(value: ahead.Z, digits: 4):0.####}) pivot=({Clean(value: pivot.X, digits: 3):0.###},{Clean(value: pivot.Y, digits: 3):0.###},{Clean(value: pivot.Z, digits: 3):0.###})"
+            handler: $"eye=({Clean(value: X, digits: 3):0.###},{Clean(value: Y, digits: 3):0.###},{Clean(value: Z, digits: 3):0.###}) yaw={Clean(value: float.RadiansToDegrees(radians: YawRadians), digits: 3):0.###} pitch={Clean(value: float.RadiansToDegrees(radians: PitchRadians), digits: 3):0.###} fov={Clean(value: float.RadiansToDegrees(radians: FieldOfViewRadians), digits: 3):0.###} distance={Clean(value: Distance, digits: 3):0.###} forward=({Clean(value: ahead.X, digits: 4):0.####},{Clean(value: ahead.Y, digits: 4):0.####},{Clean(value: ahead.Z, digits: 4):0.####}) pivot=({Clean(value: pivot.X, digits: 3):0.###},{Clean(value: pivot.Y, digits: 3):0.###},{Clean(value: pivot.Z, digits: 3):0.###})"
         );
     }
     // Rounds to what the read-back prints, so a value that prints as zero is zero rather than "-0".

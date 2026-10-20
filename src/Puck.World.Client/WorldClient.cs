@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -316,8 +315,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         )));
         var move = seat.Move;
         var stick = move.Value;
-        var stickForward = ((float)((double)stick.Y));
-        var stickStrafe = ((float)((double)stick.X));
+        var stickForward = ((float)stick.Y);
+        var stickStrafe = ((float)stick.X);
         var rowsMove = ((rowForward != 0f) || (rowStrafe != 0f));
         var stickMoves = ((stickForward != 0f) || (stickStrafe != 0f));
         var facesTravel = (stickMoves && (move.Behavior == SeatMoveBehavior.FaceTravel));
@@ -706,8 +705,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             : Vector2.Zero
         );
         var lookRate = (new Vector2(
-            x: (((float)((double)look.Value.X)) * preference.StickLookRate),
-            y: (((float)((double)look.Value.Y)) * preference.StickLookRate)
+            x: (((float)look.Value.X) * preference.StickLookRate),
+            y: (((float)look.Value.Y) * preference.StickLookRate)
         ) + motionLook);
         var looking = (
             look.IsActive ||
@@ -1161,7 +1160,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var register = m_definition.TargetRegisters[registerIndex];
         var halfAngle = register.MaximumHalfAngleDegrees;
         var range = FixedQ4816.FromDouble(value: register.MaximumRange);
-        var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngle * (Math.PI / 180.0))));
+        var minimumDot = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: halfAngle));
         var origin = FixedVector3.FromVector3(value: m_currentPosition[sourceBody]);
         var forward = FixedVector3.FromVector3(value: Vector3.Transform(
             value: -Vector3.UnitZ,
@@ -1316,7 +1315,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 // Smoothstep ease: weight is 1 at receipt (craft sits at its old pose) and eases to 0 as the window drains
                 // (craft arrives at authority), with a soft start and a soft settle. fraction = remaining/window runs 1→0.
                 var fraction = (m_remaining / m_window);
-                var weight = Easing.Smoothstep(t: fraction);
+                var weight = VectorFunctions.Smoothstep(t: fraction);
 
                 position += (m_position * weight);
                 // At weight 1 the render attitude is E · interpolated = the old attitude; at weight 0 it is the
