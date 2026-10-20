@@ -186,12 +186,12 @@ template blendPrototypes() {
 
 // The six petals motion-pulse slides out from its core and back, sixty degrees apart in the plane facing the label.
 let pulsePetals = [
-  { name: "petal-0", at [0.22, 1.2, 0], out [1, 0, 0] }
-  { name: "petal-1", at [0.11, 1.3905, 0], out [0.5, 0.866025, 0] }
-  { name: "petal-2", at [-0.11, 1.3905, 0], out [-0.5, 0.866025, 0] }
-  { name: "petal-3", at [-0.22, 1.2, 0], out [-1, 0, 0] }
-  { name: "petal-4", at [-0.11, 1.0095, 0], out [-0.5, -0.866025, 0] }
-  { name: "petal-5", at [0.11, 1.0095, 0], out [0.5, -0.866025, 0] }
+  { name: "petal-0", at [0.27, 1.2, 0], out [1, 0, 0] }
+  { name: "petal-1", at [0.135, 1.43383, 0], out [0.5, 0.866025, 0] }
+  { name: "petal-2", at [-0.135, 1.43383, 0], out [-0.5, 0.866025, 0] }
+  { name: "petal-3", at [-0.27, 1.2, 0], out [-1, 0, 0] }
+  { name: "petal-4", at [-0.135, 0.96617, 0], out [-0.5, -0.866025, 0] }
+  { name: "petal-5", at [0.135, 0.96617, 0], out [0.5, -0.866025, 0] }
 ]
 
 // The domain folds, erosion and creation noise. A fold acts in creation space before the shape's own transform, and
@@ -254,6 +254,7 @@ template foldPrototypes() {
     }
   }
   // An unbounded lattice clipped by an intersection: the creation-wide scope keeps the clip off every other placement.
+  // The sphere sits in the lattice's central cell, at the creation origin; a shape authored off it is never reached.
   prototype "shape-repeat-clipped" {
     document {
       shape Sphere "lattice" {
@@ -261,7 +262,7 @@ template foldPrototypes() {
           repeat(spacing: [0.18, 0.18, 0.18])
         ]
         material: exhibitMaterial
-        position [0, 1.2, 0]
+        position [0, 0, 0]
         scale [0.06, 0.06, 0.06]
       }
       shape Sphere "clip" {
@@ -313,6 +314,9 @@ template foldPrototypes() {
       exhibit(label: "POLAR STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }, { color: "#C23B3B", roughness: 0.45 }, { color: "#8E5BD9", roughness: 0.45 }, { color: "#E3C547", roughness: 0.45 }])
     }
   }
+  // Each wallpaper tile sits inside its group's fundamental region of the cell (`SdfWallpaperFold.Fold`), in the
+  // engine frame, so author [x, y, z] lands at [-x, y, -z]: Pmm's positive quadrant, P4M below the diagonal, P3M1's
+  // wedge from 30 to 90 degrees and P6M's from 30 to 60. A tile outside its region folds onto nothing and draws nothing.
   prototype "shape-wallpaper-pmm" {
     document {
       shape Box "subject" {
@@ -320,7 +324,7 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: Pmm, limit: [1, 1])
         ]
         material: exhibitMaterial
-        position [0.06, 1.2, 0.05]
+        position [-0.07, 1.2, -0.06]
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
@@ -334,7 +338,7 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P4M, limit: [1, 1])
         ]
         material: exhibitMaterial
-        position [0.06, 1.2, 0.03]
+        position [-0.08, 1.2, -0.025]
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
@@ -349,7 +353,7 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P3M1)
         ]
         material: exhibitMaterial
-        position [0.06, 1.2, 0.03]
+        position [-0.03, 1.2, -0.08]
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
@@ -369,7 +373,7 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P6M)
         ]
         material: exhibitMaterial
-        position [0.06, 1.2, 0.03]
+        position [-0.06, 1.2, -0.06]
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
@@ -814,13 +818,13 @@ template surfacePrototypes() {
   }
   prototype "shape-weathering-edge" {
     document {
-      shape Box "subject" {
-        chamfer: 0.06
+      shape Cylinder "subject" {
+        rounding: 0.1
         material: accentMaterial
         position [0, 1.2, 0]
         scale [0.38, 0.38, 0.38]
       }
-      exhibit(label: "WEAR EDGE", extra: [{ color: "#2E6B3A", roughness: 0.5, weathering { edge: 1, reach: 4, floor: 1, seed: 5, under [{ threshold: 0.25, surface { color: "#B5895B", roughness: 0.8, metal: 0 } }, { threshold: 0.6, surface { color: "#9AA0A6", roughness: 0.3, metal: 1 } }] } }])
+      exhibit(label: "WEAR EDGE", extra: [{ color: "#2E6B3A", roughness: 0.5, weathering { edge: 1, reach: 0.08, floor: 1, seed: 5, under [{ threshold: 0.25, surface { color: "#B5895B", roughness: 0.8, metal: 0 } }, { threshold: 0.6, surface { color: "#9AA0A6", roughness: 0.3, metal: 1 } }] } }])
     }
   }
   prototype "shape-weathering-lines" {
@@ -903,7 +907,7 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, 1.2, surfaceZ], rotation [0.258819, 0, 0, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
+      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, 1.2, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
     }
   }
   prototype "shape-text-engrave" {
@@ -981,6 +985,7 @@ template surfacePrototypes() {
           rotation [0, 0, 0, 1]
           halfExtent [0.45, 0.3, 0.45]
           width: 0.2
+          extinction: 4
           coverage: 0.6
           softness: 0.25
           ramp [
@@ -1042,10 +1047,10 @@ template motionPrototypes() {
         position [0, 1.65, 0]
         scale [0.05, 0.05, 0.05]
       }
-      shape Capsule "subject" {
-        material: accentMaterial
-        position [0, 1.15, 0]
-        scale [0.12, 0.2, 0.12]
+      shape Cylinder "subject" {
+        material: exhibitMaterial
+        position [0, 1.375, 0]
+        scale [0.025, 0.225, 0.025]
         swings [
           {
             driver: "clock"
@@ -1054,6 +1059,12 @@ template motionPrototypes() {
             pivot [0, 1.65, 0]
           }
         ]
+      }
+      shape Sphere "bob" {
+        material: accentMaterial
+        parent: "subject"
+        position [0, 1.05, 0]
+        scale [0.12, 0.12, 0.12]
       }
       exhibit(label: "ROCK", extra: [accent])
     }
@@ -1117,8 +1128,10 @@ template motionPrototypes() {
       exhibit(label: "PARENT CHAIN", extra: [accent])
     }
   }
-  // The sphere slides through a smooth union with the still box. The group bakes once, at the pose its program
-  // arrived in, and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves away.
+  // The sphere slides along the side of the still box, through a smooth union. The group bakes once, at the pose its
+  // program arrived in, and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves
+  // away. The sphere stays partly outside the box over the whole slide: a sphere the bake found inside the box would
+  // bake into no surface and never draw.
   prototype "motion-smooth-blend" {
     document {
       clockDriver(key: "blend", cadence: 1.2)
@@ -1132,14 +1145,14 @@ template motionPrototypes() {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [0, 1.2, 0]
+        position [0.35, 1.2, 0]
         scale [0.18, 0.18, 0.18]
         smooth: 0.15
         slides [
           {
             driver: "clock"
             axis [1, 0, 0]
-            amplitude: 0.45
+            amplitude: 0.15
           }
         ]
       }
@@ -1278,7 +1291,9 @@ template motionPrototypesB() {
     }
   }
   // An eye: a radial ramp of pupil, iris, limbus and sclera on a plane under a clear cornea, in the winning slot's
-  // frame. The half-turn about Y faces the plane toward the label side, where the camera stands.
+  // frame. An ungrouped pooled shape's hits win the creation root's slot, so the origin is the eye's centre in that
+  // frame, and the half-turn about Y faces the plane toward the label side. The root does not swing, so the iris holds
+  // still while the eye turns under it: what this exhibit shows until the layer frame follows the shape's own slot.
   prototype "motion-inset" {
     document {
       clockDriver(key: "inset", cadence: 0.9)
@@ -1302,7 +1317,7 @@ template motionPrototypesB() {
           }
         ]
       }
-      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 0, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.035, color: "#0B0B0B" }, { radius: 0.09, color: "#3A7BD5" }, { radius: 0.1, color: "#1A2A40" }, { radius: 0.11, color: "#F5F3EE" }], softness: 0.01, modulationAmplitude: 0.15, modulationFrequency: 24 } } }])
+      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 1.25, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.03, color: "#0B0B0B" }, { radius: 0.075, color: "#3A7BD5" }, { radius: 0.085, color: "#1A2A40" }, { radius: 0.095, color: "#F5F3EE" }], softness: 0.15, modulationAmplitude: 0.04, modulationFrequency: 40 } } }])
     }
   }
   // Twist and bend emit only on the stamp-pool path; a static placement ignores both. The twist's constant-wave swing is
@@ -1363,7 +1378,7 @@ template motionPrototypesB() {
         group: 1
         material: accentMaterial
         position [0, 1.2, 0]
-        scale [0.16, 0.16, 0.16]
+        scale [0.12, 0.12, 0.12]
       }
       for petal in pulsePetals {
         shape Sphere $"{petal.name}" {
@@ -1371,8 +1386,8 @@ template motionPrototypesB() {
           group: 1
           material: accentMaterial
           position: petal.at
-          scale [0.1, 0.1, 0.1]
-          smooth: 0.08
+          scale [0.09, 0.09, 0.09]
+          smooth: 0.06
           slides [
             {
               driver: "clock"
@@ -1472,18 +1487,18 @@ template motionPrototypesB() {
         position [0, 0.95, 0]
         scale [0.07, 0.05, 0.07]
       }
-      shape Capsule "upper" {
+      shape Cylinder "upper" {
         joint [0, 1.0, 0]
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.04, 0.15, 0.04]
+        scale [0.035, 0.2, 0.035]
       }
-      shape Capsule "lower" {
+      shape Cylinder "lower" {
         joint [0, 1.4, 0]
         material: exhibitMaterial
         parent: "upper"
-        position [0, 1.57, 0]
-        scale [0.035, 0.14, 0.035]
+        position [0, 1.58, 0]
+        scale [0.03, 0.18, 0.03]
       }
       shape Sphere "hand" {
         material: accentMaterial
