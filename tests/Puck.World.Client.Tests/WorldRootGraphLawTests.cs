@@ -61,7 +61,7 @@ public sealed class WorldRootGraphLawTests {
         Assert.Empty(collection: graph.Footprints);
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));
     }
-    // A pane is display-referred, its own shader's tonemap included (the moth studio's pane applies its own filmic curve),
+    // A pane is display-referred, its own shader's tonemap included,
     // so the tonemap is each view's place pass, over the view it reconstructs: no pane, post pass or overlay is tonemapped.
     [Fact]
     public void AFilmicTonemapIsEachViewsPlacePassAndNoPanePostPassOrOverlayIsTonemapped() {
@@ -69,7 +69,7 @@ public sealed class WorldRootGraphLawTests {
         var filmic = WorldRootGraph.Compose(
             overlay: true,
             packages: RenderGraphPackageCatalog.Engine,
-            panes: ["moth-pipeline"],
+            panes: ["ink"],
             post: post,
             tonemap: WorldTonemap.Filmic,
             views: 2
@@ -78,7 +78,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", "moth-pipeline:place", $"grain:{FilmGrain}"]
+            expected: ["main$view$1:place", "main$view$2:place", "ink:place", $"grain:{FilmGrain}"]
         );
         Assert.Equal(
             actual: Assert.IsType<RenderGraphPlan>(@object: filmic.OverlayPlan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
@@ -86,7 +86,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Equal(
             actual: PlaceFields(plan: plan),
-            expected: ["main$view$1:letterbox=1,tonemap=1", "main$view$2:letterbox=0,tonemap=1", "moth-pipeline:letterbox=0,tonemap=0"]
+            expected: ["main$view$1:letterbox=1,tonemap=1", "main$view$2:letterbox=0,tonemap=1", "ink:letterbox=0,tonemap=0"]
         );
         Assert.Equal(
             actual: filmic.Tonemap,

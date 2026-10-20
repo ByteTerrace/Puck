@@ -428,7 +428,7 @@ source's closure, its passes' interfaces and its plan's names
 stored package with its key and compiles nothing, wherever the booted document
 lies; a source with no stored package compiles in a checkout that has DXC and
 is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
-name the ink pipeline and the Moth shader; film grain is a post-process package
+name the ink pipeline; film grain is a post-process package
 whose stages the SDF build compiles. The `pipeline-echo` canary runs the generated
 echo with `pipeline.sentinels` on and a copy that expects two members to hold
 each other's sentinel.
@@ -2918,7 +2918,7 @@ it to an output buffer, and has to read back distinct sentinels exactly on both
 backends, so a generator mistake fails the package on a real driver; compiler
 reflection over both binaries is the cheaper build-time check where no GPU
 exists. The HLSL pipeline sources (`ink-simulation.hlsl`, `ink-visualize.hlsl`,
-`moth.hlsl`, the genesis `card.hlsl` and the package canary's `tint.hlsl`) move
+the genesis `card.hlsl` and the package canary's `tint.hlsl`) move
 onto a pass interface designed for Puck: presentation time and the
 deterministic tick from P9, the camera, config through the generated struct,
 and named inputs. Nothing keeps a Shadertoy name or shape for compatibility:
@@ -4314,7 +4314,7 @@ item 2 landed.
     stage: `render.tonemap` `Filmic` sets the `place` config's `tonemap` on each view's
     place pass in the root, which tonemaps the view it reconstructs and nothing
     else, so the scene is tonemapped once, and the letterbox color, a pane,
-    which is display-referred (the moth studio's applies its own filmic curve),
+    which is display-referred (its own shader owns its tonemap),
     and the HUD never are. The R2 dither belongs to the display encode
     (`SurfaceEncoder`), which every swapchain compositor draws as its write and
     a capture of a float output reads through in SDR, not to the views. The

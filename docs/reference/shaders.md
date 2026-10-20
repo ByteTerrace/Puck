@@ -1281,7 +1281,7 @@ layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
 fails it. The `interface-echo` canary runs one echo per shipped interface
 family the same way: the ink simulation, visualize and finish passes (finish's
-blocks, the extent alone, are also the Moth's, the `source-*` conversion
+blocks, the extent alone, are also the `source-*` conversion
 packages' and the SDF brick baker's, `sdf.bricks`), the package canary's tint,
 the `sdf.film-grain` post-process package, the `place` and `overlay` packages,
 and the SDF engine's per-view pass, `sdf.world`. Each echo document declares
@@ -2500,13 +2500,12 @@ point `main`. It includes its generated interface and reads its extent, time,
 pointer and paired camera through it
 ([frame values, extent and ports](#frame-values-extent-and-ports));
 a zero `cameraFov` means no camera is paired.
-[The Moth shader](../../src/Puck.World/Assets/pipelines/moth.hlsl) and
-[the genesis card](../../experimental/worlds/genesis/card.hlsl) are worked examples.
+[The genesis card](../../experimental/worlds/genesis/card.hlsl) is a worked example.
 
 Compile a single source stage from the repository root:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll shaders compile src/Puck.World/Assets/pipelines/moth.hlsl --out artifacts/shaders/moth
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll shaders compile <source>.hlsl --out artifacts/shaders/<name>
 ```
 
 `--stage compute|vertex|fragment` and `--entry` make the source contract
@@ -2917,7 +2916,7 @@ member back as its sentinel; its discriminating leg's echo expects time and
 timeDelta to hold each other's sentinel, which turns those two pixels red. The no-device-compile canary hides DXC from the World's
 search path: the shipped ink pipeline, named by source, renders from the build's
 stored package, the tint source is refused by `SHADERPKG_ABSENT`, and the tint
-package renders from its binaries; its discriminating leg names the Moth shader
+package renders from its binaries; its discriminating leg names a one-off source
 under a name no shipped world gives it and alters a package binary, so both are
 refused. The fault canary injects an allocation failure on a real device
 through `gpu.faults`: it arms the second image created after a paused feedback

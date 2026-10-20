@@ -2,15 +2,14 @@
 
 [moth.puck](moth.puck) contains a playable SDF character with directly authored
 dimensions and rig. The [original concept sheets](../../../../../docs/game/art/moth-concept-pack/README.md)
-are the visual standard; [the Moth Pipeline](../../pipelines/moth.hlsl) is an
-engine approximation available for comparison.
+are the visual standard.
 
-Both engine models render inside Puck. The native model uses curved ivory shin
+The character renders inside Puck as a native SDF creation. It uses curved ivory shin
 shells with lilac arch trim, swept shoulder plates, an
 open hood, a compact collar, inset eyes and a braid rooted in the front opening.
 Exactly two curved flight pods carry two ivory bands and a recessed nozzle each.
 The materials include a modest clear coat, studio reflections and restrained
-edge weathering. Fine sculpting and surface finish still differ from the Pipeline.
+edge weathering.
 
 ## Open the studio
 
@@ -27,22 +26,8 @@ dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world src/Puck.World/
 ```
 
 The initial view is the seat's chase camera; 1 switches to the native model's
-three-quarter inspection. In the running Puck console, open the live comparison:
-
-```text
-view.override layout pipeline
-pipeline.watch moth-pipeline on
-```
-
-The Pipeline is on the left and the native SDF creation is on the right. The
-Pipeline pane is the `graph "moth-pipeline"` row inside `views`, and the
-`pipeline` layout's left slot shows it with `instance: "moth-pipeline"`; the
-root render graph places it over the SDF world. Both read the `three-quarter`
-camera. The Pipeline authors its geometry in world units, with +Y up and -Z
-forward, and marches the paired camera's world-space ray directly.
-`pipeline.status` reports the compile and watch state;
-`pipeline.reload moth-pipeline` recompiles the Pipeline when needed. Inspection layouts
-switch immediately so a close-up does not render overlapping camera transitions.
+three-quarter inspection. Inspection layouts switch immediately so a close-up
+does not render overlapping camera transitions.
 
 ## Controls
 
@@ -70,8 +55,7 @@ switch immediately so a close-up does not render overlapping camera transitions.
 
 Out of flight mode, letting go of Space while still rising cuts the jump short.
 In flight mode, releasing Space holds altitude. Inspection cameras stay at the
-studio origin; use **5** when moving away from it. Return to the comparison
-with `view.override layout pipeline`.
+studio origin; use **5** when moving away from it.
 
 The debug world and the garden draw these controls on screen from
 [`controls.puck`](../controls.puck): the standard controller bar along the bottom
@@ -88,9 +72,7 @@ without input.
 The `moth` creation's `document.shapes`, `palette`, `drivers`, `frames` and
 `volumes` are the authoring surface. Shape positions and pivots use a common
 rest frame: +Y up, +Z forward, with the sole near Y=0 and the hood crown near
-Y=2.06. The native rest frame and the Pipeline's world frame use the same units;
-the Pipeline faces -Z. The head follows the Pipeline's smaller, seated head
-transform. Parent names carry animation deltas, so child
+Y=2.06. Parent names carry animation deltas, so child
 positions are authored in the common frame rather than relative to a parent.
 
 For a small live change:
@@ -118,8 +100,8 @@ Live look-only edits currently retain the registration's previous lane
 expressions. When changing `looks.rows[].motion.lanes`, also change and reload
 the creation document, or restart the studio, so the registration is recreated.
 
-For matching close-ups in the comparison, edit the `three-quarter` camera's
-`rig.operations`. Both panes follow that row. If copying another camera's whole
+For a different close-up, edit the `three-quarter` camera's
+`rig.operations`. If copying another camera's whole
 row, keep the row name `three-quarter` and give its rig a unique name; duplicate
 camera-program names are refused. Reload the world to restore the saved view.
 Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `knee`, `boots`,
@@ -127,10 +109,6 @@ Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `knee`
 `view.isolate moth thigh-left thigh-right` renders only the legs, both thighs and
 everything parented beneath them, still posed and animated by the hidden body;
 `view.isolate off` restores the whole Moth.
-
-The [Pipeline workflow](../../../README.md#shader-pipelines) describes shader edits and
-its pose controls. The native rig responds to the world body independently of
-the Pipeline's selected pose.
 
 ## Geometry and motion
 
@@ -232,11 +210,10 @@ body.where
 world.wait 90
 body.where
 body.stop
-view.override layout pipeline
+view.override layout play
 ```
 
 The first readback should report `airborne`; the final readback should report
 `grounded`. Capture the rear while airborne to inspect exhaust clearance and
-pod deployment. Keep native and Pipeline cameras
-matched when judging proportions, and distinguish a pose difference from a
-geometry difference.
+pod deployment. Keep cameras matched when comparing against a concept sheet,
+and distinguish a pose difference from a geometry difference.
