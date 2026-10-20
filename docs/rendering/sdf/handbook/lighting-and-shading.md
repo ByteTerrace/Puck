@@ -254,8 +254,10 @@ frame uploads zero and every default is preserved.
 
 **Curvature shading** adds cavity darkening in creases, rim light on ridges,
 and ink lines where curvature spikes, from the record's curvature. The surface
-pass writes that curvature as zero, since the mesh carries none, so authored
-`render.lighting.curvature` gains draw nothing.
+pass estimates it from the interpolated vertex normals in world units
+([surface pass](frame-rendering.md#one-render-pipeline)). Authored
+`render.lighting.curvature` gains use that same estimate as edge weathering;
+flat normals and meshes without vertex normals contribute zero.
 
 ---
 

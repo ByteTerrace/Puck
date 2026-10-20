@@ -76,11 +76,19 @@ Both fail with one message: `Invalid inset, weathering or paint: check frames,
 ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive
 paint scale and a non-negative stroke.`
 
-The live amount is `max(saturate(lane), floor)`, and the edge mask comes from the
-level-set mean curvature measured at the hit, positive side only, scaled by
-`reach` and modulated by lattice noise. So chips appear where the geometry is
-actually convex — no per-part authoring, and it rides joints because the pattern
-follows the winning dynamic transform.
+The live amount is `max(saturate(lane), floor)`. The mesh surface pass estimates
+mean curvature from the world-space gradient of the triangle's interpolated
+unit normals, before facing them toward the camera. A sphere of radius `r`
+reads approximately `1/r`; flat triangles without vertex normals read zero.
+The edge mask takes the positive side, scales it by `reach` and modulates it
+with lattice noise. It follows the baked surface rather than sampling the
+field, so unresolved bevels and split normals limit its accuracy. The pattern
+rides joints through the winning dynamic transform.
+
+For lightly worn armor, keep `reach` below the broad plate's radius so the
+rounded body stays painted and its tighter edges chip. `lines` tiles a scratch
+in every pattern cell; use a few parented paints for sparse, placed scuffs
+instead of increasing that all-over pattern.
 
 ## Inset
 

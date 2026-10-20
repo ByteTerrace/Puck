@@ -867,8 +867,7 @@ public sealed class SdfMeshPathBake {
                 points = Homogeneous(points: final.Sampled.Refine(factor: factor, regions: final.Regions));
             }
             if ((points is null) || (points.Length == 0)) {
-                final.Stage = FinalStage.Gradients;
-                points = Homogeneous(points: final.Sampled.GradientPoints());
+                points = ChooseCrossingPoints(final: final);
             } else {
                 final.Stage = FinalStage.Refinement;
             }
@@ -903,7 +902,7 @@ public sealed class SdfMeshPathBake {
 
         return homogeneous;
     }
-    // The next chunk of a group's fine samples or gradient samples, as many as a frame's share of field evaluations
+    // The next chunk of a group's fine, crossing-root or gradient samples, as many as a frame's share of field evaluations
     // takes. Gradient taps are spaced by the contour's finest cell.
     private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
         var gradients = (final.Stage == FinalStage.Gradients);
@@ -914,13 +913,15 @@ public sealed class SdfMeshPathBake {
             Points = final.Points.AsMemory(length: count, start: final.Answered),
         };
     }
-    // Answers a chunk of a group's fine samples or gradients. Once every fine sample is answered, the gradient samples
-    // are chosen on the thread pool; once every gradient is, the group contours there.
+    // Answers fine samples, a round of edge-root values, or gradients. The next crossing round and the final gradients
+    // are chosen on the thread pool; once every gradient is answered, the group contours there.
     private void AnswerFinal(Group group, FinalLattice final, in SdfMeshBakeRequest request, float[] values, int[] materials, float[]? gradients) {
         var sampled = final.Sampled!;
 
         if (final.Stage == FinalStage.Refinement) {
             sampled.AnswerRefinement(first: final.Answered, materials: materials, values: values);
+        } else if (final.Stage == FinalStage.Crossings) {
+            sampled.AnswerCrossings(first: final.Answered, values: values);
         } else {
             sampled.AnswerGradients(first: final.Answered, gradients: gradients!, values: values);
         }
@@ -932,25 +933,32 @@ public sealed class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        if (final.Stage == FinalStage.Refinement) {
-            _ = Task.Run(action: () => ChooseGradients(final: final, group: group));
+        if (final.Stage != FinalStage.Gradients) {
+            _ = Task.Run(action: () => ChooseCrossings(final: final, group: group));
             return;
         }
 
         group.Final = null;
         _ = Task.Run(action: () => Contour(group: group, lattice: sampled));
     }
-    // Chooses the gradient samples of a refined lattice once its fine samples are answered.
-    private void ChooseGradients(Group group, FinalLattice final) {
-        var points = Homogeneous(points: final.Sampled!.GradientPoints());
+    // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
+    // linear estimate can instead land on a different face of a corner, supplying the contour with the wrong plane.
+    private static Vector4[] ChooseCrossingPoints(FinalLattice final) {
+        var points = final.Sampled!.CrossingPoints();
+
+        final.Stage = ((points.Length > 0) ? FinalStage.Crossings : FinalStage.Gradients);
+        return Homogeneous(points: ((points.Length > 0) ? points : final.Sampled.GradientPoints()));
+    }
+    private void ChooseCrossings(Group group, FinalLattice final) {
+        var refined = (final.Stage == FinalStage.Refinement);
+        var points = ChooseCrossingPoints(final: final);
 
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
-            final.Stage = FinalStage.Gradients;
             final.Points = points;
             final.Answered = 0;
-            m_refinedCells += final.Sampled.MeasuredCells;
+            if (refined) { m_refinedCells += final.Sampled!.MeasuredCells; }
             group.Next = FinalChunk(final: final, group: group);
         }
     }
@@ -987,6 +995,7 @@ public sealed class SdfMeshPathBake {
                 return;
             }
             group.Creases = [.. creases];
+            group.Projection = new ContourProjection(contour: contour);
             group.CreaseSpacing = lattice.ContourCell;
             group.CreaseSlope = lattice.SurfaceSlope();
             group.Points = new Vector4[creases.Count];
@@ -1020,7 +1029,8 @@ public sealed class SdfMeshPathBake {
     // nearer it, its quads still turn across the crease, and as no crease its face's normal would shade the other face's
     // quads up to 90 degrees off, where a vertex proud of a rounding lies outside. A vertex whose gradient reads shorter
     // than KinkGradient of the field's typical slope sits on a crease the gradient's taps straddle and stays. Once every vertex is answered, the
-    // contour splits at the creases that remain on the thread pool.
+    // contour splits at the creases that remain on the thread pool. Every movement is clipped before an incident
+    // triangle reverses its original facing; an incomplete projection keeps its original crease and shading normal.
     private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
         var contour = group.Contour!;
         var tolerance = (CreaseTolerance * MathF.Min(group.CreaseSpacing.X, MathF.Min(group.CreaseSpacing.Y, group.CreaseSpacing.Z)));
@@ -1037,14 +1047,18 @@ public sealed class SdfMeshPathBake {
             if (!(MathF.Abs(distance) > tolerance)) { continue; }
             gradient /= length;
             var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
+            var point = group.Projection!.Move(contour: contour, vertex: vertex, displacement: (-distance * gradient), amount: out var amount);
 
-            if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
-            contour.Positions[(3 * vertex)] -= (distance * gradient.X);
-            contour.Positions[((3 * vertex) + 1)] -= (distance * gradient.Y);
-            contour.Positions[((3 * vertex) + 2)] -= (distance * gradient.Z);
-            contour.Normals[(3 * vertex)] = gradient.X;
-            contour.Normals[((3 * vertex) + 1)] = gradient.Y;
-            contour.Normals[((3 * vertex) + 2)] = gradient.Z;
+            if (!(amount > 0f)) { continue; }
+            contour.Positions[(3 * vertex)] = point.X;
+            contour.Positions[((3 * vertex) + 1)] = point.Y;
+            contour.Positions[((3 * vertex) + 2)] = point.Z;
+            if ((MathF.Abs(distance) * (1f - amount)) <= tolerance) {
+                if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
+                contour.Normals[(3 * vertex)] = gradient.X;
+                contour.Normals[((3 * vertex) + 1)] = gradient.Y;
+                contour.Normals[((3 * vertex) + 2)] = gradient.Z;
+            }
             m_softened++;
         }
         group.PointsAnswered += request.Samples;
@@ -1054,6 +1068,7 @@ public sealed class SdfMeshPathBake {
         }
 
         group.Creases = null;
+        group.Projection = null;
         group.Points = null;
         group.Next = null;
         group.Contouring = true;
@@ -1062,6 +1077,7 @@ public sealed class SdfMeshPathBake {
     // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
     private void Split(Group group) {
+        group.Contour!.SelectDiagonals();
         var contour = group.Contour!.SplitAtCreases();
 
         lock (m_gate) {
@@ -1252,6 +1268,109 @@ public sealed class SdfMeshPathBake {
     // vertex lies on: the material cut's lift.
     private const float SkinLift = 0.0005f;
 
+    // The contour's initial triangle facings and vertex-to-triangle rows, retained only during field projection.
+    // A triangle's area normal is affine in one moving vertex, so its dot with this fixed reference clips a proposed
+    // displacement exactly before the triangle reverses. Fixed references preserve orientation across all sequential
+    // vertex moves; comparing only against each step's new normal would permit a cumulative reversal.
+    private sealed class ContourProjection {
+        private readonly int[] m_starts;
+        private readonly int[] m_incident;
+        private readonly Triangle[] m_triangles;
+        private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference);
+
+        public ContourProjection(SdfContour contour) {
+            var triangles = new List<Triangle>(capacity: (2 * contour.QuadCount));
+            m_starts = new int[(contour.VertexCount + 1)];
+
+            void Add(int a, int b, int c) {
+                if ((a == b) || (a == c) || (b == c)) { return; }
+                var pa = At(contour: contour, vertex: a);
+                var pb = At(contour: contour, vertex: b);
+                var pc = At(contour: contour, vertex: c);
+                var normal = Area(a: pa, b: pb, c: pc);
+                var longest = Math.Max(val1: Vector3.DistanceSquared(value1: pa, value2: pb), val2: Math.Max(val1: Vector3.DistanceSquared(value1: pa, value2: pc), val2: Vector3.DistanceSquared(value1: pb, value2: pc)));
+
+                // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
+                // into a valid triangle instead of making one degenerate face immobilize the whole fan.
+                if (!(Dot(a: normal, b: normal) > (1e-12 * longest * longest))) { return; }
+                triangles.Add(item: new Triangle(A: a, B: b, C: c, Reference: normal));
+                m_starts[(a + 1)]++;
+                m_starts[(b + 1)]++;
+                m_starts[(c + 1)]++;
+            }
+
+            for (var quad = 0; (quad < contour.QuadCount); quad++) {
+                var at = (4 * quad);
+                var (a, b, c, d) = (contour.Quads[at], contour.Quads[(at + 1)], contour.Quads[(at + 2)], contour.Quads[(at + 3)]);
+
+                Add(a: a, b: b, c: c);
+                Add(a: a, b: c, c: d);
+            }
+            for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
+            m_triangles = [.. triangles];
+            m_incident = new int[m_starts[^1]];
+            var filled = new int[contour.VertexCount];
+
+            for (var index = 0; (index < m_triangles.Length); index++) {
+                var triangle = m_triangles[index];
+
+                foreach (var vertex in (ReadOnlySpan<int>)[triangle.A, triangle.B, triangle.C]) {
+                    m_incident[(m_starts[vertex] + filled[vertex]++)] = index;
+                }
+            }
+        }
+        public Vector3 Move(SdfContour contour, int vertex, Vector3 displacement, out float amount) {
+            var original = At(contour: contour, vertex: vertex);
+            var target = (original + displacement);
+
+            amount = 0f;
+            if ((target == original) || !float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) { return original; }
+            var limit = 1.0;
+
+            for (var at = m_starts[vertex]; (at < m_starts[(vertex + 1)]); at++) {
+                var triangle = m_triangles[m_incident[at]];
+                var before = Facing(contour: contour, triangle: triangle, vertex: vertex, point: original);
+                var after = Facing(contour: contour, triangle: triangle, vertex: vertex, point: target);
+                var floor = Math.Min(val1: (Dot(a: triangle.Reference, b: triangle.Reference) * 1e-5), val2: (before * 0.5));
+
+                if ((after < floor) && (after < before)) {
+                    limit = Math.Min(val1: limit, val2: (0.99 * Math.Max(val1: 0.0, val2: ((before - floor) / (before - after)))));
+                }
+            }
+
+            // Positions are ultimately floats. Check the actual rounded point too, backing off when a very narrow
+            // triangle loses the analytic margin to coordinate rounding.
+            for (var attempt = 0; ((attempt < 8) && (limit > 0.0)); attempt++, limit *= 0.5) {
+                var point = ((limit >= 1.0) ? target : Vector3.Lerp(value1: original, value2: target, amount: (float)limit));
+                var valid = (point != original);
+
+                for (var at = m_starts[vertex]; valid && (at < m_starts[(vertex + 1)]); at++) {
+                    var triangle = m_triangles[m_incident[at]];
+
+                    valid = (Facing(contour: contour, triangle: triangle, vertex: vertex, point: point) > 0.0);
+                }
+                if (valid) {
+                    amount = (float)limit;
+                    return point;
+                }
+            }
+
+            return original;
+        }
+        private static Vector3 At(SdfContour contour, int vertex) => new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
+        private static double Facing(SdfContour contour, Triangle triangle, int vertex, Vector3 point) => Dot(a: triangle.Reference, b: Area(
+            a: ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A)),
+            b: ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B)),
+            c: ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C))));
+        private static (double X, double Y, double Z) Area(Vector3 a, Vector3 b, Vector3 c) {
+            var (ux, uy, uz) = (((double)b.X - a.X), ((double)b.Y - a.Y), ((double)b.Z - a.Z));
+            var (vx, vy, vz) = (((double)c.X - a.X), ((double)c.Y - a.Y), ((double)c.Z - a.Z));
+
+            return (((uy * vz) - (uz * vy)), ((uz * vx) - (ux * vz)), ((ux * vy) - (uy * vx)));
+        }
+        private static double Dot((double X, double Y, double Z) a, (double X, double Y, double Z) b) => (((a.X * b.X) + (a.Y * b.Y)) + (a.Z * b.Z));
+    }
+
     // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
     private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
         // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
@@ -1268,6 +1387,7 @@ public sealed class SdfMeshPathBake {
         // While the contour's unpinned vertices are checked against the field, the vertices, the spacing their
         // gradient taps scale by, and the field's typical slope across its surface (SdfSampledLattice.SurfaceSlope).
         public int[]? Creases { get; set; }
+        public ContourProjection? Projection { get; set; }
         public Vector3 CreaseSpacing { get; set; } = Vector3.One;
         public float CreaseSlope { get; set; } = 1f;
         public Vector4[]? Points { get; set; }
@@ -1284,8 +1404,8 @@ public sealed class SdfMeshPathBake {
         public SdfMeshBakeRequest? Deferred { get; set; }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from
-    // them and the stage of points it is answering: its refinement's fine samples, then the samples its contour reads a
-    // gradient at.
+    // them and the stage of points it is answering: refinement's fine samples, bracketed edge roots, then the samples
+    // its contour reads a gradient at.
     private sealed class FinalLattice(SdfMeshBakeRequest lattice) {
         public SdfMeshBakeRequest Lattice { get; } = lattice;
         public float[] Values { get; } = new float[lattice.Samples];
@@ -1302,6 +1422,7 @@ public sealed class SdfMeshPathBake {
     }
     private enum FinalStage {
         Refinement,
+        Crossings,
         Gradients,
     }
 }
