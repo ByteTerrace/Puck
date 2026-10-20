@@ -186,10 +186,10 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
                     handler: $"{((pick.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{pick.Source.Name} pixel {pick.Hit.PixelX},{pick.Hit.PixelY}"
                 )
                 : "none");
-            var walk = host.Walk(point: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: x),
-                Y: FixedQ4816.FromDouble(value: y)
-            ));
+            var walk = host.Walk(point: FixedVector2.FromVector2(value: new Vector2(
+                x: x,
+                y: y
+            )));
             var ended = ((walk is null)
                 ? "no-runtime"
                 : string.Create(

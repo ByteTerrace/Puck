@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Networking;
+using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
@@ -1076,11 +1077,7 @@ public static partial class WorldSubmissionCodec {
     // A presentation vector crosses only when every lane is finite, the same rule the decoder's ReadFiniteVector
     // applies, so an encoder never produces bytes its own decoder refuses.
     private static void WriteFiniteVector(WireWriter writer, Vector3 value, string field) {
-        if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z)
-        ) {
+        if (!VectorFunctions.IsFinite(vector: value)) {
             throw new LeafCodecException(failure: Fail(
                 detail: $"{field} is not finite",
                 refusal: WorldCodecRefusal.PayloadMalformed

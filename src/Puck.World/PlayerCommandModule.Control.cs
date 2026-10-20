@@ -293,7 +293,7 @@ internal sealed partial class PlayerCommandModule {
         } else {
             return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
         }
-        if (!(float.IsFinite(f: value.X) && float.IsFinite(f: value.Y) && float.IsFinite(f: value.Z))) {
+        if (!VectorFunctions.IsFinite(vector: value)) {
             return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
         }
         var quantized = CommandValueQuantization.QuantizeAxis3D(value: value);
@@ -748,10 +748,10 @@ internal sealed partial class PlayerCommandModule {
             // simulation consumer reads a float form; this is presentation-only.
             var move = seat.Move.Value;
             var look = seat.Look.Value;
-            var moveX = ((float)((double)move.X));
-            var moveY = ((float)((double)move.Y));
-            var lookX = ((float)((double)look.X));
-            var lookY = ((float)((double)look.Y));
+            var moveX = ((float)move.X);
+            var moveY = ((float)move.Y);
+            var lookX = ((float)look.X);
+            var lookY = ((float)look.Y);
 
             segments.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,

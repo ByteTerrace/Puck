@@ -267,7 +267,7 @@ public static class WorldEffectorSolver {
 
         // The hit point is rebuilt from the marched distance rather than read off the returned FixedPosition, so the
         // answer stays in the same float world frame the origin was expressed in whichever cell the march ended in.
-        var point = (start + (direction * ((float)((double)hit.Distance))));
+        var point = (start + (direction * ((float)hit.Distance)));
 
         // The march reports no normal, so the surface's own is the field gradient at the hit — the standoff is along
         // the SURFACE's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.

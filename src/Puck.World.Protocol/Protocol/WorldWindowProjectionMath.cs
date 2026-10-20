@@ -22,8 +22,8 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
         Right: frame.Right.ToVector3(),
         Up: frame.Up.ToVector3(),
         Normal: frame.Normal.ToVector3(),
-        HalfWidth: ((float)((double)frame.HalfWidth)),
-        HalfHeight: ((float)((double)frame.HalfHeight))
+        HalfWidth: ((float)frame.HalfWidth),
+        HalfHeight: ((float)frame.HalfHeight)
     );
 }
 /// <summary>

@@ -53,7 +53,7 @@ public static class WorldPrototypeFacets {
     // minimum half-depth — is render policy over that one geometry, never part of it.
     private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter) {
         var normal = frame.Normal.ToVector3();
-        var halfDepth = ((float)((double)frame.HalfDepth));
+        var halfDepth = ((float)frame.HalfDepth);
 
         if (IsOpening(source: source)) {
             return new WorldScreen(
@@ -76,8 +76,8 @@ public static class WorldPrototypeFacets {
             Origin: (frame.Origin.ToVector3() + (normal * (halfDepth + FaceProudEpsilon))),
             Right: frame.Right.ToVector3(),
             Up: frame.Up.ToVector3(),
-            HalfWidth: (((float)((double)frame.HalfWidth)) * FaceInteriorFraction),
-            HalfHeight: (((float)((double)frame.HalfHeight)) * FaceInteriorFraction),
+            HalfWidth: (((float)frame.HalfWidth) * FaceInteriorFraction),
+            HalfHeight: (((float)frame.HalfHeight) * FaceInteriorFraction),
             HalfDepth: MathF.Max(
                 x: (halfDepth * FaceInteriorFraction),
                 y: FaceMinimumHalfDepth
@@ -106,7 +106,7 @@ public static class WorldPrototypeFacets {
     }
     // One of an opening's glass half-extents: the face's own, FaceOpeningInset short, never under FaceMinimumHalfDepth.
     private static float OpeningHalf(Puck.Maths.FixedQ4816 half) => MathF.Max(
-        x: (((float)((double)half)) - FaceOpeningInset),
+        x: (((float)half) - FaceOpeningInset),
         y: FaceMinimumHalfDepth
     );
     private static float OpeningHalfDepth(WorldFaceFrame frame) => OpeningHalf(half: frame.HalfDepth);
@@ -130,7 +130,7 @@ public static class WorldPrototypeFacets {
             return (-half, half);
         }
 
-        var halfDepth = ((float)((double)frame.HalfDepth));
+        var halfDepth = ((float)frame.HalfDepth);
         var front = (halfDepth + FaceProudEpsilon);
 
         return ((front - (2f * MathF.Max(

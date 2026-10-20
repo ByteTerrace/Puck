@@ -358,7 +358,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         var neighbour = projection.Neighbour;
         var frame = projection.Path[0].Neighbour;
-        var overlapDepth = ((float)((double)projection.OverlapDepth));
+        var overlapDepth = ((float)projection.OverlapDepth);
         var bound = Math.Min(
             val1: neighbour.EntityCapacity,
             val2: destination.Length

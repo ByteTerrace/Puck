@@ -315,8 +315,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         )));
         var move = seat.Move;
         var stick = move.Value;
-        var stickForward = ((float)((double)stick.Y));
-        var stickStrafe = ((float)((double)stick.X));
+        var stickForward = ((float)stick.Y);
+        var stickStrafe = ((float)stick.X);
         var rowsMove = ((rowForward != 0f) || (rowStrafe != 0f));
         var stickMoves = ((stickForward != 0f) || (stickStrafe != 0f));
         var facesTravel = (stickMoves && (move.Behavior == SeatMoveBehavior.FaceTravel));
@@ -705,8 +705,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             : Vector2.Zero
         );
         var lookRate = (new Vector2(
-            x: (((float)((double)look.Value.X)) * preference.StickLookRate),
-            y: (((float)((double)look.Value.Y)) * preference.StickLookRate)
+            x: (((float)look.Value.X) * preference.StickLookRate),
+            y: (((float)look.Value.Y) * preference.StickLookRate)
         ) + motionLook);
         var looking = (
             look.IsActive ||

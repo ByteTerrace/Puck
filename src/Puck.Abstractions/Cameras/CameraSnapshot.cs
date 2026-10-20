@@ -90,10 +90,7 @@ public readonly record struct CameraSnapshot {
     public Vector2 FrustumOffset {
         get => m_frustumOffset;
         init {
-            if (
-                !float.IsFinite(f: value.X) ||
-                !float.IsFinite(f: value.Y)
-            ) {
+            if (!VectorFunctions.IsFinite(vector: value)) {
                 throw new ArgumentException(
                     message: "The frustum offset must be finite.",
                     paramName: nameof(FrustumOffset)

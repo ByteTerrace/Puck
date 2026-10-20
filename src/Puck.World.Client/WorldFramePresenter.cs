@@ -1022,17 +1022,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var coordinate = pane.MapDisplayPoint(
             displayHeight: ((int)height),
             displayWidth: ((int)width),
-            point: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: framePosition.X),
-                Y: FixedQ4816.FromDouble(value: framePosition.Y)
-            )
+            point: FixedVector2.FromVector2(value: framePosition)
         ).Coordinate;
 
         if (sample.Pressed) {
-            entry.Pointer = new Vector2(
-                x: ((float)((double)coordinate.X)),
-                y: ((float)((double)coordinate.Y))
-            );
+            entry.Pointer = coordinate.ToVector2();
 
             if (!entry.PointerWasDown) {
                 entry.PointerPresses++;

@@ -1192,9 +1192,7 @@ public static class SdfDocumentDecoder {
         var unit = Vector3.Normalize(value: axis);
 
         if (
-            !float.IsFinite(f: unit.X) ||
-            !float.IsFinite(f: unit.Y) ||
-            !float.IsFinite(f: unit.Z) ||
+            !VectorFunctions.IsFinite(vector: unit) ||
             (unit.LengthSquared() == 0f)
         ) {
             throw new SdfDocumentException(
