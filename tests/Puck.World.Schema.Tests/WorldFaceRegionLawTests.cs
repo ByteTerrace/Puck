@@ -62,7 +62,7 @@ public sealed class WorldFaceRegionLawTests {
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -78,7 +78,7 @@ public sealed class WorldFaceRegionLawTests {
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -92,12 +92,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -173,12 +173,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -209,7 +209,7 @@ public sealed class WorldFaceRegionLawTests {
         // starting BEHIND the face (negative alongNormal) sweeps forward through the band and out the front, both
         // endpoints outside the band exactly as the forward case is. The aperture is documented one-sided — "a door
         // fires from the side it faces" (WorldFaceAperture.Box.Depth) — so this direction must NOT fire even though
-        // the segment visits [0, Depth] along the way; only an approach FROM the front is a legitimate entry.
+        // the segment visits [-Depth, 0] along the way; only an approach FROM the front is a legitimate entry.
         var behindToFront = Sweep(
             from: At(
                 x: 0,
@@ -259,12 +259,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -304,12 +304,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -336,12 +336,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
         var outside = Sweep(
@@ -395,12 +395,12 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
 
@@ -447,40 +447,41 @@ public sealed class WorldFaceRegionLawTests {
     }
     [Fact]
     public void TheBandIsOneSided_TheBackOfADoorIsNotACrossing() {
-        // The SAME distance from the face, on the other side of it. A two-sided band would make these agree, so
-        // this pair is what discriminates the one-sided contract from a symmetric slab.
-        var front = Sweep(
+        // The SAME distance from the face, on either side of it: just through the glass is inside the slab, just in
+        // front of it is not. A two-sided band would make these agree, so this pair is what discriminates the
+        // one-sided contract from a symmetric slab.
+        var through = Sweep(
             from: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: 0.25
+                z: -0.25
             )
         );
-        var back = Sweep(
+        var before = Sweep(
             from: At(
                 x: 0,
                 y: 0,
-                z: -0.25
+                z: 0.25
             ),
             to: At(
                 x: 0,
                 y: 0,
-                z: -0.25
+                z: 0.25
             )
         );
 
-        Assert.True(condition: front.Crossed);
-        Assert.False(condition: back.Crossed);
-        Assert.False(condition: back.Inside);
+        Assert.True(condition: through.Crossed);
+        Assert.False(condition: before.Crossed);
+        Assert.False(condition: before.Inside);
     }
     [Fact]
     public void TheCrossingParameterIsTheEarliestMeetingPoint() {
-        // Entering at z = Depth along a segment from z = 2 to z = -2 puts the meeting point at (2 - Depth) / 4.
+        // Entering through the glass at z = 0 along a segment from z = 2 to z = -2 puts the meeting point at 2 / 4.
         var crossing = Sweep(
             from: At(
                 x: 0,
@@ -493,7 +494,7 @@ public sealed class WorldFaceRegionLawTests {
                 z: -2
             )
         );
-        var expected = FixedQ4816.FromDouble(value: ((2.0 - Depth) / 4.0));
+        var expected = FixedQ4816.FromDouble(value: (2.0 / 4.0));
 
         Assert.True(
             condition: (FixedQ4816.Abs(value: (crossing.Parameter - expected)) <= FixedQ4816.FromDouble(value: 0.001)),

@@ -815,7 +815,7 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
+        (m_baseContactField as WorldColliderSet)?.RefreshAttached(population: this);
         SolveGravity();
         FreezeFlockImage();
         m_navigation.BeginStep();

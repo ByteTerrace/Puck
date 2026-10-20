@@ -386,8 +386,8 @@ public sealed partial class WorldPopulation {
         return compiled;
     }
     // Recomposes m_contactField from the current base field, adjacency source, and live definition — the
-    // ONE place any of the three changes. A definition authoring no adjacency, or no injected source, leaves
-    // m_contactField pointing at m_baseContactField directly.
+    // ONE place any of the three changes. A definition authoring no adjacency and no portal face, or no injected
+    // source, leaves m_contactField pointing at m_baseContactField directly.
     private void ComposeContactField() {
         m_contactFieldInstallVersion++;
 
@@ -405,12 +405,18 @@ public sealed partial class WorldPopulation {
             : []
         );
 
+        // A portal's opening ignores this world's geometry behind its glass for a body standing in it.
+        var opened = WorldPortalHoleContactField.Wrap(
+            definition: definition,
+            inner: baseField
+        );
+
         m_contactField = (((m_adjacencies is { } source) && (bands.Count > 0))
             ? new WorldAdjacencyContactField(
-                inner: baseField,
+                inner: opened,
                 source: source
             )
-            : baseField
+            : opened
         );
     }
     // The requirements-selected contact field: the analytic convex-collider set when no field quality is required, or

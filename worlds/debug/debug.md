@@ -111,23 +111,26 @@ out of the frames' way.
 
 ## Where a crossing lands
 
-A door fires on the edge of its band, a slab one band depth thick in front of
-the glass (the frame's half-depth, or the distance one step of the fastest
-authored travel covers, whichever is larger). The crossing maps the traveller
-through the isometry between the two frames, which carries the distance from the
-face through unchanged, so a traveller who fired the band lands that far behind
-the counterpart's face, still walking out through it. That is why the crossings
-arrive at z -6.7 in the garden, behind the garden's `arrival` frame at z -8, and
-at z -9.3 behind the debug frame on the way back: the traveller is placed where
-it would have been had the glass been a plain opening, so the view through the
-glass and the view after the crossing agree.
+A door fires when the traveller's origin passes through its glass from the side
+the glass faces, within the opening; the test sweeps the whole step, so no
+speed passes it unseen. The crossing maps the traveller through the isometry
+between the two frames, which carries the distance past the glass through
+unchanged, so the traveller lands just as far through the counterpart's glass,
+walking on out of it: a walk at 5 m/s fires within a step's 0.17 m of the glass,
+so the crossing arrives at z -8.1 in the garden, just past the garden's
+`arrival` frame at z -8, and at about z -7.9 out of the debug frame on the way
+back. The traveller is placed where it would have been had the glass been a
+plain opening, so the view through the glass and the view after the crossing
+agree. While a traveller stands in an opening, the world's own geometry behind
+the glass holds nothing back, so a door laid on the ground ([loop.md](loop.md))
+drops a body that walks onto it.
 
-The landing never re-fires a door. The band is one-sided, so the landing behind
-the counterpart is outside its band, and walking on out through the counterpart's
-glass moves against nothing it triggers on. The arrival also latches the
-traveller as already inside any band it lands in, so a mapped pair that sets the
-traveller down on its counterpart's threshold does not bounce it back. Only
-turning round and walking back into the counterpart's front fires the way back.
+The landing never re-fires a door. The counterpart fires only for an origin
+passing in through its front, and the landing is in front of it walking away.
+The arrival also latches the traveller as already through any door it lands
+behind, so a mapped pair that sets the traveller down just behind its
+counterpart's glass does not bounce it back. Only turning round and walking back
+into the counterpart's front fires the way back.
 
 ## What to try
 
@@ -148,7 +151,7 @@ to the debug world and 34 to 143 ms into the garden, its upload submission
 blocking in the driver at worst ([open item](../../docs/plans/open-items.md#rendering)).
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
-  `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
+  `body.fly 1 0 0 0 0 0 4`): passing through the debug frame's glass mints a transfer, and you
   arrive in the garden at the same point. A `body.fly` tape belongs to the
   instance that holds the body, so it stops at the crossing; issue it again in
   the garden to walk on (a held key or stick keeps going). Walk on through the far frame
@@ -174,7 +177,7 @@ Every verb below runs headless as well as windowed, except where noted.
 
 | Verb | Shows |
 |---|---|
-| `world.portals` | Each portal face: its destination, durability, travel, arrival mode, counterpart and which seats stand latched inside its band (`inside=`). `world.portals instance:6~global6~garden` reads the garden's frames. |
+| `world.portals` | Each portal face: its destination, durability, travel, arrival mode, counterpart and which seats stand latched just through its glass (`inside=`). `world.portals instance:6~global6~garden` reads the garden's frames. |
 | `world.destinations` | Each destinations row, its reference, the faces that consume it, and the resolver's live state: the instance it resolved to, its generation and its occupancy. Add `instance:<name>` for the garden's own rows. |
 | `world.references`, `world.admission` | The authored references and the admission rows that let a traveller arrive and a window observe. |
 | `world.instance.status`, `world.instance.seats` | The running worlds (`boot` and the garden, `6~global6~garden`) and which world holds each seat: after a crossing the seat moves to the garden. |

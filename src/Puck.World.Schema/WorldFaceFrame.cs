@@ -65,11 +65,12 @@ public abstract record WorldFaceAperture {
     private WorldFaceAperture() {
     }
 
-    /// <summary>A planar rectangular aperture: the face's own frame extruded one-sidedly along
-    /// <see cref="WorldFaceFrame.Normal"/>.</summary>
+    /// <summary>A planar rectangular aperture: the face's own frame extruded one-sidedly behind the glass, against
+    /// <see cref="WorldFaceFrame.Normal"/>, so a body's origin is inside once it has passed through the glass.</summary>
     /// <param name="Frame">The face frame the slab is built on.</param>
-    /// <param name="Depth">How far the band extends along <see cref="WorldFaceFrame.Normal"/>. The band is
-    /// <c>[0, Depth]</c> — one-sided, so a door fires from the side it faces.</param>
+    /// <param name="Depth">How far the slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>. The
+    /// slab is <c>[-Depth, 0]</c>, entered only from the front, so a door fires when a body's origin passes through
+    /// its glass from the side it faces.</param>
     public sealed record Box(WorldFaceFrame Frame, FixedQ4816 Depth) : WorldFaceAperture;
 }
 /// <summary>One swept region test's answer.</summary>
@@ -130,10 +131,10 @@ public static class WorldFaceRegion {
     // on all three axes and reduces exactly to the point test — a hard teleport is covered with no special case.
     //
     // THE SWEPT CLIP ITSELF IS DIRECTION-BLIND: it asks only whether the segment's normal-axis component visits
-    // [0, Depth] at some parameter, the same answer for either travel direction. That is correct for Right/Up (a
+    // [-Depth, 0] at some parameter, the same answer for either travel direction. That is correct for Right/Up (a
     // door has no preferred sideways or vertical approach) but wrong for Normal — the aperture is documented
-    // one-sided (see WorldFaceAperture.Box.Depth), so a segment that starts BEHIND the face (negative alongNormal)
-    // and passes forward out through the front must not fire, even though it visits the band along the way. Inside
+    // one-sided (see WorldFaceAperture.Box.Depth), so a segment that starts behind the slab and passes forward out
+    // through the front must not fire, even though it visits the slab along the way. Inside
     // remains the endpoint's direction-free OCCUPANCY fact, but Crossed is always the direction-gated swept result:
     // otherwise an ordinary back-side step ending inside the band bypasses the gate and fires through `inside`.
     private static WorldFaceCrossing SweepBox(WorldFaceAperture.Box box, FixedVector3 from, FixedVector3 to) {
@@ -151,7 +152,7 @@ public static class WorldFaceRegion {
             left: delta,
             right: frame.Up
         );
-        var inside = ((alongNormal >= FixedQ4816.Zero) && (alongNormal <= box.Depth) &&
+        var inside = ((alongNormal <= FixedQ4816.Zero) && (alongNormal >= -box.Depth) &&
             (FixedQ4816.Abs(value: alongRight) <= frame.HalfWidth) &&
             (FixedQ4816.Abs(value: alongUp) <= frame.HalfHeight));
 
@@ -174,8 +175,8 @@ public static class WorldFaceRegion {
         var sweptRegion = (ClipSegmentAxis(
             start: previousAlongNormal,
             end: alongNormal,
-            lower: FixedQ4816.Zero,
-            upper: box.Depth,
+            lower: -box.Depth,
+            upper: FixedQ4816.Zero,
             enter: ref enter,
             exit: ref exit
         )

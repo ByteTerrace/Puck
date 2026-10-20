@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.Physics;
 using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -189,7 +190,7 @@ public sealed class InPlacePortalCrossingLawTests {
                 machineHostFactory: Fixtures.MachineHostFactory,
                 machineId: Guid.NewGuid(),
                 resolver: new WorldSessionResolver(),
-                seats: ((IWorldEmbodiedSeats?)seats ?? WorldEmbodiedSeats.None),
+                seats: (((IWorldEmbodiedSeats?)seats) ?? WorldEmbodiedSeats.None),
                 stateRoot: new WorldStateRoot(path: m_hostRoot.RootPath)
             );
             (Instance, Server, m_rowState) = FileBackedRows.Build(
@@ -316,9 +317,11 @@ public sealed class InPlacePortalCrossingLawTests {
                     actual: scenario.Server.Body(index: 0),
                     expected: body
                 );
+                // It fired once its origin passed through the floor glass, so it comes out just through the ceiling
+                // glass, inside the shaft.
                 Assert.True(
-                    condition: (body.FixedPosition.Y >= FixedQ4816.FromDouble(value: CeilingHeight)),
-                    userMessage: $"crossing {crossings} landed at {body.FixedPosition}, below the ceiling door"
+                    condition: (body.FixedPosition.Y <= FixedQ4816.FromDouble(value: CeilingHeight)),
+                    userMessage: $"crossing {crossings} landed at {body.FixedPosition}, above the ceiling door"
                 );
                 Assert.True(condition: (entering < FixedQ4816.Zero));
                 Assert.Equal(
@@ -439,14 +442,70 @@ public sealed class InPlacePortalCrossingLawTests {
             expected: Enumerable.Repeat(count: CrossingsWanted, element: (0, FixedQ4816.Pi))
         );
     }
+    [Fact]
+    public void GroundBehindAFloorDoorHoldsNothingInItsOpening_AndStillHoldsBesideIt() {
+        var field = WorldPortalHoleContactField.Wrap(
+            definition: Shaft(counterpart: Counterpart.Ceiling, ownPath: "shaft.world.json"),
+            inner: new FlatGround()
+        );
+        var falling = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: -5), Z: FixedQ4816.Zero);
+
+        Assert.IsType<WorldPortalHoleContactField>(@object: field);
+
+        foreach (var sweep in new[] { false, true }) {
+            // Through the floor glass, in its opening: the ground under it pushes nothing back.
+            var position = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -0.25), Z: FixedQ4816.FromDouble(value: DoorZ));
+            var velocity = falling;
+            var opened = Resolve(field: field, position: ref position, sweep: sweep, velocity: ref velocity);
+
+            Assert.False(condition: opened.Grounded);
+            Assert.Equal(expected: FixedQ4816.FromDouble(value: -0.25), actual: position.Y);
+            Assert.Equal(actual: velocity, expected: falling);
+
+            // Beside the door the same ground stands the body up.
+            position = new FixedVector3(X: FixedQ4816.FromInteger(value: 5), Y: FixedQ4816.FromDouble(value: -0.25), Z: FixedQ4816.FromDouble(value: DoorZ));
+            velocity = falling;
+
+            Assert.True(condition: Resolve(field: field, position: ref position, sweep: sweep, velocity: ref velocity).Grounded);
+            Assert.Equal(expected: FixedQ4816.Zero, actual: position.Y);
+        }
+
+        Assert.True(condition: field.TryUp(position: FixedVector3.Zero, up: out var up));
+        Assert.Equal(expected: FixedVector3.UnitY, actual: up);
+        Assert.False(condition: field.TryHoldableSurfaceAlongDirection(candidate: out _, direction: -FixedVector3.UnitY, grantedByOverride: out _, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
+        Assert.False(condition: field.TryNearestSurfaceAlongDirection(assistHalfAngle: FixedQ4816.Zero, candidate: out _, direction: -FixedVector3.UnitY, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
+
+        static ContactResolution Resolve(IContactField field, ref FixedVector3 position, ref FixedVector3 velocity, bool sweep) => (sweep
+            ? field.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [])
+            : field.Resolve(orientation: FixedQuaternion.Identity, position: ref position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: []));
+    }
+
+    // Solid ground under y = 0: a foot point below it stands on it, its fall stopped.
+    private sealed class FlatGround : IContactField {
+        public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+            if (position.Y > FixedQ4816.Zero) {
+                return new ContactResolution(Grounded: false, ObstructionNormal: FixedVector3.Zero);
+            }
+
+            position = new FixedVector3(X: position.X, Y: FixedQ4816.Zero, Z: position.Z);
+            velocity = new FixedVector3(X: velocity.X, Y: FixedQ4816.Zero, Z: velocity.Z);
+
+            return new ContactResolution(Grounded: true, ObstructionNormal: FixedVector3.Zero, GroundNormal: FixedVector3.UnitY);
+        }
+        public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
+            up = FixedVector3.UnitY;
+
+            return true;
+        }
+    }
 
     // One local seat, occupied and routed wherever the host publishes it, recording each view turn the host asks for.
     public sealed class ViewSeats : IWorldEmbodiedSeats {
         private WorldAuthorityEndpoint? m_endpoint;
         private WorldEntityAddress m_entity;
 
-        public List<(int Slot, FixedQ4816 Turn)> Turns { get; } = [];
         public int SeatCount => 1;
+        public List<(int Slot, FixedQ4816 Turn)> Turns { get; } = [];
 
         public void AdvanceSeatViews(float deltaSeconds) { }
         public void ClearAnalog() { }

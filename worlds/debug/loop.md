@@ -25,15 +25,20 @@ Issue each line through the console or the World's MCP attachment.
 - Drop in from above: `body.pose -20 3 -20 0 0 0`. The body falls onto the
   floor glass, comes out of the ceiling and keeps falling.
 - Walk on: `body.pose -20 - -17.5 0 0 0`, then `body.fly 1 0 0 0 0 0 0.5`. The
-  body steps onto the floor glass at walking speed, comes out of the ceiling
-  still drifting forward, slows in the air over the shaft and settles into the
-  loop. A held walk carries it out past the posts on its first fall, onto the
-  ground beside the shaft.
+  ground under the floor glass holds nothing back while the body stands in the
+  glass's opening, so the body drops through as it steps on, comes out of the
+  ceiling still drifting forward, slows in the air over the shaft and settles
+  into the loop. A held walk carries it out past the posts on its first fall,
+  onto the ground beside the shaft.
+
+A door fires once the body's origin, at its feet, passes through the glass, so
+each crossing sets the body down just inside the shaft below the ceiling glass,
+as far through it as its feet had gone through the floor glass.
 
 ## What to watch
 
 - Each crossing narrates on stderr:
-  `[world.transfer: transfer=8 'boot' seat 1 crossed loop-floor/glass -> loop-ceiling/glass in place, at (-20.00, 6.11, -20.00) moving (0.00, -40.00, 0.00) m/s]`.
+  `[world.transfer: transfer=24 'boot' seat 1 crossed loop-floor/glass -> loop-ceiling/glass in place, at (-20.00, 5.81, -19.93) moving (0.00, -40.00, 0.00) m/s]`.
   The fall speeds up on each lap until it holds at the Moth's 40 m/s sink
   speed (its `fall` hold's `envelope.sinkSpeed`); from there the crossings
   alternate between two arrival heights, because six metres is not a whole
@@ -42,7 +47,7 @@ Issue each line through the console or the World's MCP attachment.
   in metres per second; between crossings `y` stays negative and never passes
   -40.
 - `world.portals` lists both faces; `inside=1` on `loop-floor/glass` means the
-  seat stands latched in its band.
+  seat stands latched just through its glass.
 - `world.destinations` shows `loop` resolved to `boot`, the World itself.
 
 The floor glass shows the shaft as seen from above the ceiling glass, so the

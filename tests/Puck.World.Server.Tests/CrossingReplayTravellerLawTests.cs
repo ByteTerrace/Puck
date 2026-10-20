@@ -98,7 +98,7 @@ public sealed class CrossingReplayTravellerLawTests {
         // Seat 0 stands a short walk in front of row A's door, facing it, high enough to stay above the door's floor as
         // it falls: authored, because a tape re-establishes the document and the seats, never a pose set before it.
         rowADefinition = rowADefinition with {
-            SpawnPointsRaw = [.. rowADefinition.SpawnPoints.Select(selector: point => ((point.Id == "seat-1") ? (point with { Position = new Vector3(x: 0f, y: 4.5f, z: -3f) }) : point))],
+            SpawnPointsRaw = [.. rowADefinition.SpawnPoints.Select(selector: point => ((point.Id == "seat-1") ? (point with { Position = new Vector3(x: 0f, y: 4.5f, z: -8f) }) : point))],
         };
         FileBackedRows.Write((rowAPath, rowADefinition), (rowBPath, rowBDefinition));
 
