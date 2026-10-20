@@ -769,8 +769,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             : null
         );
     }
-    // The extent, in display pixels, of a placed rect: what a camera projects for and what a pane's frame values carry,
-    // so a pane's shader and a hit through its paired camera share one aspect. A collapsed axis of an arriving slot
+    // The extent, in display pixels, of a placed rect: what a camera projects for. A collapsed axis of an arriving slot
     // counts one pixel, keeping a finite projection while it draws nothing; a positive axis stays fractional.
     private static Vector2 PlacedExtent(NormalizedRect region, uint width, uint height) => new(
         x: ((region.Width == 0f) ? 1f : (region.Width * width)),
@@ -1027,10 +1026,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         if (sample.Pressed) {
             entry.Pointer = coordinate.ToVector2();
-
-            if (!entry.PointerWasDown) {
-                entry.PointerPresses++;
-            }
         }
 
         entry.PointerWasDown = sample.Pressed;
@@ -1186,7 +1181,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         var width = m_displayWidth;
         var height = m_displayHeight;
-        var deltaSeconds = ((float)context.FrameDeltaSeconds);
         var presented = PresentedFrame(context: in context);
 
         graphs.Present(frame: in presented);
@@ -1237,39 +1231,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             var instanceDeltaSeconds = entry.AdvanceClock(presentedSeconds: presented.Time);
-            var row = WorldDefinitionRows.FindGraph(
-                graphs: m_client.Definition.Views.Graphs,
-                name: name
-            );
-            // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the graph a zero
-            // cameraFov with zero vectors — the documented "no paired camera" signal a graph branches on to keep its own
-            // pointer orbit — never a made-up default eye.
-            var cameraPos = Vector3.Zero;
-            var cameraTarget = Vector3.Zero;
-            var cameraUp = Vector3.Zero;
-            var cameraFov = 0f;
-
-            if (
-                (row?.Camera is { } cameraName) &&
-                ResolveNamedCamera(
-                    camera: out var camera,
-                    deltaSeconds: deltaSeconds,
-                    height: height,
-                    name: cameraName,
-                    region: region,
-                    width: width
-                )
-            ) {
-                cameraPos = camera.Position;
-                cameraTarget = (camera.Position + camera.Forward);
-                cameraUp = camera.Up;
-                cameraFov = (2f * MathF.Atan(x: camera.TanHalfFieldOfView));
-                graphs.SetCamera(
-                    camera: in camera,
-                    instance: name
-                );
-            }
-
             UpdatePipelinePointer(
                 entry: entry,
                 height: height,
@@ -1277,14 +1238,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 width: width
             );
             entry.Node.Frame = (presented with {
-                CameraFov = cameraFov,
-                CameraPosition = cameraPos,
-                CameraTarget = cameraTarget,
-                CameraUp = cameraUp,
-                PlacedExtent = PlacedExtent(height: height, region: region, width: width),
                 Pointer = entry.Pointer,
                 PointerDown = entry.PointerWasDown,
-                PointerPresses = entry.PointerPresses,
                 Time = entry.ClockSeconds,
                 TimeDelta = instanceDeltaSeconds,
             });
@@ -1315,7 +1270,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
-    /// <see cref="PrepareGraph"/> places camera-paired panes and publishes pane mappings over it before the world
+    /// <see cref="PrepareGraph"/> places panes and publishes pane mappings over it before the world
     /// producer captures that frame. Own cameras and viewports use this extent even when a camera export asks the shared
     /// residency for a larger frame. Without a supplied display extent, <see cref="CaptureFrame"/> uses its requested extent.</summary>
     /// <param name="width">The display's width, in pixels.</param>

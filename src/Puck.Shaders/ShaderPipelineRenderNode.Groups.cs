@@ -250,7 +250,6 @@ public sealed partial class ShaderPipelineRenderNode {
         } else {
             layout.WriteFrame(
                 block: block,
-                extent: (m_width, m_height),
                 frame: m_frame,
                 tickRate: m_pipeline!.Plan.TickRate,
                 values: Frame

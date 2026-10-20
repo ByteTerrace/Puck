@@ -122,8 +122,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public Vector2 Pointer { get; set; }
         /// <summary>Whether the pointer was pressed in the previous frame.</summary>
         public bool PointerWasDown { get; set; }
-        /// <summary>How many presses the pointer has made over the instance.</summary>
-        public uint PointerPresses { get; set; }
         /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>Gets why the instance can show nothing, or <see langword="null"/> while it has a graph installed or on
@@ -577,7 +575,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// one.</param>
     /// <param name="previousSeconds">The time the frame before presented, in seconds; a later time never reads a
     /// negative delta.</param>
-    /// <returns>The frame values, with no pointer and no paired camera.</returns>
+    /// <returns>The frame values, with no pointer.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
     public static ShaderFrameValues PresentedFrame(WorldStateMirror mirror, float fraction, double previousSeconds) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
@@ -585,13 +583,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var seconds = (mirror.PresentedEngineTick(fraction: fraction) / FixedTickConversion.TicksPerSecond);
 
         return new ShaderFrameValues(
-            CameraFov: 0f,
-            CameraPosition: Vector3.Zero,
-            CameraTarget: Vector3.Zero,
-            CameraUp: Vector3.Zero,
             Pointer: Vector2.Zero,
             PointerDown: false,
-            PointerPresses: 0,
             StateTick: mirror.Tick,
             Tick: mirror.EngineTick,
             Time: seconds,
@@ -602,17 +595,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         );
     }
     /// <summary>Hands every instance the runtime renders on a node the frame values the frame presents: the synthesized
-    /// root, every SDF view and each row. A pane the frame shows is handed its own pointer, camera and clock over them
+    /// root, every SDF view and each row. A pane the frame shows is handed its own pointer and clock over them
     /// afterwards. Does nothing before a runtime is attached.</summary>
-    /// <param name="frame">The frame values: the presented tick and presentation time, with no pointer and no paired
-    /// camera.</param>
+    /// <param name="frame">The frame values: the presented tick and presentation time, with no pointer.</param>
     public void Present(in ShaderFrameValues frame) {
         if (m_runtime is not { } runtime) {
             return;
         }
 
         // Every instance that renders on a node presents the frame: the synthesized root, every SDF view, and each
-        // views.graphs row, which PrepareGraph then hands its own camera, pointer and time.
+        // views.graphs row, which PrepareGraph then hands its own pointer and time.
         var instances = runtime.Instances.Instances;
 
         for (var index = 0; (index < instances.Count); index++) {

@@ -5503,7 +5503,7 @@ prototypes {
 
       // The thruster is a chain of separate armour plates linked like segmented armour around a dark core: each band
       // plate is its own group, hinged at its top edge and swung out so its lower edge overlaps the plate below, the
-      // bottom plate the largest, hooding the nozzle that sits flush in the opening under it. Built from the pods lab.
+      // bottom plate the largest, hooding the nozzle that sits flush in the opening under it.
       shape Superellipsoid "pod-left" {
         id: 1100
         position [0.21, 1.0413, -0.1872]
@@ -7423,7 +7423,7 @@ prototypes {
 
       // The thruster is a chain of separate armour plates linked like segmented armour around a dark core: each band
       // plate is its own group, hinged at its top edge and swung out so its lower edge overlaps the plate below, the
-      // bottom plate the largest, hooding the nozzle that sits flush in the opening under it. Built from the pods lab.
+      // bottom plate the largest, hooding the nozzle that sits flush in the opening under it.
       shape Superellipsoid "pod-right" {
         id: 1200
         position [-0.21, 1.0413, -0.1872]
@@ -8976,43 +8976,6 @@ views {
     transitionSeconds: 0
   }
 
-  layout "pods-lab" {
-    seatCount: 0
-    slots [
-      {
-        height: 1
-        instance: "pods-lab"
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "pipeline" {
-    seatCount: 0
-    slots [
-      {
-        height: 1
-        instance: "moth-pipeline"
-        width: 0.5
-        x: 0
-        y: 0
-      }
-      {
-        camera: "three-quarter"
-        height: 1
-        width: 0.5
-        x: 0.5
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
   // A dual-stick third-person action camera: the left stick moves and strafes relative to the camera, the right stick
   // turns the camera and the body with it, and the right-stick press recenters it behind the body.
   seatControl {
@@ -9047,17 +9010,5 @@ views {
       pivotOffset [0, 1, 0]
       yaw: 0
     }
-  }
-
-  // A free-form lab for the twin thruster shells; what settles there is rebuilt in the creation's shapes.
-  graph "pods-lab" {
-    source: "../../pipelines/pods.hlsl"
-    timeScale: 1
-  }
-
-  graph "moth-pipeline" {
-    camera: "three-quarter"
-    source: "../../pipelines/moth.hlsl"
-    timeScale: 1
   }
 }

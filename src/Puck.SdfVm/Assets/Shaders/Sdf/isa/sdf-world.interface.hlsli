@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/12bd302d0cbd492ee8da1eb71221809c300e0a8b3372160dae2419a940bd93a5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/4ae34dd9598732a0492f411526d3087e2eccf6ad1ef749440dc6b55fd6ab7be2). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -91,16 +91,6 @@ struct SdfWorldFrame {
     [[vk::offset(24)]] uint frame;
     [[vk::offset(28)]] uint tickRate;
     [[vk::offset(32)]] uint pointerDown;
-    [[vk::offset(36)]] uint pointerPresses;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float3 cameraPosition;
-    [[vk::offset(60)]] float cameraFov;
-    [[vk::offset(64)]] float3 cameraTarget;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float3 cameraUp;
-    [[vk::offset(92)]] uint _pad92;
-    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfWorldFrame> frameGroup : register(b0, space0);
 

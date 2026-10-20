@@ -5855,7 +5855,6 @@ public static partial class WorldModelShape {
                 M("name", typeof(global::System.String), typeof(global::Puck.World.WorldViewGraph), "Name", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Name),
                 M("source", typeof(global::System.String), typeof(global::Puck.World.WorldViewGraph), "Source", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Source),
                 M("package", typeof(global::System.String), typeof(global::Puck.World.WorldViewGraph), "Package", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Package),
-                M("camera", typeof(global::System.String), typeof(global::Puck.World.WorldViewGraph), "Camera", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Camera),
                 M("refresh", typeof(global::Puck.World.WorldViewGraphRefresh), typeof(global::Puck.World.WorldViewGraph), "Refresh", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Refresh),
                 M("inputs", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldViewGraphInput>), typeof(global::Puck.World.WorldViewGraph), "Inputs", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).Inputs),
                 M("timeScale", typeof(global::System.Single), typeof(global::Puck.World.WorldViewGraph), "TimeScale", Read | Write, static value => ((global::Puck.World.WorldViewGraph)value).TimeScale),

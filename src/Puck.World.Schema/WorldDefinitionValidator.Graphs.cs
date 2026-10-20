@@ -114,12 +114,6 @@ public static partial class WorldDefinitionValidator {
                 path: path
             );
             if (
-                (graph.Camera is { } camera) &&
-                !cameras.Contains(item: camera)
-            ) {
-                errors.Add(item: $"{path}.camera '{camera}' names no camera row.");
-            }
-            if (
                 (graph.Refresh is { } refresh) &&
                 !WorldViewGraphs.RefreshOf(graph: graph).IsValid
             ) {

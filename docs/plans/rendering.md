@@ -391,8 +391,7 @@ compiler revision, the stages and their DXC steps, and the closure.
 A pass reads its frame data only through a pass interface the engine derives
 from the pass (`ShaderFrameInterface`). The frame group, set 0, holds what every
 pass of a node shares each frame: the pointer, the engine tick and tick rate,
-presentation time and its delta, the frame count, the pointer's pressed state
-and press count, and the paired camera. The pass block, `b0` of set 3, holds the
+presentation time and its delta, the frame count, the pointer's pressed state. The pass block, `b0` of set 3, holds the
 pass's own extent and then its config fields in ordinal name order, followed by
 its ports; a pass that binds arrays reads them from the World group, set 1. Each
 pass binds its groups as descriptor sets (P7b step 15), and nothing it records is
@@ -428,7 +427,7 @@ source's closure, its passes' interfaces and its plan's names
 stored package with its key and compiles nothing, wherever the booted document
 lies; a source with no stored package compiles in a checkout that has DXC and
 is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
-name the ink pipeline and the Moth shader; film grain is a post-process package
+name the ink pipeline; film grain is a post-process package
 whose stages the SDF build compiles. The `pipeline-echo` canary runs the generated
 echo with `pipeline.sentinels` on and a copy that expects two members to hold
 each other's sentinel.
@@ -1258,7 +1257,7 @@ runtime's latest schedule renders it at. It hands them to the host's
 before without allocating. The pipeline pane's pointer maps through its
 instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
 `RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
-each view's seat camera and each pane's paired camera, starting beneath every
+each view's seat camera, starting beneath every
 pane from a lone whole-display view (`WorldViewGraphHost.DisplayView`), which is
 no pane and gets no hover outline. `world.view.panes`
 echoes the published mappings, a pick and a walk; the laws are
@@ -2918,7 +2917,7 @@ it to an output buffer, and has to read back distinct sentinels exactly on both
 backends, so a generator mistake fails the package on a real driver; compiler
 reflection over both binaries is the cheaper build-time check where no GPU
 exists. The HLSL pipeline sources (`ink-simulation.hlsl`, `ink-visualize.hlsl`,
-`moth.hlsl`, the genesis `card.hlsl` and the package canary's `tint.hlsl`) move
+the genesis `card.hlsl` and the package canary's `tint.hlsl`) move
 onto a pass interface designed for Puck: presentation time and the
 deterministic tick from P9, the camera, config through the generated struct,
 and named inputs. Nothing keeps a Shadertoy name or shape for compatibility:
@@ -3967,7 +3966,7 @@ Each commit is marked with what it waits on.
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
 6. Hits continue through live instances. Landed. `WorldViewGraphHost.Walk`
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
-   panes, with each view's seat camera and each pane's paired camera, and the pane
+   panes, with each view's seat camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
    producer reports the screens of the world it renders as the surface
    placements inside that world, so a walk continues from a view through a
@@ -4314,7 +4313,7 @@ item 2 landed.
     stage: `render.tonemap` `Filmic` sets the `place` config's `tonemap` on each view's
     place pass in the root, which tonemaps the view it reconstructs and nothing
     else, so the scene is tonemapped once, and the letterbox color, a pane,
-    which is display-referred (the moth studio's applies its own filmic curve),
+    which is display-referred (its own shader owns its tonemap),
     and the HUD never are. The R2 dither belongs to the display encode
     (`SurfaceEncoder`), which every swapchain compositor draws as its write and
     a capture of a float output reads through in SDR, not to the views. The
