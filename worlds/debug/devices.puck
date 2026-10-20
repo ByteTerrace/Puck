@@ -290,76 +290,10 @@ kits {
   ]
 }
 
-// The context button's prompts: ENGAGE while the seat stands near a device it is not engaged on, LEAVE while it is.
-// The near distance stays inside the routes' engage radius, so a prompt never offers a press that would do nothing.
-let nearDevice = {
-  $type: "any"
-  predicates [
-    { $type: "near", subject { $type: "placement", placementId: `device-humble-gaming-brick` }, distance: 2.8 }
-    { $type: "near", subject { $type: "placement", placementId: `device-advanced-gaming-brick` }, distance: 2.8 }
-    { $type: "near", subject { $type: "placement", placementId: `device-humble-gaming-deck` }, distance: 2.8 }
-  ]
-}
-let engaged = { $type: "now", fact: ScreenEngaged }
-
+// The debug world draws no HUD panels: the controller bar is its only on-screen UI, so engaging a device shows no
+// prompt. The section's panel list lives here because the garden, which imports controls.puck too, authors its own.
 hud {
-  panels [
-    {
-      id: "device-engage"
-      rect {
-        x: 0.4
-        y: 0.6
-        width: 0.2
-        height: 0.045
-      }
-      layer: Over
-      style: Chip
-      visible {
-        $type: "all"
-        predicates [nearDevice, { $type: "not", predicate: engaged }]
-      }
-      elements [
-        {
-          id: "label"
-          kind: Text
-          rect {
-            x: 0.06
-            y: 0.15
-            width: 0.88
-            height: 0.7
-          }
-          style: Primary
-          text: "E / X  ENGAGE"
-        }
-      ]
-    }
-    {
-      id: "device-leave"
-      rect {
-        x: 0.02
-        y: 0.93
-        width: 0.17
-        height: 0.04
-      }
-      layer: Over
-      style: Chip
-      visible: engaged
-      elements [
-        {
-          id: "label"
-          kind: Text
-          rect {
-            x: 0.06
-            y: 0.15
-            width: 0.88
-            height: 0.7
-          }
-          style: Dim
-          text: "E / X  LEAVE"
-        }
-      ]
-    }
-  ]
+  panels []
 }
 
 // Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. The brick's screen is
