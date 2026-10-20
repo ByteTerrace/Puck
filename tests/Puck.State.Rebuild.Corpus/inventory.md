@@ -157,14 +157,14 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `InterpolatedStringNode` | 13 | 0 | `debug/avatars/moth`, `debug/debug`, `debug/shapes` |
 | `LambdaExpressionNode` | 4 | 0 | `debug/debug`, `debug/shapes`, `debug/studio` |
 | `LetNode` | 122 | 8 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 2 more |
-| `LiteralExpressionNode` | 15809 | 173 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
+| `LiteralExpressionNode` | 15809 | 172 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
 | `LocalStatementNode` | 0 | 1 |  |
 | `NotPredicateNode` | 0 | 1 |  |
 | `ObjectExpressionNode` | 1350 | 15 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 3 more |
 | `OperandExpressionNode` | 70 | 43 | `debug/avatars/moth`, `debug/debug`, `debug/devices` |
 | `OptionBlockNode` | 0 | 1 |  |
 | `OrPredicateNode` | 1 | 0 | `debug/avatars/moth` |
-| `PropertyNode` | 9950 | 116 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
+| `PropertyNode` | 9950 | 115 | `debug/avatars/moth`, `debug/controls`, `debug/debug`, `debug/devices`, `debug/garden` and 5 more |
 | `RangeExpressionNode` | 0 | 3 |  |
 | `RhsOperandNode` | 9 | 10 | `debug/avatars/moth` |
 | `RhsTextNode` | 0 | 1 |  |
