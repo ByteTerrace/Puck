@@ -161,6 +161,57 @@ public readonly record struct CameraSnapshot {
         }
     }
 
+    /// <summary>Returns the ray the camera casts through an image point, summed as the SDF view pass's
+    /// <c>cameraRayDirection</c> (<c>frame/sdf-viewport.hlsli</c>) sums it: the forward axis, the point scaled by the
+    /// half-extents on the right and up axes, then the <see cref="FrustumOffset"/> as a trailing term.</summary>
+    /// <param name="ndc">The image point in normalized device coordinates, <c>[-1, 1]²</c> across the image, up
+    /// positive.</param>
+    /// <returns>The unnormalized direction, whose component along <see cref="Forward"/> is one.</returns>
+    public Vector3 RayThrough(Vector2 ndc) {
+        var direction = (
+            (Forward +
+            (((ndc.X * AspectRatio) * TanHalfFieldOfView) * Right)) +
+            ((ndc.Y * TanHalfFieldOfView) * Up)
+        );
+
+        return (direction + ((FrustumOffset.X * Right) + (FrustumOffset.Y * Up)));
+    }
+    /// <summary>Projects a world point onto the camera's image: the inverse of <see cref="RayThrough"/>.</summary>
+    /// <param name="world">The world-space point.</param>
+    /// <param name="ndc">The point's normalized device coordinates, up positive; <c>[-1, 1]²</c> inside the image and
+    /// beyond it outside; zero when the projection fails.</param>
+    /// <param name="depth">The point's distance along <see cref="Forward"/> from <see cref="Position"/>, in world
+    /// units; computed whether or not the projection succeeds.</param>
+    /// <returns><see langword="true"/> when the point lies ahead of the camera (a positive <paramref name="depth"/>);
+    /// <see langword="false"/> for a point at or behind the eye, which has no image point.</returns>
+    public bool TryProject(Vector3 world, out Vector2 ndc, out float depth) {
+        var delta = (world - Position);
+
+        depth = Vector3.Dot(
+            vector1: delta,
+            vector2: Forward
+        );
+
+        if (!(depth > 0f)) {
+            ndc = Vector2.Zero;
+
+            return false;
+        }
+
+        ndc = new Vector2(
+            x: ((Vector3.Dot(
+                vector1: delta,
+                vector2: Right
+            ) - (depth * FrustumOffset.X)) / ((depth * TanHalfFieldOfView) * AspectRatio)),
+            y: ((Vector3.Dot(
+                vector1: delta,
+                vector2: Up
+            ) - (depth * FrustumOffset.Y)) / (depth * TanHalfFieldOfView))
+        );
+
+        return true;
+    }
+
     /// <summary>Gets the narrowest field of view a camera is built with, in radians. Half of it is a normal float, so
     /// its tangent, the snapshot's <see cref="TanHalfFieldOfView"/>, is a positive normal float that no device flushes
     /// to zero; a narrower angle lets <see cref="MathF.Tan"/> of its half underflow to zero, which no snapshot admits.</summary>

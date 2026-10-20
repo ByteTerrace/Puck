@@ -40,10 +40,11 @@ public readonly record struct SdfPickResult(long Request, uint X, uint Y, uint W
         get {
             if (!Hit || (Sample is not { } sample)) { return null; }
             var camera = sample.Camera;
-            var projection = ViewProjection.Create(camera: camera, near: 1,
-                jitter: new Vector2(x: ((2 * sample.Jitter.X) / sample.Width), y: ((-2 * sample.Jitter.Y) / sample.Height)));
-            var ndc = ViewProjection.NdcOf(uv: new Vector2(x: ((X + 0.5f) / Width), y: ((Y + 0.5f) / Height)));
-            var direction = Vector3.Normalize(value: (projection.Unproject(depth: 1, ndc: ndc) - camera.Position));
+            // The march's ray through the pixel centre, shifted by the frame's sub-pixel jitter as ViewProjection.Create
+            // shifts it (ViewProjection.RayParameter reads the same sum).
+            var ndc = (ViewProjection.NdcOf(uv: new Vector2(x: ((X + 0.5f) / Width), y: ((Y + 0.5f) / Height))) +
+                new Vector2(x: ((2 * sample.Jitter.X) / sample.Width), y: ((-2 * sample.Jitter.Y) / sample.Height)));
+            var direction = Vector3.Normalize(value: camera.RayThrough(ndc: ndc));
 
             return (camera.Position + (direction * Distance));
         }
