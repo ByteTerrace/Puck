@@ -1291,9 +1291,8 @@ template motionPrototypesB() {
     }
   }
   // An eye: a radial ramp of pupil, iris, limbus and sclera on a plane under a clear cornea, in the winning slot's
-  // frame. An ungrouped pooled shape's hits win the creation root's slot, so the origin is the eye's centre in that
-  // frame, and the half-turn about Y faces the plane toward the label side. The root does not swing, so the iris holds
-  // still while the eye turns under it: what this exhibit shows until the layer frame follows the shape's own slot.
+  // frame. The eye's hits win its own slot, centred on the eye, so the plane sits a radius in front of that centre, and
+  // the half-turn about Y faces it toward the label side. The iris turns with the eye.
   prototype "motion-inset" {
     document {
       clockDriver(key: "inset", cadence: 0.9)
@@ -1317,7 +1316,7 @@ template motionPrototypesB() {
           }
         ]
       }
-      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 1.25, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.03, color: "#0B0B0B" }, { radius: 0.075, color: "#3A7BD5" }, { radius: 0.085, color: "#1A2A40" }, { radius: 0.095, color: "#F5F3EE" }], softness: 0.15, modulationAmplitude: 0.04, modulationFrequency: 40 } } }])
+      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 0, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.03, color: "#0B0B0B" }, { radius: 0.075, color: "#3A7BD5" }, { radius: 0.085, color: "#1A2A40" }, { radius: 0.095, color: "#F5F3EE" }], softness: 0.15, modulationAmplitude: 0.04, modulationFrequency: 40 } } }])
     }
   }
   // Twist and bend emit only on the stamp-pool path; a static placement ignores both. The twist's constant-wave swing is

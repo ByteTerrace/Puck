@@ -135,7 +135,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   its flags carry `SdfMeshRecord.SkinFlag`, and every mesh read
   (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
   carries a member's vertex out through that slot's live (or previous)
-  transform, so the mesh interface binds the dynamic transforms. A cut or
+  transform, so the mesh interface binds the dynamic transforms. The surface
+  pass records the member slot of the hit triangle's nearest vertex as the
+  pixel's frame slot (`sdfMeshSurfaceNormal`), so an inset, weathering, an
+  unparented paint and the lanes read the shape's own slot rather than the
+  group's. A cut or
   intersection face keeps the slot of the shape it shapes
   (`sdfComposeCandidate`); only a union-family winner hands its slot on. Rigid
   per-vertex skinning stretches a blend seam between members that move far

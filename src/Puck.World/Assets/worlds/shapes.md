@@ -271,10 +271,12 @@ to step along it.
   ring or eye that swims across its surface instead of riding it is a paint
   frame bug. `world.temporal off` shows whether the swim is the resolve's.
   Pause the clock and scrub it (`galleryClock $value 0`, then `1.7`) to compare
-  two poses. The parented paints ride the panel. The inset eye and
-  `motion-spin`'s line weathering do not: an ungrouped pooled shape's hit
-  shades in the creation root's frame, so the iris holds still while the eye
-  turns and the scratches stay put while the box spins (see Known defects).
+  two poses. The parented paints ride the panel, the iris turns with the eye,
+  and `motion-spin`'s scratches turn with the box: every layer shades in the
+  slot of the shape it lies on. Seen from above
+  (`view.override camera look 14 3.4 58.98 14 1.2 59`), scrubbing the clock
+  from 0 to 0.9 turns the box about 41 degrees, and the scratch pattern sampled
+  in the box's own frame matches its earlier pose.
 - **Twist, bend and cells in motion.** x = 20, 23 and 29 on the z 64 row, with
   `world.debug-view normals`: the dynamic path bakes the warped shape once and
   turns it rigidly, so its normals must hold steady on the surface.
@@ -287,11 +289,6 @@ to step along it.
 Each of these was seen in a Direct3D 12 capture of the gallery.
 `docs/plans/open-items.md` tracks them.
 
-- **Layer frames on pooled shapes.** An inset and weathering on an ungrouped
-  shape of an animated creation shade in the creation root's frame, not the
-  moving shape's slot. `motion-inset` authors its inset origin as the eye's
-  centre in that root frame, and its iris holds still while the eye turns.
-  `motion-spin`'s scratches hold still while the box spins.
 - **Pooled labels.** The motion rows' plinth labels bake frayed, letters
   broken into slivers. The same labels on the still rows bake crisp, because
   the static stamper refines a text group toward its glyphs.
