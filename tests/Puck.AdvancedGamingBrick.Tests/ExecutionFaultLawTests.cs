@@ -27,6 +27,16 @@ public sealed class ExecutionFaultLawTests {
         Assert.Equal(expected: kind, actual: fault.Kind);
     }
     [Fact]
+    public void ALinkedConsoleFaultsTheSession() {
+        using var healthy = Linkable(first: 0xEAFFFFFEu);
+        using var faulted = Linkable(first: 0xE7F000F0u);
+        using var session = new AgbLinkSession(healthy, faulted);
+
+        var fault = Assert.Throws<AgbExecutionFaultException>(testCode: () => session.Run(cycles: AdvancedGamingBrickMachine.CyclesPerFrame));
+
+        Assert.Equal(expected: AgbExecutionFaultKind.UndefinedInstruction, actual: fault.Kind);
+    }
+    [Fact]
     public void ARunningLoopDoesNotFault() {
         using var core = new AdvancedGamingBrickCore(configuration: AgbFirmware.CreateConfiguration(
             bootMode: MachineBootMode.Fast,
@@ -36,6 +46,16 @@ public sealed class ExecutionFaultLawTests {
         core.RunCycles(cycles: (AdvancedGamingBrickMachine.CyclesPerFrame * 2));
     }
 
+    private static MachineInstance<AdvancedGamingBrickMachine, AgbMachineConfiguration> Linkable(uint first) {
+        var instance = AgbMachineFactory.Create(configuration: AgbFirmware.CreateConfiguration(
+            bootMode: MachineBootMode.Fast,
+            cartridgeRom: Rom(first: first)
+        ));
+
+        instance.Machine.DirectBoot();
+
+        return instance;
+    }
     // The instruction at the cartridge entry, then a branch-to-self.
     private static byte[] Rom(uint first) {
         var rom = new byte[1024];

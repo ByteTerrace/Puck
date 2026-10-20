@@ -111,7 +111,8 @@ covers threading, buffer lifetime, cycle pacing, audio and snapshots.
 budget, the program can no longer run: the CPU sits in Undefined mode (the
 firmware's undefined-instruction vector parks it), in Abort mode, or fetches
 from a region that holds no code (past the 16 KiB BIOS, I/O, backup memory or
-an unused region). Its `Kind` names which, and a queued host reports it through
+an unused region). `AgbLinkSession.Run` makes the same check on every linked
+console. Its `Kind` names which, and a queued host reports it through
 `QueueFault`, so a World's `machine.state` shows `fault=` with the name instead
 of a running machine on a dead screen. The check reads only emulated state, so
 a replay faults at the same budget.
