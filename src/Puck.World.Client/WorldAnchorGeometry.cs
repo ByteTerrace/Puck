@@ -70,10 +70,7 @@ public static class WorldAnchorGeometry {
 
         foreach (var shape in (creation.EngineDocument.Shapes ?? [])) {
             if (shape.Id == targetShapeId) {
-                var rotation = Quaternion.CreateFromAxisAngle(
-                    axis: Vector3.UnitY,
-                    angle: (frame.YawDegrees * (MathF.PI / 180f))
-                );
+                var rotation = frame.Rotation;
 
                 return (frame.Position + Vector3.Transform(
                     value: (shape.Position * placement.Scale),

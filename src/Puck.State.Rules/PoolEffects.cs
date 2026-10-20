@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 // Pool effects are priced in the element operations every other effect and transform is: one per journal entry and
@@ -12,7 +14,7 @@ internal static class PoolEffectWork {
         var units = RowMutationWidth(valueWidth: 1L);
 
         foreach (var field in pool.Fields) {
-            units = RuleWorkBudget.SaturatingAdd(
+            units = BinaryIntegerFunctions.AddSaturating(
                 left: units,
                 right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field))
             );
@@ -22,25 +24,21 @@ internal static class PoolEffectWork {
     public static long ReleaseWidth(StatePoolDescriptor pool, IRuleCostContext context) {
         var units = RowMutationWidth(valueWidth: 1L);
 
-        units = RuleWorkBudget.SaturatingAdd(left: units, right: 1L);
+        units = BinaryIntegerFunctions.AddSaturating(left: units, right: 1L);
         foreach (var field in pool.Fields) {
-            units = RuleWorkBudget.SaturatingAdd(
+            units = BinaryIntegerFunctions.AddSaturating(
                 left: units,
                 right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field))
             );
         }
         return units;
     }
-    public static long SaturatingMultiply(long left, long right) => (((left != 0L) && (right > (long.MaxValue / left)))
-        ? long.MaxValue
-        : (left * right));
-
     // One fixed slot, its member count, and every optional per-cell metadata lane. The typed value includes a
     // vector's components. A claim clears then initializes its vector, journaling the payload twice; no live-count
     // multiplier remains.
-    private static long RowMutationWidth(long valueWidth) => RuleWorkBudget.SaturatingAdd(
+    private static long RowMutationWidth(long valueWidth) => BinaryIntegerFunctions.AddSaturating(
         left: 20L,
-        right: SaturatingMultiply(left: 2L, right: valueWidth)
+        right: BinaryIntegerFunctions.MultiplySaturating(left: 2L, right: valueWidth)
     );
 
     public static long OccupancyWords(StatePoolDescriptor pool) => ((pool.Capacity + 63L) / 64L);
@@ -93,8 +91,8 @@ public sealed class ClaimEffect : RuleEffect {
         }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
-        left: RuleWorkBudget.SaturatingAdd(left: 512L, right: PoolEffectWork.OccupancyWords(pool: Pool)),
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(
+        left: BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.OccupancyWords(pool: Pool)),
         right: PoolEffectWork.InsertWidth(pool: Pool, context: context)
     )) + RuleWorkBudget.EffectsCost(context: context, effects: Effects));
 }
@@ -140,7 +138,7 @@ public sealed class ReleaseEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
-        var units = RuleWorkBudget.SaturatingAdd(left: 512L, right: PoolEffectWork.ReleaseWidth(pool: Pool, context: context));
+        var units = BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.ReleaseWidth(pool: Pool, context: context));
         var releaseCalls = 1L;
         var scanWidth = 0L;
 
@@ -149,16 +147,16 @@ public sealed class ReleaseEffect : RuleEffect {
         // of scans is one for the requested handle plus one for each possibly live cascade handle.
         foreach (var pair in m_cascadePools) {
             var live = pair.MaxLive;
-            var pairRelease = RuleWorkBudget.SaturatingAdd(left: 512L, right: PoolEffectWork.ReleaseWidth(context: context, pool: pair));
+            var pairRelease = BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.ReleaseWidth(context: context, pool: pair));
 
-            units = RuleWorkBudget.SaturatingAdd(left: units, right: PoolEffectWork.SaturatingMultiply(left: live, right: pairRelease));
-            releaseCalls = RuleWorkBudget.SaturatingAdd(left: releaseCalls, right: live);
-            scanWidth = RuleWorkBudget.SaturatingAdd(left: scanWidth, right: RuleWorkBudget.SaturatingAdd(left: live, right: PoolEffectWork.OccupancyWords(pool: pair)));
+            units = BinaryIntegerFunctions.AddSaturating(left: units, right: BinaryIntegerFunctions.MultiplySaturating(left: live, right: pairRelease));
+            releaseCalls = BinaryIntegerFunctions.AddSaturating(left: releaseCalls, right: live);
+            scanWidth = BinaryIntegerFunctions.AddSaturating(left: scanWidth, right: BinaryIntegerFunctions.AddSaturating(left: live, right: PoolEffectWork.OccupancyWords(pool: pair)));
         }
 
-        units = RuleWorkBudget.SaturatingAdd(
+        units = BinaryIntegerFunctions.AddSaturating(
             left: units,
-            right: PoolEffectWork.SaturatingMultiply(left: releaseCalls, right: scanWidth)
+            right: BinaryIntegerFunctions.MultiplySaturating(left: releaseCalls, right: scanWidth)
         );
 
         return RuleWork.Known(units: units);
@@ -235,7 +233,7 @@ public sealed class ClaimPairEffect : RuleEffect {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
         // Endpoint validation and pair-slot arithmetic are fixed work; insertion touches one slot per field.
-        var units = RuleWorkBudget.SaturatingAdd(
+        var units = BinaryIntegerFunctions.AddSaturating(
             left: 512L,
             right: PoolEffectWork.InsertWidth(pool: Pool, context: context)
         );
@@ -284,7 +282,7 @@ public sealed class ForEachPoolEffect : RuleEffect {
         var capacity = (Pool.IsPair
             ? Pool.MaxLive
             : context.RowCapacity(rowOrdinal: Pool.DomainRowOrdinal));
-        var snapshot = RuleWorkBudget.SaturatingAdd(left: PoolEffectWork.SaturatingMultiply(left: capacity, right: 3L), right: PoolEffectWork.OccupancyWords(pool: Pool));
+        var snapshot = BinaryIntegerFunctions.AddSaturating(left: BinaryIntegerFunctions.MultiplySaturating(left: capacity, right: 3L), right: PoolEffectWork.OccupancyWords(pool: Pool));
 
         return (RuleWork.Known(units: snapshot) + (capacity * RuleWorkBudget.EffectsCost(context: context, effects: Effects)));
     }
@@ -313,7 +311,7 @@ public sealed class InstanceFieldOperand : RuleOperand {
         into.Add(item: new CellAccess(Key: default, RowOrdinal: Field.RowOrdinal));
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
+    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(
         left: 2L,
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
@@ -348,7 +346,7 @@ public sealed class StaticInstanceFieldOperand : RuleOperand {
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) { into.Add(item: new CellAccess(Pool.DomainRowOrdinal, default)); into.Add(item: new CellAccess(Pool.GenerationRowOrdinal, default)); into.Add(item: new CellAccess(Field.RowOrdinal, default)); }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
+    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(
         left: 2L,
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
@@ -390,7 +388,7 @@ public sealed class StaticInstanceFieldWriteEffect : RuleEffect, IValueSourcedEf
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(Field.RowOrdinal, default, (Write == StateWriteKind.Set)));
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context));
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context));
 }
 /// <summary>Writes one qualified field through its bound, generation-checked instance handle.</summary>
 public sealed class InstanceFieldWriteEffect : RuleEffect, IValueSourcedEffect {
@@ -429,7 +427,7 @@ public sealed class InstanceFieldWriteEffect : RuleEffect, IValueSourcedEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(IsSet: (Write == StateWriteKind.Set), Key: default, RowOrdinal: Field.RowOrdinal));
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context: context));
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context: context));
 }
 /// <summary>Writes an absolute due tick to an integer field through either a lexical instance binding or a static pool slot.</summary>
 public sealed class InstanceFieldScheduleEffect : RuleEffect {
@@ -470,7 +468,7 @@ public sealed class InstanceFieldScheduleEffect : RuleEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(RowOrdinal: Field.RowOrdinal, Key: default, IsSet: true));
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field)));
+    public override RuleWork Cost(IRuleCostContext context) => RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field)));
 }
 /// <summary>A vector source for a qualified pool field: a literal, an ordinary state vector, or another qualified
 /// field. Each case preserves the vector's declared space until the arena validates the target write.</summary>
@@ -521,8 +519,8 @@ public sealed class InstanceFieldVectorWriteEffect : RuleEffect {
     public override RuleWork Cost(IRuleCostContext context) {
         var sourceWidth = ((long)(Source.Vector?.Space.Identity.Dimensions ?? Source.Field.Declaration.Dimensions.GetValueOrDefault()));
 
-        return RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
-            left: RuleWorkBudget.SaturatingAdd(left: 2L, right: sourceWidth),
+        return RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(
+            left: BinaryIntegerFunctions.AddSaturating(left: 2L, right: sourceWidth),
             right: PoolEffectWork.FieldJournalWidth(field: Field)
         ));
     }

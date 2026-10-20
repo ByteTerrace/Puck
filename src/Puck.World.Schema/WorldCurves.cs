@@ -158,14 +158,14 @@ public sealed record WorldCurveRow(
 
         for (var index = 0; (index < knots.Count); index++) {
             var knot = knots[index];
-            var position = knot.Position.Value;
+            var position = FixedVector3.FromVector3(value: knot.Position.Value);
 
             result[index] = new CurvatureSplineKnot(
                 Curvature: FixedQ4816.FromDouble(value: knot.Curvature),
-                Elevation: FixedQ4816.FromDouble(value: position.Y),
+                Elevation: position.Y,
                 TangentYaw: FixedQ4816.FromDouble(value: knot.TangentYaw),
-                X: FixedQ4816.FromDouble(value: position.X),
-                Z: FixedQ4816.FromDouble(value: position.Z)
+                X: position.X,
+                Z: position.Z
             );
         }
 

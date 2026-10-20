@@ -33,10 +33,7 @@ public static class WorldEditorGeometry {
 
         return new SnapReference(
             FaceRadius: (0.5f * MathF.Min(x: pitch.X, y: pitch.Z)),
-            Frame: Quaternion.CreateFromAxisAngle(
-                angle: (frame.YawDegrees * (MathF.PI / 180f)),
-                axis: Vector3.UnitY
-            ),
+            Frame: frame.Rotation,
             LocalHalfExtents: HalfExtentsOf(placement: placement),
             Origin: frame.Position,
             Pitch: pitch

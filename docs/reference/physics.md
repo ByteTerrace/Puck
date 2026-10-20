@@ -153,16 +153,18 @@ and [project map](../project-map.md) own the dependency list.
 ## Contact and rigid-body kernels
 
 `FixedBodyColliderVolume` is the shared sphere/capsule/oriented-box vocabulary.
+`FixedOrientedBox` is the one owner of a box's geometry: its center, unit face
+axes and half-extents, with the projection radius, world-axis extent
+(`FixedColliderBounds.WorldBounds` reads it), box-local frame, closest point,
+containment, sphere test, and the complete fifteen-axis separating-axis test
+as a verdict (`Overlaps`) and with depth (`TrySeparation`). A body volume
+builds one with `FromVolume`, a placement's compiled spatial volume carries
+one, and the event feed's overlap sense reads the same tests.
 `FixedDynamicBodyContacts` supplies a conservative compound broadphase radius and
 the deepest pair correction without knowing body identity or mutating state. A
-box-vs-box pair depenetrates by separating-axis test over world X/Y/Z plus
-each box's own three face axes (`FixedColliderBounds.BoxAxes`) rather than
-the world-bounds approximation—an oriented
-box's own face axes are what a world-axis-only overlap never tests, and
-skipping them overstates penetration for anything but an axis-aligned box.
-Face axes alone (no edge-edge cross products) bound the remaining error
-rather than eliminate it: a pure edge-edge contact can still read deeper than
-its true minimum.
+box-vs-box pair depenetrates by `FixedOrientedBox.TrySeparation`: both boxes'
+face axes and their nine edge cross products, each at unit length, so an
+edge-edge contact reads its true minimum.
 Sphere/box pairs instead use the closest point on the oriented box, including
 its faces, edges, and corners. A sphere center inside the box exits through the
 nearest face, with ties resolved X, Y, then Z. Static and dynamic sphere/box
@@ -583,8 +585,9 @@ thread-safe**.
   `GravitySolveStatistics`, `OctreeGravityOptions` (the shared leaf/depth/angle
   validation both octree option sets derive their controls from),
   `FastMonopoleOptions`, `AdaptiveFmmOptions`.
-- **Contact geometry**—`FixedBodyColliderVolume`, `FixedDynamicBodyContacts`,
-  `FixedStaticCollider`, `FixedContactPush`.
+- **Contact geometry**—`FixedBodyColliderVolume`, `FixedOrientedBox`,
+  `FixedColliderBounds`, `FixedDynamicBodyContacts`, `FixedStaticCollider`,
+  `FixedContactPush`.
 - **The contact seam**—`IContactField`, `ContactResolution`,
   `FixedStaticContactSolver`, `FixedFieldContactSolver`, `FixedStepUp`,
   `IFixedContactStep`, `FixedStepUpResult`.

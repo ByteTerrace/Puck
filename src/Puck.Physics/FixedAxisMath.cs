@@ -2,10 +2,9 @@ using Puck.Maths;
 
 namespace Puck.Physics;
 
-/// <summary>The axis-sign arithmetic the analytic collider queries share, and the box-interior nearest-exit-face rule
-/// <see cref="FixedStaticCollider"/>'s sphere push and <see cref="FixedSurfaceQuery"/>'s box query both resolve an
-/// interior probe with. One home so a correction to the exit-face tie-break reaches every caller in the same
-/// change.</summary>
+/// <summary>The box-interior nearest-exit-face rule <see cref="FixedStaticCollider"/>'s sphere push and
+/// <see cref="FixedSurfaceQuery"/>'s box query both resolve an interior probe with. One home so a correction to the
+/// exit-face tie-break reaches every caller in the same change.</summary>
 internal static class FixedAxisMath {
     /// <summary>Resolves a probe inside (or exactly on the boundary of) an axis-aligned box to its nearest exit
     /// face: the axis with the smallest gap to its half-extent, ties breaking X, then Y, then Z.</summary>
@@ -49,11 +48,10 @@ internal static class FixedAxisMath {
             Z: (halfExtents.Z * signZ)
         ), Gap: gapZ);
     }
-    /// <summary>Maps a value to its axis sign: negative to <c>-1</c>, zero and positive to <c>+1</c> — never zero,
-    /// so the result always scales a unit axis to a usable direction.</summary>
-    /// <param name="value">The value whose sign selects the direction.</param>
-    internal static FixedQ4816 Sign(FixedQ4816 value) => ((value < FixedQ4816.Zero)
-        ? -FixedQ4816.One
-        : FixedQ4816.One
-    );
+    // The axis sign: −1 below zero, +1 at and above it, so the result always scales a unit axis to a usable direction.
+    private static FixedQ4816 Sign(FixedQ4816 value) =>
+        FixedQ4816.CopySign(
+            sign: value,
+            value: FixedQ4816.One
+        );
 }

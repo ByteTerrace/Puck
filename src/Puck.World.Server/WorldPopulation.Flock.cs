@@ -218,7 +218,12 @@ public sealed partial class WorldPopulation {
             range,
             index,
             flock.Source.CandidateBudget,
-            unchecked(((state.FlockSampleOrdinal++ + (((ulong)index) * 0x9E3779B9UL)) + (((ulong)((uint)entry.Generation)) << 32))),
+            FixedFlockSteering.IndexPhase(
+                generation: ((uint)entry.Generation),
+                index: 0U,
+                key: ((uint)index),
+                ordinal: state.FlockSampleOrdinal++
+            ),
             m_neighborScratch.AsSpan(
                 0,
                 flock.Source.CandidateBudget
@@ -240,16 +245,14 @@ public sealed partial class WorldPopulation {
             }
         }
         state.FlockTarget = null;
-        var flockRangeSquaredRaw = (((UInt128)((ulong)flock.Range.Value)) * ((ulong)flock.Range.Value));
 
         for (var candidate = 0; (candidate < work.NeighborsWritten); candidate++) {
             var other = m_neighborScratch[candidate].Index;
             var offset = (m_flockPositions[other] - self);
-            var neighbor = ((count < flock.Source.MaxNeighbors) && (m_neighborScratch[candidate].SquaredDistanceRaw <= flockRangeSquaredRaw) &&
-                ((offset == FixedVector3.Zero) || (FixedVector3.Dot(
-                left: forward,
-                right: offset.Normalize()
-            ) >= flock.MinimumDot)));
+            var neighbor = ((count < flock.Source.MaxNeighbors) && offset.IsWithin(radius: flock.Range) && offset.IsWithinCone(
+                cosineHalfAngle: flock.MinimumDot,
+                forward: forward
+            ));
             var target = ((state.FlockTarget is null) && (sensedTarget is { Source: BodyTargetSource.Sensed sensed } source) &&
                 ((sensed.Scope != BodyTargetScope.Seats) || (m_entries[other].Kind == PopulationKind.LocalSeat)) &&
                 BodyTargetConeSense.Contains(

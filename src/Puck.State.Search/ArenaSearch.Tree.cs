@@ -20,17 +20,20 @@ public sealed partial class ArenaSearch {
     private const int TreeSelectPhase = 0;
     private const long TreeScale = 1_000L;
 
-    private static ulong Next(ref ulong seed) {
-        // SplitMix64: one deterministic stream per job, advanced only here.
-        seed += 0x9E3779B97F4A7C15UL;
-
-        var z = seed;
-
-        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL);
-        z = ((z ^ (z >> 27)) * 0x94D049BB133111EBUL);
-
-        return z ^ (z >> 31);
-    }
+    // An unbiased draw of a flat candidate index in [0, max(1, count)) from the job's own stream.
+    private static int Draw(ref Pcg32XshRr stream, int count) => ((int)stream.NextUInt32(
+        maximum: ((uint)(Math.Max(
+            val1: 1,
+            val2: count
+        ) - 1)),
+        minimum: 0U
+    ));
+    // The job's draw stream: the plan's master seed, on the stream the job's own ordinal selects, so two jobs never
+    // share a sequence.
+    private static Pcg32XshRr StreamOf(Job job) => Pcg32XshRr.Create(
+        state: job.Plan.DrawSeed,
+        stream: ((ulong)job.Ordinal)
+    );
     private static int TotalCandidates(SearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var total = 0;
 
@@ -103,10 +106,10 @@ public sealed partial class ArenaSearch {
         job.TreeNextSibling![node] = -1;
         job.TreeParent![node] = parent;
         job.TreeScanned![node] = 0;
-        job.TreeScanStart![node] = ((int)(Next(seed: ref job.Seed) % ((ulong)Math.Max(
-            val1: 1,
-            val2: total
-        ))));
+        job.TreeScanStart![node] = Draw(
+            count: total,
+            stream: ref job.Stream
+        );
         job.TreeShape![node] = shape;
         job.TreeTarget![node] = target;
         job.TreeToken![node] = token;
@@ -214,7 +217,7 @@ public sealed partial class ArenaSearch {
         job.BestToken = -1;
         job.Iteration = 0;
         job.Phase = TreeSelectPhase;
-        job.Seed = job.Plan.DrawSeed;
+        job.Stream = StreamOf(job: job);
         job.TreeActive = true;
         job.TreeCount = 0;
 
@@ -245,10 +248,10 @@ public sealed partial class ArenaSearch {
         job.Phase = TreePlayoutPhase;
         job.PlayoutPlies = plies;
         job.UScan = 0;
-        job.UStart = ((int)(Next(seed: ref job.Seed) % ((ulong)Math.Max(
-            val1: 1,
-            val2: total
-        ))));
+        job.UStart = Draw(
+            count: total,
+            stream: ref job.Stream
+        );
     }
     // One unit of tree search. Returns what it cost: a cursor move, an inspected or a judged candidate, a chance
     // draw, or a whole step that selects, opens, scores, and folds back.
@@ -403,7 +406,7 @@ public sealed partial class ArenaSearch {
                     }
 
                     // A chance ply draws rather than chooses: one weighted pick over this job's own stream, the same
-                    // stream every other playout draw uses, so two jobs sharing a seed make the same choice.
+                    // stream every other playout draw uses.
                     if (
                         (plan.Chance is { } chance) &&
                         (job.PlayoutPlies == chance.AtDepth)
@@ -412,7 +415,7 @@ public sealed partial class ArenaSearch {
                             job: job,
                             outcome: SampleChanceOutcome(
                                 chance: chance,
-                                seed: ref job.Seed
+                                stream: ref job.Stream
                             )
                         );
 
@@ -453,7 +456,10 @@ public sealed partial class ArenaSearch {
                         job.PlayoutPlies++;
                         m_playoutPlies.Increment();
                         job.UScan = 0;
-                        job.UStart = ((int)(Next(seed: ref job.Seed) % ((ulong)total)));
+                        job.UStart = Draw(
+                            count: total,
+                            stream: ref job.Stream
+                        );
                     }
 
                     return ((job.Nodes != judged)

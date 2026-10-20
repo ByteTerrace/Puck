@@ -27,46 +27,14 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
 /// <param name="Rotation">An oriented box's box-to-world rotation; unread by every other kind.</param>
 public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default) {
-    private static FixedQ4816 BoxMinimumProjection(
-        FixedVector3 position,
-        in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume,
-        FixedVector3 normal
-    ) {
-        var center = (position + orientation.Rotate(vector: volume.Center));
-        var rotation = (orientation * volume.Rotation).Normalize();
-        var localNormal = rotation.RotateInverse(vector: normal);
-        var support = (((FixedQ4816.Abs(value: localNormal.X) * volume.HalfExtents.X) +
-                       (FixedQ4816.Abs(value: localNormal.Y) * volume.HalfExtents.Y)) +
-                       (FixedQ4816.Abs(value: localNormal.Z) * volume.HalfExtents.Z));
-
-        return (FixedVector3.Dot(
-            left: center,
-            right: normal
-        ) - support);
-    }
-    private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) {
-        var segment = (end - start);
-        var lengthSquared = FixedVector3.Dot(
-            left: segment,
-            right: segment
-        );
-
-        if (lengthSquared <= FixedQ4816.Zero) {
-            return start;
-        }
-
-        var amount = FixedQ4816.Clamp(
-            value: (FixedVector3.Dot(
-                left: (point - start),
-                right: segment
-            ) / lengthSquared),
-            minimum: FixedQ4816.Zero,
-            maximum: FixedQ4816.One
-        );
-
-        return (start + (segment * amount));
-    }
+    // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
+    private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
+        (point - FixedDynamicBodyContacts.ClosestDelta(
+            p1: point,
+            p2: start,
+            q1: point,
+            q2: end
+        ));
     private bool TryBoxPush(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -109,17 +77,26 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             (overlapX <= overlapZ)
         ) {
             push = new FixedContactPush(
-                Normal: (FixedVector3.UnitX * FixedAxisMath.Sign(value: delta.X)),
+                Normal: (FixedVector3.UnitX * FixedQ4816.CopySign(
+                    sign: delta.X,
+                    value: FixedQ4816.One
+                )),
                 Penetration: overlapX
             );
         } else if (overlapY <= overlapZ) {
             push = new FixedContactPush(
-                Normal: (FixedVector3.UnitY * FixedAxisMath.Sign(value: delta.Y)),
+                Normal: (FixedVector3.UnitY * FixedQ4816.CopySign(
+                    sign: delta.Y,
+                    value: FixedQ4816.One
+                )),
                 Penetration: overlapY
             );
         } else {
             push = new FixedContactPush(
-                Normal: (FixedVector3.UnitZ * FixedAxisMath.Sign(value: delta.Z)),
+                Normal: (FixedVector3.UnitZ * FixedQ4816.CopySign(
+                    sign: delta.Z,
+                    value: FixedQ4816.One
+                )),
                 Penetration: overlapZ
             );
         }
@@ -179,12 +156,11 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                 right: Extent
             )
         ) - volume.Radius),
-            FixedBodyColliderKind.Box => BoxMinimumProjection(
-            position: position,
+            FixedBodyColliderKind.Box => FixedOrientedBox.FromVolume(
             orientation: in orientation,
-            volume: in volume,
-            normal: Extent
-        ),
+            position: position,
+            volume: in volume
+        ).MinimumProjection(normal: Extent),
             _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
         };
         var distance = (minimumProjection - FixedVector3.Dot(

@@ -13,10 +13,7 @@ public sealed partial class WorldBody {
     // never an unconditional resync, which would discard the sixteen guard bits every step. Shared by the planar
     // (per-lane) and vertical (scalar) followers.
     private static SecondOrderState ReseatFollowerPosition(SecondOrderState follower, FixedQ4816 position) =>
-        new(
-            PositionRaw: (position.Value << 16),
-            VelocityRaw: follower.VelocityRaw
-        );
+        follower.WithPosition(position: position);
     private static SecondOrderState3 ReseatFollowerPosition(SecondOrderState3 follower, FixedVector3 position) => new(
         X: ReseatFollowerPosition(
             follower: follower.X,
@@ -62,13 +59,7 @@ public sealed partial class WorldBody {
         );
         m_planarPreviousTarget = target;
 
-        var followed = m_planarFollower.Position;
-        var speed = followed.Length;
-
-        m_planarVelocity = ((speed > ceiling)
-            ? ((followed / speed) * ceiling)
-            : followed
-        );
+        m_planarVelocity = m_planarFollower.Position.ClampLength(maximum: ceiling);
 
         return m_planarVelocity;
     }

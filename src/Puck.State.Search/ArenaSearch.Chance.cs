@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 public sealed partial class ArenaSearch {
@@ -23,43 +25,29 @@ public sealed partial class ArenaSearch {
         level.ChanceSum += (((Int128)value) * weight);
         level.ChanceWeight += weight;
     }
-    // Round-half-away-from-zero over a weighted sum, exact in Int128: the table's whole weight fits one word, so
-    // outcomes at MateScore magnitude each never overflow the accumulator.
-    private static long RoundedWeightedAverage(Int128 weightedSum, ulong totalWeight) {
-        if (totalWeight == 0UL) {
-            return 0L;
-        }
-
-        var half = (((Int128)totalWeight) / 2);
-
-        return ((weightedSum >= 0)
-            ? ((long)((weightedSum + half) / totalWeight))
-            : (-((long)(((-weightedSum) + half) / totalWeight)))
-        );
-    }
-    // The one outcome a tree job's playout draws at a chance ply: a weighted pick over the job's own stream, the
-    // same SplitMix64 sequence the playout's move draws use.
-    private static int SampleChanceOutcome(ArenaSearchChancePlan chance, ref ulong seed) {
-        var total = 0UL;
-
+    // The weighted mean of a chance ply's outcomes, rounded to nearest with ties to even. The sum is exact in Int128:
+    // the table's whole weight fits one word, so outcomes at MateScore magnitude never overflow the accumulator, and
+    // the mean lies between the least and greatest outcome.
+    private static long RoundedWeightedAverage(Int128 weightedSum, ulong totalWeight) => ((totalWeight == 0UL)
+        ? 0L
+        : ((long)FixedPointRounding.RoundRational(
+            denominator: totalWeight,
+            fractionBitCount: 0,
+            numerator: weightedSum
+        ))
+    );
+    // The one outcome a tree job's playout draws at a chance ply: a one-shot alias pick over the job's own stream,
+    // the stream the playout's move draws advance too.
+    private static int SampleChanceOutcome(ArenaSearchChancePlan chance, ref Pcg32XshRr stream) {
         foreach (var weight in chance.Weights) {
-            total += weight;
-        }
-        if (total == 0UL) {
-            return 0;
-        }
-
-        var draw = (Next(seed: ref seed) % total);
-        var cumulative = 0UL;
-
-        for (var index = 0; (index < chance.Weights.Length); index++) {
-            cumulative += chance.Weights[index];
-
-            if (draw < cumulative) {
-                return index;
+            if (weight != 0UL) {
+                return WeightedSampler.SampleOnce(
+                    generator: ref stream,
+                    weights: chance.Weights
+                );
             }
         }
 
-        return (chance.Weights.Length - 1);
+        return 0;
     }
 }

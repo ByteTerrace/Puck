@@ -228,7 +228,7 @@ public sealed class CreationBuilder {
     public Quaternion AxisAngleDegrees(Vector3 axis, float degrees, string? explicitName = null) {
         var normalized = Vector3.Normalize(value: axis);
         var value = RoundQuaternion(value: Quaternion.CreateFromAxisAngle(
-            angle: (degrees * (MathF.PI / 180f)),
+            angle: float.DegreesToRadians(degrees: degrees),
             axis: normalized
         ));
         var name = (explicitName ?? DeriveAxisName(

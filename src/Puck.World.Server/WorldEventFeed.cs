@@ -231,67 +231,6 @@ public sealed class WorldEventFeed {
             Now: now
         );
     }
-    private static (FixedVector3 Center, FixedVector3 Extent) Bounds(FixedVector3 position, FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume) {
-        if (volume.Kind == FixedBodyColliderKind.Sphere) {
-            var radius = new FixedVector3(
-                X: volume.Radius,
-                Y: volume.Radius,
-                Z: volume.Radius
-            );
-
-            return (Center: (position + orientation.Rotate(vector: volume.Center)), Extent: radius);
-        }
-
-        if (volume.Kind == FixedBodyColliderKind.Capsule) {
-            var (start, end) = Segment(
-                orientation: orientation,
-                position: position,
-                volume: in volume
-            );
-            var delta = (end - start);
-            var radius = new FixedVector3(
-                X: volume.Radius,
-                Y: volume.Radius,
-                Z: volume.Radius
-            );
-            var extent = new FixedVector3(
-                X: (FixedQ4816.Abs(value: delta.X) / FixedQ4816.FromInteger(value: 2L)),
-                Y: (FixedQ4816.Abs(value: delta.Y) / FixedQ4816.FromInteger(value: 2L)),
-                Z: (FixedQ4816.Abs(value: delta.Z) / FixedQ4816.FromInteger(value: 2L))
-            );
-
-            return (Center: ((start + end) / FixedQ4816.FromInteger(value: 2L)), Extent: (extent + radius));
-        }
-
-        var center = (position + orientation.Rotate(vector: volume.Center));
-        var rotation = (orientation * volume.Rotation).Normalize();
-        var unitX = new FixedVector3(
-            X: FixedQ4816.One,
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.Zero
-        );
-        var unitY = new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.One,
-            Z: FixedQ4816.Zero
-        );
-        var unitZ = new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.One
-        );
-        var axisX = rotation.Rotate(vector: unitX);
-        var axisY = rotation.Rotate(vector: unitY);
-        var axisZ = rotation.Rotate(vector: unitZ);
-        var boxExtent = new FixedVector3(
-            X: (((FixedQ4816.Abs(value: axisX.X) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * volume.HalfExtents.Z)),
-            Y: (((FixedQ4816.Abs(value: axisX.Y) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * volume.HalfExtents.Z)),
-            Z: (((FixedQ4816.Abs(value: axisX.Z) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * volume.HalfExtents.Z))
-        );
-
-        return (Center: center, Extent: boxExtent);
-    }
     private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy) {
         Array.Clear(array: m_collisionDegrees);
         CollisionCandidates = 0;
@@ -692,39 +631,88 @@ public sealed class WorldEventFeed {
 
         return false;
     }
+    // The overlap sense of one volume pair, through the same geometry the contact solver depenetrates with: the
+    // shared segment witness for a sphere/capsule pair, the box's own exact sphere test and the fifteen-axis
+    // separating-axis test for a box against a sphere or a box. A capsule against a box is the one pair with no
+    // exact kernel on either side; it reads world-axis bounds, as the solver does.
     private static bool Overlaps(FixedVector3 leftPosition, FixedQuaternion leftOrientation, in FixedBodyColliderVolume left,
         FixedVector3 rightPosition, FixedQuaternion rightOrientation, in FixedBodyColliderVolume right) {
         if (
             (left.Kind != FixedBodyColliderKind.Box) &&
             (right.Kind != FixedBodyColliderKind.Box)
         ) {
-            var (leftStart, leftEnd) = Segment(
+            var (leftStart, leftEnd) = FixedDynamicBodyContacts.Segment(
                 orientation: leftOrientation,
                 position: leftPosition,
                 volume: in left
             );
-            var (rightStart, rightEnd) = Segment(
+            var (rightStart, rightEnd) = FixedDynamicBodyContacts.Segment(
                 orientation: rightOrientation,
                 position: rightPosition,
                 volume: in right
             );
-            var radius = (left.Radius + right.Radius);
-
-            return (SegmentDistanceSquared(
+            var closest = FixedDynamicBodyContacts.ClosestDelta(
                 p1: leftStart,
                 p2: rightStart,
                 q1: leftEnd,
                 q2: rightEnd
+            );
+            var radius = (left.Radius + right.Radius);
+
+            return (FixedVector3.Dot(
+                left: closest,
+                right: closest
             ) < (radius * radius));
         }
 
-        var (leftCenter, leftExtent) = Bounds(
-            orientation: leftOrientation,
+        if (
+            (left.Kind == FixedBodyColliderKind.Box) &&
+            (right.Kind == FixedBodyColliderKind.Box)
+        ) {
+            return FixedOrientedBox.Overlaps(
+                left: FixedOrientedBox.FromVolume(
+                    orientation: in leftOrientation,
+                    position: leftPosition,
+                    volume: in left
+                ),
+                right: FixedOrientedBox.FromVolume(
+                    orientation: in rightOrientation,
+                    position: rightPosition,
+                    volume: in right
+                )
+            );
+        }
+
+        if (
+            (left.Kind == FixedBodyColliderKind.Sphere) ||
+            (right.Kind == FixedBodyColliderKind.Sphere)
+        ) {
+            var sphereIsLeft = (left.Kind == FixedBodyColliderKind.Sphere);
+            var sphere = (sphereIsLeft ? left : right);
+            var (sphereCenter, _) = FixedDynamicBodyContacts.Segment(
+                orientation: (sphereIsLeft ? leftOrientation : rightOrientation),
+                position: (sphereIsLeft ? leftPosition : rightPosition),
+                volume: in sphere
+            );
+            var box = FixedOrientedBox.FromVolume(
+                orientation: (sphereIsLeft ? rightOrientation : leftOrientation),
+                position: (sphereIsLeft ? rightPosition : leftPosition),
+                volume: (sphereIsLeft ? right : left)
+            );
+
+            return box.IntersectsSphere(
+                center: sphereCenter,
+                radius: sphere.Radius
+            );
+        }
+
+        var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
+            orientation: in leftOrientation,
             position: leftPosition,
             volume: in left
         );
-        var (rightCenter, rightExtent) = Bounds(
-            orientation: rightOrientation,
+        var (rightCenter, rightExtent) = FixedColliderBounds.WorldBounds(
+            orientation: in rightOrientation,
             position: rightPosition,
             volume: in right
         );
@@ -756,29 +744,6 @@ public sealed class WorldEventFeed {
             A: sourceBody,
             B: encodedTarget
         ));
-    }
-    private static (FixedVector3 Start, FixedVector3 End) Segment(FixedVector3 position, FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume) {
-        var start = (position + orientation.Rotate(vector: volume.Center));
-        var end = ((volume.Kind == FixedBodyColliderKind.Capsule)
-            ? (position + orientation.Rotate(vector: volume.Endpoint))
-            : start
-        );
-
-        return (Start: start, End: end);
-    }
-    private static FixedQ4816 SegmentDistanceSquared(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
-        var closest = FixedDynamicBodyContacts.ClosestDelta(
-            p1: p1,
-            p2: p2,
-            q1: q1,
-            q2: q2
-        );
-
-        return FixedVector3.Dot(
-            left: closest,
-            right: closest
-        );
     }
 
     /// <summary>Captures this feed's live state.</summary>

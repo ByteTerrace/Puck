@@ -83,7 +83,7 @@ public sealed class InfinityViewFrameLawTests {
 
         foreach (var x in new[] { -1f, -0.37f, 0f, 0.81f, 1f }) {
             foreach (var y in new[] { -1f, -0.5f, 0.2f, 1f }) {
-                var instance = Vector3.Normalize(value: InfinityViewFit.RayThrough(camera: frame.Camera, ndc: new Vector2(x: x, y: y)));
+                var instance = Vector3.Normalize(value: frame.Camera.RayThrough(ndc: new Vector2(x: x, y: y)));
                 // The tangent point the instance pixel sits at, read back as the viewer pixel that covers it.
                 var tangentX = (frame.Rect.X + (((x + 1f) / 2f) * (frame.Rect.Z - frame.Rect.X)));
                 var tangentY = (frame.Rect.Y + (((y + 1f) / 2f) * (frame.Rect.W - frame.Rect.Y)));
@@ -91,7 +91,7 @@ public sealed class InfinityViewFrameLawTests {
                     x: ((tangentX - viewer.FrustumOffset.X) / (viewer.AspectRatio * viewer.TanHalfFieldOfView)),
                     y: ((tangentY - viewer.FrustumOffset.Y) / viewer.TanHalfFieldOfView)
                 );
-                var covered = Vector3.Normalize(value: InfinityViewFit.RayThrough(camera: viewer, ndc: viewerNdc));
+                var covered = Vector3.Normalize(value: viewer.RayThrough(ndc: viewerNdc));
 
                 Assert.True(condition: (Vector3.Distance(value1: instance, value2: covered) < 1e-5f), userMessage: $"ndc ({x}, {y}): {instance} against {covered}");
             }

@@ -180,10 +180,28 @@ public readonly record struct FixedWorldNavigationDomain(
         AgentRadius: FixedQ4816.FromDouble(value: domain.AgentRadius),
         AgentHeight: FixedQ4816.FromDouble(value: domain.AgentHeight),
         MaxStepHeight: FixedQ4816.FromDouble(value: domain.MaxStepHeight),
-        MaximumSlopeRise: FixedQ4816.FromDouble(value: (domain.CellSize * Math.Tan(a: (domain.MaxSlopeDegrees * (Math.PI / 180.0))))),
+        MaximumSlopeRise: SlopeRise(
+            cellSize: FixedQ4816.FromDouble(value: domain.CellSize),
+            slopeDegrees: domain.MaxSlopeDegrees
+        ),
         ArrivalDistance: FixedQ4816.FromDouble(value: domain.ArrivalDistance),
         MaxExpandedNodes: domain.MaxExpandedNodes,
         MaxPathNodes: domain.MaxPathNodes,
         Medium: domain.Medium
     );
+
+    // The rise across one cell at the steepest admitted slope, cellSize · sin / cos of the pinned fixed-point sine and
+    // cosine, rounded once. A slope whose cosine is not positive rises without bound and saturates; the validator
+    // caps a surface slope below that.
+    private static FixedQ4816 SlopeRise(FixedQ4816 cellSize, float slopeDegrees) {
+        var (sine, cosine) = FixedQ4816.SinCos(angle: FixedQ4816.FromDegrees(degrees: slopeDegrees));
+
+        return ((cosine <= FixedQ4816.Zero)
+            ? FixedQ4816.MaxValue
+            : FixedQ4816.FromRawBits(value: ((long)FixedPointRounding.RoundRational(
+                denominator: cosine.Value,
+                fractionBitCount: 0,
+                numerator: (((BigInteger)cellSize.Value) * sine.Value)
+            ))));
+    }
 }

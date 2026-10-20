@@ -554,8 +554,7 @@ public static partial class WorldDefinitionValidator {
                 if (hold.Cone is not { } cone) {
                     errors.Add(item: $"{rowPath}.cone is required for a surface hold — the angle band, in degrees, between an admitted surface normal and gravity-up.");
                 } else if (
-                    !float.IsFinite(f: cone.X) ||
-                    !float.IsFinite(f: cone.Y) ||
+                    !VectorFunctions.IsFinite(vector: cone) ||
                     (cone.X < 0f) ||
                     (cone.Y > 180f) ||
                     (cone.X >= cone.Y)

@@ -370,15 +370,4 @@ public sealed class WorldInfinityViewLawTests {
         Assert.True(condition: set.TryPublish(instances: out var published));
         Assert.Empty(collection: published!.Views);
     }
-    [InlineData(0.0, 0.0625)]
-    [InlineData(0.0001, 0.0625)]
-    [InlineData(0.0625, 0.0625)]
-    [InlineData(0.07, 0.125)]
-    [InlineData(0.99, 1.0)]
-    [InlineData(3.0, 1.0)]
-    [Theory]
-    public void AFootprintRoundsUpToASixteenthAndNeverPastTheConsumer(double fraction, double expected) {
-        // A zero fraction still covers a sixteenth: a footprint of zero would mean the consumer does not show the view.
-        Assert.Equal(expected: expected, actual: WorldInfinityViews.Quantize(fraction: fraction));
-    }
 }

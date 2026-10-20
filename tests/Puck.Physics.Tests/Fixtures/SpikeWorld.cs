@@ -166,20 +166,51 @@ internal sealed class SpikeWorld {
             return (m_options.ContactMargin + ((Body.LinearVelocity.Length + nearestSpin) * m_stepSecondsNearest));
         }
 
-        var spin = FixedRigidArithmetic.CeilingProduct(
-            left: FixedRigidArithmetic.CeilingProduct(
-                left: FixedRigidArithmetic.CeilingMagnitude(value: Body.AngularVelocity),
+        var spin = CeilingProduct(
+            left: CeilingProduct(
+                left: CeilingMagnitude(value: Body.AngularVelocity),
                 right: Reach
             ),
             right: m_stepSecondsCeiling
         );
 
-        return (m_options.ContactMargin + FixedRigidArithmetic.CeilingProductSum(
-            left: FixedRigidArithmetic.CeilingMagnitude(value: Body.LinearVelocity),
-            right: m_stepSecondsCeiling,
-            addend: spin
-        ));
+        return (m_options.ContactMargin + (FixedDirectedRounding.TryCeilingProductSum(
+            a: CeilingMagnitude(value: Body.LinearVelocity).Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: m_stepSecondsCeiling.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            addend: spin.Value,
+            fractionBitsAddend: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var sum
+        )
+            ? FixedQ4816.FromRawBits(value: sum)
+            : FixedQ4816.MaxValue));
     }
+    // The least raw at or above a vector's exact magnitude; the maximum when the bound leaves the carrier.
+    private static FixedQ4816 CeilingMagnitude(FixedVector3 value) =>
+        (FixedDirectedRounding.TryCeilingMagnitude(
+            x: value.X.Value,
+            y: value.Y.Value,
+            z: value.Z.Value,
+            result: out var magnitude
+        )
+            ? FixedQ4816.FromRawBits(value: magnitude)
+            : FixedQ4816.MaxValue
+        );
+    // The least raw at or above the exact product of two non-negative values; the maximum when the bound leaves the carrier.
+    private static FixedQ4816 CeilingProduct(FixedQ4816 left, FixedQ4816 right) =>
+        (FixedDirectedRounding.TryCeilingProduct(
+            a: left.Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: right.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var product
+        )
+            ? FixedQ4816.FromRawBits(value: product)
+            : FixedQ4816.MaxValue
+        );
 }
 /// <summary>Builds solver bodies from authored solids and one density, through the shared mass-property kernels.</summary>
 internal static class SpikeBodies {

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -60,22 +61,30 @@ public static class WorldClocks {
     /// <summary>Returns the engine ticks nearest a duration and whether the duration is exactly that many: a clock's
     /// period must be a whole number of engine ticks.</summary>
     /// <param name="seconds">The duration, in seconds.</param>
-    /// <param name="ticks">The nearest whole engine ticks, zero when the duration is not finite and positive.</param>
-    /// <returns><see langword="true"/> when <paramref name="seconds"/> is finite, positive and a whole number of engine
-    /// ticks, to within a millionth of a tick.</returns>
+    /// <param name="ticks">The exact whole engine ticks, or the nearest when the duration is not exact; zero when the
+    /// duration is not finite and positive.</param>
+    /// <returns><see langword="true"/> when <paramref name="seconds"/> is finite, positive and, read as the decimal it
+    /// was authored as, exactly a whole number of engine ticks
+    /// (<see cref="FixedTickConversion.TryDurationEngineTicksExact"/>).</returns>
     public static bool TryWholeTicks(double seconds, out ulong ticks) {
         if (!double.IsFinite(d: seconds) || (seconds <= 0d) || ((seconds * EngineTicks.PerSecond) >= ulong.MaxValue)) {
             ticks = 0UL;
 
             return false;
         }
+        if (
+            FixedTickConversion.TryDurationEngineTicksExact(
+                seconds: ((decimal)seconds),
+                ticks: out ticks
+            ) &&
+            (ticks > 0UL)
+        ) {
+            return true;
+        }
 
-        var exact = (seconds * EngineTicks.PerSecond);
-        var nearest = Math.Round(a: exact);
+        ticks = ((ulong)Math.Round(a: (seconds * EngineTicks.PerSecond)));
 
-        ticks = ((ulong)nearest);
-
-        return ((ticks > 0UL) && (Math.Abs(value: (exact - nearest)) <= 1e-6d));
+        return false;
     }
     /// <summary>Returns a tick clock's period in engine ticks.</summary>
     /// <param name="clock">The clock; a tick clock whose period the validator admitted.</param>

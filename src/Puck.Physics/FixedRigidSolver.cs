@@ -562,27 +562,18 @@ public sealed class FixedRigidSolver {
             return;
         }
 
-        var accumulatedXRaw = (slot.TangentImpulseXRaw + deltaXRaw);
-        var accumulatedYRaw = (slot.TangentImpulseYRaw + deltaYRaw);
-        var maxImpulseRaw = Scale(
+        // The friction cone: the accumulated tangent impulse is shortened toward zero onto the Coulomb limit, so it
+        // never exceeds it.
+        var maxImpulse = Scale(
             factor: m_options.Friction,
             value: FixedQ4816.FromRawBits(value: slot.NormalImpulseRaw)
-        ).Value;
-        var lengthSquared = ((((Int128)accumulatedXRaw) * accumulatedXRaw) + (((Int128)accumulatedYRaw) * accumulatedYRaw));
-        var maxSquared = (((Int128)maxImpulseRaw) * maxImpulseRaw);
-
-        if (lengthSquared > maxSquared) {
-            var lengthRaw = ((long)((UInt128)lengthSquared).SquareRoot());
-
-            if (lengthRaw <= 0L) {
-                accumulatedXRaw = 0L;
-                accumulatedYRaw = 0L;
-            } else {
-                accumulatedXRaw = ((long)((((Int128)accumulatedXRaw) * maxImpulseRaw) / lengthRaw));
-                accumulatedYRaw = ((long)((((Int128)accumulatedYRaw) * maxImpulseRaw) / lengthRaw));
-            }
-        }
-
+        );
+        var accumulated = (new FixedVector2(
+            X: FixedQ4816.FromRawBits(value: (slot.TangentImpulseXRaw + deltaXRaw)),
+            Y: FixedQ4816.FromRawBits(value: (slot.TangentImpulseYRaw + deltaYRaw))
+        )).ClampLength(maximum: maxImpulse);
+        var accumulatedXRaw = accumulated.X.Value;
+        var accumulatedYRaw = accumulated.Y.Value;
         var appliedXRaw = (accumulatedXRaw - slot.TangentImpulseXRaw);
         var appliedYRaw = (accumulatedYRaw - slot.TangentImpulseYRaw);
 

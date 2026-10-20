@@ -104,7 +104,7 @@ public sealed partial class WorldPopulation {
                         ExpandedNodesPerTick: shared.ExpandedNodesPerTick
                     )
                 : null),
-                YawRadians: FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)))
+                YawRadians: FixedQ4816.FromDegrees(degrees: frame.YawDegrees)
             );
         }
         return domains;

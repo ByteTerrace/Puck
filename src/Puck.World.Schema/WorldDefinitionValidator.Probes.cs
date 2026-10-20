@@ -1,4 +1,5 @@
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -441,8 +442,7 @@ public static partial class WorldDefinitionValidator {
             );
 
             if (
-                float.IsFinite(f: range.X) &&
-                float.IsFinite(f: range.Y) &&
+                VectorFunctions.IsFinite(vector: range) &&
                 (range.X >= range.Y)
             ) {
                 errors.Add(item: $"{path}.range.x must be below {path}.range.y.");

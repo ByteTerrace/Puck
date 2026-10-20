@@ -18,7 +18,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
-            entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
+            entry.ProducerState.ActivityPhase = (phase + (FixedQ4816.Tau * activityUnit));
             entry.ProducerState.ActivityRate = (producer.Scalar(parameter: BodyProducerParameter.ActivityRateBase) + (producer.Scalar(parameter: BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
@@ -367,13 +367,7 @@ public sealed partial class WorldPopulation {
             return 0L;
         }
 
-        next %= totalLengthRaw;
-
-        if (next < 0L) {
-            next += totalLengthRaw;
-        }
-
-        return next;
+        return next.FloorModulo(modulus: totalLengthRaw);
     }
 
     /// <summary>Counts active bodies whose currently selected producer follows a <c>curves</c> row — the

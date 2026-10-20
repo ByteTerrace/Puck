@@ -35,7 +35,7 @@ public sealed partial class WorldPopulation {
             count: desiredCount
         );
         var altitude = FixedQ4816.FromDouble(value: frame.Position.Y);
-        var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
+        var yaw = FixedQ4816.FromDegrees(degrees: frame.YawDegrees);
 
         body.Pose(
             position: spawn with { Y = altitude },

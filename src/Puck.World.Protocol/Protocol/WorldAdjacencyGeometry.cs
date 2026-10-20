@@ -19,37 +19,46 @@ public static class WorldAdjacencyGeometry {
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
 
     // Whether the placement's enclosing sphere touches the band, and how far that sphere sits from the seam plane:
-    // negative when it straddles the plane, negative infinity for an unbounded shape (a ground plane), so a sort on
-    // it delivers what meets the seam before what merely falls inside the band.
-    private static bool TryMeasureReach(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, float overlapDepth, out float seamDistance) {
+    // negative when it straddles the plane, the carrier's minimum for an unbounded shape (a ground plane), so a sort
+    // on it delivers what meets the seam before what merely falls inside the band. The selection feeds authoritative
+    // contact, so the authored reach and position are quantized once at this boundary and the band test and ranking
+    // run in fixed point.
+    private static bool TryMeasureReach(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, FixedQ4816 overlapDepth, out FixedQ4816 seamDistance) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
             if (SdfSolidGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
-                seamDistance = float.NegativeInfinity;
+                seamDistance = FixedQ4816.MinValue;
 
                 return true;
             }
         }
 
-        var position = WorldDefinitionRows.ResolvedPosition(
+        var delta = (FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
             definition: definition,
             placement: placement
+        )) - frame.Origin);
+        var reach = FixedQ4816.FromDouble(value: (CreationGeometry.Reach(document: creation.Document) * placement.Scale));
+        var alongNormal = FixedVector3.Dot(
+            left: delta,
+            right: frame.Normal
         );
-        var reach = (CreationGeometry.Reach(document: creation.Document) * placement.Scale);
 
-        seamDistance = (MathF.Abs(x: Vector3.Dot(
-            vector1: (position - frame.Origin.ToVector3()),
-            vector2: frame.Normal.ToVector3()
-        )) - reach);
+        seamDistance = (FixedQ4816.Abs(value: alongNormal) - reach);
 
-        return IsWithinBand(
-            frame: frame,
-            overlapDepth: overlapDepth,
-            position: position,
-            reach: reach
+        return (
+            (FixedQ4816.Abs(value: alongNormal) <= (overlapDepth + reach)) &&
+            (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: delta,
+                right: frame.Right
+            )) <= (frame.HalfWidth + reach)) &&
+            (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: delta,
+                right: frame.Up
+            )) <= (frame.HalfHeight + reach))
         );
     }
 
-    /// <summary>Returns whether a point of the given reach falls inside one counterpart band's own extents.</summary>
+    /// <summary>Returns whether a point of the given reach falls inside one counterpart band's own extents: the
+    /// presentation-side test a client emitter applies to the bodies it draws across a seam.</summary>
     /// <param name="position">The point, in the frame's own local coordinates.</param>
     /// <param name="reach">The point's own enclosing radius, world units.</param>
     /// <param name="frame">The counterpart face's derived frame.</param>
@@ -72,19 +81,27 @@ public static class WorldAdjacencyGeometry {
 
         return (
             (MathF.Abs(x: alongNormal) <= (overlapDepth + reach)) &&
-            (MathF.Abs(x: alongRight) <= (((float)((double)frame.HalfWidth)) + reach)) &&
-            (MathF.Abs(x: alongUp) <= (((float)((double)frame.HalfHeight)) + reach))
+            (MathF.Abs(x: alongRight) <= (((float)frame.HalfWidth) + reach)) &&
+            (MathF.Abs(x: alongUp) <= (((float)frame.HalfHeight) + reach))
         );
     }
     /// <summary>Selects the solid placements relevant to one counterpart band: those whose enclosing sphere touches
     /// the band, nearest to the seam plane first (an unbounded shape before every other), document order breaking
-    /// ties, at most <paramref name="maximum"/> of them.</summary>
+    /// ties, at most <paramref name="maximum"/> of them. The band test and the ranking run in fixed point, so the
+    /// selection is the same on every machine that compiles the band's contact.</summary>
+    /// <param name="definition">The world definition.</param>
+    /// <param name="frame">The counterpart face's derived frame.</param>
+    /// <param name="overlapDepth">The compiler-derived overlap depth.</param>
+    /// <param name="maximum">The largest number of placements to deliver.</param>
+    /// <returns>The selected placements, resolved to their composed world frames, and whether more qualified.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximum"/> is negative.</exception>
     public static Selection Select(WorldDefinition definition, WorldFaceFrame frame, FixedQ4816 overlapDepth, int maximum = MaximumPlacementsPerBand) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         ArgumentOutOfRangeException.ThrowIfNegative(value: maximum);
 
-        var candidates = new List<(float SeamDistance, int Row, WorldPlacement Placement)>();
+        var candidates = new List<(FixedQ4816 SeamDistance, int Row, WorldPlacement Placement)>();
 
         for (var row = 0; (row < definition.Placements.Count); row++) {
             var placement = definition.Placements[row];
@@ -99,7 +116,7 @@ public static class WorldAdjacencyGeometry {
                 creation: creation,
                 definition: definition,
                 frame: frame,
-                overlapDepth: ((float)((double)overlapDepth)),
+                overlapDepth: overlapDepth,
                 placement: placement,
                 seamDistance: out var seamDistance
             )

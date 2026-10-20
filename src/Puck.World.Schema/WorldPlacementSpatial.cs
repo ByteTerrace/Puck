@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Puck.Assets.Documents;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World;
 
@@ -61,16 +62,21 @@ public enum FixedSpatialShapeKind : byte {
     /// <summary>A sphere.</summary>
     Sphere,
 }
-/// <summary>An immutable fixed-point shape compiled from a document volume.</summary>
+/// <summary>An immutable fixed-point shape compiled from a document volume: an oriented box, or a sphere whose
+/// <see cref="Box"/> carries only its center.</summary>
+/// <param name="Kind">The shape kind.</param>
+/// <param name="Box">The oriented box, or for a sphere a world-axis box at the sphere's center with zero extents.</param>
+/// <param name="Radius">The sphere's radius; zero for a box.</param>
 public readonly record struct FixedSpatialShape(
     FixedSpatialShapeKind Kind,
-    FixedVector3 Center,
-    FixedVector3 AxisX,
-    FixedVector3 AxisY,
-    FixedVector3 AxisZ,
-    FixedVector3 HalfExtents,
+    FixedOrientedBox Box,
     FixedQ4816 Radius
-);
+) {
+    /// <summary>Gets the shape's world-space center.</summary>
+    public FixedVector3 Center => Box.Center;
+    /// <summary>Gets a box's half-extents along its own axes; zero for a sphere.</summary>
+    public FixedVector3 HalfExtents => Box.HalfExtents;
+}
 /// <summary>An inclusive world-space AABB used only for exhaustive spatial index candidate discovery.</summary>
 public readonly record struct FixedSpatialAabb(FixedVector3 Center, FixedVector3 Extent) {
     /// <summary>Returns whether two closed AABBs overlap.</summary>
@@ -188,83 +194,6 @@ public sealed class WorldSpatialQueryIndex {
         }
         return region.Bounds;
     }
-    private static bool BoxBoxOverlap(in FixedSpatialShape left, in FixedSpatialShape right) {
-        Span<FixedVector3> axes = stackalloc FixedVector3[15];
-
-        axes[0] = left.AxisX;
-        axes[1] = left.AxisY;
-        axes[2] = left.AxisZ;
-        axes[3] = right.AxisX;
-        axes[4] = right.AxisY;
-        axes[5] = right.AxisZ;
-        axes[6] = FixedVector3.Cross(
-            left: left.AxisX,
-            right: right.AxisX
-        );
-        axes[7] = FixedVector3.Cross(
-            left: left.AxisX,
-            right: right.AxisY
-        );
-        axes[8] = FixedVector3.Cross(
-            left: left.AxisX,
-            right: right.AxisZ
-        );
-        axes[9] = FixedVector3.Cross(
-            left: left.AxisY,
-            right: right.AxisX
-        );
-        axes[10] = FixedVector3.Cross(
-            left: left.AxisY,
-            right: right.AxisY
-        );
-        axes[11] = FixedVector3.Cross(
-            left: left.AxisY,
-            right: right.AxisZ
-        );
-        axes[12] = FixedVector3.Cross(
-            left: left.AxisZ,
-            right: right.AxisX
-        );
-        axes[13] = FixedVector3.Cross(
-            left: left.AxisZ,
-            right: right.AxisY
-        );
-        axes[14] = FixedVector3.Cross(
-            left: left.AxisZ,
-            right: right.AxisZ
-        );
-
-        if (!TrySubtract(
-            right.Center,
-            left.Center,
-            out var delta
-        )) {
-            return false;
-        }
-        foreach (var axis in axes) {
-            if (axis.LengthSquared <= FixedQ4816.FromRawBits(value: 1L)) {
-                continue;
-            }
-
-            var leftRadius = ProjectionRadius(
-                axis: axis,
-                box: in left
-            );
-            var rightRadius = ProjectionRadius(
-                axis: axis,
-                box: in right
-            );
-
-            if (FixedQ4816.Abs(value: FixedVector3.Dot(
-                left: delta,
-                right: axis
-            )) > checked((leftRadius + rightRadius))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     private static int BuildBvh(List<SpatialBvhNode> nodes, int[] order, int start, int count, IReadOnlyList<CompiledSpatialVolume> volumes) {
         var nodeIndex = nodes.Count;
 
@@ -326,40 +255,17 @@ public sealed class WorldSpatialQueryIndex {
         );
         return nodeIndex;
     }
+    // Whether a shape's closed volume holds a point; a point whose offset leaves the carrier is outside.
     private static bool Contains(in FixedSpatialShape shape, FixedVector3 point) {
-        if (!TrySubtract(
-            point,
-            shape.Center,
-            out var delta
-        )) {
-            return false;
-        }
         if (shape.Kind == FixedSpatialShapeKind.Sphere) {
-            return WithinRadius(
-                delta: delta,
-                radius: shape.Radius
-            );
+            return (FixedVector3.TrySubtract(
+                difference: out var delta,
+                left: point,
+                right: shape.Center
+            ) && delta.IsWithin(radius: shape.Radius));
         }
-        var local = new FixedVector3(
-            X: FixedVector3.Dot(
-                left: delta,
-                right: shape.AxisX
-            ),
-            Y: FixedVector3.Dot(
-                left: delta,
-                right: shape.AxisY
-            ),
-            Z: FixedVector3.Dot(
-                left: delta,
-                right: shape.AxisZ
-            )
-        );
 
-        return (
-            (FixedQ4816.Abs(value: local.X) <= shape.HalfExtents.X) &&
-            (FixedQ4816.Abs(value: local.Y) <= shape.HalfExtents.Y) &&
-            (FixedQ4816.Abs(value: local.Z) <= shape.HalfExtents.Z)
-        );
+        return shape.Box.Contains(point: point);
     }
     private static bool IsBlockingPair(WorldPlacementSpatialRole candidate, WorldPlacementSpatialRole existing) =>
         (((candidate == WorldPlacementSpatialRole.Occupation) && (existing is WorldPlacementSpatialRole.Occupation or WorldPlacementSpatialRole.Clearance)) ||
@@ -370,81 +276,6 @@ public sealed class WorldSpatialQueryIndex {
         WorldPlacementSpatialRole.Influence => ((mask & WorldSpatialQueryMask.Influence) != 0),
         _ => false,
     };
-    private static FixedQ4816 ProjectionRadius(in FixedSpatialShape box, FixedVector3 axis) => checked(
-        ((checked((FixedQ4816.Abs(value: FixedVector3.Dot(
-        left: box.AxisX,
-        right: axis
-    )) * box.HalfExtents.X)) +
-        checked((FixedQ4816.Abs(value: FixedVector3.Dot(
-        left: box.AxisY,
-        right: axis
-    )) * box.HalfExtents.Y))) +
-        checked((FixedQ4816.Abs(value: FixedVector3.Dot(
-        left: box.AxisZ,
-        right: axis
-    )) * box.HalfExtents.Z))));
-    private static bool SphereBoxOverlap(in FixedSpatialShape sphere, in FixedSpatialShape box) {
-        if (!TrySubtract(
-            sphere.Center,
-            box.Center,
-            out var separation
-        )) {
-            return false;
-        }
-        var local = new FixedVector3(
-            X: FixedVector3.Dot(
-                left: separation,
-                right: box.AxisX
-            ),
-            Y: FixedVector3.Dot(
-                left: separation,
-                right: box.AxisY
-            ),
-            Z: FixedVector3.Dot(
-                left: separation,
-                right: box.AxisZ
-            )
-        );
-        var closest = FixedVector3.Clamp(
-            value: local,
-            minimum: -box.HalfExtents,
-            maximum: box.HalfExtents
-        );
-        var delta = (local - closest);
-
-        return WithinRadius(
-            delta: delta,
-            radius: sphere.Radius
-        );
-    }
-    private static bool TrySubtract(FixedVector3 left, FixedVector3 right, out FixedVector3 difference) {
-        var x = (((Int128)left.X.Value) - right.X.Value);
-        var y = (((Int128)left.Y.Value) - right.Y.Value);
-        var z = (((Int128)left.Z.Value) - right.Z.Value);
-
-        if (
-            (x < long.MinValue) ||
-            (x > long.MaxValue) ||
-            (y < long.MinValue) ||
-            (y > long.MaxValue) ||
-            (z < long.MinValue) ||
-            (z > long.MaxValue)
-        ) {
-            difference = default;
-            return false;
-        }
-        difference = new FixedVector3(
-            X: FixedQ4816.FromRawBits(value: ((long)x)),
-            Y: FixedQ4816.FromRawBits(value: ((long)y)),
-            Z: FixedQ4816.FromRawBits(value: ((long)z))
-        );
-        return true;
-    }
-    // Compare raw Q32 squares without rounding them back to Q16: rounding erases separation between very small
-    // spheres. The compiled coordinate envelope keeps this three-term sum inside Int128.
-    private static bool WithinRadius(FixedVector3 delta, FixedQ4816 radius) =>
-        ((((((Int128)delta.X.Value) * delta.X.Value) + (((Int128)delta.Y.Value) * delta.Y.Value)) +
-        (((Int128)delta.Z.Value) * delta.Z.Value)) <= (((Int128)radius.Value) * radius.Value));
 
     /// <summary>Returns whether two compiled placement volumes conflict under the authored blocking roles.</summary>
     public static bool Conflicts(in CompiledSpatialVolume left, in CompiledSpatialVolume right) {
@@ -631,37 +462,29 @@ public sealed class WorldSpatialQueryIndex {
             (left.Kind == FixedSpatialShapeKind.Sphere) &&
             (right.Kind == FixedSpatialShapeKind.Sphere)
         ) {
-            if (!TrySubtract(
-                left.Center,
-                right.Center,
-                out var delta
-            )) {
-                return false;
-            }
-            var radius = checked((left.Radius + right.Radius));
-
-            return WithinRadius(
-                delta: delta,
-                radius: radius
-            );
+            return (FixedVector3.TrySubtract(
+                difference: out var delta,
+                left: left.Center,
+                right: right.Center
+            ) && delta.IsWithin(radius: checked((left.Radius + right.Radius))));
         }
 
         if (left.Kind == FixedSpatialShapeKind.Sphere) {
-            return SphereBoxOverlap(
-                box: in right,
-                sphere: in left
+            return right.Box.IntersectsSphere(
+                center: left.Center,
+                radius: left.Radius
             );
         }
         if (right.Kind == FixedSpatialShapeKind.Sphere) {
-            return SphereBoxOverlap(
-                box: in left,
-                sphere: in right
+            return left.Box.IntersectsSphere(
+                center: right.Center,
+                radius: right.Radius
             );
         }
 
-        return BoxBoxOverlap(
-            left: in left,
-            right: in right
+        return FixedOrientedBox.Overlaps(
+            left: left.Box,
+            right: right.Box
         );
     }
 
@@ -690,20 +513,7 @@ public static class WorldSpatialQueryCompilation {
         }
         return new FixedSpatialAabb(
             Center: shape.Center,
-            Extent: new FixedVector3(
-                X: checked(
-                ((checked((FixedQ4816.Abs(value: shape.AxisX.X) * shape.HalfExtents.X)) +
-                checked((FixedQ4816.Abs(value: shape.AxisY.X) * shape.HalfExtents.Y))) +
-                checked((FixedQ4816.Abs(value: shape.AxisZ.X) * shape.HalfExtents.Z)))),
-                Y: checked(
-                ((checked((FixedQ4816.Abs(value: shape.AxisX.Y) * shape.HalfExtents.X)) +
-                checked((FixedQ4816.Abs(value: shape.AxisY.Y) * shape.HalfExtents.Y))) +
-                checked((FixedQ4816.Abs(value: shape.AxisZ.Y) * shape.HalfExtents.Z)))),
-                Z: checked(
-                ((checked((FixedQ4816.Abs(value: shape.AxisX.Z) * shape.HalfExtents.X)) +
-                checked((FixedQ4816.Abs(value: shape.AxisY.Z) * shape.HalfExtents.Y))) +
-                checked((FixedQ4816.Abs(value: shape.AxisZ.Z) * shape.HalfExtents.Z))))
-            )
+            Extent: shape.Box.WorldExtent
         );
     }
     private static FixedSpatialShape CompileShape(WorldSpatialShape authored, SpatialFrame frame) {
@@ -711,31 +521,30 @@ public static class WorldSpatialQueryCompilation {
             vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.Scale)),
             yaw: frame.YawRadians
         )));
-        var yaw = checked((frame.YawRadians + FixedQ4816.FromDouble(value: (authored.YawDegrees * (Math.PI / 180d)))));
+        var yaw = checked((frame.YawRadians + FixedQ4816.FromDegrees(degrees: authored.YawDegrees)));
         var rotation = Yaw(radians: yaw);
 
         if (authored.Kind == WorldSpatialShapeKind.Sphere) {
             return new FixedSpatialShape(
-                FixedSpatialShapeKind.Sphere,
-                center,
-                FixedVector3.UnitX,
-                FixedVector3.UnitY,
-                FixedVector3.UnitZ,
-                default,
-                checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.Scale))
+                Box: FixedOrientedBox.AxisAligned(
+                    center: center,
+                    halfExtents: FixedVector3.Zero
+                ),
+                Kind: FixedSpatialShapeKind.Sphere,
+                Radius: checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.Scale))
             );
         }
 
         var extents = checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.Scale));
 
         return new FixedSpatialShape(
-            FixedSpatialShapeKind.Box,
-            center,
-            rotation.Rotate(vector: FixedVector3.UnitX),
-            rotation.Rotate(vector: FixedVector3.UnitY),
-            rotation.Rotate(vector: FixedVector3.UnitZ),
-            extents,
-            FixedQ4816.Zero
+            Box: FixedOrientedBox.FromRotation(
+                center: center,
+                halfExtents: extents,
+                rotation: rotation
+            ),
+            Kind: FixedSpatialShapeKind.Box,
+            Radius: FixedQ4816.Zero
         );
     }
     private static FixedVector3 Rotate(FixedVector3 vector, FixedQ4816 yaw) {
@@ -799,7 +608,7 @@ public static class WorldSpatialQueryCompilation {
         try {
             var position = FixedVector3.FromVector3(value: placement.Position);
             var scale = FixedQ4816.FromDouble(value: placement.Scale);
-            var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180d)));
+            var yaw = FixedQ4816.FromDegrees(degrees: placement.YawDegrees);
 
             if (placement.Parent is { Length: > 0 } parentId) {
                 byId.TryGetValue(

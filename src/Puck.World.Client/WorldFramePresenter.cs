@@ -1022,17 +1022,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var coordinate = pane.MapDisplayPoint(
             displayHeight: ((int)height),
             displayWidth: ((int)width),
-            point: new FixedVector2(
-                X: FixedQ4816.FromDouble(value: framePosition.X),
-                Y: FixedQ4816.FromDouble(value: framePosition.Y)
-            )
+            point: FixedVector2.FromVector2(value: framePosition)
         ).Coordinate;
 
         if (sample.Pressed) {
-            entry.Pointer = new Vector2(
-                x: ((float)((double)coordinate.X)),
-                y: ((float)((double)coordinate.Y))
-            );
+            entry.Pointer = coordinate.ToVector2();
 
             if (!entry.PointerWasDown) {
                 entry.PointerPresses++;
@@ -1102,36 +1096,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         py = 0f;
         pixelsPerUnit = 0f;
 
-        var delta = (world - camera.Position);
-        var depth = Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Forward
-        );
-
-        if (depth < 0.05f) {
-            return false;
-        }
-
-        var ndcX = ((Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Right
-        ) - (depth * camera.FrustumOffset.X)) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
-        var ndcY = ((Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Up
-        ) - (depth * camera.FrustumOffset.Y)) / (depth * camera.TanHalfFieldOfView));
-
         if (
-            (MathF.Abs(x: ndcX) > 1.5f) ||
-            (MathF.Abs(x: ndcY) > 1.5f)
+            !camera.TryProject(
+                depth: out var depth,
+                ndc: out var ndc,
+                world: world
+            ) ||
+            (depth < 0.05f) ||
+            (MathF.Abs(x: ndc.X) > 1.5f) ||
+            (MathF.Abs(x: ndc.Y) > 1.5f)
         ) {
             return false;
         }
 
         var regionHeight = (region.Height * height);
 
-        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
-        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
+        px = ((region.X * width) + ((0.5f + (0.5f * ndc.X)) * (region.Width * width)));
+        py = ((region.Y * height) + ((0.5f - (0.5f * ndc.Y)) * regionHeight));
         pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
 
         return true;

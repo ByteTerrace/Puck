@@ -596,21 +596,15 @@ public sealed partial class WorldBody {
     }
     // The direction "along the face, away from down" — gravity-up projected onto the face's tangent plane, zero for
     // a face whose normal is parallel to gravity-up (a floor or a flat ceiling says nothing about forward).
-    private static FixedVector3 HoldTangentForward(in FixedVector3 normal, in FixedVector3 up) {
-        if (normal == FixedVector3.Zero) {
-            return FixedVector3.Zero;
-        }
-
-        var tangent = (up - (normal * FixedVector3.Dot(
-            left: up,
-            right: normal
-        )));
-
-        return ((tangent.TryLength(length: out var length) && (length > FixedQ4816.Zero))
-            ? (tangent / length)
+    private static FixedVector3 HoldTangentForward(in FixedVector3 normal, in FixedVector3 up) =>
+        (((normal != FixedVector3.Zero) && up.TryRejectNormalized(
+            length: out _,
+            unit: out var tangent,
+            unitAxis: normal
+        ))
+            ? tangent
             : FixedVector3.Zero
         );
-    }
     // The hold's frame. Movement rides the face's own tangent plane, oriented by gravity: forward is gravity-up
     // projected onto the face ("up the face"), right completes it. The body's own up axis blends from gravity-up
     // toward the face normal by the row's lean, so a lean of zero keeps a body upright on a wall and reads that wall
@@ -677,18 +671,11 @@ public sealed partial class WorldBody {
 
         scratch.AttitudeUp = attitude;
 
-        var tangent = (gravityUp - (normal * FixedVector3.Dot(
-            left: gravityUp,
-            right: normal
-        )));
-
-        if (!tangent.TryLength(length: out var length)) {
-            return;
-        }
-
-        if (length > FixedQ4816.Zero) {
-            var forward = (tangent / length);
-
+        if (gravityUp.TryRejectNormalized(
+            length: out _,
+            unit: out var forward,
+            unitAxis: normal
+        )) {
             scratch.Facing = forward;
             scratch.Right = FixedVector3.Cross(
                 left: forward,
@@ -862,21 +849,23 @@ public sealed partial class WorldBody {
                 : scratch.Facing
             );
 
+            // The forward's component perpendicular to the leaned axis, or the attitude's, or the right's: the
+            // first that is not parallel to it.
             if (
-                !TryPerpendicular(
-                axis: in leaned,
+                !forward.TryRejectNormalized(
+                length: out _,
                 unit: out var aligned,
-                vector: in forward
+                unitAxis: leaned
             ) &&
-                !TryPerpendicular(
-                axis: in leaned,
+                !scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ).TryRejectNormalized(
+                length: out _,
                 unit: out aligned,
-                vector: scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ)
+                unitAxis: leaned
             ) &&
-                !TryPerpendicular(
-                axis: in leaned,
+                !scratch.Right.TryRejectNormalized(
+                length: out _,
                 unit: out aligned,
-                vector: in scratch.Right
+                unitAxis: leaned
             )
             ) {
                 return;
@@ -897,11 +886,8 @@ public sealed partial class WorldBody {
                 Z: local.Z
             );
 
-            if (planar.LengthSquared > FixedQ4816.Zero) {
-                m_yaw = FixedQ4816.Atan2(
-                    x: -planar.Z,
-                    y: -planar.X
-                );
+            if (planar != FixedVector3.Zero) {
+                m_yaw = planar.Yaw();
             }
         }
 
@@ -914,26 +900,6 @@ public sealed partial class WorldBody {
             ? attitude
             : (m_frame * attitude)
         );
-    }
-    // The component of a vector perpendicular to an axis, unit length, or false when the two are parallel.
-    private static bool TryPerpendicular(in FixedVector3 vector, in FixedVector3 axis, out FixedVector3 unit) {
-        unit = FixedVector3.Zero;
-
-        var perpendicular = (vector - (axis * FixedVector3.Dot(
-            left: vector,
-            right: axis
-        )));
-
-        if (
-            !perpendicular.TryLength(length: out var length) ||
-            (length <= FixedQ4816.Zero)
-        ) {
-            return false;
-        }
-
-        unit = (perpendicular / length);
-
-        return true;
     }
     // The attitude carrying world +Y onto an up axis and world -Z onto a forward already perpendicular to it. The
     // shortest arc from +Y is undefined at the antipode, but the twist that follows aligns forward exactly, so the

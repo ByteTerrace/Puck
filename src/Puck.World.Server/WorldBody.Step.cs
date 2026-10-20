@@ -1,5 +1,3 @@
-using System.Numerics;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -355,11 +353,8 @@ public sealed partial class WorldBody {
     }
     // An angle in radians normalized into [0, 360) degrees, so an echo is a stable compass reading (a -10° pitch reads
     // as 350°, level as 0°).
-    private static float CompassDegrees(float radians) {
-        var degrees = (radians * (180f / MathF.PI));
-
-        return (degrees - (360f * MathF.Floor(x: (degrees / 360f))));
-    }
+    private static float CompassDegrees(float radians) =>
+        float.RadiansToDegrees(radians: VectorFunctions.WrapTurn(radians: radians));
     private void ComputeLocalTargetVelocity(ref BodyMotionScratch scratch) {
         // The free program shares the kit's declared movement frame. Under World, the client has ALREADY rotated
         // the planar pair through camera yaw, so rotating it through body attitude again is a second composition
@@ -483,19 +478,15 @@ public sealed partial class WorldBody {
             speed = FixedQ4816.One;
         }
 
-        var tangent = (commanded - (scratch.Up * FixedVector3.Dot(
-            left: commanded,
-            right: scratch.Up
-        )));
-        var tangentLength = tangent.Length;
+        var tangent = commanded.RejectFrom(unitAxis: scratch.Up);
 
-        if (tangentLength <= FixedQ4816.Zero) {
+        if (tangent == FixedVector3.Zero) {
             // Straight into (or out of) the surface: nothing to walk along. The body holds still rather than being
             // handed an arbitrary direction.
             return true;
         }
 
-        direction = ((tangent / tangentLength) * speed);
+        direction = tangent.WithLength(length: speed);
 
         return true;
     }
@@ -521,40 +512,10 @@ public sealed partial class WorldBody {
 
         return ((forward / length), (strafe / length));
     }
-    // The canonical orientation decomposed to Tait-Bryan angles (radians), the exact inverse of OrientationFromEuler's
-    // Ry(yaw)·Rx(pitch)·Rz(roll) construction (the codebase-wide yaw-about-+Y / pitch-about-+X / roll-about-+Z
-    // convention). Yaw is atan2 of the facing's horizontal components; pitch is the facing's elevation; roll is the bank
-    // read from the body right/up vectors' vertical parts. A pure-yaw attitude yields pitch = roll = 0.
-    private (float Yaw, float Pitch, float Roll) EulerRadians() {
-        var orientation = m_orientation.ToQuaternion();
-        var forward = Vector3.Transform(
-            value: -Vector3.UnitZ,
-            rotation: orientation
-        );
-        var up = Vector3.Transform(
-            value: Vector3.UnitY,
-            rotation: orientation
-        );
-        var right = Vector3.Transform(
-            value: Vector3.UnitX,
-            rotation: orientation
-        );
-        var yaw = MathF.Atan2(
-            x: -forward.Z,
-            y: -forward.X
-        );
-        var pitch = MathF.Asin(x: Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: forward.Y
-        ));
-        var roll = MathF.Atan2(
-            x: up.Y,
-            y: right.Y
-        );
-
-        return (Yaw: yaw, Pitch: pitch, Roll: roll);
-    }
+    // The presentation-side Tait-Bryan readback of the orientation FromYawPitchRoll built: the float echo of
+    // body.where, never a value that re-enters state.
+    private (float Yaw, float Pitch, float Roll) EulerRadians() =>
+        VectorFunctions.EulerOf(attitude: m_orientation.ToQuaternion());
     private void ExecuteOperation(in CompiledBodyInstruction instruction, ref BodyMotionScratch scratch) {
         switch (instruction.Operation) {
             case BodyMotionOp.SenseNearestInCone:
@@ -749,14 +710,6 @@ public sealed partial class WorldBody {
         // lands after integration: it is a correction to where the body ended up, not a term in how it got there.
         SeatToHold(stepTicks: stepTicks);
     }
-    private static FixedQ4816 ExtractYaw(FixedQuaternion orientation) {
-        var forward = orientation.Rotate(vector: -FixedVector3.UnitZ);
-
-        return FixedQ4816.Atan2(
-            y: -forward.X,
-            x: -forward.Z
-        );
-    }
     private void FaceSensorTarget(ref BodyMotionScratch scratch) {
         if (
             !scratch.SensorTarget.Exists ||
@@ -765,13 +718,11 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var dx = (scratch.SensorTarget.Position.X - m_position.X);
-        var dz = (scratch.SensorTarget.Position.Z - m_position.Z);
-        var targetYaw = FixedQ4816.Atan2(
-            x: -dz,
-            y: -dx
-        );
-        var yawRate = (scratch.Producer!.Scalar(parameter: BodyProducerParameter.InwardGain) * WrapPi(angle: (targetYaw - FixedYaw)));
+        var targetYaw = PlanarOffset(
+            from: m_position,
+            to: scratch.SensorTarget.Position
+        ).Yaw();
+        var yawRate = (scratch.Producer!.Scalar(parameter: BodyProducerParameter.InwardGain) * FixedQ4816.WrapAngle(radians: (targetYaw - FixedYaw)));
         var turn = FixedQ4816.Clamp(
             value: (yawRate / scratch.Producer.Scalar(parameter: BodyProducerParameter.TurnScale)),
             minimum: NegativeOne,
@@ -811,18 +762,11 @@ public sealed partial class WorldBody {
             ),
             elapsedTicks: scratch.StepTicks
         );
-        var delta = ((FixedQuaternion.FromAxisAngle(
-            axis: FixedVector3.UnitY,
-            angle: angularStep.X
-        )
-            * FixedQuaternion.FromAxisAngle(
-            axis: FixedVector3.UnitX,
-            angle: angularStep.Y
-        ))
-            * FixedQuaternion.FromAxisAngle(
-            axis: FixedVector3.UnitZ,
-            angle: angularStep.Z
-        ));
+        var delta = FixedQuaternion.FromYawPitchRoll(
+            pitch: angularStep.Y,
+            roll: angularStep.Z,
+            yaw: angularStep.X
+        );
 
         scratch.Orientation = (m_orientation * delta).Normalize();
     }
@@ -924,34 +868,17 @@ public sealed partial class WorldBody {
 
         return m_channelReadComposed;
     }
-    // Build a canonical orientation from Tait-Bryan angles (radians): yaw about world up (+Y), then pitch about the body
-    // right (+X), then roll about the body forward (+Z) — the codebase-wide convention, the exact inverse EulerRadians
-    // decomposes. Roll is about local +Z uniformly here and in the free integrator, so the pose set by body.pose and
-    // the attitude flown by body.fly share one sign convention.
-    private static FixedQuaternion OrientationFromEuler(FixedQ4816 yaw, FixedQ4816 pitch, FixedQ4816 roll) {
-        return ((FixedQuaternion.FromAxisAngle(
-            angle: yaw,
-            axis: FixedVector3.UnitY
-        )
-            * FixedQuaternion.FromAxisAngle(
-            angle: pitch,
-            axis: FixedVector3.UnitX
-        ))
-            * FixedQuaternion.FromAxisAngle(
-            angle: roll,
-            axis: FixedVector3.UnitZ
-        )).Normalize();
-    }
-    private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) {
-        if ((EngineTicks.PerSecond % stepTicks) != 0UL) {
-            throw new ArgumentException(
-                message: $"The fixed-step period {stepTicks} must divide {EngineTicks.PerSecond} engine ticks exactly.",
-                paramName: nameof(stepTicks)
-            );
-        }
-
-        return (value / FixedQ4816.FromInteger(value: checked((long)(EngineTicks.PerSecond / stepTicks))));
-    }
+    // The planar (XZ) offset from one point to another, whose Yaw is the bearing from the first to the second.
+    private static FixedVector3 PlanarOffset(in FixedVector3 from, in FixedVector3 to) =>
+        new(
+            X: (to.X - from.X),
+            Y: FixedQ4816.Zero,
+            Z: (to.Z - from.Z)
+        );
+    // A per-second value's share of one fixed step: the exact division by the step's rate, which must divide the
+    // engine tick base (PerRate refuses one that does not).
+    private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) =>
+        (value / FixedQ4816.FromInteger(value: checked((long)FixedTickConversion.PerRate(ratePerSecond: checked((uint)stepTicks)))));
     // The body's own resolved up may differ from world Y (a tilted planetoid surface, a wall run) — a producer's
     // "preferred altitude" is a distance from the world origin along that axis, not a literal world-Y coordinate.
     // Under the ordinary UnitY up this is exactly the .Y component every world read before the term generalized.
@@ -1006,13 +933,10 @@ public sealed partial class WorldBody {
             // using the bearing TO the sensed target — the same atan2 convention FaceSensorTarget's Turn write
             // steers the drawn attitude toward, since that Turn value never reaches the World-frame translation
             // basis (ResolveYawAttitudeAndPlanarFrame). This is what steers movement.
-            var dx = (scratch.SensorTarget.Position.X - m_position.X);
-            var dz = (scratch.SensorTarget.Position.Z - m_position.Z);
-            var targetYaw = FixedQ4816.Atan2(
-                x: -dz,
-                y: -dx
-            );
-
+            var targetYaw = PlanarOffset(
+                from: m_position,
+                to: scratch.SensorTarget.Position
+            ).Yaw();
             var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
 
             scratch.Intent = m_roleOrdinals.Intent(
@@ -1050,12 +974,13 @@ public sealed partial class WorldBody {
         var radius = FixedQ4816.Sqrt(value: ((planarX * planarX) + (planarZ * planarZ)));
 
         if (radius > producer.Scalar(parameter: BodyProducerParameter.SoftRadius)) {
-            var inwardYaw = FixedQ4816.Atan2(
-                x: planarZ,
-                y: planarX
-            );
+            // The bearing from the body back to its home.
+            var inwardYaw = PlanarOffset(
+                from: m_position,
+                to: m_home
+            ).Yaw();
 
-            yawRate += (producer.Scalar(parameter: BodyProducerParameter.InwardGain) * WrapPi(angle: (inwardYaw - FixedYaw)));
+            yawRate += (producer.Scalar(parameter: BodyProducerParameter.InwardGain) * FixedQ4816.WrapAngle(radians: (inwardYaw - FixedYaw)));
         }
 
         var turn = FixedQ4816.Clamp(
@@ -1230,18 +1155,9 @@ public sealed partial class WorldBody {
             var rotatedVelocity = transport.Rotate(vector: m_planarFollower.Velocity);
 
             m_planarFollower = new SecondOrderState3(
-                X: new SecondOrderState(
-                    PositionRaw: m_planarFollower.X.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.X.Value << 16)
-                ),
-                Y: new SecondOrderState(
-                    PositionRaw: m_planarFollower.Y.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.Y.Value << 16)
-                ),
-                Z: new SecondOrderState(
-                    PositionRaw: m_planarFollower.Z.PositionRaw,
-                    VelocityRaw: (rotatedVelocity.Z.Value << 16)
-                )
+                X: m_planarFollower.X.WithVelocity(velocity: rotatedVelocity.X),
+                Y: m_planarFollower.Y.WithVelocity(velocity: rotatedVelocity.Y),
+                Z: m_planarFollower.Z.WithVelocity(velocity: rotatedVelocity.Z)
             );
             m_planarPreviousTarget = transport.Rotate(vector: m_planarPreviousTarget);
         }
@@ -1480,13 +1396,11 @@ public sealed partial class WorldBody {
                 angle: m_yaw,
                 axis: FixedVector3.UnitY
             )
-            : (FixedQuaternion.FromAxisAngle(
-                angle: m_yaw,
-                axis: FixedVector3.UnitY
-            ) * FixedQuaternion.FromAxisAngle(
-                angle: m_drivePitch,
-                axis: FixedVector3.UnitX
-            )).Normalize()
+            : FixedQuaternion.FromYawPitchRoll(
+                pitch: m_drivePitch,
+                roll: FixedQ4816.Zero,
+                yaw: m_yaw
+            )
         );
 
         scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
@@ -1534,9 +1448,9 @@ public sealed partial class WorldBody {
                 role: ChannelRole.MoveStrafe
             ) == FixedQ4816.Zero)
             ) {
-                var facingYaw = ExtractYaw(orientation: m_orientation);
+                var facingYaw = m_orientation.Yaw();
 
-                if (FixedQ4816.Abs(value: WrapPi(angle: (facingYaw - m_yaw))) > FacingAdoptEpsilon) {
+                if (FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (facingYaw - m_yaw))) > FacingAdoptEpsilon) {
                     m_yaw = facingYaw;
                 }
             }
@@ -1861,10 +1775,11 @@ public sealed partial class WorldBody {
         ) {
             SnapYaw(
                 scratch: ref scratch,
-                yaw: FixedQ4816.Atan2(
-                    x: -faceZ,
-                    y: -faceX
-                )
+                yaw: (new FixedVector3(
+                    X: faceX,
+                    Y: FixedQ4816.Zero,
+                    Z: faceZ
+                )).Yaw()
             );
 
             return;
@@ -1884,18 +1799,20 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // The commanded world-frame direction: advance along −Z, strafe along +X.
         SnapFacing(
             scratch: ref scratch,
-            yaw: FixedQ4816.Atan2(
-                y: -Role(
+            yaw: (new FixedVector3(
+                X: Role(
                     intent: in scratch.Intent,
                     role: ChannelRole.MoveStrafe
                 ),
-                x: Role(
+                Y: FixedQ4816.Zero,
+                Z: -Role(
                     intent: in scratch.Intent,
                     role: ChannelRole.MoveAdvance
                 )
-            )
+            )).Yaw()
         );
     }
     private void SnapYaw(ref BodyMotionScratch scratch, FixedQ4816 yaw) {
@@ -1932,10 +1849,8 @@ public sealed partial class WorldBody {
     // action-track lanes are then overlaid, so a wire body.press jumps a tape-driven runner.
     // Whether an intent source names a server-side producer whose staged image fills gaps.
     private static bool SourceNamesProducer(IntentSource source) => source.IsProducer;
-    private static ulong SubtractSaturating(ulong value, ulong amount) => ((value > amount)
-        ? (value - amount)
-        : 0UL
-    );
+    private static ulong SubtractSaturating(ulong value, ulong amount) =>
+        value.SubtractSaturating(right: amount);
     /// <summary>Updates the latched <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
     /// fresh non-walkable push always (re)latches immediately and refills the grace window. Absent one, the
     /// existing latch clears immediately the instant either releasing condition holds — the raw planar move intent
@@ -1993,8 +1908,6 @@ public sealed partial class WorldBody {
             m_obstructionWitness = FixedVector3.Zero;
         }
     }
-    private static FixedQ4816 WrapPi(FixedQ4816 angle) => (angle - (TwoPi * FixedQ4816.Floor(value: ((angle + Pi) / TwoPi))));
-
     private struct BodyMotionScratch {
         public PlayerIntent Intent;
         public CompiledBodyProducer? Producer;

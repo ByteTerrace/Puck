@@ -231,14 +231,12 @@ public sealed partial class WorldBody {
     private FixedRateAccumulator m_driveResidualAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private static readonly FixedQ4816 MaxActionHoldSecondsFixed = FixedQ4816.FromInteger(value: 60L);
     private static readonly FixedQ4816 NegativeOne = -FixedQ4816.One;
-    private static readonly FixedQ4816 Pi = FixedQ4816.FromDouble(value: Math.PI);
-    // Above the yaw round-trip error of FromAxisAngle -> ExtractYaw, below any facing a snap can leave (radians).
+    // Above the yaw round-trip error of FromAxisAngle -> FixedQuaternion.Yaw, below any facing a snap can leave (radians).
     private static readonly FixedQ4816 FacingAdoptEpsilon = FixedQ4816.FromDouble(value: 0.001);
 
     // Kit-authored (WorldTurn.MaxPitch); see FixedTurn.
     private FixedQ4816 MaxDrivePitch => m_tuning.Turn.MaxPitch;
 
-    private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     // The scripted tape: a FIFO of timed segments in a growable ring buffer of structs. While one is live it overrides
     // the keys; a segment is consumed one host tick at a time (one segment drives each Advance) and
     // dropped once its time runs out. An enqueue writes a struct into a pre-owned slot (no per-segment heap object) and

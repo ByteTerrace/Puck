@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>Deterministic discrete queries over immutable topology and caller-owned value spans.</summary>
@@ -44,16 +46,8 @@ public static class BoardQueries {
     }
     // One (ordinal, value) pair's mix. A fingerprint is the wrapping sum of its cells' mixes, so it depends only on the
     // set of pairs and not on the order cells are walked.
-    private static ulong Mix(int ordinal, long value) {
-        var pair = (((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value);
-
-        pair *= 0xBF58476D1CE4E5B9UL;
-        pair ^= (pair >> 31);
-        pair *= 0x94D049BB133111EBUL;
-        pair ^= (pair >> 29);
-
-        return pair;
-    }
+    private static ulong Mix(int ordinal, long value) =>
+        InvertibleBitMix.Mix64(value: ((((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value)));
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
     // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
     // twice is one boundary cell.

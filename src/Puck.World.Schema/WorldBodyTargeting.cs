@@ -136,7 +136,7 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
-        MinimumDot: FixedQ4816.FromDouble(value: Math.Cos(d: (sensed.HalfAngleDegrees * (Math.PI / 180.0)))),
+        MinimumDot: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: sensed.HalfAngleDegrees)),
         RegisterIndex: -1
     ),
         BodyTargetSource.Designated designated => new FixedBodyTargetSource(
@@ -177,23 +177,27 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
 }
 /// <summary>The shared fixed-point body-forward cone predicate used by client proposals and authoritative senses.</summary>
 public static class BodyTargetConeSense {
-    /// <summary>Reports whether a candidate lies inside the supplied cone.</summary>
+    /// <summary>Reports whether a candidate lies inside the supplied cone: within <paramref name="range"/> of the
+    /// origin by the exact <see cref="FixedVector3.IsWithin"/> predicate, and inside the closed cone about
+    /// <paramref name="forward"/> by <see cref="FixedVector3.IsWithinCone"/>, the apex included.</summary>
+    /// <param name="origin">The cone's apex: the sensing body's position.</param>
+    /// <param name="forward">The cone's axis, of any non-zero length.</param>
+    /// <param name="candidate">The position tested.</param>
+    /// <param name="range">The sensing range.</param>
+    /// <param name="minimumDot">The cosine of the cone's half-angle.</param>
+    /// <param name="distanceSquared">The rounded squared distance from the origin to the candidate, for ranking
+    /// among candidates the cone admits.</param>
+    /// <returns><see langword="true"/> when the candidate is inside or on both the range sphere and the cone. A
+    /// candidate at the origin is inside: a caller that must exclude itself does so by identity.</returns>
     public static bool Contains(in FixedVector3 origin, in FixedVector3 forward, in FixedVector3 candidate, FixedQ4816 range, FixedQ4816 minimumDot, out FixedQ4816 distanceSquared) {
         var delta = (candidate - origin);
 
         distanceSquared = delta.LengthSquared;
 
-        if (
-            (distanceSquared <= FixedQ4816.Zero) ||
-            (distanceSquared > (range * range))
-        ) {
-            return false;
-        }
-
-        return (FixedVector3.Dot(
-            left: forward.Normalize(),
-            right: delta.Normalize()
-        ) >= minimumDot);
+        return (delta.IsWithin(radius: range) && delta.IsWithinCone(
+            cosineHalfAngle: minimumDot,
+            forward: forward
+        ));
     }
 }
 /// <summary>Selects whether authored target decisions require the deterministic solid-field query provider.</summary>

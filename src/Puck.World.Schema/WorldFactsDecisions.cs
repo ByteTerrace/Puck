@@ -416,15 +416,8 @@ public static partial class WorldFactsCompiler {
                 throw refuse(arg: "neighbors requires range [1/65536,1000000], halfAngleDegrees (0,180], and 1 <= maxCandidates <= min(32,candidateBudget), with candidateBudget within body capacity ceiling");
             }
 
-            var radians = ((source.HalfAngleDegrees * FixedQ4816.PiQ61) / (180m * (1UL << FixedQ4816.PiQ61FractionBitCount)));
-
             neighbors = new CompiledWorldFactsDecisionNeighbors(
-                MinimumDot: FixedQ4816.Cos(angle: FixedQ4816.FromRawBits(value: RuleCompiler.LiteralToRaw(
-                    kind: CellKind.Fixed,
-                    literal: radians,
-                    ruleName: rule.Name,
-                    verb: "decision neighbors angle"
-                ))),
+                MinimumDot: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: ((double)source.HalfAngleDegrees))),
                 Range: FixedQ4816.FromRawBits(value: RuleCompiler.LiteralToRaw(
                     kind: CellKind.Fixed,
                     literal: source.Range,

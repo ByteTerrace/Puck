@@ -18,15 +18,15 @@ namespace Puck.World.Client;
 /// demanded view in the viewer's frustum is also published with <see cref="WorldViewDemand.SkySeen"/>, which the graph host
 /// turns into a footprint, so the graph renders it; any other has no footprint, which the graph reads as unread
 /// (<see cref="RenderGraphInstanceStatus.Unread"/>), so it renders nothing and keeps its last image. Its footprint is the
-/// share of the consumer's extent its frame covers at its scale, rounded up to <see cref="FootprintSteps"/> steps so a viewer
-/// turning slowly does not republish the views every frame.</para>
+/// share of the consumer's extent its frame covers at its scale, quantized against the share it held by the render
+/// graph's one footprint rule (<see cref="RenderGraphExtent.Quantize(double, double)"/>), so a viewer turning slowly
+/// does not republish the views every frame.</para>
 /// </summary>
 public sealed class WorldInfinityViews {
-    /// <summary>The steps a footprint fraction is rounded up to: sixteenths.</summary>
-    public const int FootprintSteps = 16;
-
     private readonly Dictionary<string, InfinityViewFrame> m_frames = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, RenderGraphPixelExtent> m_extents = new(comparer: StringComparer.Ordinal);
+    // Each visible view's quantized share of its consumer's axes, the allocation the next fit's hysteresis holds to.
+    private readonly Dictionary<string, (double Width, double Height)> m_shares = new(comparer: StringComparer.Ordinal);
     // Each view's reads, kept as one list while the plan stands: a view whose list is replaced is a changed view.
     private readonly Dictionary<string, IReadOnlyList<string>> m_reads = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, List<SdfSkyViewBinding>> m_bindings = new(comparer: StringComparer.Ordinal);
@@ -57,15 +57,6 @@ public sealed class WorldInfinityViews {
     /// <summary>Gets the plan the views follow.</summary>
     public WorldInfinityViewPlan Plan => m_plan;
 
-    /// <summary>Returns the fraction a footprint is rounded up to a step of: never zero, since a footprint of zero means
-    /// the consumer does not show the view.</summary>
-    /// <param name="fraction">The share of the consumer's axis.</param>
-    /// <returns>The fraction rounded up to a multiple of 1/<see cref="FootprintSteps"/>, from one step to 1.</returns>
-    public static double Quantize(double fraction) => Math.Clamp(
-        value: (Math.Ceiling(a: (Math.Clamp(max: 1.0, min: 0.0, value: fraction) * FootprintSteps)) / FootprintSteps),
-        min: (1.0 / FootprintSteps),
-        max: 1.0
-    );
     /// <summary>Replaces the plan; a view the new plan lacks is forgotten, so one later added under its name starts
     /// undemanded.</summary>
     /// <param name="plan">The plan.</param>
@@ -77,6 +68,7 @@ public sealed class WorldInfinityViews {
         foreach (var gone in m_frames.Keys.Where(predicate: name => !kept.Contains(item: name)).ToArray()) {
             _ = m_frames.Remove(key: gone);
             _ = m_extents.Remove(key: gone);
+            _ = m_shares.Remove(key: gone);
             Demand.Forget(view: gone);
         }
 
@@ -211,25 +203,36 @@ public sealed class WorldInfinityViews {
             if (m_unavailable.Contains(item: view.Name)) { continue; }
 
             if (frame.Visible) {
-                // The extent is the footprint's step of the consumer's, so it moves only when the footprint does.
+                // The extent is the footprint's step of the consumer's, so it moves only when the footprint does. A
+                // visible frame spans at least one pixel, so its share is never zero.
+                var held = m_shares.GetValueOrDefault(key: view.Name);
+                var share = (
+                    Width: RenderGraphExtent.Quantize(allocated: held.Width, fraction: (((double)frame.Width) / consumerWidth)),
+                    Height: RenderGraphExtent.Quantize(allocated: held.Height, fraction: (((double)frame.Height) / consumerHeight))
+                );
+
+                m_shares[view.Name] = share;
                 m_extents[view.Name] = new RenderGraphPixelExtent(
-                    Height: ((int)Math.Ceiling(a: (consumerHeight * Quantize(fraction: (((double)frame.Height) / consumerHeight))))),
-                    Width: ((int)Math.Ceiling(a: (consumerWidth * Quantize(fraction: (((double)frame.Width) / consumerWidth)))))
+                    Height: ((int)Math.Ceiling(a: (consumerHeight * share.Height))),
+                    Width: ((int)Math.Ceiling(a: (consumerWidth * share.Width)))
                 );
             }
 
             var extent = (m_extents.TryGetValue(key: view.Name, value: out var last)
                 ? last
                 : new RenderGraphPixelExtent(Height: 1, Width: 1));
+            var footprint = (m_shares.TryGetValue(key: view.Name, value: out var shown)
+                ? shown
+                : (Width: RenderGraphExtent.Quantize(fraction: (1.0 / Math.Max(val1: 1u, val2: consumerWidth))), Height: RenderGraphExtent.Quantize(fraction: (1.0 / Math.Max(val1: 1u, val2: consumerHeight)))));
             var demanded = (frame.Visible && Demand.IsDemanded(view: view.Name));
 
             views.Set(view: new WorldView(
                 Demand: (demanded ? WorldViewDemand.Sky | WorldViewDemand.SkySeen : WorldViewDemand.Sky),
                 FilmsWorld: false,
-                Height: Quantize(fraction: (((double)extent.Height) / Math.Max(val1: 1u, val2: consumerHeight))),
+                Height: footprint.Height,
                 Name: ProducerOf(name: view.Name),
                 Refresh: RenderGraphRefresh.Every(divisor: view.Spec.Refresh),
-                Width: Quantize(fraction: (((double)extent.Width) / Math.Max(val1: 1u, val2: consumerWidth)))
+                Width: footprint.Width
             ) {
                 OutputExtent = extent,
                 Parent = ((view.Parent is null) ? null : ProducerOf(name: view.Parent)),

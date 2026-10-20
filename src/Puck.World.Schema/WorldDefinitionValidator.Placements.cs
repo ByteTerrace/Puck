@@ -372,7 +372,7 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.aimHalfAngleDegrees",
             value: facet.AimHalfAngleDegrees
         );
-        if (float.IsFinite(f: facet.AimHalfAngleDegrees) && (facet.AimHalfAngleDegrees > 0f) && (FixedQ4816.FromDouble(value: (facet.AimHalfAngleDegrees * (Math.PI / 180d))) <= FixedQ4816.Zero)) {
+        if (float.IsFinite(f: facet.AimHalfAngleDegrees) && (facet.AimHalfAngleDegrees > 0f) && (FixedQ4816.FromDegrees(degrees: facet.AimHalfAngleDegrees) <= FixedQ4816.Zero)) {
             errors.Add(item: $"{path}.aimHalfAngleDegrees {facet.AimHalfAngleDegrees} is positive but quantizes to zero radians in Q48.16.");
         }
         RequireNonNegativeFixed(

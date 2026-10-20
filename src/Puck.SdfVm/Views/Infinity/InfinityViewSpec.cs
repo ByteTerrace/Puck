@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 
 namespace Puck.SdfVm.Views;
 
@@ -105,17 +106,17 @@ public sealed record InfinityViewSpec(
 
             return false;
         }
-        if (!(float.IsFinite(f: Anchor.X) && float.IsFinite(f: Anchor.Y) && float.IsFinite(f: Anchor.Z))) {
+        if (!VectorFunctions.IsFinite(vector: Anchor)) {
             reason = $"infinity view '{Name}' has a non-finite anchor.";
 
             return false;
         }
-        if (!(float.IsFinite(f: Fallback.X) && float.IsFinite(f: Fallback.Y) && float.IsFinite(f: Fallback.Z))) {
+        if (!VectorFunctions.IsFinite(vector: Fallback)) {
             reason = $"infinity view '{Name}' has a non-finite fallback colour.";
 
             return false;
         }
-        if (!(float.IsFinite(f: Orientation.X) && float.IsFinite(f: Orientation.Y) && float.IsFinite(f: Orientation.Z) && float.IsFinite(f: Orientation.W) && (MathF.Abs(x: (Orientation.Length() - 1f)) < 1e-3f))) {
+        if (!(VectorFunctions.IsFinite(rotation: Orientation) && (MathF.Abs(x: (Orientation.Length() - 1f)) < 1e-3f))) {
             reason = $"infinity view '{Name}' has an orientation that is not a unit rotation.";
 
             return false;

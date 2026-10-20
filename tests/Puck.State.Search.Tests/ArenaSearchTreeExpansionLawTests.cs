@@ -131,15 +131,16 @@ public sealed class ArenaSearchTreeExpansionLawTests {
             low: Iterations
         );
 
-        // The search's own counters tell the same story: every judged candidate, one grown node per iteration here
-        // (the pool never fills), and one playout ply for each of the depth's plies below the grown node.
+        // The search's own counters tell the same story: every judged candidate, at most one grown node per iteration
+        // (the pool never fills; two of this job's iterations select a path ending on a node that may not grow, and
+        // those grow none and play none out), and one playout ply for each of the depth's plies below each grown node.
         Assert.True(condition: counts.TryRead(kind: SearchWorkKinds.Candidates, value: out var candidates));
         Assert.True(condition: counts.TryRead(kind: SearchWorkKinds.Expansions, value: out var expansions));
         Assert.True(condition: counts.TryRead(kind: SearchWorkKinds.PlayoutPlies, value: out var plies));
         Assert.Equal(expected: status.Nodes, actual: candidates);
-        Assert.Equal(actual: expansions, expected: ((long)Iterations));
+        Assert.Equal(actual: expansions, expected: (Iterations - 2L));
         Assert.Equal(expected: (status.TreeNodes - 1L), actual: expansions);
-        Assert.Equal(actual: plies, expected: (Iterations * (Depth - 1L)));
+        Assert.Equal(actual: plies, expected: (expansions * (Depth - 1L)));
     }
     // Progressive widening: every node holds at most one child more than the integer square root of its visits, and
     // the root, visited once per iteration, grows past one child.

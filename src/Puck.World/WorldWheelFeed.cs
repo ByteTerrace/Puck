@@ -260,13 +260,17 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             ? state.Center.Y
             : ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
         );
+        var (innerRadius, ringWidth) = BindingWheelGeometry.RingRadii(
+            style: wheel.Style,
+            unit: unit
+        );
 
         return new OverlayWheelSeat(
             Viewport: viewport.Region,
             CenterX: centerX,
             CenterY: centerY,
-            InnerRadius: (unit * wheel.Style.DeadZoneFraction),
-            RingWidth: (unit * wheel.Style.RingWidthFraction),
+            InnerRadius: innerRadius,
+            RingWidth: ringWidth,
             ActiveRing: state.ActiveRing,
             HoveredSector: hoverSector,
             SectorOffset: wheel.Style.SectorOffset,

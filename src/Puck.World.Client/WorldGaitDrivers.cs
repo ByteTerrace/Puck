@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Authoring;
+using Puck.SdfVm.Views;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -16,7 +17,6 @@ namespace Puck.World.Client;
 /// (or elapsed time) sets the rate; the weight eases on wall time using the driver's authored blend times
 /// (default <see cref="CreationDriverDocument.WeightSeconds"/>) instead of freezing mid-stride when the gate flips.</remarks>
 public static class WorldGaitDrivers {
-    private const float TwoPi = (2f * MathF.PI);
 
     /// <summary>The travel one frame may charge to an integrating phase, world units — clamps a teleport or an
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
@@ -30,26 +30,6 @@ public static class WorldGaitDrivers {
     /// and a driver whose weight is merely denormal still advances its phase forever. Snapping there stops the phase
     /// as well as the pose, and a milliradian of residual swing is invisible.</summary>
     public const float RestWeight = 1e-3f;
-
-    private static float Wrap(float radians) {
-        var wrapped = MathF.IEEERemainder(
-            x: radians,
-            y: TwoPi
-        );
-
-        return ((wrapped < 0f)
-            ? (wrapped + TwoPi)
-            : wrapped
-        );
-    }
-    private static float WrapAngle(float radians) {
-        var wrapped = Wrap(radians: radians);
-
-        return ((wrapped > MathF.PI)
-            ? (wrapped - TwoPi)
-            : wrapped
-        );
-    }
 
     /// <summary>Advances one registration's driver phases and weights for a frame. Reseeds — every phase and weight to zero,
     /// no signal charged — when the entity address changes or this is the first call for the registration, so a
@@ -95,7 +75,7 @@ public static class WorldGaitDrivers {
         }
 
         var travel = (position - lastPosition);
-        var yawDelta = WrapAngle(radians: (Yaw(rotation: orientation) - Yaw(rotation: lastOrientation)));
+        var yawDelta = VectorFunctions.WrapAngle(radians: (VectorFunctions.YawOf(attitude: orientation) - VectorFunctions.YawOf(attitude: lastOrientation)));
 
         lastPosition = position;
         lastOrientation = orientation;
@@ -123,7 +103,7 @@ public static class WorldGaitDrivers {
             travel: ((travelLength > MaxTravelPerFrame)
                 ? (travel * (MaxTravelPerFrame / travelLength))
                 : travel),
-            yaw: Yaw(rotation: orientation)
+            yaw: VectorFunctions.YawOf(attitude: orientation)
         );
 
         if (drivers is not { Count: > 0 } rows) {
@@ -265,7 +245,7 @@ public static class WorldGaitDrivers {
 
             // Wrapped into [0, 2π) every frame: both waveforms are 2π-periodic in their argument, so wrapping is
             // exact for the motion and is what keeps a rotor's phase from losing float precision after an hour.
-            phases[index] = Wrap(radians: (phases[index] + (cadence * (driver.Signal switch {
+            phases[index] = VectorFunctions.WrapTurn(radians: (phases[index] + (cadence * (driver.Signal switch {
                 CreationDriverDocument.SignalPlanarTravel => planar,
                 CreationDriverDocument.SignalTravel => total,
                 _ => deltaSeconds,
@@ -434,7 +414,7 @@ public static class WorldGaitDrivers {
             }
         }
 
-        return ((float)((double)compiled.EvaluateRaw(arcRaw: low).Position.Z));
+        return ((float)compiled.EvaluateRaw(arcRaw: low).Position.Z);
     }
     // A driver's curve modulator: the height of the named row at the named earlier driver's phase this frame; a row
     // the definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
@@ -696,38 +676,19 @@ public static class WorldGaitDrivers {
             return 0f;
         }
 
-        var turns = (argument / (2f * MathF.PI));
-        var fraction = (turns - MathF.Floor(x: turns));
+        var fraction = VectorFunctions.Fract(x: (argument / MathF.Tau));
         var compiled = row.Compiled;
         var sample = compiled.Evaluate(arcLength: FixedQ4816.FromDouble(value: (((double)compiled.TotalLength) * fraction)));
 
-        return ((float)((double)sample.Position.Z));
+        return ((float)sample.Position.Z);
     }
     /// <summary>Returns the fraction of the remaining error a weight closes in one frame — the frame-rate independent
     /// exponential approach over <see cref="CreationDriverDocument.WeightSeconds"/>.</summary>
     /// <param name="deltaSeconds">The frame delta; a non-positive delta closes nothing.</param>
     /// <param name="seconds">The non-negative exponential time constant. Zero closes the full error on a positive delta.</param>
     /// <returns>The blend factor in [0, 1].</returns>
-    public static float WeightBlend(float deltaSeconds, float seconds = CreationDriverDocument.WeightSeconds) => ((deltaSeconds > 0f)
-        ? ((seconds == 0f)
-            ? 1f
-            : (1f - MathF.Exp(x: (-deltaSeconds / seconds))))
-        : 0f
+    public static float WeightBlend(float deltaSeconds, float seconds = CreationDriverDocument.WeightSeconds) => FirstOrderLag.Alpha(
+        deltaSeconds: deltaSeconds,
+        rate: (1f / seconds)
     );
-    /// <summary>Returns the yaw of a rotation about world up, radians, under the engine's −Z-forward convention.</summary>
-    /// <param name="rotation">The attitude.</param>
-    /// <returns>The yaw in (−π, π].</returns>
-    public static float Yaw(Quaternion rotation) {
-        var forward = Vector3.Transform(
-            rotation: rotation,
-            value: -Vector3.UnitZ
-        );
-
-        // Engine forward is −Z, so a rotation of θ about +Y carries it to (−sin θ, 0, −cos θ); negating both
-        // components recovers θ with the sign the axis-angle convention gives it.
-        return MathF.Atan2(
-            x: -forward.Z,
-            y: -forward.X
-        );
-    }
 }

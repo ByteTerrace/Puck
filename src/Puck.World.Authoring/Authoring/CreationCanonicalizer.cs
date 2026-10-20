@@ -105,9 +105,7 @@ public static partial class CreationCanonicalizer {
         foreach (var camera in sourceCameras) {
             if (
                 !shapeIds.Contains(item: camera.ShapeId) ||
-                !float.IsFinite(f: camera.Position.X) ||
-                !float.IsFinite(f: camera.Position.Y) ||
-                !float.IsFinite(f: camera.Position.Z)
+                !VectorFunctions.IsFinite(vector: camera.Position)
             ) {
                 continue;
             }

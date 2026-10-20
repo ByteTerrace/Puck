@@ -860,7 +860,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         if (field.TryFieldGradient(gradient: out var gradient, position: hit.Point)) {
             var unit = Vector3.Normalize(value: gradient.ToVector3());
 
-            normal = (float.IsFinite(f: unit.X) ? unit : Vector3.Zero);
+            normal = (VectorFunctions.IsFinite(vector: unit) ? unit : Vector3.Zero);
         }
 
         return true;

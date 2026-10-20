@@ -81,13 +81,11 @@ public static class FixedContactPushMath {
             !grounded &&
             (alignment > -groundedThreshold)
         ) {
-            var across = (normal - (up * alignment));
-
-            if (
-                across.TryLength(length: out var acrossLength) &&
-                (acrossLength > FixedQ4816.Zero)
-            ) {
-                var wall = (across / acrossLength);
+            if (normal.TryRejectNormalized(
+                length: out var acrossLength,
+                unit: out var wall,
+                unitAxis: up
+            )) {
                 var intoWall = FixedVector3.Dot(
                     left: velocity,
                     right: wall

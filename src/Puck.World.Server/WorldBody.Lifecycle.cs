@@ -97,14 +97,14 @@ public sealed partial class WorldBody {
             || program.Contains(operation: BodyMotionOp.ResolveDriveFrame));
 
         if (resolvesYawAttitude) {
-            m_yaw = ExtractYaw(orientation: m_orientation);
+            m_yaw = m_orientation.Yaw();
             m_drivePitch = FixedQ4816.Zero;
             m_orientation = FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
                 axis: FixedVector3.UnitY
             );
         } else if (program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
-            m_yaw = ExtractYaw(orientation: m_orientation);
+            m_yaw = m_orientation.Yaw();
         }
 
         m_motionRecency = ((m_tuning.RecencySlots > 0)
@@ -283,7 +283,7 @@ public sealed partial class WorldBody {
             minimum: -MaxDrivePitch,
             value: pitchRadians
         );
-        m_orientation = OrientationFromEuler(
+        m_orientation = FixedQuaternion.FromYawPitchRoll(
             pitch: pitchRadians,
             roll: rollRadians,
             yaw: m_yaw
@@ -945,7 +945,7 @@ public sealed partial class WorldBody {
     public FixedVector3 FixedPreviousPosition => m_previousPosition;
     /// <summary>Gets the authoritative deterministic heading.</summary>
     public FixedQ4816 FixedYaw => (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-        ? ExtractYaw(orientation: m_orientation)
+        ? m_orientation.Yaw()
         : m_yaw
     );
     /// <summary>Gets a value indicating whether the body is grounded this tick (resting on a walkable contact surface) — the

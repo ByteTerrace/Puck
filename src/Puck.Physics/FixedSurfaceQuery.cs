@@ -189,13 +189,11 @@ public static class FixedSurfaceQuery {
     // alone is not enough, because clamping a point already inside the range changes nothing). The normal is exact
     // on a face (delta nonzero on exactly one axis) and Normalize()-correct on an edge/corner (delta nonzero on two
     // or three) — see the type's remarks.
-    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnBox(FixedVector3 center, FixedVector3 halfExtents, FixedVector3 probe) {
-        var local = (probe - center);
-        var clamped = FixedVector3.Clamp(
-            maximum: halfExtents,
-            minimum: -halfExtents,
-            value: local
-        );
+    // The box's own frame answers the probe: an axis-aligned box's frame is an exact translation, so every clamp,
+    // face normal and interior exit below is exact there (the type's remarks).
+    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnBox(in FixedOrientedBox box, FixedVector3 probe) {
+        var local = box.ToLocal(point: probe);
+        var clamped = box.ClosestLocal(local: local);
         var delta = (local - clamped);
         var clampedX = (delta.X != FixedQ4816.Zero);
         var clampedY = (delta.Y != FixedQ4816.Zero);
@@ -206,7 +204,7 @@ public static class FixedSurfaceQuery {
             clampedY ||
             clampedZ
         ) {
-            var point = (center + clamped);
+            var point = box.ToWorld(local: clamped);
 
             // Face case: the probe is outside on exactly one axis, so the outward normal is that axis's unit
             // vector — no square root, no rounding.
@@ -215,37 +213,46 @@ public static class FixedSurfaceQuery {
                 !clampedY &&
                 !clampedZ
             ) {
-                return (Point: point, Normal: (FixedVector3.UnitX * FixedAxisMath.Sign(value: delta.X)));
+                return (Point: point, Normal: (box.AxisX * FixedQ4816.CopySign(
+                    sign: delta.X,
+                    value: FixedQ4816.One
+                )));
             }
             if (
                 clampedY &&
                 !clampedX &&
                 !clampedZ
             ) {
-                return (Point: point, Normal: (FixedVector3.UnitY * FixedAxisMath.Sign(value: delta.Y)));
+                return (Point: point, Normal: (box.AxisY * FixedQ4816.CopySign(
+                    sign: delta.Y,
+                    value: FixedQ4816.One
+                )));
             }
             if (
                 clampedZ &&
                 !clampedX &&
                 !clampedY
             ) {
-                return (Point: point, Normal: (FixedVector3.UnitZ * FixedAxisMath.Sign(value: delta.Z)));
+                return (Point: point, Normal: (box.AxisZ * FixedQ4816.CopySign(
+                    sign: delta.Z,
+                    value: FixedQ4816.One
+                )));
             }
 
             // Edge or corner: `delta` already points from the nearest boundary point straight at the probe, which
             // is the analytically correct outward gradient there too — Normalize() just rescales it to unit length.
-            return (Point: point, Normal: delta.Normalize());
+            return (Point: point, Normal: box.ToWorldOffset(local: delta.Normalize()));
         }
 
         // Interior (including exactly ON a face, where the gap on that axis is zero): no axis needed clamping, so
         // project out through the nearest exit face — the shared rule TrySpherePush's interior branch resolves this
         // collider kind with too.
         var (normal, surfaceLocal, _) = FixedAxisMath.BoxInteriorExit(
-            halfExtents: halfExtents,
+            halfExtents: box.HalfExtents,
             local: local
         );
 
-        return (Point: (center + surfaceLocal), Normal: normal);
+        return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
         FixedStaticColliderKind.Sphere => NearestOnSphere(
@@ -254,8 +261,10 @@ public static class FixedSurfaceQuery {
         radius: collider.Extent.X
     ),
         FixedStaticColliderKind.AxisAlignedBox => NearestOnBox(
-        center: collider.Center,
-        halfExtents: collider.Extent,
+        box: FixedOrientedBox.AxisAligned(
+            center: collider.Center,
+            halfExtents: collider.Extent
+        ),
         probe: probe
     ),
         FixedStaticColliderKind.OrientedBox => NearestOnOrientedBox(
@@ -271,25 +280,23 @@ public static class FixedSurfaceQuery {
     ),
         _ => throw new InvalidOperationException(message: $"Unknown collider kind {collider.Kind}."),
     };
+    // The frame change is the unit rotation's own fused kernel, one rounding per component, rather than the box's
+    // three axis projections: the query then runs on the axis-aligned box at the origin, exactly.
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnOrientedBox(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation, FixedVector3 probe) {
         var (point, normal) = NearestOnBox(
-            center: FixedVector3.Zero,
-            halfExtents: halfExtents,
+            box: FixedOrientedBox.AxisAligned(
+                center: FixedVector3.Zero,
+                halfExtents: halfExtents
+            ),
             probe: rotation.RotateInverse(vector: (probe - center))
         );
 
         return (Point: (center + rotation.Rotate(vector: point)), Normal: rotation.Rotate(vector: normal));
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnHalfSpace(FixedVector3 boundaryPoint, FixedVector3 normal, FixedVector3 probe) {
-        // A plane projection: exact by construction, the same single-rounded dot/multiply/subtract every other
-        // fixed-point vector operation already carries — no iteration, no square root.
-        var signedDistance = FixedVector3.Dot(
-            left: (probe - boundaryPoint),
-            right: normal
-        );
-        var point = (probe - (normal * signedDistance));
-
-        return (Point: point, Normal: normal);
+        // A plane projection: the probe's offset from the boundary point rejected from the normal, the same
+        // single-rounded dot/multiply/subtract every other fixed-point vector operation already carries.
+        return (Point: (boundaryPoint + (probe - boundaryPoint).RejectFrom(unitAxis: normal)), Normal: normal);
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnSphere(FixedVector3 center, FixedQ4816 radius, FixedVector3 probe) {
         var delta = (probe - center);

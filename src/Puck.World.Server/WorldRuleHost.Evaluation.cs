@@ -35,12 +35,6 @@ public sealed partial class WorldRuleHost {
             }
         } else {
             var rights = m_carrierScratchRight;
-            // Range is a finite non-negative authored distance; its square only leaves the carrier past 2^39 raw,
-            // where every saturated LengthSquared already compares within it.
-            var rangeSquared = ((interaction.Range.Value < (1L << 39))
-                ? (interaction.Range * interaction.Range)
-                : FixedQ4816.MaxValue
-            );
 
             InteractionCarriers(
                 into: rights,
@@ -59,19 +53,22 @@ public sealed partial class WorldRuleHost {
 
                 foreach (var right in rights) {
                     var rightBody = ((interaction.RightPool is null) ? right : m_poolCarrierRightBody[right]);
-                    // A carrier an earlier pair's effect despawned mid-sweep reads the sentinel, never a distance.
-                    var distanceSquared = ReadBodyDistanceSquared(
-                        bodyA: leftBody,
-                        bodyB: rightBody
-                    );
 
+                    // A carrier an earlier pair's effect despawned mid-sweep reads no offset, never a distance; the
+                    // range is the exact sphere test, and the rounded square only ranks what it admits.
                     if (
                         (rightBody == leftBody) ||
-                        (distanceSquared == NoBodyDistance) ||
-                        (distanceSquared > rangeSquared)
+                        !TryReadBodyOffset(
+                        bodyA: leftBody,
+                        bodyB: rightBody,
+                        offset: out var offset
+                    ) ||
+                        !offset.IsWithin(radius: interaction.Range)
                     ) {
                         continue;
                     }
+
+                    var distanceSquared = offset.LengthSquared;
 
                     if (budget > 0) {
                         // Keep the nearest `budget` rights, ascending by distance then index; the sweep evaluates them

@@ -38,7 +38,7 @@ public readonly record struct RigidContactPolicy(
     public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
         RestLinearThreshold: FixedQ4816.FromDouble(value: policy.RigidRestLinearSpeed),
         RestAngularThreshold: FixedQ4816.FromDouble(value: policy.RigidRestAngularSpeed),
-        RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: policy.RigidRestHoldSeconds)),
+        RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)policy.RigidRestHoldSeconds)),
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
         SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
         SubstepCeiling: policy.RigidSubstepCeiling,
@@ -270,28 +270,6 @@ public sealed partial class WorldBody {
 
         return accumulatorRaw;
     }
-    // baseValue^exponent by repeated single-rounding multiplication, saturating on overflow.
-    private static FixedQ4816 PositiveIntegerPower(FixedQ4816 baseValue, int exponent) {
-        var accumulatorRaw = FixedQ4816.One.Value;
-
-        for (var step = 0; (step < exponent); step++) {
-            if (!FusedArithmetic.TryMixedScaleProduct(
-                a: accumulatorRaw,
-                fractionBitsA: FixedQ4816.FractionBitCount,
-                b: baseValue.Value,
-                fractionBitsB: FixedQ4816.FractionBitCount,
-                fractionBitsOut: FixedQ4816.FractionBitCount,
-                result: out var scaled
-            )) {
-                return FixedQ4816.MaxValue;
-            }
-
-            accumulatorRaw = scaled;
-        }
-
-        return FixedQ4816.FromRawBits(value: accumulatorRaw);
-    }
-
     /// <summary>Gets the rigid facet's world-space centre of mass — <c>root + orientation·CenterOffset</c>, the
     /// point every substep actually rotates and translates about (see <see cref="AdvanceRigid"/>). For a rolling or
     /// tumbling body this orbits away from <see cref="WorldBody.FixedPosition"/> (the root); the pose <c>body.where</c>
@@ -354,7 +332,7 @@ public sealed partial class WorldBody {
                 inverseMassRaw: ScaleRigid(rigid: rigid).InverseMassRaw,
                 delta: out var delta
             ) &&
-            TryAdd(
+            FixedVector3.TryAdd(
                 left: velocity,
                 right: delta,
                 sum: out projected
@@ -375,76 +353,26 @@ public sealed partial class WorldBody {
             return FixedQ4816.One;
         }
 
-        if (!FusedArithmetic.TryMixedScaleProduct(
-            a: rate.Value,
-            fractionBitsA: FixedQ4816.FractionBitCount,
-            b: seconds.Value,
-            fractionBitsB: FixedQ4816.FractionBitCount,
-            fractionBitsOut: FixedQ4816.FractionBitCount,
-            result: out var decayRaw
-        )) {
-            return FixedQ4816.Zero;
-        }
-
+        // A product past the carrier saturates to the maximum, which the clamp reads as a full decay.
         return FixedQ4816.Max(
             x: FixedQ4816.Zero,
-            y: (FixedQ4816.One - FixedQ4816.FromRawBits(value: decayRaw))
+            y: (FixedQ4816.One - FixedSaturate.Multiply(
+                left: rate,
+                right: seconds
+            ))
         );
     }
 
     /// <summary>Multiplies non-negative Q48.16 quantities without wraparound, saturating only when the exact
     /// rounded product leaves the representation. Used for scale-derived mass/reach and Coulomb impulse ceilings,
     /// where saturation preserves the quantity's monotone physical direction.</summary>
-    internal static FixedQ4816 SaturatingNonnegativeProduct(FixedQ4816 left, FixedQ4816 right) {
-        if (
-            (left <= FixedQ4816.Zero) ||
-            (right <= FixedQ4816.Zero)
-        ) {
-            return FixedQ4816.Zero;
-        }
-
-        return (FusedArithmetic.TryMixedScaleProduct(
-            a: left.Value,
-            fractionBitsA: FixedQ4816.FractionBitCount,
-            b: right.Value,
-            fractionBitsB: FixedQ4816.FractionBitCount,
-            fractionBitsOut: FixedQ4816.FractionBitCount,
-            result: out var product
-        )
-            ? FixedQ4816.FromRawBits(value: product)
-            : FixedQ4816.MaxValue
-        );
-    }
-
-    private static bool TryAdd(FixedVector3 left, FixedVector3 right, out FixedVector3 sum) {
-        if (
-            !BinaryIntegerFunctions.TryAdd(
-            left: left.X.Value,
-            right: right.X.Value,
-            sum: out var x
-        ) ||
-            !BinaryIntegerFunctions.TryAdd(
-            left: left.Y.Value,
-            right: right.Y.Value,
-            sum: out var y
-        ) ||
-            !BinaryIntegerFunctions.TryAdd(
-            left: left.Z.Value,
-            right: right.Z.Value,
-            sum: out var z
-        )
-        ) {
-            sum = FixedVector3.Zero;
-            return false;
-        }
-
-        sum = new FixedVector3(
-            X: FixedQ4816.FromRawBits(value: x),
-            Y: FixedQ4816.FromRawBits(value: y),
-            Z: FixedQ4816.FromRawBits(value: z)
-        );
-        return true;
-    }
+    internal static FixedQ4816 SaturatingNonnegativeProduct(FixedQ4816 left, FixedQ4816 right) =>
+        (((left <= FixedQ4816.Zero) || (right <= FixedQ4816.Zero))
+            ? FixedQ4816.Zero
+            : FixedSaturate.Multiply(
+                left: left,
+                right: right
+            ));
     // impulse * inverseMass, both at their own declared scales, rounded once to FixedQ4816. Refuses (rather than
     // silently reading a zero raw) when any axis's correctly-rounded product overflows the signed 64-bit raw.
     private static bool TryImpulseToVelocity(FixedVector3 impulse, long inverseMassRaw, out FixedVector3 delta) {
@@ -939,17 +867,14 @@ public sealed partial class WorldBody {
             left: m_angularVelocity,
             right: contactAnchor
         ));
-        var tangential = (contactVelocity - (normal * FixedVector3.Dot(
-            left: contactVelocity,
-            right: normal
-        )));
 
-        if (tangential == FixedVector3.Zero) {
+        if (!contactVelocity.TryRejectNormalized(
+            length: out var tangentSpeed,
+            unit: out var tangentDirection,
+            unitAxis: normal
+        )) {
             return;
         }
-
-        var tangentSpeed = tangential.Length;
-        var tangentDirection = (tangential / tangentSpeed);
 
         var ballHandle = TwoBodyHandle();
         var groundHandle = GroundPhantomHandle();
@@ -1161,17 +1086,14 @@ public sealed partial class WorldBody {
                 left: ballHandle.AngularVelocity,
                 right: anchor
             ));
-            var tangential = (contactVelocity - (normal * FixedVector3.Dot(
-                left: contactVelocity,
-                right: normal
-            )));
 
-            if (tangential == FixedVector3.Zero) {
+            if (!contactVelocity.TryRejectNormalized(
+                length: out var tangentSpeed,
+                unit: out var tangentDirection,
+                unitAxis: normal
+            )) {
                 continue;
             }
-
-            var tangentSpeed = tangential.Length;
-            var tangentDirection = (tangential / tangentSpeed);
 
             if (!FixedTwoBodyKernel.TryEffectiveMass(
                 bodyA: groundHandle,

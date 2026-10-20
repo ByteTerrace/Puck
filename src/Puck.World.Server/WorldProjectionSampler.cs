@@ -32,10 +32,7 @@ public sealed class WorldProjectionSampler {
     }
 
     private void Accumulate(in WorldSnapshot snapshot) {
-        m_accumulatedStepTicks = (((ulong.MaxValue - m_accumulatedStepTicks) < snapshot.StepTicks)
-            ? ulong.MaxValue
-            : (m_accumulatedStepTicks + snapshot.StepTicks)
-        );
+        m_accumulatedStepTicks = m_accumulatedStepTicks.AddSaturating(right: snapshot.StepTicks);
 
         if (snapshot.FieldsFull) {
             m_pendingFields.Clear();
@@ -137,7 +134,7 @@ public sealed class WorldProjectionSampler {
         }
 
         m_updateTicks = ((updateSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: updateSeconds))
+            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)updateSeconds))
             : 0UL
         );
         m_updateSeconds = updateSeconds;

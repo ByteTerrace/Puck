@@ -237,13 +237,21 @@ public sealed partial class WorldRuleHost {
         ? (b.FixedPosition - a.FixedPosition).Length
         : NoBodyDistance
     );
-    // The squared sibling for a range test that never needs the root; the same NoBodyDistance sentinel for a
-    // missing side, which a caller must test for before comparing against an unbounded range.
-    private FixedQ4816 ReadBodyDistanceSquared(int bodyA, int bodyB) => (
-        ((Host.Body(index: bodyA) is { } a) && (Host.Body(index: bodyB) is { } b))
-        ? (b.FixedPosition - a.FixedPosition).LengthSquared
-        : NoBodyDistance
-    );
+    // The offset from one body to another, for a range test that never needs the root; false for a missing side.
+    private bool TryReadBodyOffset(int bodyA, int bodyB, out FixedVector3 offset) {
+        if (
+            (Host.Body(index: bodyA) is { } a) &&
+            (Host.Body(index: bodyB) is { } b)
+        ) {
+            offset = (b.FixedPosition - a.FixedPosition);
+
+            return true;
+        }
+
+        offset = FixedVector3.Zero;
+
+        return false;
+    }
     // $channel: — the 1-based local seat's channel value as its body integrates it that tick: the drained
     // CommandSnapshot's direct read folded with co-driving contributions and the admitted held overlay (a probe axis
     // or any other held sample reaches a channel only through that overlay), in the channel's own FixedQ4816 domain.

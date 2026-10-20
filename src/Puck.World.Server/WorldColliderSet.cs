@@ -189,10 +189,8 @@ internal sealed class WorldColliderSet : IContactField {
         );
     }
 
-    private static long AddSaturated(long left, long right) => ((left > (long.MaxValue - right))
-        ? long.MaxValue
-        : (left + right)
-    );
+    private static long AddSaturated(long left, long right) =>
+        left.AddSaturating(right: right);
     private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
         hash.Add(value: ((byte)collider.Kind));
         hash.Add(value: collider.Center.X.Value);
@@ -326,7 +324,7 @@ internal sealed class WorldColliderSet : IContactField {
             // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
             var rotation = FixedQuaternion.FromAxisAngle(
                 axis: FixedVector3.UnitY,
-                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDegrees(degrees: resolvedFrame.YawDegrees)
             );
             // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
             // WorldPlacementGrip's own remarks.

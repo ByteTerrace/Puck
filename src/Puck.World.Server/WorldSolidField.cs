@@ -426,7 +426,7 @@ public sealed class WorldSolidField : IContactField {
             // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
             var fixedRotation = FixedQuaternion.FromAxisAngle(
                 axis: FixedVector3.UnitY,
-                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDegrees(degrees: resolvedFrame.YawDegrees)
             );
 
             // A creation whose parts carve each other is one candidate against the solid field, never a carve of it.

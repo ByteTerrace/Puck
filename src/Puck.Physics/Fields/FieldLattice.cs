@@ -376,24 +376,13 @@ public sealed class FieldLattice {
 
                 for (var dz = -1; (!hit && (dz <= 1)); dz++) {
                     for (var dx = -1; (!hit && (dx <= 1)); dx++) {
-                        var bx = (blockX + dx);
-                        var bz = (blockZ + dz);
-                        var h = Pcg3dLatticeNoise.Pcg3d(
-                            x: unchecked((uint)bx),
-                            y: unchecked((uint)bz),
-                            z: seed
+                        var (px, pz) = Pcg3dLatticeNoise.ScatterPoint(
+                            blockX: (blockX + dx),
+                            blockZ: (blockZ + dz),
+                            radius: radius,
+                            seed: seed,
+                            spacing: spacing
                         );
-                        // The point sits inside its block, radius-inset so a disc never leaves the block.
-                        var inset = System.Math.Max(
-                            val1: 0,
-                            val2: (spacing - (2 * radius))
-                        );
-                        var px = (((bx * spacing) + radius) + ((inset > 0)
-                            ? (int)(h.X % ((uint)inset))
-                            : 0));
-                        var pz = (((bz * spacing) + radius) + ((inset > 0)
-                            ? (int)(h.Y % ((uint)inset))
-                            : 0));
                         var ddx = (x - px);
                         var ddz = (z - pz);
 
