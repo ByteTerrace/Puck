@@ -493,10 +493,9 @@ fresh broadphase and narrowphase, over the same bodies' now-current
 positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
 `rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
 domino line) crosses more than one pair-hop within one tick instead of one
-body per tick; a box-vs-box pair depenetrates by separating-axis test over
-world X/Y/Z plus each box's own three face axes
-(`Puck.Physics.FixedColliderBounds.BoxAxes`), not the coarser world-bounds
-approximation every other volume pair still uses. Once the resting latch
+body per tick; a box-vs-box pair depenetrates by the complete fifteen-axis
+separating-axis test (`Puck.Physics.FixedOrientedBox.TrySeparation`), not the
+coarser world-bounds approximation a capsule-vs-box pair still uses. Once the resting latch
 closes, `AdvanceRigid` stops integrating that body entirely until something
 wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
 teleport, or a live solid edit replacing the contact field it rested
