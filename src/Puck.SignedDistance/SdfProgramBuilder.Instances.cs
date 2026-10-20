@@ -158,11 +158,13 @@ public sealed partial class SdfProgramBuilder {
     /// reserved-pool slot that carries no live content this rebuild (the classic "hidden below the floor" placeholder):
     /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the walk skips it
     /// with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs almost nothing.</param>
+    /// <param name="detail">The finest feature, in world units, the instance carries that its bound does not imply; zero
+    /// for none, and a negative or non-finite value reads as zero (<see cref="SdfInstanceRange.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
     /// non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true) {
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -176,6 +178,7 @@ public sealed partial class SdfProgramBuilder {
             radius: boundRadius,
             slot: slot
         );
+        m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
 
         return this;
     }

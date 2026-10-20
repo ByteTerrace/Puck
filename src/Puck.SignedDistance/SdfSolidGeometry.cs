@@ -7,9 +7,12 @@ namespace Puck.SignedDistance;
 /// through, so one primitive means one volume in every program, bound, and contact compile.
 /// </summary>
 /// <remarks>The unit-size law: an authored scale of <c>(1,1,1)</c> is the primitive's unit size and every other scale
-/// reads as a direct multiple of it. Sphere r=1; Box half-extents (1,1,1); Capsule r=1, endpoint (0, 0.5, 0) —
-/// <c>scale.y</c> is the cylindrical section's length and <c>scale.x</c>/<c>z</c> the radius, so total height is
-/// 2·radius + length; Cylinder r=1, half-height 1; Cone base r=1, half-height 1 (apex radius 0); Ellipsoid radii
+/// reads as a direct multiple of it. Sphere r=1; Box half-extents (1,1,1); Capsule r=1 around the segment from the
+/// origin to (0, 0.5, 0) — the straight section is <c>0.5·scale.y</c> long and runs up from the shape's position,
+/// <c>scale.x</c>/<c>z</c> is the radius, so the capsule spans y from <c>-radius</c> to
+/// <c>0.5·scale.y + radius</c>, a total height of 2·radius + 0.5·scale.y, and is not centred on its position (its
+/// bound, <see cref="HalfExtent"/>, is the symmetric half-height <c>0.5·scale.y + radius</c>); Cylinder r=1,
+/// half-height 1; Cone base r=1, half-height 1 (apex radius 0); Ellipsoid radii
 /// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4; Prism bottom half-width,
 /// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
 /// meaning of every persisted document that names the vocabulary.</remarks>

@@ -400,6 +400,69 @@ public sealed class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: mesh.Members.ToArray(), actual: reloaded.Members.ToArray());
         Assert.Equal(expected: vertexMembers, actual: reloaded.VertexMembers.ToArray());
     }
+    // A slot's group refines toward the finest detail its instances declare, over their bounds, as a static instance's
+    // does: two boxes riding one slot, each its own instance, bake into more triangles and refined cells when they
+    // declare a detail finer than the slot's lattice (a pooled creation's embossed text), and the detail keys the mesh.
+    [Fact]
+    public void ADynamicSlotRefinesTowardTheDetailItsInstancesDeclare() {
+        Shape[] pair = [
+            new(Center: Vector3.Zero, Half: new Vector3(value: 0.2f), Rotation: Quaternion.Identity, Material: 0),
+            new(Center: new Vector3(x: 0.3f, y: 0f, z: 0f), Half: new Vector3(value: 0.1f), Rotation: Quaternion.Identity, Material: 0),
+        ];
+        SdfProgram Program(float detail) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            return builder.BeginInstanceDynamic(slot: 1, boundOffset: Vector3.Zero, boundRadius: 0.4f, detail: detail)
+                .ResetPoint().TransformDynamic(slot: 1).Box(halfExtents: pair[0].Half, material: material, round: 0f)
+                .EndInstance()
+                .BeginInstanceDynamic(slot: 1, boundOffset: pair[1].Center, boundRadius: 0.2f, detail: (2f * detail))
+                .ResetPoint().TransformDynamic(slot: 1).Translate(offset: pair[1].Center).Box(halfExtents: pair[1].Half, material: material, round: 0f)
+                .EndInstance()
+                .Build();
+        }
+        (SdfMeshPathBake Bake, SdfMeshBakeGroup Group, int Triangles) Bake(SdfProgram program) {
+            var bake = new SdfMeshPathBake { Residency = "detailed" };
+            var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
+                DynamicTransforms = [default, new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero)],
+                FarDistance = 100f,
+            };
+            var index = 0L;
+
+            TestLiveness.Until(reason: bake.Describe, step: () => {
+                _ = bake.Dress(frame: frame);
+                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                    bake.Record(batch: batch);
+                    bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
+                }
+
+                return !bake.Pending;
+            });
+
+            var group = Assert.Single(collection: SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, transforms: frame.DynamicTransforms));
+
+            Assert.Same(expected: program, actual: bake.Program);
+
+            return (bake, group, Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.TriangleCount);
+        }
+        static long Refined(SdfMeshPathBake bake) {
+            var line = bake.Describe();
+            var start = (line.IndexOf(value: "refined=", comparisonType: StringComparison.Ordinal) + "refined=".Length);
+
+            return long.Parse(s: line[start..line.IndexOf(value: ' ', startIndex: start)], provider: System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var (plain, plainGroup, plainTriangles) = Bake(program: Program(detail: 0f));
+        var (detailed, detailedGroup, detailedTriangles) = Bake(program: Program(detail: 0.004f));
+
+        Assert.Equal(expected: 0f, actual: plainGroup.Detail);
+        Assert.Equal(expected: 0.004f, actual: detailedGroup.Detail);
+        Assert.True(condition: (Vector3.Distance(value1: new Vector3(value: -0.4f), value2: detailedGroup.DetailLow) < 2e-3f), userMessage: $"{detailedGroup.DetailLow}");
+        Assert.True(condition: (Vector3.Distance(value1: new Vector3(x: 0.5f, y: 0.4f, z: 0.4f), value2: detailedGroup.DetailHigh) < 2e-3f), userMessage: $"{detailedGroup.DetailHigh}");
+        Assert.NotEqual(expected: plainGroup.Sealed, actual: detailedGroup.Sealed);
+        Assert.True(condition: (Refined(bake: detailed) > Refined(bake: plain)), userMessage: $"{detailed.Describe()} against {plain.Describe()}");
+        Assert.True(condition: (detailedTriangles > plainTriangles), userMessage: $"{detailedTriangles} triangles against {plainTriangles}");
+    }
     // The program: one static instance per shape with its tight bound, the second baking with the first, or with
     // `oneCopy` every shape after the first baking with the one before it.
     private static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {

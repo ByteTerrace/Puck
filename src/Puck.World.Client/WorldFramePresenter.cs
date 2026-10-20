@@ -2013,6 +2013,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the composed dynamic-transform table's moved set, whose <c>sdf.transforms</c> counters count the
     /// rows every frame packed, compared and owed.</summary>
     public SdfMovedTransforms MovedTransforms => m_composed.MovedTransforms;
+    /// <summary>Gets the composed source every frame is captured through: its frame count, the program it holds and
+    /// whether a build of the next is in flight, which a wait for the baked frame reads.</summary>
+    public SdfCompositionFrameSource Composed => m_composed;
     /// <inheritdoc/>
     public SdfGlyphAtlas? GlyphAtlas => m_text.GlyphAtlas;
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>

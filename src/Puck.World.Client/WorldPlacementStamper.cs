@@ -374,6 +374,17 @@ public static class WorldPlacementStamper {
             visitor: ref visitor
         );
     }
+    // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke, about
+    // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldStampPool).
+    internal static float TextDetail(CreationDocument creation, float scale) {
+        var detail = float.PositiveInfinity;
+
+        foreach (var run in (creation.TextRuns ?? [])) {
+            detail = MathF.Min(detail, MathF.Min((run.Depth ?? 0.02f), (0.1f * run.EmHeight)));
+        }
+
+        return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
+    }
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
@@ -435,17 +446,6 @@ public static class WorldPlacementStamper {
             }
 
             return (float.IsFinite(detail) ? detail : 0f);
-        }
-        // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke,
-        // about a tenth of its em.
-        private static float TextDetail(CreationDocument creation, float scale) {
-            var detail = float.PositiveInfinity;
-
-            foreach (var run in (creation.TextRuns ?? [])) {
-                detail = MathF.Min(detail, MathF.Min((run.Depth ?? 0.02f), (0.1f * run.EmHeight)));
-            }
-
-            return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
         }
         private void EmitTextRuns(CreationStampInstance instance) {
             // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
