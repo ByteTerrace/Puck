@@ -1061,6 +1061,40 @@ public static class CreationStampEmitter {
             (scale.Y == scale.Z)
         );
     }
+    /// <summary>Measures one shape's worst-case reach from the creation's origin, in creation units: its position,
+    /// its primitive's reach grown by its cells padding, warps (flare, shear, bumps), domain fold, dilation and
+    /// onion. The one per-shape reach every creation bound is built from (<see cref="RenderReach"/>,
+    /// <see cref="CreationGeometry.Reach"/>); a Sweep carries no <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3, SdfLift)"/>
+    /// unit-scale law (its own control points already carry creation-unit dimensions — see
+    /// <see cref="SdfSolidPrimitive.Sweep"/>'s remarks), so its own uniform scale bakes on directly.</summary>
+    /// <param name="shape">The authored shape.</param>
+    /// <returns>The reach in creation units.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public static float ShapeReach(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(shape);
+
+        var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
+            ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
+            : SdfSolidGeometry.Reach(
+                type: shape.Type,
+                scale: shape.Scale,
+                lift: (shape.Lift ?? SdfLift.Extrude)
+            )
+        );
+        var warpedReach = ShapeWarpReach.Expand(
+            (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
+                shape.Scale,
+                shape.Flare
+            ) ?? 0f)),
+            shape.Flare,
+            shape.Shear,
+            ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
+        );
+
+        // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged beside the
+        // shape's own position; Dilate/Onion move the outer surface outward by their own value.
+        return ((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f));
+    }
     /// <summary>Lays out every one of a creation's authored text runs once, in document order — the same input
     /// <see cref="RenderReach"/> and <see cref="EmitText"/>/<see cref="EmitTextDynamic"/> each independently derive
     /// from (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) per run. A caller
@@ -1169,31 +1203,8 @@ public static class CreationStampEmitter {
 
         for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
             var shape = shapes[shapeIndex];
-            // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged
-            // beside the shape's own position; Dilate/Onion move the outer surface outward by their own value — all
-            // in creation units, scaled with them.
-            // A flare grows the primitive's own reach by up to max(s) (ShapeFlareDocument.ReachFactor). A Sweep
-            // carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry creation-unit
-            // dimensions — see SdfSolidPrimitive.Sweep's remarks); its own uniform scale bakes on directly.
-            var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
-                ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
-                : SdfSolidGeometry.Reach(
-                    type: shape.Type,
-                    scale: shape.Scale,
-                    lift: (shape.Lift ?? SdfLift.Extrude)
-                )
-            );
-            var warpedReach = ShapeWarpReach.Expand(
-                (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
-                    shape.Scale,
-                    shape.Flare
-                ) ?? 0f)),
-                shape.Flare,
-                shape.Shear,
-                ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
-            );
-
-            var shapeReach = ((((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f));
+            // The shape's creation-unit reach, scaled with the stamp; the noise amplitude is world units, un-scaled.
+            var shapeReach = ((ShapeReach(shape: shape) * scale) + (document.Noise?.Amplitude ?? 0f));
 
             reach = ((composeBlends && any)
                 ? SdfBoundAlgebra.Compose(
