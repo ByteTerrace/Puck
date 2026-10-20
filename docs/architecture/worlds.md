@@ -112,10 +112,10 @@ whole file:
 | Instance identity | The instance the definition's draws were seeded for; the desktop boot and `puck compile` use `boot`. |
 
 Each chunk is one registered derivation's product, and each code appears once.
-A chunk records the version of its derivation and the content hash of every
-input it read beyond the definition, and a boot keeps a stored chunk only while
-its version is the derivation's own, every input still reads as recorded, and
-no chunk it depends on was derived afresh. Otherwise the boot derives that chunk
+A chunk records the content hash of every input it read beyond the definition,
+and a boot keeps a stored chunk only while every input still reads as recorded
+and no chunk it depends on was derived afresh. A derivation has no version of
+its own: the header's engine build moves with any change to code it runs. Otherwise the boot derives that chunk
 and keeps the rest. Nothing is repaired or adapted.
 
 | Code | Holds | Inputs |

@@ -12,21 +12,12 @@ namespace Puck.World.Games.Tests;
 /// derives every chunk and writes one into its cache; with one whose header is its own it takes every chunk that
 /// still holds, beside the document first, and derives only the rest; a compiled world whose header differs is
 /// ignored whole; and a boot from a compiled world admits byte for byte the definition a fresh draw admits. The
-/// boots count through the <c>world.boot</c> work source's <c>compiled-hits</c> and <c>chunk-derivations</c>. Each
-/// derivation's product is pinned to its version, so a deliberate change to a derivation moves the version. That every
+/// boots count through the <c>world.boot</c> work source's <c>compiled-hits</c> and <c>chunk-derivations</c>. That every
 /// shipped world the World's build compiled boots from its compiled world was held by <c>CompiledCatalogLawTests</c>,
 /// which is quarantined in <c>experimental/tests</c>.
 /// </summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class CompiledWorldLawTests {
-    // The products the pinned fixture's derivations produce at their current versions. A derivation whose product
-    // moves is a deliberate change to it: bump the chunk's Version and re-record its pin here.
-    private static readonly (string Code, uint Version, string Product)[] Pins = [
-        ("DEFN", 2, "sha256-64/c73c72b8c1a3aeb8"),
-        ("ASST", 1, "sha256-64/1bc8ff1f5742445f"),
-        ("CURV", 1, "sha256-64/db2fa90498613fdf"),
-    ];
-
     internal static string WriteWorld(TemporaryDirectory directory, string patchSource) {
         WritePatchBeside(directory: directory);
 
@@ -119,31 +110,6 @@ public sealed class CompiledWorldLawTests {
         Assert.Equal(expected: 1L, actual: Boot(cache: new CompiledWorldCache(directory: directory.PathOf(name: "state-control")), path: path).Hits);
     }
     [Fact]
-    public void AChunkWhoseVersionMovedIsRederivedAndTheRestKept() {
-        using var directory = new TemporaryDirectory();
-        var path = WriteWorld(directory: directory, patchSource: PatchBeside);
-        var cache = new CompiledWorldCache(directory: directory.PathOf(name: "state/compiled"));
-        var valid = Compile(path: path);
-
-        Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: valid, header: out var header, reason: out var reason), userMessage: reason);
-        File.WriteAllBytes(
-            bytes: CompiledWorld.Encode(
-                chunks: [.. container.Chunks.Select(selector: static chunk => ((chunk.Code == AssetChunk.Instance.Code)
-                    ? new ContainerChunk(code: chunk.Code, inputs: chunk.Inputs, payload: chunk.Payload, version: (chunk.Version + 1))
-                    : chunk))],
-                header: header
-            ),
-            path: CompiledWorld.Beside(documentPath: path)
-        );
-
-        var boot = Boot(cache: cache, path: path);
-
-        Assert.Equal(actual: (boot.Hits, boot.Derivations), expected: (1L, 1L));
-        Assert.Equal(expected: ["DEFN", "CURV"], actual: Codes(codes: boot.Resolution.Kept));
-        Assert.Equal(expected: ["ASST"], actual: Codes(codes: boot.Resolution.Derived));
-        Assert.Equal(expected: valid, actual: File.ReadAllBytes(path: cache.FileFor(documentPath: path)));
-    }
-    [Fact]
     public void AnEditedAssetFileRederivesItsChunkAndTheRestKept() {
         using var directory = new TemporaryDirectory();
         var patch = directory.WriteBytes(bytes: File.ReadAllBytes(path: ShippedPatch()), name: "patches/stinger.synth.json");
@@ -183,7 +149,7 @@ public sealed class CompiledWorldLawTests {
         File.WriteAllBytes(
             bytes: CompiledWorld.Encode(
                 chunks: [.. container.Chunks.Select(selector: static chunk => ((chunk.Code == AssetChunk.Instance.Code)
-                    ? new ContainerChunk(code: chunk.Code, inputs: chunk.Inputs, payload: chunk.Payload, version: (chunk.Version + 1))
+                    ? new ContainerChunk(code: chunk.Code, inputs: [.. chunk.Inputs.Select(selector: static input => (input with { Hash = null }))], payload: chunk.Payload, version: chunk.Version)
                     : chunk))],
                 header: header
             ),
@@ -196,30 +162,6 @@ public sealed class CompiledWorldLawTests {
         Assert.Equal(expected: ["ASST", "DOCI"], actual: Codes(codes: boot.Resolution.Derived));
         Assert.Equal(expected: valid, actual: File.ReadAllBytes(path: cache.FileFor(documentPath: path)));
     }
-    [Fact]
-    public void EachDerivationsProductIsPinnedToItsVersion() {
-        using var directory = new TemporaryDirectory();
-        // A relative source no directory carries: the pin reads no file, so only the derivation can move it.
-        var path = WriteWorld(directory: directory, patchSource: "compiled-world-law/absent.synth.json");
-
-        Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: Compile(path: path), header: out _, reason: out var reason), userMessage: reason);
-
-        var derived = container.Chunks.Select(selector: static chunk => (chunk.Code.ToString(), chunk.Version, chunk.Hash.ToString())).ToArray();
-
-        Assert.Equal(expected: Codes(codes: CompiledWorldChunks.Standard.Select(selector: static chunk => chunk.Code)), actual: derived.Select(selector: static chunk => chunk.Item1));
-        foreach (var (code, version, product) in Pins) {
-            var actual = derived.Single(predicate: chunk => (chunk.Item1 == code));
-
-            Assert.True(
-                condition: ((actual.Version != version) || (actual.Item3 == product)),
-                userMessage: $"{code}'s product at version {version} is {actual.Item3}, pinned as {product}: a deliberate change to the derivation bumps its Version and re-records this pin."
-            );
-            Assert.True(
-                condition: (actual.Version == version),
-                userMessage: $"{code} is at version {actual.Version}; re-record its pin at that version."
-            );
-        }
-    }
 }
 
 // A chunk a later package might register: the drawn document's id, read after ASST so it follows ASST's derivation.
@@ -230,8 +172,6 @@ internal sealed class DocumentIdChunk : ICompiledWorldChunk {
 
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "DOCI");
     public IReadOnlyList<ChunkCode> DependsOn { get; } = [AssetChunk.Instance.Code];
-
-    public uint Version => 1;
 
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;
     public bool TryDerive(CompiledWorldContext context, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out CompiledWorldProduct? product, out string reason) {

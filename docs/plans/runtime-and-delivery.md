@@ -219,11 +219,9 @@ produces them for shipped worlds, the runtime writes one into the per-user
 compiled-world cache on a miss. Checkpoints, replay tapes, and instance starts do
 not yet reference one by its header hash. Every package that adds a chunk
 carries the same law: for every shipped world, each product derived fresh equals
-the product loaded from the compiled world byte for byte, and a deliberate
-change to a derivation moves that chunk's version and re-records its pin
-(`CompiledWorldLawTests`) in the same change. A chunk's version is set by hand
-(`CompiledWorldChunks.cs`); the [derivation keys](#derivation-keys) package
-owns moving versions onto fingerprints.
+the product loaded from the compiled world byte for byte. A chunk carries no
+version: the header's engine build moves with any change to code a derivation
+runs ([derivation keys](#derivation-keys)).
 
 **One validated load (landed).** Owns `WorldDefinitionValidator.ValidateCore`'s
 callers and `WorldServer.RecompileRules`'s. One validation receipt reaches the
@@ -275,9 +273,9 @@ contract. Check: `CompiledCatalogLawTests` (quarantined in `experimental/tests/P
 every compiled world the build shipped and counts a hit through the
 `world.boot` work source's `world.boot.compiled-hits`; `CompiledWorldLawTests`
 in `tests/Puck.World.Games.Tests` ignores a mismatched
-header, re-derives a chunk whose version or asset input moved while keeping the
-rest, admits byte for byte the definition a fresh draw admits, and pins each
-derivation's product to its version; `WorldDocumentOutputLawTests` in
+header, re-derives a chunk whose asset input moved while keeping the
+rest, and admits byte for byte the definition a fresh draw admits;
+`WorldDocumentOutputLawTests` in
 `tests/Puck.Cli.Worlds.Tests` holds every shipped compiled world to what its document
 derives fresh, byte for byte. Still open:
 
@@ -321,34 +319,19 @@ A derived product is keyed by the code that makes it, so a deliberate change to
 that code moves the key and nothing is served stale. The running build computes
 the key, so nothing records it and nothing goes stale: the producer's assembly
 roots the reach (`AssemblyReach.Of`, every Puck assembly it reaches), and the
-content fingerprint of that reach is the key. No product is keyed this way yet;
-the first slice that keys one adds the fingerprint over the reach.
+content fingerprint of that reach is the key. The compiled world's chunks need
+none of their own: its header keys the engine build, the module version id of
+every `Puck.*` assembly reachable from `Puck.World.Schema`
+(`CompiledWorld.EngineBuild`), and `DEFN`, `ASST` and `CURV` derive wholly
+inside that reach. A chunk whose derivation lies outside the reach adds the
+fingerprint of its producer's assembly as its key. No other product is keyed
+this way yet; the first slice that keys one adds the fingerprint over the reach.
 
-**Owns:** `AssemblyReach` and the two products below.
+**Owns:** `AssemblyReach` and the product below.
 
-**Delivers, as two independent slices:**
+**Delivers:**
 
-1. **Chunk versions.** A compiled world is kept only while its header's engine
-   build equals the running one (`CompiledWorldCache.TryResolve`), and the
-   engine build is the module version id of every `Puck.*` assembly reachable
-   from `Puck.World.Schema` (`CompiledWorld.EngineBuild`). `DEFN` and `ASST`
-   derive wholly inside that reach, and carry hand-set integers (2 and 1) that
-   `CompiledWorldChunks.Holds` compares only after the header has matched, so
-   they can never decide anything the engine build has not. The rule is that a chunk's `Version` is
-   the fingerprint of its derivation exactly when the derivation's assemblies
-   are outside the engine build's reach, and carries nothing when they are
-   inside: `DEFN` and `ASST` drop their integers, `ICompiledWorldChunk.Version`
-   defaults to zero for a chunk inside the reach, and each chunk the
-   simulation-chunks and everything-else packages add declares which side it is
-   on. Per-chunk fingerprints for `DEFN` and `ASST` are not taken: they would
-   gain a kept compiled world across a rebuild only if the header gave up the
-   engine build, which is the stronger key. Nothing
-   re-records: no hash, baseline or shipped compiled world moves, because the
-   compile at build already re-derives every world. Check: a law that every
-   registered chunk either lists an assembly inside the engine build's reach
-   and carries zero, or carries its derivation's fingerprint and names its
-   producer's assembly.
-2. **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
+1. **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
    path, the pipeline's name, every closure file's pin, and each pass's interface
    and declarations pins. It reads nothing of the code that compiles and writes
    the package, so a change to that code under an unchanged source keeps the key
@@ -545,7 +528,7 @@ carries the commands and results against the candidate.
 | Step | Packages, in parallel | Why here |
 |---|---|---|
 | 1 — today | The product tree; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
-| 2 | One validated load; the container; the view's static sections; the derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state, and a new chunk's version slice lands with the chunk. |
+| 2 | One validated load; the container; the view's static sections; the derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state, and a new chunk outside the engine build's reach adds its key with the chunk. |
 | 3 | Simulation chunks; target registers and the authoring envelope | Content-keyed caches first; the widest slice of the boot profile. The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. |
 | 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged product; the observation channel needs the rebuilt substrate's delivery seam. |
 | 5 | The primary client onto the view | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |

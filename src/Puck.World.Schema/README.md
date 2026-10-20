@@ -2878,8 +2878,8 @@ Authored with `world.row.set curves <row-json>` /
 compiled segment count and total arc length, and a live reference count split
 by camera/follow consumer. Consumers: a camera program's `path` op (dollies
 the eye/pivot along the curve by arc-length fraction, `Puck.World.Client`'s
-`WorldCameraRigCompiler` + `Puck.SdfVm.Views.SdfCurvePath`, the float twin
-converted once from the compiled Q32 raws—never a second solver) and a
+`WorldCameraRigCompiler` + the compiled `CompiledCurvatureSpline` it
+evaluates—never a second solver) and a
 body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
 per-tick arc advance)—the seed the kart-track charter inherits.
