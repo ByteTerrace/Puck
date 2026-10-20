@@ -11,10 +11,13 @@
 // GLYPH DECODE — extracted from the proven per-surface copies with NO math changed: the pack is one RGBA texel per
 // word (little-endian R|G|B|A), each channel encoded 0.5 + d/range; reconstruction is per-channel manual bilinear +
 // MEDIAN-OF-3 + a screenPxRange coverage ramp, with a darker outline band from the SAME field at zero extra taps.
-// This file declares no resources and includes nothing — a caller passes its own buffer in by name (DXC lowers a
-// resource-typed parameter to identical code as an inlined global).
+// This file declares no resources — a caller passes its own buffer in by name (DXC lowers a resource-typed parameter
+// to identical code as an inlined global). The median reconstruction and the coverage ramp are Puck.Shaders' shared
+// msdf.hlsli.
 #ifndef PUCK_OVERLAY_COMMON_HLSLI
 #define PUCK_OVERLAY_COMMON_HLSLI
+
+#include "../../../Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli"
 
 // KEEP IN SYNC with OverlayTokenBlock.RoleCount.
 #define OVERLAY_TOKEN_ROLE_COUNT 21u
@@ -102,9 +105,8 @@ float OverlaySdfBilinear(ByteAddressBuffer data, uint atlasBase, int glyph, floa
     float3 s10 = OverlaySdfTexel(data, atlasBase, glyph, (b + int2(1, 0)), cellW, cellH);
     float3 s01 = OverlaySdfTexel(data, atlasBase, glyph, (b + int2(0, 1)), cellW, cellH);
     float3 s11 = OverlaySdfTexel(data, atlasBase, glyph, (b + int2(1, 1)), cellW, cellH);
-    float3 s = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
 
-    return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
+    return puckMsdfReconstruct(s00, s10, s01, s11, f);
 }
 
 // The pack's per-glyph metric table, just past the last glyph's cell — KEEP IN SYNC with OverlayGlyphSdfPack.MetricWords:
@@ -140,8 +142,8 @@ float2 SampleGlyphCoverage(ByteAddressBuffer data, uint atlasBase, int glyph, in
 
     float2 atlasCoord = float2(((cellLocal.x / cellSize.x) * atlasCellW), ((cellLocal.y / cellSize.y) * atlasCellH));
     float encoded = OverlaySdfBilinear(data, atlasBase, glyph, atlasCoord, atlasCellW, atlasCellH);
-    float coverage = saturate((screenPxRange * (encoded - 0.5)) + 0.5);
-    float outline = saturate((screenPxRange * ((encoded - 0.5) + outlineBand)) + 0.5);
+    float coverage = puckMsdfCoverage(screenPxRange, (encoded - 0.5));
+    float outline = puckMsdfCoverage(screenPxRange, ((encoded - 0.5) + outlineBand));
 
     return float2(coverage, outline);
 }

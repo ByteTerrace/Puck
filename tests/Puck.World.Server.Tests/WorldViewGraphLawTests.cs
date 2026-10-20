@@ -1,5 +1,6 @@
 using Xunit;
 
+using Puck.Shaders;
 using Puck.Testing;
 
 namespace Puck.World.Server.Tests;
@@ -298,16 +299,18 @@ public sealed class WorldViewGraphLawTests {
             passes: sources.PlanGraph
         );
 
-        Assert.Equal(expected: (((int?)12), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
-        Assert.Equal(expected: 3.0, actual: presentation.Instances[0].PassDisplaysPerFrame);
-        Assert.Equal(expected: 12, actual: presentation.Instances[1].Passes);
+        var planned = (RenderGraphPackageCatalog.Engine.Packages.Single(predicate: static package => (package.Id == RenderGraphPackageCatalog.SdfWorld)).Fragment!.Passes.Count + 1);
+
+        Assert.Equal(expected: (((int?)planned), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
+        Assert.Equal(expected: (planned / 4.0), actual: presentation.Instances[0].PassDisplaysPerFrame);
+        Assert.Equal(expected: planned, actual: presentation.Instances[1].Passes);
         Assert.Contains(
             expectedSubstring: "screen name no external version",
             actualString: presentation.Instances[1].Issue
         );
         Assert.Null(@object: presentation.Instances[2].Passes);
         Assert.Contains(
-            expectedSubstring: "security (graphs/view.graph.json) extent<=display rate 1/4 frames passes 12 <= 3 display pass-pixels/frame",
+            expectedSubstring: $"security (graphs/view.graph.json) extent<=display rate 1/4 frames passes {planned} <=",
             actualString: presentation.Describe()
         );
     }

@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Overlays;
 
 /// <summary>A panel's chrome recipe: which scrim + corner radius the token block resolves for it.</summary>
@@ -519,11 +521,7 @@ public sealed class OverlayFrameBuilder {
         // own hue through the very tier a hovered chip blooms accent.
         m_scratch[(offset + 4)] = 2u | (((uint)(accentRole ?? 0)) << 4);
         m_scratch[(offset + 5)] = iconGlyph0;
-        m_scratch[(offset + 6)] = ((uint)(Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: alpha
-        ) * 255f))
+        m_scratch[(offset + 6)] = ((uint)VectorFunctions.ToUnorm8(value: alpha))
             | (pressed
             ? (1u << 8)
             : 0u)
@@ -877,6 +875,6 @@ public sealed class OverlayFrameBuilder {
 
         var total = (((((OverlayTokenBlock.WordCount + glyphs.Words.Length) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + leases.TextWordCapacity) + (MaxClips * ClipWords));
 
-        return (total + 3) & ~3;
+        return total.AlignUp(alignment: 4);
     }
 }

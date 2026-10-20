@@ -42,7 +42,7 @@ public sealed class ImageSourceWorkingSpaceLawTests {
             x: linear,
             y: (1.0 / 2.4)
         )) - 0.055);
-    // display-encode.frag.hlsl's displayToLinear: the decode the display encode applies to a working value.
+    // display-encode.frag.hlsl's puckSrgbToLinearExtended (Shared/transfer.hlsli): the decode the display encode applies to a working value.
     private static double DisplayToLinear(double value) {
         var magnitude = Math.Abs(value: value);
         var curve = ((magnitude <= 0.04045)
