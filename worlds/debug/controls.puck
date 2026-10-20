@@ -225,6 +225,7 @@ state {
       annotate = "act.annotate"
       jetpackAlone = "act.isolate"
       build = "act.build"
+      respawn = "act.respawn"
     }
 
     // The play wheel's sector labels and icons, by sector id; `cancel` is the hub's label while nothing is hovered.
@@ -347,6 +348,14 @@ bindingOverlays [
                 id: "build"
                 label: "Build"
                 sources ["keyboard.f2", "gamepad.back"]
+              }
+              // Back to the spawn from anywhere, a fall or a portal loop included: Backspace or the left stick's press.
+              {
+                command: "body.pose"
+                id: "respawn"
+                label: "Respawn"
+                text: "spawn:stage"
+                sources ["keyboard.backspace", "gamepad.leftStickPress"]
               }
             ]
           }
