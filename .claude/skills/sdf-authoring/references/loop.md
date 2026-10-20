@@ -157,7 +157,7 @@ live motion, nor rendered appearance.
 live twin `creation.shape <prototype> [<shape-name>...]` (headless too) read
 each shape off its own lowering: `lowered=` (what the renderer emits for it
 alone), `distance=exact | bound gain=<g> | uncertified`, `step=` when a warp
-clamps the march, `cpu=` (the fixed-point evaluator's verdict) and `contact=`
+clamps the march, `cpu=` (whether the fixed-point evaluator reads the render lowering as the renderer draws it, the reading `mesh audit` measures a bake against) and `contact=`
 (admitted with `contact-omits=`, omitted, or refused and why). A `bound` is a
 field that underestimates: `|grad d|` lies in `[g, 1]`, from a non-uniform
 `Scale` the primitive has no native spelling for (a capsule, cone or torus

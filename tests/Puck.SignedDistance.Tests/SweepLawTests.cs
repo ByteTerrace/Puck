@@ -988,17 +988,25 @@ public sealed class SweepLawTests {
         Assert.True(condition: (MathF.Abs(x: (((float)distance) - expectedFloat)) < 0.0005f), userMessage: $"fixed {(float)distance} against float {expectedFloat}");
     }
     [Fact]
-    public void TheFixedPointEvaluatorRefusesMoreThanOneStrandByName() {
+    public void TheContactReadingRefusesMoreThanOneStrandByNameAndTheRenderReadingReadsEveryStrand() {
+        var a = Vector3.Zero;
+        var b = Vector3.UnitY;
+        var c = (2f * Vector3.UnitY);
+        const float RadiusStart = 0.1f;
+        const float RadiusEnd = 0.1f;
+        const int Strands = 3;
+        const float Twist = 1f;
+        const float StrandOffset = 0.05f;
         var program = BuildSweep(
-            a: Vector3.Zero,
-            b: Vector3.UnitY,
-            c: (2f * Vector3.UnitY),
-            radiusStart: 0.1f,
-            radiusEnd: 0.1f,
+            a: a,
+            b: b,
+            c: c,
+            radiusStart: RadiusStart,
+            radiusEnd: RadiusEnd,
             bulge: 0f,
-            strands: 3,
-            twist: 1f,
-            strandOffset: 0.05f
+            strands: Strands,
+            twist: Twist,
+            strandOffset: StrandOffset
         );
         var exception = Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: program));
 
@@ -1006,6 +1014,27 @@ public sealed class SweepLawTests {
             actualString: exception.Message,
             expectedSubstring: "Sweep"
         );
+
+        var render = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+        var random = new Random(Seed: 5);
+
+        for (var trial = 0; (trial < 200); trial++) {
+            var p = new Vector3(
+                x: ((((float)random.NextDouble()) - 0.5f) * 0.8f),
+                y: (((float)random.NextDouble()) * 2.4f) - 0.2f,
+                z: ((((float)random.NextDouble()) - 0.5f) * 0.8f)
+            );
+            var expected = ReferenceDistance(p: p, a: a, b: b, c: c, radiusStart: RadiusStart, radiusEnd: RadiusEnd, bulge: 0f, strands: Strands, twist: Twist, strandOffset: StrandOffset);
+
+            Assert.True(condition: render.TryDistance(distance: out var distance, material: out _, position: FixedPositionOf(value: p)));
+
+            var actual = (float)(double)distance;
+
+            Assert.True(
+                condition: ((actual <= (expected + 1e-3f)) && (actual >= (expected - 2e-3f))),
+                userMessage: $"trial {trial}: the render reading answers {actual} where the swept spheres' distance is {expected} at p={p}"
+            );
+        }
     }
     [InlineData(0f, 0.1f, 0.5f, 0f, 0.1f)]
     [InlineData(0.5f, 0.1f, 0.5f, 0.05f, 0.35f)]

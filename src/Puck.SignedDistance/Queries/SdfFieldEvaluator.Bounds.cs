@@ -225,6 +225,10 @@ public sealed partial class SdfFieldEvaluator {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
+        // A pending LaneErode's effect on the next shape (WalkPoints' laneErodeSkip and laneErodeAmount): skipped, or
+        // eroded by an interval of its reach; cleared by ResetPoint.
+        var laneErodeSkip = false;
+        var laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
         Span<FixedInterval> scopes = stackalloc FixedInterval[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
@@ -285,6 +289,8 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfOp.ResetPoint: {
                         local = world;
                         distanceScale = Point(value: FixedQ4816.One);
+                        laneErodeSkip = false;
+                        laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
 
                         var segment = segmentSlots[index];
 
@@ -339,10 +345,32 @@ public sealed partial class SdfFieldEvaluator {
                         local = WarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
                         break;
                     }
+                case SdfOp.Shear:
+                case SdfOp.GaussianPush:
+                case SdfOp.DomainWarp:
+                case SdfOp.RepeatPolar:
+                case SdfOp.WallpaperFold:
+                case SdfOp.LogSphere:
+                case SdfOp.CellJitter: {
+                        local = RenderWarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
+                        break;
+                    }
+                case SdfOp.LaneErode: {
+                        var amount = LaneErodeBounds(instruction: in instruction);
+
+                        laneErodeSkip = (amount is null);
+                        laneErodeAmount = (amount ?? FixedInterval.FromPoint(value: FixedQ4816.Zero));
+                        break;
+                    }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
                 case SdfOp.Dilate: {
                         result = EditFieldBounds(instruction: in instruction, local: local, result: result);
+                        break;
+                    }
+                case SdfOp.Displace:
+                case SdfOp.NoiseDisplace: {
+                        result = RenderEditFieldBounds(instruction: in instruction, result: result);
                         break;
                     }
                 case SdfOp.PushField: {
@@ -355,11 +383,17 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.ShapeBlend: {
-                        if (instruction.Detail) {
+                        var erosion = laneErodeAmount;
+                        var skipped = laneErodeSkip;
+
+                        laneErodeSkip = false;
+                        laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
+
+                        if (instruction.Detail || skipped) {
                             break;
                         }
 
-                        var candidate = (ShapeBounds(instruction: instruction, p: local) * distanceScale);
+                        var candidate = ((ShapeBounds(instruction: instruction, p: local) * distanceScale) + erosion);
 
                         result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
                         break;
@@ -492,7 +526,7 @@ public sealed partial class SdfFieldEvaluator {
         Math.Max(val1: FusedArithmetic.RawMagnitude(value: reach.CenterX), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: reach.CenterY), val2: FusedArithmetic.RawMagnitude(value: reach.CenterZ)));
 
     /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
-    /// must appear here; the sync law holds the two sets equal.</summary>
+    /// under either reading must appear here; the sync law holds the two sets equal.</summary>
     public static IReadOnlyList<SdfOp> BoundedOps { get; } = [
         SdfOp.ResetPoint,
         SdfOp.Translate,
@@ -508,6 +542,18 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.PushField,
         SdfOp.PopField,
         SdfOp.ShapeBlend,
+        SdfOp.AxialProfile,
+        SdfOp.RotatePlane,
+        SdfOp.Shear,
+        SdfOp.GaussianPush,
+        SdfOp.DomainWarp,
+        SdfOp.RepeatPolar,
+        SdfOp.WallpaperFold,
+        SdfOp.LogSphere,
+        SdfOp.CellJitter,
+        SdfOp.LaneErode,
+        SdfOp.Displace,
+        SdfOp.NoiseDisplace,
     ];
     /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for. Every shape the point interpreter
     /// accepts must appear here; the sync law holds the two sets equal.</summary>

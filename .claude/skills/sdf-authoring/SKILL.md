@@ -68,9 +68,9 @@ puck creation stats --world <file>.puck --prototype <id>
 `compile --validate` runs document validation: the stamp budget and the
 panel/trim/cells creation-scope refusal fire here (PUCK030), over every
 `prototypes[]` document whether or not a placement uses it. It does **not** run
-emission or contact construction, so `Morph`/`StairsUnion`/
-`StairsSubtraction`, the Path contact refusal, and a residual nonuniform
-`Scale` on a solid placement pass it and fail only under `creation stats`.
+emission or contact construction, so the Path contact refusal and a residual
+nonuniform `Scale` on a solid placement pass it and fail only under
+`creation stats`.
 `creation stats`, `creation shape` and `mesh audit` read a `.puck` source
 directly, compiling it in memory with its relative `basis` resolved from the
 source's own directory; a compiled JSON copied elsewhere loses that basis.
@@ -126,6 +126,11 @@ from what you want the surface to *do*:
 | A part that swells or pinches along its length | `flare` | a scale profile along one axis with a mid-span bulge |
 | A leaning or S-curved mass | `shear` | polynomial offset of one axis driven by another |
 | A local dent or swelling | `bumps` | up to 4 gaussian pushes |
+| An organic wobble over the whole form | `warp` | a bounded sine warp of the point, each axis driven by the next |
+| Fine even relief: dimples, corrugation, a hammered skin | `displace` | a sine product added to the field, real geometry |
+| A rounded slab, a stadium, a capsule from any primitive | `elongate` | the cross-section swept over a box of half-extents, 1-Lipschitz |
+| Scattered, tumbled, recoloured copies | a `jitter` fold | a hashed repeat; render only |
+| Self-similar shells, a Droste zoom | a `logSphere` fold | render only |
 | Softened edges | `rounding` (curved) or `chamfer` (45° bevel) | never both on one shape |
 | A hollow shell | `onion` | |
 | Repetition: ribs, teeth, plates, spokes, fins | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
@@ -150,14 +155,16 @@ Blends run from `Union` through the smooth and chamfer families to the round
 seams: `GrooveUnion` carves a recessed seam along the intersection curve of two
 solids, `PipeUnion` lays a bead along it, and both have subtraction twins. Reach
 for a groove when the seam should follow that intersection; it removes a
-separate cutter shape, but it still forces the creation-wide scope. `Morph`,
-`StairsUnion` and `StairsSubtraction` exist in the blend enum but compose only
-at a field-scope pop; on a shape they validate and then fail at emission.
+separate cutter shape, but it still forces the creation-wide scope.
+`StairsUnion`, `StairsSubtraction` (`steps`) and `Morph` (`morph { lane, from,
+to }`) compose at the pop of a scope the shape opens for itself
+([composition](references/composition.md#blends)).
 
 Two rules decide whether facets are available at all:
 
 1. **Per-shape scope.** `dilate`, `onion`, `panel`, `flare`, `shear`, `bumps`,
-   `erode`, and `cells` each make the shape request its own field scope. A
+   `warp`, `displace`, `erode`, and `cells` each make the shape request its
+   own field scope, as does a stairs or morph blend. A
    non-uniformly scaled sphere or ellipsoid does not: it bakes into the
    1-Lipschitz exponent-2 superellipsoid gauge. A warped shape whose scope is
    free clamps only itself at its own pop: `creation stats` shows

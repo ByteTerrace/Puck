@@ -258,6 +258,16 @@ public static class SdfDomainExpansion {
 
                     return false;
                 }
+            case SdfDomainOp.Jitter: {
+                    refusal = "a jitter domain op, whose hashed copies have no rigid-copy expansion";
+
+                    return false;
+                }
+            case SdfDomainOp.LogSphere: {
+                    refusal = "a log-sphere domain op, whose scaled shells have no rigid-copy expansion";
+
+                    return false;
+                }
             default:
                 throw new ArgumentOutOfRangeException(
                     paramName: nameof(op),

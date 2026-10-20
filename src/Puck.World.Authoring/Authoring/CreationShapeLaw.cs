@@ -33,7 +33,8 @@ public enum CreationShapeDistance {
 /// <param name="Gain">The certified distance gain in [0, 1]: the field is at least this times the distance.</param>
 /// <param name="StepScale">The smallest step scale the lowering's warps or blends bake (1/L), one for an isometric
 /// field.</param>
-/// <param name="CpuRefusal">Why <see cref="SdfFieldEvaluator"/> refuses the render lowering, or <see langword="null"/>
+/// <param name="CpuRefusal">Why <see cref="SdfFieldEvaluator"/> refuses the render lowering read as the renderer draws
+/// it (<see cref="SdfFieldReading.Render"/>, what the mesh audit measures a bake against), or <see langword="null"/>
 /// when it interprets it.</param>
 /// <param name="Contact">What deterministic contact makes of the shape on a solid placement: <c>admitted</c>,
 /// <c>omitted (…)</c> or <c>refused (…)</c>.</param>
@@ -97,6 +98,9 @@ public sealed record CreationShapeLaw(
         if (shape.Flare is not null) { facets.Add(item: "flare"); }
         if (shape.Shear is not null) { facets.Add(item: "shear"); }
         if (shape.Bumps is { Count: > 0 }) { facets.Add(item: "bumps"); }
+        if (shape.Warp is not null) { facets.Add(item: "warp"); }
+        if (shape.Displace is not null) { facets.Add(item: "displace"); }
+        if (shape.Elongate is not null) { facets.Add(item: "elongate"); }
         if (shape.Erode is not null) { facets.Add(item: "erode"); }
         if (shape.Cells is not null) { facets.Add(item: "cells"); }
         if (shape.Panel is not null) { facets.Add(item: "panel"); }
@@ -255,7 +259,7 @@ public static partial class CreationShapeLaws {
         return new CreationShapeLaw(
             Contact: contact,
             ContactOmits: omits,
-            CpuRefusal: CpuRefusal(program: posed),
+            CpuRefusal: CpuRefusal(program: posed, reading: SdfFieldReading.Render),
             Distance: distance,
             Failure: null,
             Gain: ((distance == CreationShapeDistance.Exact) ? 1f : gain),
@@ -313,10 +317,12 @@ public static partial class CreationShapeLaws {
         }
         return ("admitted", dropped);
     }
-    // Why the fixed-point evaluator refuses a program, in its own words up to the first sentence, or null.
-    private static string? CpuRefusal(SdfProgram program) {
+    // Why the fixed-point evaluator refuses a program, in its own words up to the first sentence, or null. The render
+    // lowering is read as the renderer draws it (the reading the mesh audit measures against); the contact lowering as
+    // clearance.
+    private static string? CpuRefusal(SdfProgram program, SdfFieldReading reading = SdfFieldReading.Contact) {
         try {
-            _ = new SdfFieldEvaluator(program: program);
+            _ = new SdfFieldEvaluator(program: program, reading: reading);
             return null;
         } catch (ArgumentException exception) {
             return Sentence(exception: exception);

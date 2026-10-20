@@ -72,6 +72,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 - **A `--cosim` run under about 60 frames proves nothing** (the boot logo scroll
   dominates it). Give a CPU-stream comparison at least 120 frames and check that the
   record count differs per ROM before believing a clean result.
+- **Know which AGB BIOS ran before blaming firmware.** Advanced Post
+  diagnostics (`--render`, `--probe`, `--trace-crash` and the rest) boot the
+  bundled Puck firmware unless `--bios` names another image, as a World does;
+  only the battery runs the zeroed stub, where any SWI or IRQ runs off into
+  zeroed BIOS memory. A hosted core that stops being able to run (Undefined or
+  Abort mode, a fetch from a region with no code) throws
+  `AgbExecutionFaultException`, which `machine.state` shows as `fault=`.
 - **Every core's framebuffer is packed `0x00RRGGBB`** (`ITimeTravelMachineCore.Framebuffer`, red in bits 16-23;
   the advanced brick sets the alpha byte), because the queued worker repacks it for the World's screens in that
   order. A PNG or a hash of the image goes through `FramebufferRgba.Pack` (`Puck.Machines.Post`), never
@@ -96,9 +103,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   Implementing it flips that stage; update the stage and the reference together,
   and derive the bits from the modeled `AgbLinkCable` partner, never from ambient
   state.
-- **No licensed image is ever a default or a bundled payload.** Retail ROMs and BIOS
-  images are named per run (`--link-rom`, `--bios`, `--ags`) and stay out of the
-  repository.
+- **No licensed image is ever a committed default or a bundled payload.** Retail
+  ROMs and BIOS images are named per run (`--link-rom`, `--bios`, `--ags`) and
+  stay out of the repository, its builds, packages, logs and commit messages. A
+  world device boots one only as the owner's local default: the git-ignored
+  folder's own `folder.json`, written by `machine.default` (`puck-world`,
+  [engagement](../puck-world/references/engagement.md)), so nothing committed
+  names it.
 
 ## Workflow
 

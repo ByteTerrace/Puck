@@ -86,7 +86,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
     // exists nowhere else, so this is the one door onto it.
     private readonly WorldStampPool m_stamps = stamps;
-    // The seat camera's pointer adapter, whose drag gate applies player.orbit and player.steer edges.
+    // The seat camera's pointer adapter, whose drag gate applies player.orbit and player.steer edges; a headless boot
+    // registers none, having no pointer to drag.
     private readonly WorldSeatViewInput? m_viewInput = viewInput;
     // The boot instance's live channel table — name→ordinal resolution for a typed press, fly or tether on a body
     // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets

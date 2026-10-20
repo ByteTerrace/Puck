@@ -6,9 +6,11 @@ namespace Puck.SignedDistance;
 /// One domain operator applied to a shape's evaluation point before the shape's own translate/rotate/scale — the
 /// isometric subset of the ISA's point ops, named as data so a caller can carry a fold without carrying a builder.
 /// </summary>
-/// <remarks>Every member of this family is an isometry, which is what lets <see cref="SdfDomainExpansion"/> answer the
-/// same fold as a finite set of rigid copies. Non-isometric point ops (twist, bend, log-sphere, displace, domain warp,
-/// cell jitter) are deliberately absent: they have no rigid-copy spelling, so they stay builder-only.</remarks>
+/// <remarks>The reflections, repeats and polar folds are isometries, which is what lets <see cref="SdfDomainExpansion"/>
+/// answer the same fold as a finite set of rigid copies. The wallpaper, jitter and log-sphere folds have no finite
+/// rigid-copy spelling (a lattice without an edge, a hashed copy per cell, a similarity per shell), so the expansion
+/// refuses each by name and a solid placement carrying one is refused at validation. The non-isometric point warps
+/// (twist, bend, displace, domain warp) are per-shape facets, not folds.</remarks>
 public abstract record SdfDomainOp {
     private SdfDomainOp() {
     }
@@ -64,6 +66,22 @@ public abstract record SdfDomainOp {
         SdfPlane Plane = SdfPlane.XZ,
         int MaterialStride = 0
     ) : SdfDomainOp;
+    /// <summary>Stochastic lattice fold — <see cref="SdfProgramBuilder.CellJitter"/>: a repeat whose every cell
+    /// displaces, tumbles and recolours its copy by a hash of the cell.</summary>
+    /// <param name="Spacing">The per-axis cell spacing.</param>
+    /// <param name="Amount">The peak-to-peak hashed displacement per axis; under half the least spacing.</param>
+    /// <param name="Seed">The hash seed.</param>
+    /// <param name="Tumble">The hashed rotation's share of a half turn, in [0, 1]; zero keeps every copy upright.</param>
+    /// <param name="MaterialVariants">The hashed palette rows a copy's material strides over (0 = geometric only).</param>
+    /// <param name="Flavor">How the displacement is distributed over the cell.</param>
+    /// <param name="Origin">The point the lattice folds around, as <see cref="Repeat.Origin"/>.</param>
+    public sealed record Jitter(Vector3 Spacing, float Amount, uint Seed = 0u, float Tumble = 0f, int MaterialVariants = 0, SdfNoiseFlavor Flavor = SdfNoiseFlavor.White, Vector3 Origin = default) : SdfDomainOp;
+    /// <summary>Log-spherical shell fold — <see cref="SdfProgramBuilder.LogSphere"/>: space tiled into self-similar
+    /// shells about the origin, each a scaled copy of the prototype shell.</summary>
+    /// <param name="ShellRatio">The ratio between neighbouring shells' radii, above 1.</param>
+    /// <param name="Twist">The spin each shell turns about the Z axis, in radians per shell.</param>
+    /// <param name="Origin">The point the shells centre on, as <see cref="Repeat.Origin"/>.</param>
+    public sealed record LogSphere(float ShellRatio, float Twist = 0f, Vector3 Origin = default) : SdfDomainOp;
 }
 /// <summary>Applies an ordered <see cref="SdfDomainOp"/> list to a builder chain — the one place the family's
 /// argument mapping onto <see cref="SdfProgramBuilder"/> is written.</summary>
@@ -141,6 +159,22 @@ public static class SdfDomainOps {
             materialStride: wallpaper.MaterialStride,
             plane: wallpaper.Plane
         ),
+            SdfDomainOp.Jitter jitter => chain.Translate(offset: jitter.Origin)
+                .CellJitter(
+            flavor: jitter.Flavor,
+            jitter: jitter.Amount,
+            materialVariants: jitter.MaterialVariants,
+            seed: jitter.Seed,
+            spacing: jitter.Spacing,
+            tumble: jitter.Tumble
+        )
+                .Translate(offset: -jitter.Origin),
+            SdfDomainOp.LogSphere logSphere => chain.Translate(offset: logSphere.Origin)
+                .LogSphere(
+            shellRatio: logSphere.ShellRatio,
+            twist: logSphere.Twist
+        )
+                .Translate(offset: -logSphere.Origin),
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(op),
             actualValue: op,

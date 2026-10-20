@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Abstractions.Machines;
 
 namespace Puck.World;
@@ -9,13 +10,26 @@ namespace Puck.World;
 /// extension, an image its machines run (<see cref="IMachineValidationCatalog.RefuseImage"/>). An engine with neither
 /// mounts every file. A folder that does not exist on this machine, or stops existing while the World runs, holds
 /// nothing and is reported absent, never refused. Subfolders are not searched, and nothing outside the folders is
-/// listed.</summary>
+/// listed. A folder may hold its own settings, <see cref="SettingsFile"/>, which names the file a device preferring a
+/// folder default (<see cref="WorldMachine.PreferFolderDefault"/>) boots; the settings file is never listed as
+/// content.</summary>
 public static class WorldMachineContentFolder {
+    /// <summary>The name of the settings file a content folder may hold beside its content.</summary>
+    public const string SettingsFile = "folder.json";
+    /// <summary>The schema tag a <see cref="SettingsFile"/> carries.</summary>
+    public const string SettingsSchema = "puck.content-folder.v1";
+    // A settings file is a handful of bytes; anything larger is not one.
+    private const int MaximumSettingsBytes = 4096;
+
     /// <summary>One authored folder.</summary>
     /// <param name="Path">The folder as the document authors it.</param>
     /// <param name="Resolved">The full, forward-slashed folder it resolves to.</param>
     /// <param name="Present">Whether the folder exists on this machine.</param>
-    public readonly record struct Folder(string Path, string Resolved, bool Present);
+    /// <param name="Default">The file name the folder's <see cref="SettingsFile"/> names as its default, or
+    /// <see langword="null"/> when it names none or the folder holds no settings file.</param>
+    /// <param name="SettingsRefusal">Why the folder's <see cref="SettingsFile"/> cannot be read, or
+    /// <see langword="null"/> when it reads or is absent.</param>
+    public readonly record struct Folder(string Path, string Resolved, bool Present, string? Default = null, string? SettingsRefusal = null);
     /// <summary>One file a folder holds.</summary>
     /// <param name="Name">The file name, as <c>machine.swap</c> takes it.</param>
     /// <param name="Folder">The authored folder the file is in.</param>
@@ -73,16 +87,24 @@ public static class WorldMachineContentFolder {
                 files = [];
             }
 
+            var settingsRefusal = ReadSettings(folder: resolved, name: out var folderDefault);
+
             resolvedFolders.Add(item: new(
+                Default: folderDefault,
                 Path: folder,
                 Present: Directory.Exists(path: resolved),
-                Resolved: resolved
+                Resolved: resolved,
+                SettingsRefusal: settingsRefusal
             ));
 
             var inFolder = new List<Entry>(capacity: files.Length);
 
             foreach (var file in files) {
                 var name = Path.GetFileName(path: file);
+
+                if (IsSettingsFile(name: name)) {
+                    continue;
+                }
 
                 inFolder.Add(item: new(
                     ContentPath: $"{folder}/{name}",
@@ -164,6 +186,85 @@ public static class WorldMachineContentFolder {
             : $"'{name}' names {matches.Length} files ({Describe(entries: matches, qualified: true)}); give the whole file name"
         );
         return false;
+    }
+
+    /// <summary>Finds the default a machine's folders name: the first folder, in authored order, whose
+    /// <see cref="SettingsFile"/> names a default or cannot be read decides. The named file must be one the folder holds
+    /// and the engine can mount. A refusal names the folder and its settings file, never the file the settings name, so
+    /// a narrated refusal carries no content name.</summary>
+    /// <param name="folders">The machine's folders, as <see cref="TryList"/> returns them.</param>
+    /// <param name="entries">The files the folders hold, as <see cref="TryList"/> returns them.</param>
+    /// <param name="entry">The default file on success.</param>
+    /// <param name="refusal">Why the deciding folder's default cannot boot, or <see langword="null"/> on success and
+    /// when no folder names a default.</param>
+    /// <returns><see langword="true"/> when a folder names a default the machine can mount.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="folders"/> or <paramref name="entries"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool TryDefault(IReadOnlyList<Folder> folders, IReadOnlyList<Entry> entries, out Entry entry, out string? refusal) {
+        ArgumentNullException.ThrowIfNull(argument: folders);
+        ArgumentNullException.ThrowIfNull(argument: entries);
+        entry = default;
+        refusal = null;
+
+        foreach (var folder in folders) {
+            if (folder.SettingsRefusal is { } unreadable) {
+                refusal = $"folder '{folder.Path}' {SettingsFile} {unreadable}";
+                return false;
+            }
+            if (folder.Default is not { } name) {
+                continue;
+            }
+
+            var found = entries.Where(predicate: candidate =>
+                string.Equals(a: candidate.Folder, b: folder.Path, comparisonType: StringComparison.Ordinal) &&
+                string.Equals(a: candidate.Name, b: name, comparisonType: StringComparison.Ordinal)
+            ).ToArray();
+
+            if (found.Length != 1) {
+                refusal = $"folder '{folder.Path}' {SettingsFile} names a default the folder does not hold";
+                return false;
+            }
+            if (found[0].Refusal is not null) {
+                refusal = $"folder '{folder.Path}' {SettingsFile} names a default the engine cannot mount (machine.content says why)";
+                return false;
+            }
+            entry = found[0];
+            return true;
+        }
+        return false;
+    }
+    /// <summary>Writes a folder's <see cref="SettingsFile"/>, naming its default or none, creating or replacing the
+    /// file.</summary>
+    /// <param name="folder">The full path of the folder to write the settings into; it must exist.</param>
+    /// <param name="name">The file name of the folder's default, or <see langword="null"/> to name none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="folder"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is not a bare file name or names the settings file
+    /// itself.</exception>
+    /// <exception cref="IOException">The file cannot be written.</exception>
+    /// <exception cref="UnauthorizedAccessException">The folder denies writing.</exception>
+    public static void WriteSettings(string folder, string? name) {
+        ArgumentNullException.ThrowIfNull(argument: folder);
+
+        if ((name is not null) && (DefaultNameRefusal(name: name) is { } refusal)) {
+            throw new ArgumentException(message: $"default {refusal}", paramName: nameof(name));
+        }
+
+        using var buffer = new MemoryStream();
+
+        using (var writer = new Utf8JsonWriter(utf8Json: buffer, options: new() {
+            // A file name is written as the owner reads it (an apostrophe stays one); the file is never served.
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            Indented = true,
+        })) {
+            writer.WriteStartObject();
+            writer.WriteString(propertyName: "schema", value: SettingsSchema);
+            if (name is not null) {
+                writer.WriteString(propertyName: "default", value: name);
+            }
+            writer.WriteEndObject();
+        }
+        buffer.WriteByte(value: (byte)'\n');
+        File.WriteAllBytes(path: Path.Combine(path1: folder, path2: SettingsFile), bytes: buffer.ToArray());
     }
 
     /// <summary>Decides whether a content path a provider operation would mount names a file directly in one of the
@@ -282,6 +383,73 @@ public static class WorldMachineContentFolder {
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return $"unreadable ({exception.Message.ReplaceLineEndings(replacementText: " ")})";
+        }
+    }
+    private static bool IsSettingsFile(string name) => string.Equals(a: name, b: SettingsFile, comparisonType: StringComparison.OrdinalIgnoreCase);
+    // Why a settings file's default is not a bare file name in its folder, or null when it is.
+    private static string? DefaultNameRefusal(string name) => (((name.Length == 0) || (name is "." or "..") ||
+        (name.IndexOfAny(anyOf: ['/', '\\', ':']) >= 0) || IsSettingsFile(name: name))
+        ? "must be the bare name of a file in the folder"
+        : null);
+    // Reads a folder's settings file: its default file name, or null when it names none or there is no file. Returns
+    // why the file cannot be read, or null when it reads or is absent. Strict: the schema tag is required and any other
+    // member is refused.
+    private static string? ReadSettings(string folder, out string? name) {
+        name = null;
+
+        byte[] bytes;
+
+        try {
+            bytes = File.ReadAllBytes(path: Path.Combine(path1: folder, path2: SettingsFile));
+        } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
+            return null;
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return "is unreadable";
+        }
+        if (bytes.Length > MaximumSettingsBytes) {
+            return $"is larger than {MaximumSettingsBytes} bytes";
+        }
+
+        try {
+            using var document = JsonDocument.Parse(utf8Json: bytes);
+            var root = document.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object) {
+                return "must be a JSON object";
+            }
+
+            string? schema = null;
+
+            foreach (var member in root.EnumerateObject()) {
+                switch (member.Name) {
+                    case "schema" when (member.Value.ValueKind == JsonValueKind.String):
+                        schema = member.Value.GetString();
+                        break;
+                    case "default" when (member.Value.ValueKind == JsonValueKind.String):
+                        name = member.Value.GetString();
+                        break;
+                    case "default" when (member.Value.ValueKind == JsonValueKind.Null):
+                        break;
+                    case "schema" or "default":
+                        name = null;
+                        return $"member '{member.Name}' must be a string";
+                    default:
+                        name = null;
+                        return $"has unknown member '{member.Name}'";
+                }
+            }
+            if (!string.Equals(a: schema, b: SettingsSchema, comparisonType: StringComparison.Ordinal)) {
+                name = null;
+                return $"must carry schema \"{SettingsSchema}\"";
+            }
+            if ((name is not null) && (DefaultNameRefusal(name: name) is { } refusal)) {
+                name = null;
+                return $"default {refusal}";
+            }
+            return null;
+        } catch (JsonException) {
+            name = null;
+            return "is not valid JSON";
         }
     }
     private static string Stem(string name) {
