@@ -19,6 +19,7 @@ import "theme"
 import "controls"
 import "devices"
 import "desktop"
+import "hall"
 import "chess"
 import "loop"
 import "places"
@@ -99,6 +100,12 @@ spawnPoints: concat([
 )
 
 commands: galleryCommands
+
+// The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck) and the chess
+// pieces the 32 below it (chess.puck); both imports name a population, so this body settles it.
+bodies {
+  capacity: 41
+}
 
 placements {
   // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck).

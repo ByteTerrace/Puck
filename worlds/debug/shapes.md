@@ -1,75 +1,109 @@
 # Debug world shape gallery
 
-The debug world lays every authorable signed-distance construct out on the open
-ground at +X/+Z, one prototype an exhibit, so a change to the field, the bake,
-the stamp pool or the renderer shows on every construct at once. Two rows move:
-their exhibits run through the dynamic stamp path on one console-controlled
-clock, so motion, skinning and motion vectors can be inspected, paused and
-scrubbed. [`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports
-it, expands `galleryPrototypes()` in its `prototypes` block,
-`galleryPlacements()` in its `placements` block and `galleryState()` in its
-`state.world` block, concatenates `gallerySpawns` into its `spawnPoints` and
-`galleryCommands` into its `commands`, and declares the font the labels emboss
-in. The gaming devices stand on their own row west of the spawn:
-[`devices.md`](devices.md), and the chess table ahead and left of it:
-[`chess.md`](chess.md).
+The debug world shows every authorable signed-distance construct in the gallery
+hall, a four-storey building on the open ground at +X/+Z, one prototype an
+exhibit, so a change to the field, the bake, the stamp pool or the renderer
+shows on every construct at once, and the building itself exercises stairs, a
+lift, floors, walls, windows and indoor light. Two rows move: their exhibits
+run through the dynamic stamp path on one console-controlled clock, so motion,
+skinning and motion vectors can be inspected, paused and scrubbed.
+[`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports it,
+expands `galleryPrototypes()` in its `prototypes` block, `galleryPlacements()`
+in its `placements` block and `galleryState()` in its `state.world` block,
+concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
+its `commands`, and declares the font the labels emboss in.
+[`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
+lights, level boards, tour and keys. The gaming devices stand on their own row
+west of the spawn: [`devices.md`](devices.md), and the chess table ahead and
+left of it: [`chess.md`](chess.md).
 
-Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, toward the
-origin, with a plaque in small type under the label saying what the exhibit
-demos and what to look for. The plinth is the exhibit's last shape, so an
-exhibit's subtraction or intersection never cuts it. A plinth that renders
-wrong shows the exhibit's scope or bound reaching its siblings. Exhibits stand
-3 m apart from x = 14. Slot 0 is the exhibit's grey, slot 1 the plinth, slot 2
-the label, and slot 3 the exhibit's own second material: a blend's tool, the
-palette channel under test, or a moving part.
+Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
+in small type under the label saying what the exhibit demos and what to look
+for. The plinth is the exhibit's last shape, so an exhibit's subtraction or
+intersection never cuts it. A plinth that renders wrong shows the exhibit's
+scope or bound reaching its siblings. Slot 0 is the exhibit's grey, slot 1 the
+plinth, slot 2 the label, and slot 3 the exhibit's own second material: a
+blend's tool, the palette channel under test, or a moving part.
 
-## Walking the gallery
+## The hall
 
-The entrance is the `gallery` spawn point (`places.puck`, (14, 0, 9) facing
-+Z): `debug.go gallery` stands a player there, looking up the first row, with
-the map board ahead and to the right at (16.5, 0, 11.5) listing every row and
-the z it stands on. A sign stands 3 m before each row's first exhibit, at
-x = 11, naming the row and what it shows. Every exhibit has a spawn point
-named after its prototype, 2.8 m in front of its plinth facing it, so a line
-reaches any exhibit by name; a player walks the rows (+Z, 5 m apart) and reads
-the plaques, and an agent drives the same through the gallery's authored
-commands (`shapes.puck`'s `galleryCommands`, composed from existing verbs;
-`help --names gallery.` lists them):
+The footprint is x 10 to 70, z 12 to 40. Level k's floor stands at y = 4.5k +
+0.05, k = 0 to 3, under a flat roof at 18.05 with three skylights over level 3.
+Every piece is a solid box, so the Moth walks every floor, climbs the stairs and
+rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 
-| To | Console line |
+| Where | What |
 |---|---|
-| Walk to an exhibit, facing it, in the chase camera | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
+| South wall, x 14 to 18 | The entrance, 3.3 m high, facing the spawn; `gallery` stands outside it |
+| x 10 to 20, z 12 to 34 | The lobby on level 0, with the map board left of the door; each level above has its landing here |
+| x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
+| x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
+| x 20 to 70 | The halls: each level's rows run along +X from x = 23, a sign at each row's west end |
+| South, north and east walls | A 2.4 m window band on every level; the roof's skylights light level 3 |
+
+Lighting: an emissive strip runs along the ceiling over each viewing aisle and
+two over each landing (`hall-lights`); three small point lights warm the lobby,
+the stairwell and the lift car (the last rides the car's body). A point light
+neither occludes nor is occluded, so the rooms' light is the strips' and the
+windows', carried indoors by the traced indirect light, the shadow cascades
+under the roof and ambient occlusion.
+
+### Getting around
+
+| To | How |
+|---|---|
+| Enter | `debug.go gallery`, then walk +Z through the door |
+| Change level on foot | The stairs at the lobby's north-west corner: walk +Z up the first flight, step east on the half landing, walk -Z up the second |
+| Call the lift | Step on the `CALL` pad before the lift door, or `gallery.lift <level>` |
+| Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
+| Stand on a level's landing | `gallery.level <level> [body]` |
+| Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
+| Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` or the right shoulder steps on, `-` steps back; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
-| Flag an exhibit that looks wrong | `gallery.flag <exhibit> [note]`: writes `<exhibit>:<note>` to `galleryFlags.last` and prints the body's pose; then `world.screenshot worlds/debug/flags/<exhibit>.png` captures it into the git-ignored `worlds/debug/flags/` folder an agent reads back |
+| Flag the exhibit the tour stands at | `gallery.mark`, or `G`: writes `<exhibit>:marked` to `galleryFlags.last` and prints body 0's pose |
+| Flag any exhibit with a note | `gallery.flag <exhibit> [note]`: writes `<exhibit>:<note>` to `galleryFlags.last` and prints the body's pose; then `world.screenshot worlds/debug/flags/<exhibit>.png` captures it into the git-ignored `worlds/debug/flags/` folder an agent reads back |
 | Read the last flag | `world.state galleryFlags` |
 
-Each exhibit's and sign's in-world text is a text run on its placement: the
-debug world draws no HUD, so there is nothing to show or hide. An authored
-command may call only verbs every presentation registers and a binding may
-name, which keeps `world.debug-view`, `world.slice` and `world.screenshot` out
-of them: the debug views and the slice stay the console lines under "Looking
-at one exhibit", and a binding row may name `world.debug-view normals` directly
-to cycle a view from a key or a pad button.
+The lift car is a population body (`lift-car`, body 40) whose look draws the
+cab and which carries the attached solid platform the Moth stands on. Rules move
+it: `liftCall` names the level a pad or command called, `liftTarget` and
+`liftAt` count sixteenths of a metre, and `lift-ride` poses the car at cell
+`liftAt` of the `liftShaft` topology every tick, so it climbs 1.875 m/s and
+stops exactly at each floor. A body standing on the platform rides it up and
+down, grounded the whole way (the analytic contact provider carries a body
+with the attached solid under it; `src/Puck.World.Server/README.md`). The shaft
+has no landing doors: walking into the shaft on a level where the car is not
+drops to the car's roof or the pit.
+
+The tour keys live in `hall.puck`'s `gallery-keys` overlay on the debug world's
+resting page; the bar shows the right shoulder with `=` beside it. Each
+exhibit's and sign's in-world text is a text run on its placement: the debug
+world draws no HUD, so there is nothing to show or hide. An authored command
+may call only verbs every presentation registers and a binding may name, which
+keeps `world.debug-view`, `world.slice` and `world.screenshot` out of them: the
+debug views and the slice stay the console lines under "Looking at one
+exhibit".
 
 ## Rows
 
 Prototype names are `shape-<exhibit>` for the still rows and `motion-<exhibit>`
-for the moving ones; the rows' arrays in `shapes.puck` list them in order.
+for the moving ones; the rows' arrays in `shapes.puck` list them in order, and
+`galleryRows` places each row on its level.
 
-| Row | z | Exhibits, from x = 14 |
+| Row | Level, z | Exhibits, from x = 23 |
 |---|---|---|
-| Uniform | 14 | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
-| Stretched | 19 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3) |
-| Extruded profiles | 24 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
-| Revolved profiles | 29 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
-| Sweeps and facets | 34 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
-| Blends | 39 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
-| Folds | 44 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
-| Forms | 49 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
-| Surfaces | 54 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
-| Motion | 59 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
-| Motion II | 64 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
-| Warps II | 69 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
+| Uniform | 0, 16 | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
+| Stretched | 0, 22 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3) |
+| Extruded profiles | 0, 28 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
+| Revolved profiles | 0, 34 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
+| Sweeps and facets | 1, 17 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
+| Blends | 1, 25 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
+| Folds | 1, 33 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
+| Forms | 2, 17 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
+| Surfaces | 2, 25 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
+| Motion | 3, 20 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
+| Motion II | 3, 30 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
+| Warps II | 2, 33 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
 
 ## Coverage
 
@@ -184,16 +218,16 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 
 ## Looking at one exhibit
 
-Exhibit `i` of a row stands at x = 14 + 3i. The operator camera frames it from
-the label side:
+Exhibit `i` of a row stands at x = 23 + 2.6i on its level's floor, y = f =
+4.5k + 0.05. The operator camera frames it from the label side:
 
 ```text
-view.override camera look <x> 1.9 <z - 2.8> <x> 1.2 <z>
+view.override camera look <x> <f + 1.9> <z - 2.8> <x> <f + 1.2> <z>
 ```
 
-`view.override camera look 26 1.9 21.2 26 1.2 24` frames the polygon 12 with
-X ≠ Y, for example. `view.override camera look <x> 2.3 <z - 4.4> <x> 1 <z>`
-frames three exhibits of a row at once. `view.override camera auto` returns the
+`view.override camera look 33.4 1.95 25.2 33.4 1.25 28` frames the polygon 12
+with X ≠ Y, for example. `view.override camera look <x> <f + 2.3> <z - 4.4> <x>
+<f + 1> <z>` frames three exhibits of a row at once. `view.override camera auto` returns the
 seat's view.
 
 Every inspection the debug world offers works on an exhibit:
@@ -253,7 +287,7 @@ render clock, eight 60 Hz frames a pose, and answers none of these controls;
 | Cell | Read by | Console line |
 |---|---|---|
 | `probe` | `motion-state-blend`'s sphere position, author frame | `world.state.cell.set galleryInputs probe [0.1, 1.45, 0.05]` |
-| `reach` | `motion-ik`'s target, a world point | `world.state.cell.set galleryInputs reach [35.3, 1.55, 63.7]` |
+| `reach` | `motion-ik`'s target, a world point | `world.state.cell.set galleryInputs reach [41.5, 15.1, 29.7]` |
 | `tint` | `shape-state-color`'s colour | `world.state.cell.set galleryInputs tint #3A7BD5` |
 
 A `probe` write re-emits the creation and rebakes its seam exactly, where
@@ -271,15 +305,15 @@ world.wait bakes 60
 ```
 
 A placement moves the same way, whole, still or moving:
-`world.row.set placements motion-spin position [26, 0.5, 59]`. `world.reload`
+`world.row.set placements motion-spin position [35, 14.05, 20]`. `world.reload`
 discards every such edit.
 
 ## Inspection recipes
 
-Each recipe frames a row's first three exhibits; move the x of both points by 3
-to step along it.
+Each recipe frames a row's first three exhibits; move the x of both points by
+2.6 to step along it. The motion rows stand on level 3 (f = 13.55).
 
-- **Motion vectors.** `view.override camera look 17 2.3 54.6 17 1 59`, then
+- **Motion vectors.** `view.override camera look 25.6 15.85 15.6 25.6 14.55 20`, then
   `world.debug-view motion`. The spin, rock and slide exhibits must read their
   own motion and their plinths stationary, and pausing the clock must still
   every vector within a frame. A capture holds the frame it serves and shows
@@ -292,7 +326,7 @@ to step along it.
   the motion row 60 ticks apart differ in 436 of 1,152,000 pixels, mostly the
   flow volume (which animates on the render clock); two running ones 30 ticks
   apart differ in 17,394.
-- **Moving blend seam.** `view.override camera look 26 1.9 56.2 26 1.2 59`,
+- **Moving blend seam.** `view.override camera look 33.4 15.45 17.2 33.4 14.75 20`,
   `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
   box and sphere stretches as the sphere slides away from the pose it baked in.
   Pause or scrub `galleryClock` and the group bakes again at the held pose
@@ -301,32 +335,32 @@ to step along it.
   group at the pose of its frame anyway; a scrub after it (`world.state.cell.set
   galleryClock $value 1.3`) changes state alone, so only the settle rebake moves
   the seam (`sdf.mesh-settle.queued` and `done` count it). Compare against
-  `motion-state-blend` at x = 29 with `galleryInputs probe` at the same offset.
+  `motion-state-blend` at x = 36 with `galleryInputs probe` at the same offset.
   `world.counters sdf.mesh-settle` read twice while the clock runs shows
   `moving` climbing and `queued` still.
-- **Moving cut.** `motion-carve` at x = 32: the carved face rides the cutter's
+- **Moving cut.** `motion-carve` at x = 38.6: the carved face rides the cutter's
   slot, so `world.debug-view motion` shows it moving with the cutter while the
   rest of the box stays still.
-- **Folds in motion.** `motion-mirror` and `motion-polar` at x = 35 and 38: the
+- **Folds in motion.** `motion-mirror` and `motion-polar` at x = 41.2 and 43.8: the
   mirrored wing pair and the eight blades must stay whole and symmetric through
   the swing; a copy that lags, tears or vanishes is the folded slot losing its
   parent's delta.
-- **Paints and inset on a moving surface.** `view.override camera look 14 1.9
-  61.2 14 1.2 64` for `motion-paint`, then x = 17 for `motion-inset`: a stripe,
+- **Paints and inset on a moving surface.** `view.override camera look 23 15.45
+  27.2 23 14.75 30` for `motion-paint`, then x = 25.6 for `motion-inset`: a stripe,
   ring or eye that swims across its surface instead of riding it is a paint
   frame bug. `world.temporal off` shows whether the swim is the resolve's.
   Pause the clock and scrub it (`galleryClock $value 0`, then `1.7`) to compare
   two poses. The parented paints ride the panel, the iris turns with the eye,
   and `motion-spin`'s scratches turn with the box: every layer shades in the
   slot of the shape it lies on. Seen from above
-  (`view.override camera look 14 3.4 58.98 14 1.2 59`), scrubbing the clock
+  (`view.override camera look 23 16.95 19.98 23 14.75 20`), scrubbing the clock
   from 0 to 0.9 turns the box about 41 degrees, and the scratch pattern sampled
   in the box's own frame matches its earlier pose.
-- **Twist, bend and cells in motion.** x = 20, 23 and 29 on the z 64 row, with
+- **Twist, bend and cells in motion.** x = 28.2, 30.8 and 36 on the z 30 row, with
   `world.debug-view normals`: the dynamic path bakes the warped shape once and
   turns it rigidly, so its normals must hold steady on the surface.
-- **IK.** `view.override camera look 35 1.9 61.2 35 1.4 64`, then write
-  `galleryInputs reach` around `[35.35, 1.45, 63.75]`: the hand follows, and the
+- **IK.** `view.override camera look 41.2 15.45 27.2 41.2 14.95 30`, then write
+  `galleryInputs reach` around `[41.55, 15, 29.75]`: the hand follows, and the
   arm folds rather than stretches.
 
 ## Evidence per operation

@@ -1,30 +1,27 @@
 // The shape gallery: every authorable signed-distance construct, one prototype an exhibit, each held 1.2 m over a
 // labelled plinth so it reads from every side, underside included. The debug world expands `galleryPrototypes()` inside
 // its `prototypes` block, `galleryPlacements()` inside its `placements` block and `galleryState()` (the motion rows'
-// console controls) inside its `state.world` block. The rows stand on the open ground at +X/+Z, every exhibit 3 m from
-// the next, its label facing -Z, toward the origin:
+// console controls) inside its `state.world` block. The exhibits stand inside the gallery hall (hall.puck), four levels
+// of rows running along +X, every exhibit 2.6 m from the next and its label facing -Z:
 //
-//   z 14  each primitive at a uniform scale
-//   z 19  each primitive stretched unevenly, where an exact distance is hardest to keep
-//   z 24  each prism profile, extruded
-//   z 29  each prism profile, revolved
-//   z 34  sweeps, the per-shape facets and a domain fold
-//   z 39  every shape blend, a box and a sphere in two colours
-//   z 44  the domain folds, erosion and creation noise
-//   z 49  parameter forms: exponents, tapers, rounded and chamfered profiles, path holes, shears and closed strokes
-//   z 54  surfaces: palette channels, weathering, panels, trims, paints, text runs, volumes, a state-bound colour
-//   z 59  motion through the stamp pool: rotation, swing, slide, parent chains, moving blends and cuts, moving folds
-//   z 64  motion II: paints and an inset on moving surfaces, twist and bend, a radial pulse, cells, a volume, IK, frames
-//   z 69  warps II: a domain warp, a sine relief, an elongation, jittered and log-spherical lattices, stairs and morph blends
+//   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
+//   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
+//   level 2  form and surface: parameter forms, palette channels and wear, warps II
+//   level 3  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames
 //
-// A sign stands 3 m before each row's first exhibit naming the row, a map board by the entrance lists the rows, and every
-// plinth's plaque says what the exhibit demos and what to look for. Each exhibit has a spawn point 2.8 m in front of its
-// plinth, named after it, and the gallery.* commands (galleryCommands) walk, frame, inspect and flag exhibits through
-// them. shapes.md beside this file holds the coverage table, the operator camera line that frames each exhibit and the
-// console controls the motion rows answer to. This file is a library: debug.puck expands its templates and lets.
+// A sign stands at the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
+// and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
+// to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it, and the gallery.* commands
+// (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
+// the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
+// to. This file is a library: debug.puck and hall.puck expand its templates and lets.
 
-let galleryX = 14
-let gallerySpacing = 3
+// The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
+let galleryStorey = 4.5
+let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
+
+let galleryX = 23
+let gallerySpacing = 2.6
 
 let uniformRow = ["shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone", "shape-cone", "shape-superellipsoid", "shape-plane"]
 let stretchedRow = ["shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz", "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"]
@@ -38,30 +35,38 @@ let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "
 let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
 let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
 
-let foldZ = 44
-let surfaceZ = 54
-let motionZB = 64
-let warpZ = 69
+let foldZ = 33
+let surfaceZ = 25
+let motionZB = 30
+let warpZ = 33
 
-// Every row, in walking order: its sign's title, the z it stands on, its exhibit names and what the row shows.
+// The levels, in walking order: the board over each lift door names its level and what it shows.
+let galleryLevels = [
+  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
+  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
+  { level: 2, title: "LEVEL 2  FORM AND SURFACE", what: "forms, surfaces, warps II" }
+  { level: 3, title: "LEVEL 3  MOTION", what: "motion through the stamp pool" }
+]
+
+// Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
 let galleryRows = [
-  { title: "PRIMITIVES", z: 14, names: uniformRow, what: "each primitive at a uniform scale" }
-  { title: "STRETCHED", z: 19, names: stretchedRow, what: "each primitive scaled unevenly" }
-  { title: "EXTRUDED", z: 24, names: extrudeRow, what: "each prism profile, extruded" }
-  { title: "REVOLVED", z: 29, names: revolveRow, what: "each prism profile, revolved" }
-  { title: "SWEEPS AND FACETS", z: 34, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
-  { title: "BLENDS", z: 39, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
-  { title: "FOLDS", z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
-  { title: "FORMS", z: 49, names: formRow, what: "exponents, tapers, paths, a braid" }
-  { title: "SURFACES", z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
-  { title: "MOTION", z: 59, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
-  { title: "MOTION II", z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
-  { title: "WARPS II", z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
+  { title: "PRIMITIVES", level: 0, z: 16, names: uniformRow, what: "each primitive at a uniform scale" }
+  { title: "STRETCHED", level: 0, z: 22, names: stretchedRow, what: "each primitive scaled unevenly" }
+  { title: "EXTRUDED", level: 0, z: 28, names: extrudeRow, what: "each prism profile, extruded" }
+  { title: "REVOLVED", level: 0, z: 34, names: revolveRow, what: "each prism profile, revolved" }
+  { title: "SWEEPS AND FACETS", level: 1, z: 17, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
+  { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
+  { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
+  { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
+  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
+  { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
+  { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
+  { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
 ]
 
 // A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
 // `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to any exhibit by name.
-let gallerySpawns = reduce(galleryRows, [], (spawns, row) => concat(spawns, map(row.names, (name, index) => { id: name, position [(galleryX + (gallerySpacing * index)), 0, (row.z - 2.8)], yawDegrees: 180 })))
+let gallerySpawns = reduce(galleryRows, [], (spawns, row) => concat(spawns, map(row.names, (name, index) => { id: name, position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)], yawDegrees: 180 })))
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
 
@@ -96,13 +101,13 @@ template exhibit(label, extra = [], runs = [], note = "") {
   )
 }
 
-// A row's sign: a post and a board 3 m before the row's first exhibit, facing the way the plinths face, naming the row
-// and what it shows.
+// A row's sign: a post and a board at the row's west end, facing the way the plinths face, naming the row and what it
+// shows.
 template signPrototypes() {
-  for row in galleryRows {
-    prototype $"gallery-sign-{row.z}" {
+  for (row, index) in galleryRows {
+    prototype $"gallery-sign-{index}" {
       document {
-        name: $"gallery-sign-{row.z}"
+        name: $"gallery-sign-{index}"
         schema: "puck.creation.v1"
         palette: galleryPalette
         shape Box "post" {
@@ -122,7 +127,7 @@ template signPrototypes() {
       }
     }
   }
-  // The map board by the entrance: the rows in walking order, each with the z it stands on.
+  // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
   prototype "gallery-map" {
     document {
       name: "gallery-map"
@@ -130,41 +135,42 @@ template signPrototypes() {
       palette: galleryPalette
       shape Box "post-left" {
         material: 1
-        position [-0.5, 0.7, 0]
-        scale [0.03, 0.7, 0.03]
+        position [-0.6, 0.75, 0]
+        scale [0.03, 0.75, 0.03]
       }
       shape Box "post-right" {
         material: 1
-        position [0.5, 0.7, 0]
-        scale [0.03, 0.7, 0.03]
+        position [0.6, 0.75, 0]
+        scale [0.03, 0.75, 0.03]
       }
       shape Box "board" {
         material: 2
-        position [0, 1.5, 0]
-        scale [0.62, 0.62, 0.015]
+        position [0, 1.6, 0]
+        scale [0.72, 0.6, 0.015]
       }
       textRuns: concat(
-        [{ text: "SHAPE GALLERY", position [0, 2.02, 0.015], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
-        [{ text: "rows run +Z, 5 m apart; x = 14 + 3i", position [0, 1.94, 0.015], rotation [0, 0, 0, 1], emHeight: 0.028, depth: 0.003, mode: "emboss", material: 1, align: "center" }],
-        map(galleryRows, (row, index) => { text: $"Z {row.z}  {row.title}", position [0, (1.86 - (0.075 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.04, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
-        [{ text: "gallery.go <exhibit>   gallery.flag <exhibit> <note>", position [0, 0.94, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.2 }]
+        [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
+        [{ text: "stairs and lift at the north-west corner: stand on CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
+        map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
+        [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
       )
     }
   }
 }
 
-// The signs stand 3 m before each row's first exhibit, the map board by the entrance spawn (places.puck's `gallery`,
-// at (14, 0, 9) facing +Z), ahead and to its right.
+// Each row's sign stands 2.3 m west of its first exhibit on the row's level, and the map board in the lobby left of the
+// entrance (places.puck's `gallery` spawn stands outside it, facing in).
 template gallerySignPlacements() {
-  for row in galleryRows {
-    placement $"gallery-sign-{row.z}" {
-      prototype: $"gallery-sign-{row.z}"
-      position [(galleryX - gallerySpacing), 0, row.z]
+  for (row, index) in galleryRows {
+    placement $"gallery-sign-{index}" {
+      prototype: $"gallery-sign-{index}"
+      position [(galleryX - 2.3), galleryFloor[row.level], row.z]
     }
   }
   placement "gallery-map" {
     prototype: "gallery-map"
-    position [(galleryX + 2.5), 0, 11.5]
+    position [12.4, galleryFloor[0], 16]
   }
 }
 
@@ -213,28 +219,15 @@ let galleryCommands = [
   }
 ]
 
-template galleryRow(names, z) {
-  for (name, index) in names {
-    placement $"{name}" {
-      prototype: name
-      position [(galleryX + (gallerySpacing * index)), 0, z]
+template galleryPlacements() {
+  for row in galleryRows {
+    for (name, index) in row.names {
+      placement $"{name}" {
+        prototype: name
+        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
+      }
     }
   }
-}
-
-template galleryPlacements() {
-  galleryRow(names: uniformRow, z: 14)
-  galleryRow(names: stretchedRow, z: 19)
-  galleryRow(names: extrudeRow, z: 24)
-  galleryRow(names: revolveRow, z: 29)
-  galleryRow(names: facetRow, z: 34)
-  galleryRow(names: map(blendExhibits, entry => entry.id), z: 39)
-  galleryRow(names: foldRow, z: foldZ)
-  galleryRow(names: formRow, z: 49)
-  galleryRow(names: surfaceRow, z: surfaceZ)
-  galleryRow(names: motionRow, z: 59)
-  galleryRow(names: motionRowB, z: motionZB)
-  galleryRow(names: warpRow, z: warpZ)
   gallerySignPlacements()
 }
 
@@ -270,7 +263,7 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{reachX + 0.35}, 1.45, {motionZB - 0.25}]"
+    reach = $"[{reachX + 0.35}, {galleryFloor[3] + 1.45}, {motionZB - 0.25}]"
     tint = "#D9822B"
   }
 
@@ -897,8 +890,9 @@ template formPrototypes() {
 }
 
 // The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
-// space, so the stripe names its own exhibit's place in the surface row (index 12).
+// space, so the stripe names its own exhibit's place in the surface row (index 12, on level 2).
 let paintX = (galleryX + (gallerySpacing * 12))
+let paintY = (galleryFloor[2] + 1.2)
 
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
 // colour, each on slot 3.
@@ -1062,7 +1056,7 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, 1.2, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
+      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, paintY, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
     }
   }
   prototype "shape-text-engrave" {

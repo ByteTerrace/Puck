@@ -12,7 +12,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `addState` | 11 | 3 | `debug/chess` |
+| `addState` | 12 | 3 | `debug/chess`, `debug/hall` |
 | `applyRigidImpulse` | 0 | 0 |  |
 | `claim` | 0 | 0 |  |
 | `claimPair` | 0 | 0 |  |
@@ -23,8 +23,8 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `if` | 22 | 1 | `debug/chess` |
 | `paintField` | 0 | 0 |  |
 | `planarImpulse` | 0 | 0 |  |
-| `pose` | 1 | 0 | `debug/debug` |
-| `poseCell` | 64 | 0 | `debug/chess` |
+| `pose` | 139 | 0 | `debug/debug`, `debug/hall` |
+| `poseCell` | 65 | 0 | `debug/chess`, `debug/hall` |
 | `pushState` | 5 | 0 | `debug/chess` |
 | `release` | 0 | 0 |  |
 | `removeHudPanel` | 0 | 0 |  |
@@ -35,7 +35,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `scaleVerticalVelocity` | 0 | 0 |  |
 | `scheduleState` | 2 | 1 | `debug/avatars/moth` |
 | `setIdentityFact` | 0 | 0 |  |
-| `setState` | 101 | 10 | `debug/avatars/moth`, `debug/chess` |
+| `setState` | 257 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
 | `setVerticalVelocity` | 0 | 0 |  |
 | `startTimer` | 0 | 0 |  |
 | `transaction` | 1 | 1 | `debug/chess` |
@@ -47,9 +47,9 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `all` | 26 | 1 | `debug/avatars/moth`, `debug/chess` |
+| `all` | 174 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
 | `any` | 4 | 0 | `debug/avatars/moth`, `debug/chess` |
-| `compareState` | 89 | 8 | `debug/avatars/moth`, `debug/chess`, `debug/debug` |
+| `compareState` | 553 | 8 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall` |
 | `compareValue` | 83 | 1 | `debug/chess` |
 | `held` | 0 | 0 |  |
 | `not` | 1 | 1 | `debug/chess` |
@@ -125,8 +125,8 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
 | `board` | 125 | 0 | `debug/chess` |
-| `bodies` | 1 | 0 | `debug/debug` |
-| `bodyPosition` | 1 | 0 | `debug/debug` |
+| `bodies` | 9 | 0 | `debug/debug`, `debug/hall` |
+| `bodyPosition` | 41 | 0 | `debug/debug`, `debug/hall` |
 | `bodyState` | 4 | 0 | `debug/avatars/moth` |
 | `cell` | 30 | 0 | `debug/chess` |
 | `each` | 49 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug` |
@@ -151,59 +151,60 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `AddCellStatementNode` | 11 | 1 | `debug/chess` |
-| `AndPredicateNode` | 17 | 1 | `debug/avatars/moth`, `debug/chess` |
-| `ArgumentNode` | 1461 | 53 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 5 more |
-| `ArrayExpressionNode` | 3695 | 16 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 7 more |
-| `BinaryExpressionNode` | 47 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 2 more |
-| `BlockNode` | 1608 | 35 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 8 more |
-| `CallExpressionNode` | 784 | 9 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 5 more |
+| `AddCellStatementNode` | 12 | 1 | `debug/chess`, `debug/hall` |
+| `AndPredicateNode` | 22 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
+| `ArgumentNode` | 2336 | 53 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
+| `ArrayExpressionNode` | 4656 | 16 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 8 more |
+| `BinaryExpressionNode` | 217 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 3 more |
+| `BlockNode` | 2232 | 35 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 9 more |
+| `CallExpressionNode` | 1067 | 9 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/desktop`, `debug/devices` and 6 more |
 | `ColorExpressionNode` | 0 | 2 |  |
-| `ComparisonPredicateNode` | 165 | 9 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/debug` |
+| `ComparisonPredicateNode` | 188 | 9 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/debug`, `debug/hall` |
+| `ConditionalExpressionNode` | 9 | 0 | `debug/debug`, `debug/hall`, `debug/shapes` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 15 | 6 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 10 more |
+| `DocumentNode` | 16 | 6 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 11 more |
 | `EmbeddedBlockNode` | 0 | 1 |  |
 | `EnumDeclarationNode` | 3 | 0 | `debug/chess` |
 | `EnumMemberNode` | 14 | 0 | `debug/chess` |
-| `ExpressionStatementNode` | 347 | 2 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/loop`, `debug/shapes` |
-| `FlagStatementNode` | 7 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/garden` |
-| `ForStatementNode` | 18 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/shapes` |
-| `IdentifierExpressionNode` | 1379 | 32 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 8 more |
+| `ExpressionStatementNode` | 541 | 2 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/hall` and 2 more |
+| `FlagStatementNode` | 12 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/garden`, `debug/hall` |
+| `ForStatementNode` | 53 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes` |
+| `IdentifierExpressionNode` | 2114 | 32 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 9 more |
 | `IfStatementNode` | 22 | 1 | `debug/chess` |
-| `ImportNode` | 10 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/garden` |
-| `IndexExpressionNode` | 16 | 2 | `debug/avatars/moth`, `debug/chess` |
-| `InterpolatedStringNode` | 40 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/shapes` |
-| `LambdaExpressionNode` | 21 | 0 | `debug/chess`, `debug/debug`, `debug/shapes`, `debug/studio` |
-| `LetNode` | 143 | 8 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 5 more |
-| `LiteralExpressionNode` | 16304 | 172 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 10 more |
+| `ImportNode` | 11 | 1 | `debug/avatars/moth`, `debug/debug`, `debug/garden` |
+| `IndexExpressionNode` | 43 | 2 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes` |
+| `InterpolatedStringNode` | 91 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes` |
+| `LambdaExpressionNode` | 49 | 0 | `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes`, `debug/studio` |
+| `LetNode` | 220 | 8 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 6 more |
+| `LiteralExpressionNode` | 20428 | 172 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 11 more |
 | `LocalStatementNode` | 70 | 1 | `debug/chess` |
 | `NotPredicateNode` | 1 | 1 | `debug/chess` |
-| `ObjectExpressionNode` | 1409 | 15 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 7 more |
-| `OperandExpressionNode` | 568 | 43 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/debug`, `debug/devices` |
+| `ObjectExpressionNode` | 1710 | 15 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/desktop` and 8 more |
+| `OperandExpressionNode` | 634 | 43 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/debug`, `debug/devices`, `debug/hall` |
 | `OptionBlockNode` | 0 | 1 |  |
 | `OrPredicateNode` | 4 | 0 | `debug/avatars/moth`, `debug/chess` |
 | `PatternDeclarationNode` | 1 | 0 | `debug/chess` |
 | `PatternSymbolDeclarationNode` | 1 | 0 | `debug/chess` |
-| `PropertyNode` | 10279 | 115 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 10 more |
+| `PropertyNode` | 12581 | 115 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/controls`, `debug/debug` and 11 more |
 | `PushStatementNode` | 5 | 0 | `debug/chess` |
-| `RangeExpressionNode` | 26 | 3 | `debug/chess` |
-| `RhsOperandNode` | 117 | 10 | `debug/avatars/moth`, `debug/chess` |
+| `RangeExpressionNode` | 32 | 3 | `debug/chess`, `debug/hall` |
+| `RhsOperandNode` | 130 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
 | `RhsTextNode` | 0 | 1 |  |
-| `RowRefNode` | 114 | 12 | `debug/avatars/moth`, `debug/chess` |
-| `RuleBlockNode` | 43 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/debug` |
+| `RowRefNode` | 127 | 12 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
+| `RuleBlockNode` | 55 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall` |
 | `RuleScopeNode` | 1 | 0 | `debug/chess` |
 | `ScheduleStatementNode` | 2 | 1 | `debug/avatars/moth` |
 | `ScoreStatementNode` | 0 | 1 |  |
-| `SetCellStatementNode` | 101 | 10 | `debug/avatars/moth`, `debug/chess` |
-| `StateCellEntryNode` | 114 | 23 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/shapes` |
+| `SetCellStatementNode` | 113 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/hall` |
+| `StateCellEntryNode` | 140 | 23 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/hall`, `debug/shapes` |
 | `StateGridDeclarationNode` | 0 | 2 |  |
-| `StateModifierNode` | 33 | 26 | `debug/chess`, `debug/debug`, `debug/shapes` |
+| `StateModifierNode` | 40 | 26 | `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes` |
 | `StatePileDeclarationNode` | 0 | 1 |  |
 | `StatePileTokenNode` | 0 | 3 |  |
-| `StateSlotDeclarationNode` | 24 | 6 | `debug/chess`, `debug/debug`, `debug/shapes` |
-| `StateTableDeclarationNode` | 19 | 12 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/shapes` |
-| `TemplateNode` | 53 | 2 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/loop` and 3 more |
-| `TemplateParameterNode` | 69 | 3 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/loop` and 2 more |
+| `StateSlotDeclarationNode` | 31 | 6 | `debug/chess`, `debug/debug`, `debug/hall`, `debug/shapes` |
+| `StateTableDeclarationNode` | 24 | 12 | `debug/avatars/moth`, `debug/chess`, `debug/controls`, `debug/debug`, `debug/hall`, `debug/shapes` |
+| `TemplateNode` | 72 | 2 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/hall` and 4 more |
+| `TemplateParameterNode` | 82 | 3 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/hall` and 3 more |
 | `TestDeclarationNode` | 16 | 0 | `debug/chess-tests` |
 | `TestExpectBlockNode` | 16 | 0 | `debug/chess-tests` |
 | `TestExpectationNode` | 82 | 0 | `debug/chess-tests` |
@@ -213,4 +214,4 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `TransactionStatementNode` | 1 | 1 | `debug/chess` |
 | `TransformStatementNode` | 4 | 5 | `debug/chess` |
 | `UnaryExpressionNode` | 19 | 0 | `debug/avatars/moth`, `debug/chess` |
-| `WhenStatementNode` | 32 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/debug` |
+| `WhenStatementNode` | 44 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/hall` |

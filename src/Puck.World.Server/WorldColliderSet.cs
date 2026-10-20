@@ -31,7 +31,18 @@ namespace Puck.World.Server;
 /// depenetrates against the same snapshot rather than repeating the recompute per body.</para>
 /// </remarks>
 internal sealed class WorldColliderSet : IContactField {
-    private readonly List<FixedStaticCollider> m_attachedColliders = [];
+    private List<FixedStaticCollider> m_attachedColliders = [];
+    // The attached row each collider in m_attachedColliders came from, parallel to it.
+    private List<int> m_attachedColliderRows = [];
+    // The refresh before the latest one: the colliders a body that was grounded last tick stood on, and their rows.
+    private List<FixedStaticCollider> m_previousAttachedColliders = [];
+    private List<int> m_previousAttachedColliderRows = [];
+    // Each attached row's resolved origin at the latest refresh and at the one before it, and whether the row resolved
+    // at each: the difference is the displacement a body standing on the row rides (TryRideDisplacement).
+    private FixedVector3[] m_attachedOrigins;
+    private FixedVector3[] m_previousAttachedOrigins;
+    private bool[] m_attachedResolved;
+    private bool[] m_previousAttachedResolved;
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick. Attached
@@ -61,6 +72,10 @@ internal sealed class WorldColliderSet : IContactField {
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
+        m_attachedOrigins = new FixedVector3[attachedRows.Count];
+        m_previousAttachedOrigins = new FixedVector3[attachedRows.Count];
+        m_attachedResolved = new bool[attachedRows.Count];
+        m_previousAttachedResolved = new bool[attachedRows.Count];
         m_solver = new FixedStaticContactSolver(
             ContactSkin: tuning.ContactSkin,
             GroundedThreshold: tuning.GroundedThreshold,
@@ -420,12 +435,17 @@ internal sealed class WorldColliderSet : IContactField {
     public void RefreshAttached(WorldPopulation population) {
         ArgumentNullException.ThrowIfNull(argument: population);
 
-        m_attachedColliders.Clear();
-
         if (m_attachedRows.Count == 0) {
             return;
         }
 
+        (m_previousAttachedColliders, m_attachedColliders) = (m_attachedColliders, m_previousAttachedColliders);
+        (m_previousAttachedColliderRows, m_attachedColliderRows) = (m_attachedColliderRows, m_previousAttachedColliderRows);
+        (m_previousAttachedOrigins, m_attachedOrigins) = (m_attachedOrigins, m_previousAttachedOrigins);
+        (m_previousAttachedResolved, m_attachedResolved) = (m_attachedResolved, m_previousAttachedResolved);
+        m_attachedColliders.Clear();
+        m_attachedColliderRows.Clear();
+        Array.Clear(array: m_attachedResolved);
         RefreshAttachedRows(population: population);
     }
 
@@ -435,7 +455,9 @@ internal sealed class WorldColliderSet : IContactField {
     private void RefreshAttachedRows(WorldPopulation population) {
         var hash = Fnv1aHash.Create();
 
-        foreach (var (placement, creation) in m_attachedRows) {
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            var (placement, creation) = m_attachedRows[row];
+
             // An inactive target body resolves nothing — the row's established "contributes nothing" verdict
             // (WorldPlacementAttach's own remarks), never a stale collider parked at the last-known pose.
             if (!WorldPlacementAttachment.TryResolve(
@@ -448,7 +470,11 @@ internal sealed class WorldColliderSet : IContactField {
                 continue;
             }
 
+            m_attachedOrigins[row] = fixedPosition;
+            m_attachedResolved[row] = true;
+
             var margin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
+            var colliderRow = row;
             // The SAME creation-shape transform chain the static loop above (and the renderer) already runs, fed the
             // resolved dynamic origin/yaw instead of the row's static authored Position/YawDegrees — and taken through
             // the FIXED-POINT emitter, because this runs every tick on a live body's pose. The single-precision
@@ -478,6 +504,7 @@ internal sealed class WorldColliderSet : IContactField {
                             normal: normal
                         );
                         m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
                         FoldCollider(
                             collider: in attached,
                             hash: ref hash
@@ -493,6 +520,7 @@ internal sealed class WorldColliderSet : IContactField {
                             radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
                         );
                         m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
                         FoldCollider(
                             collider: in attached,
                             hash: ref hash
@@ -503,6 +531,7 @@ internal sealed class WorldColliderSet : IContactField {
                             margin: margin
                         );
                         m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
                         FoldCollider(
                             collider: in attached,
                             hash: ref hash
@@ -516,6 +545,89 @@ internal sealed class WorldColliderSet : IContactField {
             m_attachedHash = hash.Value;
             AttachedRevision++;
         }
+    }
+    /// <summary>Finds the attached solid a body was standing on before the latest <see cref="RefreshAttached"/> and
+    /// how far its carrier moved it: a moving platform carries what stands on it. The body stood on a collider of the
+    /// previous refresh when the bottom of its volumes' world bounds lay within two contact skins above that
+    /// collider's top and the two overlapped horizontally; of several, the highest top carries it. Only axis-aligned
+    /// boxes carry (an attached box keeps that kind under its carrier's yaw only at quarter turns), and only the
+    /// carrier's translation: a turning platform does not turn what rides it.</summary>
+    /// <param name="position">The body's foot point, as the previous tick left it.</param>
+    /// <param name="orientation">The body's orientation.</param>
+    /// <param name="volumes">The body's scaled collider volumes.</param>
+    /// <param name="displacement">The carrier's translation between the two refreshes, or zero when nothing carries
+    /// the body.</param>
+    /// <returns><see langword="true"/> when an attached box that moved was under the body.</returns>
+    public bool TryRideDisplacement(FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 displacement) {
+        displacement = FixedVector3.Zero;
+
+        if (
+            (m_previousAttachedColliders.Count == 0) ||
+            volumes.IsEmpty
+        ) {
+            return false;
+        }
+
+        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
+        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+
+        foreach (ref readonly var volume in volumes) {
+            var (center, extent) = FixedColliderBounds.WorldBounds(
+                orientation: in orientation,
+                position: position,
+                volume: in volume
+            );
+            var lower = (center - extent);
+            var upper = (center + extent);
+
+            low = new FixedVector3(
+                X: FixedQ4816.Min(x: low.X, y: lower.X),
+                Y: FixedQ4816.Min(x: low.Y, y: lower.Y),
+                Z: FixedQ4816.Min(x: low.Z, y: lower.Z)
+            );
+            high = new FixedVector3(
+                X: FixedQ4816.Max(x: high.X, y: upper.X),
+                Y: FixedQ4816.Max(x: high.Y, y: upper.Y),
+                Z: FixedQ4816.Max(x: high.Z, y: upper.Z)
+            );
+        }
+
+        var skin = m_solver.ContactSkin;
+        var found = false;
+        var bestTop = FixedQ4816.MinValue;
+
+        for (var index = 0; (index < m_previousAttachedColliders.Count); index++) {
+            var collider = m_previousAttachedColliders[index];
+            var row = m_previousAttachedColliderRows[index];
+
+            if (
+                (collider.Kind != FixedStaticColliderKind.AxisAlignedBox) ||
+                !m_attachedResolved[row] ||
+                !m_previousAttachedResolved[row]
+            ) {
+                continue;
+            }
+
+            var top = (collider.Center.Y + collider.Extent.Y);
+
+            if (
+                (low.Y < top) ||
+                (low.Y > (top + (skin + skin))) ||
+                (low.X >= (collider.Center.X + collider.Extent.X)) ||
+                (high.X <= (collider.Center.X - collider.Extent.X)) ||
+                (low.Z >= (collider.Center.Z + collider.Extent.Z)) ||
+                (high.Z <= (collider.Center.Z - collider.Extent.Z)) ||
+                (found && (top <= bestTop))
+            ) {
+                continue;
+            }
+
+            found = true;
+            bestTop = top;
+            displacement = (m_attachedOrigins[row] - m_previousAttachedOrigins[row]);
+        }
+
+        return (found && (displacement != FixedVector3.Zero));
     }
 
     /// <inheritdoc/>

@@ -903,6 +903,22 @@ blocked step only when it lands grounded on a walkable surface, so a face
 steeper than `maxSlopeDegrees` is never stepped onto. `body.motion` echoes
 the body's effective `stepHeight=`, and `world.kits` the kit's.
 
+A body grounded on an attached solid rides it (the analytic provider only,
+which is the one that admits attach with solid). `WorldColliderSet` keeps the
+previous refresh's attached colliders and each attached row's resolved origin
+at its last two refreshes; right after `RefreshAttached`,
+`WorldPopulation.AdvanceSimulated` asks it, for every active grounded
+locomotion body (seats included, rigid and carried bodies excluded), whether
+the bottom of the body's bounds lay within two contact skins above an
+axis-aligned attached box of the previous refresh, overlapping it
+horizontally, and moves the body by that row's displacement
+(`WorldBody.RideAttachedSupport`) before any body advances. A rising platform
+lifts what stands on it without a push, and a falling one keeps it grounded
+instead of dropping it a tick at a time. Only translation rides: a platform
+that turns does not turn its rider. The debug world's gallery lift
+(`worlds/debug/hall.puck`) is the live case, and `AttachedPlatformRideLawTests`
+holds a rider grounded through a climb and a descent.
+
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position
 and velocity raws, plus the previous commanded target the `r` term needs—
