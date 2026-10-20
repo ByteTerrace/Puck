@@ -1374,7 +1374,9 @@ package declares the push with `RenderGraphPackage.PushesIndex`, which
 
 A kernel compiled at build never declares what the C# model owns. The model
 generates it: `sdf-isa.hlsli`, the SDF instruction set's enums, lane accessors
-and packed-layout constants (`SdfIsaHlsl`); the instruction set's fingerprint,
+and packed-layout constants (`SdfIsaHlsl`); the R2 dither's two 32-bit increments
+(`ShaderLowDiscrepancyHlsl`, `Puck.Shaders/Assets/Shaders/Shared/low-discrepancy.hlsli`,
+which `display-encode.frag.hlsl` includes); the instruction set's fingerprint,
 recorded for the host in `src/Puck.SdfVm/SdfIsaFingerprint.cs`; and every
 generated interface include (`<name>.interface.hlsli`), an engine package's
 found by its file name and the SDF kernels' (`SdfKernelInterfaces`) at fixed

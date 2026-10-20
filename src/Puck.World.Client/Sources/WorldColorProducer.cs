@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -55,9 +56,9 @@ public sealed class WorldColorFeed : IWorldUploadFeed, IImageSourceReference {
     /// <param name="rgb">The colour, each component in <c>[0, 1]</c>.</param>
     public WorldColorFeed(Vector3 rgb) {
         m_pixel = [
-            Component(value: rgb.Z),
-            Component(value: rgb.Y),
-            Component(value: rgb.X),
+            VectorFunctions.ToUnorm8(value: rgb.Z),
+            VectorFunctions.ToUnorm8(value: rgb.Y),
+            VectorFunctions.ToUnorm8(value: rgb.X),
             byte.MaxValue,
         ];
         Descriptor = new ImageSourceDescriptor(
@@ -79,12 +80,6 @@ public sealed class WorldColorFeed : IWorldUploadFeed, IImageSourceReference {
     public string? Fault => null;
     /// <inheritdoc/>
     public Vector3 Light { get; }
-
-    private static byte Component(float value) => ((byte)MathF.Round(x: (Math.Clamp(
-        max: 1f,
-        min: 0f,
-        value: value
-    ) * 255f)));
 
     /// <inheritdoc/>
     /// <remarks>The colour owns no resource.</remarks>

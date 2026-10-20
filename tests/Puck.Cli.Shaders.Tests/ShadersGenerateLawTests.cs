@@ -28,6 +28,7 @@ public sealed class ShadersGenerateLawTests {
         (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaFingerprint.Value)),
         (SkyKindsPath, SdfSkyKindsHlsl.Generate()),
         (SkyKindTablePath, SdfSkyKindsHlsl.GenerateTable()),
+        (ShaderLowDiscrepancyHlsl.Path, ShaderLowDiscrepancyHlsl.Generate()),
     ];
 
     // Each conversion package's interface include, beside its kernel.
@@ -234,12 +235,12 @@ public sealed class ShadersGenerateLawTests {
         );
 
         Assert.Empty(collection: problems);
-        // The checked set is the tracked interface includes plus the four generated files that are not named
+        // The checked set is the tracked interface includes plus the five generated files that are not named
         // *.interface.hlsli: the tree and the generator's own declaration are the two sources, so a new interface
         // needs no edit here, and one the generator skips or one nobody tracked fails.
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path).Order(comparer: StringComparer.Ordinal),
-            expected: tracked.Concat(second: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, SkyKindsPath, SkyKindTablePath]).Order(comparer: StringComparer.Ordinal)
+            expected: tracked.Concat(second: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, SkyKindsPath, SkyKindTablePath, ShaderLowDiscrepancyHlsl.Path]).Order(comparer: StringComparer.Ordinal)
         );
     }
 }

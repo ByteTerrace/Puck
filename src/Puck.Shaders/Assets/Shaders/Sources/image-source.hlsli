@@ -9,6 +9,8 @@
 #ifndef IMAGE_SOURCE_HLSLI
 #define IMAGE_SOURCE_HLSLI
 
+#include "../Shared/transfer.hlsli"
+
 // ImagePixelFormat codes.
 #define IMAGE_FORMAT_R8G8B8A8 1u
 #define IMAGE_FORMAT_B8G8R8A8 2u
@@ -106,46 +108,20 @@ float3 imageSourceYuvToRgb(uint y, uint cb, uint cr, uint color) {
     return float3(r, g, b);
 }
 
-// SMPTE ST 2084 decode to cd/m²; ImageSourceConversion.PqToNits.
-float imageSourcePqToNits(float value) {
-    const float c1 = (3424.0 / 4096.0);
-    const float c2 = ((2413.0 / 4096.0) * 32.0);
-    const float c3 = ((2392.0 / 4096.0) * 32.0);
-    const float m1 = (2610.0 / 16384.0);
-    const float m2 = ((2523.0 / 4096.0) * 128.0);
-    float power = pow(saturate(value), (1.0 / m2));
-
-    return (10000.0 * pow((max((power - c1), 0.0) / (c2 - (c3 * power))), (1.0 / m1)));
-}
-
-float imageSourceSrgbToLinear(float value) {
-    float clamped = saturate(value);
-
-    return ((clamped <= 0.04045) ? (clamped / 12.92) : pow(((clamped + 0.055) / 1.055), 2.4));
-}
-
-// One stored value to linear light relative to the paper-white level; ImageSourceConversion.ToLinear. An sRGB value is
-// relative to SDR white already, a linear value is scRGB (one at 80 cd/m²) and is not clamped, and a perceptual-quantizer
-// value is its luminance over the paper white.
+// One stored value to linear light relative to the paper-white level; ImageSourceConversion.ToLinear (PqToNits and
+// SrgbToLinear are puckPqToNits and puckSrgbToLinear in transfer.hlsli). An sRGB value is relative to SDR white already,
+// a linear value is scRGB (one at 80 cd/m²) and is not clamped, and a perceptual-quantizer value is its luminance over
+// the paper white.
 float imageSourceToLinear(uint transfer, float value, float paperWhiteNits) {
     if (transfer == IMAGE_TRANSFER_PQ) {
-        return (imageSourcePqToNits(value) / paperWhiteNits);
+        return (puckPqToNits(value) / paperWhiteNits);
     }
 
     if (transfer == IMAGE_TRANSFER_LINEAR) {
         return ((value * IMAGE_SDR_WHITE_NITS) / paperWhiteNits);
     }
 
-    return imageSourceSrgbToLinear(value);
-}
-
-// Linear light to a working value: the sRGB curve extended past one and mirrored below zero, the curve the display encode
-// decodes; ImageSourceConversion.LinearToWorking.
-float imageSourceLinearToWorking(float value) {
-    float magnitude = abs(value);
-    float encoded = ((magnitude <= 0.0031308) ? (magnitude * 12.92) : ((1.055 * pow(magnitude, (1.0 / 2.4))) - 0.055));
-
-    return ((value < 0.0) ? -encoded : encoded);
+    return puckSrgbToLinear(value);
 }
 
 // One sample's stored channels to working values: decoded to linear light relative to the paper white, BT.2020 primaries
@@ -168,7 +144,9 @@ float3 imageSourceToWorking(uint color, float3 stored, float paperWhiteNits) {
         linearLight = mul(bt2020ToBt709, linearLight);
     }
 
-    return float3(imageSourceLinearToWorking(linearLight.r), imageSourceLinearToWorking(linearLight.g), imageSourceLinearToWorking(linearLight.b));
+    // The working value is the sRGB curve extended past one and mirrored below zero, the curve the display encode decodes
+    // (ImageSourceConversion.LinearToWorking).
+    return float3(puckLinearToSrgbExtended(linearLight.r), puckLinearToSrgbExtended(linearLight.g), puckLinearToSrgbExtended(linearLight.b));
 }
 
 #endif
