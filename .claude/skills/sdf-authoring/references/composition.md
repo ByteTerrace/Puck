@@ -85,6 +85,12 @@ instance's cull bound then composes through the blends (`SdfBoundAlgebra`), so
 the clipped lattice is as cullable as its clipper, while the same lattice with a
 shape unioned in has no bound and is never culled by radius. An absent repeat
 limit is unbounded the same way. A `cell` is refused when its reciprocal exceeds 1e18.
+Clip a kaleidoscope, a repeat or a jitter along its mirror planes or cell
+walls (a box or a hexagonal prism whose faces are mirrors), never with a round
+clip: a round wall meets some copy's face within a millimetre or two, and the
+sliver between them is thinner than any bake cell, so the contour folds it into
+a crease the audit reports as hundreds of turned triangles on the wall (the
+gallery's hex wallpapers and clipped beads).
 
 Mirror a part with a `symmetry` fold, never with a negative scale — negative
 scale components are refused by name because emission reads magnitudes.

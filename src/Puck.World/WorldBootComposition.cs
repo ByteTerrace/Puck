@@ -886,6 +886,15 @@ public static class WorldBootComposition {
         // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
         // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
+        // world.flag writes beside the booted document and arms its capture through the same optional renderer.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldFlagCommandModule(
+            captureScheduler: sp.GetRequiredService<WorldCaptureScheduler>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            link: sp.GetRequiredService<IServerLink>(),
+            packageDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath),
+            renderProbe: sp.GetService<WorldRenderProbe>(),
+            viewports: sp.GetService<WorldSeatViewports>()
+        ));
         services.AddSingleton<WorldControlCommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
             () => sp.GetRequiredService<TextCommandSource>(),
             sp.GetRequiredService<WorldCaptureScheduler>(),

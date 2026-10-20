@@ -281,7 +281,8 @@ through `SdfFieldEvaluator`'s render reading), and prints per group, worst
 first, the off-surface error at vertices, centroids and edge midpoints, face and
 shading normal error against the field gradient, folds, flips, open edges,
 uncovered surface and how loose the field is, then the worst clusters with
-rest-pose and author-frame positions and the shapes nearest them. The
+rest-pose and author-frame positions, the worst sample's position with the
+mesh's facing against the field's gradient there, and the shapes nearest them. The
 [CLI reference](../../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
 owns its flags.
 

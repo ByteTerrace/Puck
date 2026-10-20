@@ -2524,6 +2524,20 @@ request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
+`world.flag <exhibit> [note…]` is a player's "this looks wrong" mark, for the
+gallery and anything else a document names by a token. It writes
+`<package>/flags/<exhibit>.json` beside the booted document (the exhibit, the
+note, the tick, the flagging seat, its authoritative pose as `body.where` reads
+it, and its render camera) and arms a capture of the next composed frame to
+`<package>/flags/<exhibit>.png`, announced on stderr exactly as
+`world.screenshot`'s is. The caller never names a path: the exhibit is a
+file-safe token, the folder is the package's own (the debug world git-ignores
+`worlds/debug/flags/`), and a later flag of the same exhibit overwrites the
+earlier one. Only the host console and a local seat may flag. Headless, or
+while another capture is pending, the record is still written and the echo says
+no capture was armed. It is bindable, so a binding row or a document-authored
+command (the debug world's `gallery.flag`) may call it.
+
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/`—`sdf-decode-sign-refusal`
 (all twelve builder-mirrored sign fields) and `world-seat-binding-recompose`
