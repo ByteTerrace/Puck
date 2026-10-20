@@ -3,8 +3,8 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static readonly float CurveMaxCoordinate = ((float)((double)CurvatureSpline.MaxCoordinate));
-    private static readonly float CurveMaxCurvature = ((float)((double)CurvatureSpline.MaxCurvature));
+    private static readonly float CurveMaxCoordinate = ((float)CurvatureSpline.MaxCoordinate);
+    private static readonly float CurveMaxCurvature = ((float)CurvatureSpline.MaxCurvature);
 
     // A knot's tangentYaw must arrive already reduced to the canonical interval: FixedQ4816.FromDouble saturates
     // (rather than wraps) a finite value outside its representable range, so an authored angle outside this interval
@@ -113,9 +113,10 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 var knotAdmitted = (
-                    float.IsFinite(f: position.X) && (MathF.Abs(x: position.X) <= CurveMaxCoordinate) &&
-                    float.IsFinite(f: position.Y) && (MathF.Abs(x: position.Y) <= CurveMaxCoordinate) &&
-                    float.IsFinite(f: position.Z) && (MathF.Abs(x: position.Z) <= CurveMaxCoordinate) &&
+                    VectorFunctions.IsFinite(vector: position) &&
+                    (MathF.Abs(x: position.X) <= CurveMaxCoordinate) &&
+                    (MathF.Abs(x: position.Y) <= CurveMaxCoordinate) &&
+                    (MathF.Abs(x: position.Z) <= CurveMaxCoordinate) &&
                     float.IsFinite(f: knot.TangentYaw) && (MathF.Abs(x: knot.TangentYaw) <= CurveMaxTangentYaw) &&
                     float.IsFinite(f: knot.Curvature) && (MathF.Abs(x: knot.Curvature) <= CurveMaxCurvature)
                 );

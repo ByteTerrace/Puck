@@ -962,8 +962,8 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=Fixed row declaring both min and max — the world's own body-scale envelope.");
             } else {
-                var scaleMin = ((float)((double)FixedQ4816.FromRawBits(value: scaleStateRow.Min.Value)));
-                var scaleMax = ((float)((double)FixedQ4816.FromRawBits(value: scaleStateRow.Max.Value)));
+                var scaleMin = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Min.Value));
+                var scaleMax = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Max.Value));
 
                 if (scaleMin <= 0f) {
                     errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose min {scaleMin} is not positive — a body's Scale is a multiplier, never zero or inverted.");

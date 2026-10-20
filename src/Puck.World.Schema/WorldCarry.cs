@@ -55,9 +55,7 @@ public readonly record struct FixedWorldCarry(FixedVector3 Offset, FixedQ4816 Ma
         var offset = carry.Offset.Value;
 
         if (
-            !float.IsFinite(f: offset.X) ||
-            !float.IsFinite(f: offset.Y) ||
-            !float.IsFinite(f: offset.Z) ||
+            !VectorFunctions.IsFinite(vector: offset) ||
             (Math.Abs(value: offset.X) > fixedMaximum) ||
             (Math.Abs(value: offset.Y) > fixedMaximum) ||
             (Math.Abs(value: offset.Z) > fixedMaximum)

@@ -462,10 +462,10 @@ public static partial class WorldDefinitionValidator {
                         JudgeColor(color: panel.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
                         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelIntensity, path: $"{layerPath}.intensity", scalar: panel.Intensity);
                         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelBlur, path: $"{layerPath}.blur", scalar: panel.Blur);
-                        if ((panel.Direction is { } direction) && (!float.IsFinite(f: direction.X) || !float.IsFinite(f: direction.Y) || !float.IsFinite(f: direction.Z) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
+                        if ((panel.Direction is { } direction) && (!VectorFunctions.IsFinite(vector: direction) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
                             errors.Add(item: $"{layerPath}.direction must be finite and nonzero.");
                         }
-                        if ((panel.Size is { } size) && (!float.IsFinite(f: size.X) || !float.IsFinite(f: size.Y) || !(size.X > 0f) || !(size.Y > 0f))) {
+                        if ((panel.Size is { } size) && (!VectorFunctions.IsFinite(vector: size) || !(size.X > 0f) || !(size.Y > 0f))) {
                             errors.Add(item: $"{layerPath}.size must be finite and positive on both axes.");
                         }
                         break;
@@ -676,7 +676,7 @@ public static partial class WorldDefinitionValidator {
         } else if (name.Contains(value: '$') || name.Contains(value: '~')) {
             errors.Add(item: $"{path}.name '{name}' contains '$' or '~'; the name is one part of the instance's generated name.");
         }
-        if ((anchor is { } point) && !(float.IsFinite(f: point.Value.X) && float.IsFinite(f: point.Value.Y) && float.IsFinite(f: point.Value.Z))) {
+        if ((anchor is { } point) && !VectorFunctions.IsFinite(vector: point.Value)) {
             errors.Add(item: $"{path}.anchor must be finite.");
         }
         if ((turn is { } degrees) && !float.IsFinite(f: degrees)) {
@@ -841,7 +841,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var vector in value.AuthoredValues()) {
-            if (!float.IsFinite(f: vector.X) || !float.IsFinite(f: vector.Y) || !float.IsFinite(f: vector.Z)) {
+            if (!VectorFunctions.IsFinite(vector: vector)) {
                 errors.Add(item: $"{path} must contain finite coordinates.");
             } else if (vector.LengthSquared() <= 0f) {
                 errors.Add(item: $"{path} must be nonzero.");
@@ -865,7 +865,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var component in value.AuthoredValues()) {
-            if (!float.IsFinite(f: component.X) || !float.IsFinite(f: component.Y)) {
+            if (!VectorFunctions.IsFinite(vector: component)) {
                 errors.Add(item: $"{path} must contain finite coordinates.");
             }
         }

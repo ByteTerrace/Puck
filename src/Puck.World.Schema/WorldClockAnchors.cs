@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 
@@ -141,18 +142,24 @@ public static class WorldClockAnchors {
         }
 
         var step = (EngineTicks.PerSecond / ((ulong)rateHz));
-        var numerator = ((Int128.Abs(value: advance.PerSecondNumerator) * (1L << FixedQ4816.FractionBitCount)) * ((Int128)step));
-        var denominator = (((Int128)advance.PerSecondDenominator) * EngineTicks.PerSecond);
-
-        var (magnitude, remainder) = Int128.DivRem(
-            left: numerator,
-            right: denominator
+        // The raw advance per engine tick, as the measure the row's trait allocates by; every authoritative tick adds
+        // the same amount exactly when its span of engine ticks covers whole periods of that allocation.
+        var measure = DiscreteMeasure.Rational(
+            denominator: (((BigInteger)advance.PerSecondDenominator) * EngineTicks.PerSecond),
+            numerator: (BigInteger.Abs(value: advance.PerSecondNumerator) << FixedQ4816.FractionBitCount)
         );
 
-        if (remainder != Int128.Zero) {
+        if (
+            (measure.Period is not { } period) ||
+            !(step % period).IsZero
+        ) {
             return (0L, 0UL);
         }
 
+        var magnitude = ((Int128)measure.AmountOver(
+            length: step,
+            start: BigInteger.Zero
+        ));
         var perTick = ((advance.PerSecondNumerator < 0L)
             ? -magnitude
             : magnitude

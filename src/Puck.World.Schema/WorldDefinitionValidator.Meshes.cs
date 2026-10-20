@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -61,7 +62,7 @@ public static partial class WorldDefinitionValidator {
         for (var vertex = 0; (vertex < vertices.Count); vertex++) {
             var position = vertices[vertex];
 
-            if (!float.IsFinite(f: position.X) || !float.IsFinite(f: position.Y) || !float.IsFinite(f: position.Z)) {
+            if (!VectorFunctions.IsFinite(vector: position)) {
                 errors.Add(item: $"{path}.vertices[{vertex}] is not finite.");
                 finite = false;
             }
