@@ -1345,14 +1345,8 @@ public sealed partial class WorldBody {
             commanded = ((m_orientation.Rotate(vector: -FixedVector3.UnitZ) * forward) + (m_orientation.Rotate(vector: FixedVector3.UnitX) * strafe));
         }
 
-        var length = commanded.Length;
+        direction = commanded.Normalize();
 
-        if (length <= FixedQ4816.Zero) {
-            return false;
-        }
-
-        direction = (commanded / length);
-
-        return true;
+        return (direction != FixedVector3.Zero);
     }
 }
