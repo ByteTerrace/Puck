@@ -78,17 +78,25 @@ public static class CartridgeLanguageServices {
     }
     /// <summary>Lowers and validates a cartridge document if its schema selects this vocabulary.</summary>
     /// <param name="document">The parsed source.</param>
-    /// <param name="sourcePath">The optional source path; cartridges carry no imports.</param>
+    /// <param name="sourcePath">The optional source path its imports resolve against; without one an import
+    /// contributes nothing.</param>
     /// <param name="diagnostics">The shared diagnostic bag.</param>
     /// <returns>Whether the document selected the cartridge vocabulary.</returns>
     public static bool Diagnose(DocumentNode document, string? sourcePath, DiagnosticBag diagnostics) {
         if (document.Schema != CartridgeDocument.SchemaId) { return false; }
         var sourceMap = new SourceMap();
-        var lowered = CartridgeDocumentEmitter.LowerWithDiagnostics(
-            document,
-            diagnostics,
-            sourceMap
-        );
+        var lowered = ((sourcePath is null)
+            ? CartridgeDocumentEmitter.LowerWithDiagnostics(
+                document,
+                diagnostics,
+                sourceMap
+            )
+            : CartridgeDocumentEmitter.LowerSource(
+                diagnostics: diagnostics,
+                document: document,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
+            ));
 
         if (lowered.Success) {
             Validate(

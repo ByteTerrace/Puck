@@ -733,7 +733,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
         }
     }
-    private void Palettes(int colors, int backgroundLimit, int objectLimit) {
+    private void Palettes(int colors, int limit) {
         if (document.Palettes is not { } palettes) {
             Error(
                 message: "A cartridge declares its palettes.",
@@ -745,28 +745,15 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
         Bank(
             bank: palettes.Background,
             colors: colors,
-            limit: backgroundLimit,
+            limit: limit,
             path: "palettes.background"
         );
         Bank(
             bank: palettes.Object,
             colors: colors,
-            limit: objectLimit,
+            limit: limit,
             path: "palettes.object"
         );
-    }
-    // The monochrome machine has one background shade register and no per-cell attributes, so a per-cell palette has
-    // nothing to select.
-    private void CellPalettes(object? palettes, string path) {
-        if (
-            (palettes is not null) &&
-            (document.Target == "dmg")
-        ) {
-            Error(
-                message: "A per-cell palette needs a colour machine; the dmg target shades every cell from its one background palette.",
-                path: path
-            );
-        }
     }
     private void Raster() {
         var previous = -1;
@@ -1041,10 +1028,6 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             }
 
             if (screen.Palettes is { } shades) {
-                CellPalettes(
-                    palettes: shades,
-                    path: (path + ".palettes")
-                );
                 if (shades.Length != screen.Tiles.Length) {
                     Error(
                         message: "Expected one palette index per tile.",
@@ -1370,10 +1353,6 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                     Value(
                         path: (path + ".palette"),
                         value: cellPalette
-                    );
-                    CellPalettes(
-                        palettes: cellPalette,
-                        path: (path + ".palette")
                     );
                     if (Literal(value: cellPalette) >= (document.Palettes?.Background?.Length ?? 0)) {
                         Error(
@@ -1828,24 +1807,14 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             ? 16
             : 4
         );
-        var (backgroundPalettes, objectPalettes) = document.Target switch {
-            "agb" => (CartridgeLimits.AdvancedPaletteCount, CartridgeLimits.AdvancedPaletteCount),
-            "dmg" => (CartridgeLimits.MonochromeBackgroundPaletteCount, CartridgeLimits.MonochromeObjectPaletteCount),
-            _ => (CartridgeLimits.HumblePaletteCount, CartridgeLimits.HumblePaletteCount),
-        };
+        var paletteCount = ((document.Target == "agb")
+            ? CartridgeLimits.AdvancedPaletteCount
+            : CartridgeLimits.HumblePaletteCount
+        );
 
         Palettes(
-            backgroundLimit: backgroundPalettes,
             colors: colors,
-            objectLimit: objectPalettes
-        );
-        CellPalettes(
-            palettes: document.MapPalettes,
-            path: "mapPalettes"
-        );
-        CellPalettes(
-            palettes: document.Window?.MapPalettes,
-            path: "window.mapPalettes"
+            limit: paletteCount
         );
         if (
             !Count(

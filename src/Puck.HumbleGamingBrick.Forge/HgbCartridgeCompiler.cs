@@ -10,7 +10,9 @@ namespace Puck.HumbleGamingBrick.Forge;
 /// <c>cgb</c>) or the monochrome one (target <c>dmg</c>).</summary>
 /// <remarks>
 /// A dmg image runs at single speed, shades through the three monochrome registers its palettes reduce to, and never
-/// touches the Color machine's palette memory, second video bank or work-RAM bank register.
+/// touches the Color machine's palette memory, second video bank or work-RAM bank register. The same document compiles
+/// for either target: on dmg the background shades from its first palette whatever a cell selects, and a sprite's
+/// palette picks an object register by its low bit.
 /// Work-RAM layout above <c>FrameworkMemoryMap.GameRam</c>:
 /// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283 the frame's scene snapshot, 0xC284..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
 /// </remarks>
@@ -192,7 +194,8 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 name: $"screen-{screen.Name}",
                 bytes: screen.Tiles.Select(selector: static tile => ((byte)tile)).ToArray()
             ),
-                Shades: ((screen.Palettes is { } palettes)
+                // The monochrome machine has no attribute bank to hold a cell's palette, so it paints tiles only.
+                Shades: (((screen.Palettes is { } palettes) && !monochrome)
             ? data.Add(
                     name: $"screen-{screen.Name}-palettes",
                     bytes: palettes.Select(selector: static shade => ((byte)(shade & 0x07))).ToArray()

@@ -25,7 +25,7 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>identity.bindings.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldServer server, WorldOwnedWorlds ownedWorlds) : ICommandModule {
+public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldServer server, WorldOwnedWorlds ownedWorlds) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;

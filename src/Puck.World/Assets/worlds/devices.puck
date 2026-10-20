@@ -355,8 +355,8 @@ machines [
   }
 ]
 
-// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and rise
-// is start.
+// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and the
+// start channel (the pad's Start, Enter on a keyboard) is start.
 kits {
   rows [
     {
@@ -394,7 +394,7 @@ kits {
         strafe: "LeftStickX"
         jump: "South"
         flight: "East"
-        rise: "Start"
+        start: "Start"
       }
     }
   ]

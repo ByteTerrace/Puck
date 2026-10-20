@@ -20,7 +20,7 @@ this file is corrected in the same change.
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
 | Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
-| Shipped sources | `src/Puck.World/Assets/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world names as a machine's `contentFolder`), each with its committed `.cartridge.json` |
+| Shipped sources | `src/Puck.World/Assets/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world names as a machine's `contentFolder`), each with its committed `.cartridge.json`; `shared/` holds the modules several targets import |
 
 Both compilers consume the same rules, variables, sprites and input conditions.
 Source data determines behavior: never add a game-name switch or copy gameplay
@@ -76,12 +76,19 @@ export and play always validate.
   portable. The light sensor `$light` exists only on `cgb`.
 - **Colour is per-palette:** up to 8 palettes on cgb and 16 on agb,
   `mapPalettes` per background cell, a sprite picks an object palette. The dmg
-  target has one background palette and two object palettes and no per-cell
-  palette anywhere (`mapPalettes`, a map step's `palette`, a screen's
-  `palettes`); the compiler reduces each colour to one of four shades by its
-  luma (`CartridgeGraphics.MonochromePalette`), and a fade is a table of shade
-  registers. A dmg image runs at single speed, so it sustains half the cgb
-  work per frame (`CartridgeCostProfile.Monochrome`).
+  target validates like cgb but shades monochrome: every cell from the first
+  background palette whatever it selects, a sprite from the first or second
+  object palette by its palette's low bit, each colour reduced to one of four
+  shades by its luma (`CartridgeGraphics.MonochromePalette`); a fade is a
+  table of shade registers. A dmg image runs at single speed, so it sustains
+  half the cgb work per frame (`CartridgeCostProfile.Monochrome`).
+- **One game, several targets: a shared module.** A cartridge source may
+  `import` a `.puck` module; its templates and constants come in
+  (`CartridgeDocumentEmitter.LowerSource`, which `puck compile`, the language
+  server and the round-trip test use), never rows. The game lives once as a
+  template in `cartridges/shared/` (`tetromino.puck`), and each target's source
+  imports it, declares `target` and `palettes`, and calls it. A module has no
+  `.cartridge.json` twin.
 - **A Color-only image cannot run on the DMG.** The cgb image arms the speed
   switch and executes STOP, which parks a monochrome processor until a key is
   pressed, and it writes palette memory and video bank one, which the DMG does

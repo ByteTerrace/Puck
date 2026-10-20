@@ -5,6 +5,7 @@ using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Modules;
 
 using Puck.GamingBricks.Forge;
 using Puck.State;
@@ -538,6 +539,8 @@ public static class CartridgeDocumentEmitter {
         switch (statement) {
             case LetNode:
             case TemplateNode:
+            // An import contributes compile-time templates and constants (LowerSource resolves them first), never rows.
+            case ImportNode:
                 break;
 
             case PropertyNode property: {
@@ -629,7 +632,6 @@ public static class CartridgeDocumentEmitter {
     private static string Spell(StatementNode statement) => statement switch {
         BlockNode block => $"a '{block.Identifier}' block",
         FlagStatementNode flag => $"a bare '{flag.Name}'",
-        ImportNode => "an 'import'",
         PropertyNode property => $"a '{property.Name}' property",
         ExpressionStatementNode => "an expression statement",
         _ => "this statement",
@@ -647,6 +649,44 @@ public static class CartridgeDocumentEmitter {
     /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static byte[] CompileToUtf8Bytes(DocumentNode document) =>
         CanonicalJsonDocument.Serialize(node: LowerWithDiagnostics(document: document).RequireValue());
+    /// <summary>
+    /// Lowers a cartridge source read from a file, first importing the templates and constants its <c>import</c>
+    /// statements name, resolved beside <paramref name="sourcePath"/>. This is how one game serves several targets:
+    /// each target's source imports the shared module and supplies its own target and palettes.
+    /// </summary>
+    /// <param name="document">The parsed source.</param>
+    /// <param name="sourcePath">The source's file path, which its imports resolve against.</param>
+    /// <param name="diagnostics">The bag refusals are reported into, or <see langword="null"/> for a fresh one.</param>
+    /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancels import traversal, evaluation and expansion.</param>
+    /// <returns>The canonical object, or a <see langword="null"/> value when an import does not resolve, paired with
+    /// the diagnostics raised.</returns>
+    public static CompilationResult<JsonObject> LowerSource(DocumentNode document, string sourcePath, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+
+        diagnostics ??= new DiagnosticBag();
+
+        var withModules = ModuleResolver.ImportModules(
+            cancellationToken: cancellationToken,
+            diagnostics: diagnostics,
+            rootDoc: document,
+            rootPath: sourcePath,
+            vocabulary: CartridgeVocabulary.Instance
+        );
+
+        return ((withModules is null)
+            ? new CompilationResult<JsonObject>(
+                null,
+                diagnostics
+            )
+            : LowerWithDiagnostics(
+                cancellationToken: cancellationToken,
+                diagnostics: diagnostics,
+                document: withModules,
+                sourceMap: sourceMap
+            ));
+    }
     /// <summary>Lowers a parsed document into a canonical cartridge JSON object.</summary>
     /// <param name="document">The parsed document.</param>
     /// <param name="diagnostics">The bag refusals are reported into, or <see langword="null"/> for a fresh one.</param>

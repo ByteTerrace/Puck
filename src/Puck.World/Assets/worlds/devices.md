@@ -70,11 +70,18 @@ prints the generation an operation names; a swap, reset or eject replaces the
 machine under a new generation.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
-jump is A, flight is B and rise is start. The Moth binds a gamepad's South
-button to both jump and rise, so South presses A and start together, and North
-presses B; `player.signal gamepad.buttonSouth press` is the scripted A. Engaging captures the seat, so the
-Moth stands still until `body.disengage`. The screens name no engage channel,
-so a jump beside a device stays a jump; engaging is the console line.
+jump is A, flight is B and the Moth's `start` channel is start. Engaging
+captures the seat, so the Moth stands still until `body.disengage`. The screens
+name no engage channel, so a jump beside a device stays a jump; engaging is the
+console line. On a brick, each control lands in the joypad byte a forged
+cartridge copies to `0xC280` each frame (`screen.peek <screen> 0xC280`):
+
+| Control (`player.signal` source) | Keyboard | Machine button | Byte |
+|---|---|---|---|
+| `gamepad.leftStick` right, left, up, down | `d`, `a`, `w`, `s` | d-pad | `0x01`, `0x02`, `0x04`, `0x08` |
+| `gamepad.buttonSouth` | `space` | A | `0x10` |
+| `gamepad.buttonNorth` | `f` | B | `0x20` |
+| `gamepad.start` | `enter` | start | `0x80` |
 
 Each `machine.swap` restarts the device on the new cartridge and keeps the rest
 of its configuration (its model and boot mode). A name the folder does not hold

@@ -279,20 +279,28 @@ public static partial class CompileCommand {
             if (bundledDoc is not null) {
                 documentNode = bundledDoc;
             }
-        } else if (imports == ImportHandling.Validate) {
-            ModuleResolver.ValidateImportGraph(
+
+            json = CartridgeDocumentEmitter.LowerWithDiagnostics(
                 diagnostics: diagnostics,
-                rootDoc: documentNode,
-                rootPath: sourcePath,
-                vocabulary: vocabulary
-            );
+                document: documentNode,
+                sourceMap: sourceMap
+            ).Value;
+
+            return documentNode;
         }
 
-        json = CartridgeDocumentEmitter.LowerWithDiagnostics(
-            diagnostics: diagnostics,
-            document: documentNode,
-            sourceMap: sourceMap
-        ).Value;
+        json = ((imports == ImportHandling.Ignore)
+            ? CartridgeDocumentEmitter.LowerWithDiagnostics(
+                diagnostics: diagnostics,
+                document: documentNode,
+                sourceMap: sourceMap
+            )
+            : CartridgeDocumentEmitter.LowerSource(
+                diagnostics: diagnostics,
+                document: documentNode,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
+            )).Value;
 
         return documentNode;
     }

@@ -71,60 +71,6 @@ public sealed class CartridgePaletteTests {
             Path: "sprites[0].palette",
             Fragment: "object palette that is not declared"
         ),
-        new(
-            Name: "a second monochrome background palette",
-            Document: Monochrome() with { Palettes = new CartridgePalettes(
-                Background: [Palette(
-                        colors: 4,
-                        ink: 0
-                    ), Palette(
-                        colors: 4,
-                        ink: 0
-                    )],
-                Object: [Palette(
-                        colors: 4,
-                        ink: 0
-                    )]
-            ) },
-            Path: "palettes.background",
-            Fragment: "Expected an array with 1..1"
-        ),
-        new(
-            Name: "a monochrome cell palette map",
-            Document: Monochrome() with { MapPalettes = new int[1024] },
-            Path: "mapPalettes",
-            Fragment: "the dmg target shades every cell from its one background palette"
-        ),
-        new(
-            Name: "a monochrome map write naming a palette",
-            Document: Monochrome() with {
-                Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                        Kind: "map",
-                        Row: CartridgeExpressions.Of(constant: 0),
-                        Column: CartridgeExpressions.Of(constant: 0),
-                        Tile: CartridgeExpressions.Of(constant: 0),
-                        Palette: CartridgeExpressions.Of(constant: 0)
-                    )]
-                )],
-            },
-            Path: "rules[0].body[0].palette",
-            Fragment: "needs a colour machine"
-        ),
-        new(
-            Name: "a monochrome screen with cell palettes",
-            Document: Monochrome() with {
-                Screens = [new CartridgeScreen(
-                    Name: "panel",
-                    Width: 1,
-                    Tiles: [0],
-                    Palettes: [0]
-                )],
-            },
-            Path: "screens[0].palettes",
-            Fragment: "needs a colour machine"
-        ),
     ];
 
     public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
@@ -133,10 +79,7 @@ public sealed class CartridgePaletteTests {
         target: "cgb",
         title: "PALBAD"
     );
-    private static CartridgeDocument Monochrome() => CartridgeDocuments.Create(
-        target: "dmg",
-        title: "PALBAD"
-    );
+
     private static int[] Palette(int colors, int ink) {
         var entries = new int[colors];
 
@@ -239,8 +182,9 @@ public sealed class CartridgePaletteTests {
         );
     }
     [Fact]
-    public void MonochromeObjectsPickTheirShadeRegister() {
-        // Object palette zero inks black and palette one light grey; the background is white.
+    public void MonochromeShadesIgnoreCellPalettesAndPickAnObjectRegister() {
+        // Object palette zero inks black and palette one light grey. Every cell selects the black background palette,
+        // which the monochrome machine has no attribute to honour, so the background stays white.
         var white = new[] { 0x7FFF, 0x7FFF, 0x7FFF, 0x7FFF };
         var solid = new CartridgeTile(
             Name: "solid",
@@ -254,9 +198,13 @@ public sealed class CartridgePaletteTests {
             title: "SHADES"
         ) with {
             Palettes = new CartridgePalettes(
-                Background: [white],
+                Background: [white, [0, 0, 0, 0]],
                 Object: [[0, 0, 0, 0], [0, 0x56B5, 0, 0]]
             ),
+            MapPalettes = [.. Enumerable.Repeat(
+                count: 1024,
+                element: 1
+            )],
             Tiles = [CartridgeDocuments.Create(target: "dmg", title: "T").Tiles[0], solid],
             Sprites = [.. new[] { 0, 1 }.Select(selector: slot => new CartridgeSprite(
                 Name: $"s{slot}",

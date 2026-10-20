@@ -6,8 +6,9 @@ image runs at double speed, writes Color palette memory and keeps cell
 attributes in video bank one, so a DMG cannot run it: the speed switch's STOP
 parks a monochrome processor until a key is pressed. A dmg image stays at single
 speed, writes the three shade registers (BGP, OBP0, OBP1) its palettes reduce to,
-drains map writes without the attribute pass, and carries a monochrome header
-flag.
+drains map writes without the attribute pass, ignores per-cell palette
+selections, and carries a monochrome header flag, so the same document compiles
+for either target.
 Players edit documents through Puck's in-engine console. The shared
 [cartridge authoring guide](../shared/cartridge-forge.md) documents
 commands, schema, limits and the host-independent compiler/editor APIs.

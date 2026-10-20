@@ -2561,6 +2561,12 @@
         32767,
         21140,
         10570
+      ],
+      [
+        0,
+        32767,
+        21140,
+        10570
       ]
     ]
   },
@@ -3627,6 +3633,7 @@
             {
               "column": "c2",
               "kind": "map",
+              "palette": "pcol",
               "row": "r2",
               "tile": "1"
             }
@@ -3958,6 +3965,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "0",
                   "row": "cr",
                   "tile": "0"
                 },
@@ -3987,6 +3995,7 @@
                 {
                   "column": "c2",
                   "kind": "map",
+                  "palette": "0",
                   "row": "cr",
                   "tile": "0"
                 }
@@ -4619,6 +4628,7 @@
                 {
                   "column": "c2",
                   "kind": "map",
+                  "palette": "dv",
                   "row": "r2",
                   "tile": "1"
                 }
@@ -4628,6 +4638,7 @@
                 {
                   "column": "c2",
                   "kind": "map",
+                  "palette": "0",
                   "row": "r2",
                   "tile": "0"
                 }
@@ -5872,6 +5883,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "si",
                   "row": "cr",
                   "tile": "dv"
                 }
@@ -6061,6 +6073,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "si",
                   "row": "cr",
                   "tile": "dv"
                 }
@@ -6250,6 +6263,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "si",
                   "row": "cr",
                   "tile": "dv"
                 }
@@ -6448,6 +6462,7 @@
         {
           "column": "cc",
           "kind": "map",
+          "palette": "si",
           "row": "14",
           "tile": "dv"
         },
@@ -6639,6 +6654,7 @@
             {
               "column": "12",
               "kind": "map",
+              "palette": "0",
               "row": "11",
               "tile": "dv"
             },
@@ -6787,6 +6803,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "si",
                   "row": "cr",
                   "tile": "dv"
                 }
@@ -6917,6 +6934,7 @@
             {
               "column": "wcol",
               "kind": "map",
+              "palette": "0",
               "row": "wrow",
               "tile": "0"
             },
@@ -7418,6 +7436,7 @@
             {
               "column": "cc",
               "kind": "map",
+              "palette": "si",
               "row": "cr",
               "tile": "dv"
             }
@@ -7735,6 +7754,7 @@
                 {
                   "column": "cc",
                   "kind": "map",
+                  "palette": "si",
                   "row": "cr",
                   "tile": "dv"
                 }
@@ -8094,6 +8114,7 @@
             {
               "column": "cc",
               "kind": "map",
+              "palette": "0",
               "row": "13",
               "tile": "dv"
             }
@@ -8154,6 +8175,7 @@
             {
               "column": "cc",
               "kind": "map",
+              "palette": "0",
               "row": "9",
               "tile": "dv"
             }
@@ -8259,6 +8281,7 @@
         {
           "column": "cc",
           "kind": "map",
+          "palette": "0",
           "row": "16",
           "tile": "dv"
         }
@@ -12144,6 +12167,7 @@
   "sprites": [
     {
       "name": "cell0",
+      "palette": "pcol",
       "tile": "1",
       "visible": "showpiece",
       "x": "sx[0]",
@@ -12151,6 +12175,7 @@
     },
     {
       "name": "cell1",
+      "palette": "pcol",
       "tile": "1",
       "visible": "showpiece",
       "x": "sx[1]",
@@ -12158,6 +12183,7 @@
     },
     {
       "name": "cell2",
+      "palette": "pcol",
       "tile": "1",
       "visible": "showpiece",
       "x": "sx[2]",
@@ -12165,6 +12191,7 @@
     },
     {
       "name": "cell3",
+      "palette": "pcol",
       "tile": "1",
       "visible": "showpiece",
       "x": "sx[3]",
@@ -12172,6 +12199,7 @@
     },
     {
       "name": "marker",
+      "palette": "2",
       "tile": "3",
       "visible": "showmark",
       "x": "40",
@@ -12211,6 +12239,7 @@
     },
     {
       "name": "next0",
+      "palette": "ncol",
       "tile": "1",
       "visible": "shownext",
       "x": "nx[0]",
@@ -12218,6 +12247,7 @@
     },
     {
       "name": "next1",
+      "palette": "ncol",
       "tile": "1",
       "visible": "shownext",
       "x": "nx[1]",
@@ -12225,6 +12255,7 @@
     },
     {
       "name": "next2",
+      "palette": "ncol",
       "tile": "1",
       "visible": "shownext",
       "x": "nx[2]",
@@ -12232,6 +12263,7 @@
     },
     {
       "name": "next3",
+      "palette": "ncol",
       "tile": "1",
       "visible": "shownext",
       "x": "nx[3]",
