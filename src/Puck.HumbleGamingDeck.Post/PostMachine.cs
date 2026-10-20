@@ -211,12 +211,12 @@ internal static class PostMachine {
 
         var mapper = ((HgdMmc3)machine.Bus.Mapper);
 
-        for (var tick = 0UL; ((tick < FrameTicks) && (mapper.IrqCounter == 1)); ++tick) {
+        byte previous;
+
+        do {
+            previous = mapper.IrqCounter;
             machine.RunCycles(masterTicks: 1);
-        }
-        for (var tick = 0UL; ((tick < FrameTicks) && (mapper.IrqCounter != 1)); ++tick) {
-            machine.RunCycles(masterTicks: 1);
-        }
+        } while ((previous == 1) || (mapper.IrqCounter != 1));
         machine.RunCycles(masterTicks: 400);
     }
 }

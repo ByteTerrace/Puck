@@ -1,4 +1,5 @@
 using Puck.HumbleGamingDeck.Forge;
+using Puck.Machines;
 using Puck.Testing;
 
 namespace Puck.HumbleGamingDeck.Tests;
@@ -142,6 +143,97 @@ public sealed class BoardLawTests {
         Serial(address: 0xA000, mapper: mapper, value: 0x10);
         Assert.Equal(expected: 19, actual: mapper.CpuRead(address: 0x8000, openBus: 0));
         Assert.Equal(expected: 31, actual: mapper.CpuRead(address: 0xC000, openBus: 0));
+    }
+    /// <summary>On 16 KiB of PRG-RAM (SOROM) CHR bank bit 3 selects the 8 KiB bank, and on 32 KiB (SXROM) bits 3 and 2
+    /// do.</summary>
+    /// <param name="ramShift">The PRG-RAM size as NES 2.0 encodes it: 8 for 16 KiB, 9 for 32 KiB.</param>
+    /// <param name="chrBank">The CHR bank 0 value selecting the second bank checked.</param>
+    [InlineData(8, 0x08)]
+    [InlineData(9, 0x0C)]
+    [Theory]
+    public void Mmc1ChrBankSelectsThePrgRamBank(int ramShift, byte chrBank) {
+        var image = new DeckProgram(origin: 0xC000).Label(name: "idle").Jump(label: "idle", opcode: Jmp).Build(chr: [], mapper: 1, prgRomSize: 32768);
+
+        image[10] = ((byte)ramShift);
+        var mapper = ((HgdMmc1)HgdCartridge.Load(image: image).CreateMapper());
+
+        mapper.CpuWrite(address: 0x6000, value: 0x11);
+        Serial(address: 0xA000, mapper: mapper, value: chrBank);
+        Assert.Equal(expected: 0, actual: mapper.CpuRead(address: 0x6000, openBus: 0xEE));
+        mapper.CpuWrite(address: 0x6000, value: 0x22);
+        Serial(address: 0xA000, mapper: mapper, value: 0);
+        Assert.Equal(expected: 0x11, actual: mapper.CpuRead(address: 0x6000, openBus: 0));
+        Serial(address: 0xA000, mapper: mapper, value: chrBank);
+        Assert.Equal(expected: 0x22, actual: mapper.CpuRead(address: 0x6000, openBus: 0));
+    }
+    /// <summary>CHR-RAM is banked like CHR-ROM on both boards: a byte written through one bank reads back through the same
+    /// bank wherever it is mapped and is absent from the other.</summary>
+    [Fact]
+    public void ChrRamFollowsTheBankRegisters() {
+        var nametables = new HgdNametableRam();
+        var mmc1 = Mmc1(prgBanks: 2, chrBanks: 0);
+
+        Serial(address: 0x8000, mapper: mmc1, value: 0x1C);
+        Serial(address: 0xA000, mapper: mmc1, value: 1);
+        mmc1.PpuWrite(address: 0x0010, nametables: nametables, value: 0x5A);
+        Serial(address: 0xC000, mapper: mmc1, value: 1);
+        Assert.Equal(expected: 0x5A, actual: mmc1.PpuRead(address: 0x1010, nametables: nametables));
+        Serial(address: 0xA000, mapper: mmc1, value: 0);
+        Assert.Equal(expected: 0, actual: mmc1.PpuRead(address: 0x0010, nametables: nametables));
+        Assert.Equal(expected: 1, actual: mmc1.Header.Mapper);
+
+        var mmc3 = Mmc3(prgBanks: 4, chrBanks: 0);
+
+        BankData(mapper: mmc3, register: 2, value: 3);
+        mmc3.PpuWrite(address: 0x1010, nametables: nametables, value: 0xA5);
+        BankData(mapper: mmc3, register: 5, value: 3);
+        Assert.Equal(expected: 0xA5, actual: mmc3.PpuRead(address: 0x1C10, nametables: nametables));
+        Assert.Equal(expected: 0, actual: mmc3.PpuRead(address: 0x1410, nametables: nametables));
+    }
+    /// <summary>A four-screen MMC3 image answers the upper two nametables from its own RAM, wires the lower two
+    /// vertically, and ignores $A000.</summary>
+    [Fact]
+    public void Mmc3FourScreenKeepsItsOwnNametables() {
+        var image = new DeckProgram(origin: 0xC000).Label(name: "idle").Jump(label: "idle", opcode: Jmp).Build(chr: new byte[8192], mapper: 4, prgRomSize: 32768);
+
+        image[6] |= 0x08;
+        var mapper = HgdCartridge.Load(image: image).CreateMapper();
+        var nametables = new HgdNametableRam();
+
+        mapper.CpuWrite(address: 0xA000, value: 1);
+        for (var quadrant = 0; (quadrant < 4); ++quadrant) {
+            mapper.PpuWrite(address: ((ushort)(0x2000 + (quadrant * 0x400))), nametables: nametables, value: ((byte)(0x10 + quadrant)));
+        }
+        Assert.Equal(expected: 0x10, actual: nametables.Read(offset: 0, page: 0));
+        Assert.Equal(expected: 0x11, actual: nametables.Read(offset: 0, page: 1));
+        Assert.Equal(expected: 0x12, actual: mapper.PpuRead(address: 0x2800, nametables: nametables));
+        Assert.Equal(expected: 0x13, actual: mapper.PpuRead(address: 0x2C00, nametables: nametables));
+    }
+    /// <summary>A board refuses a snapshot whose shift register or A12 filter count no board could hold.</summary>
+    [Fact]
+    public void BoardsRefuseOutOfRangeSnapshots() {
+        IHgdMapper[] mappers = [Mmc1(prgBanks: 2, chrBanks: 2), Mmc3(prgBanks: 4, chrBanks: 8)];
+        int[] fromEnd = [7, 1];
+
+        for (var index = 0; (index < mappers.Length); ++index) {
+            var writer = new StateWriter();
+
+            mappers[index].SaveState(writer: writer);
+            var bytes = writer.ToArray();
+
+            bytes[(bytes.Length - fromEnd[index])] = 0x40;
+            Assert.Throws<InvalidDataException>(testCode: () => mappers[index].LoadState(reader: new StateReader(buffer: bytes)));
+        }
+    }
+    /// <summary>The assembler places code from its origin and refuses an origin other than $8000 or $C000, a branch out
+    /// of range, a banked size that is not whole banks, and a program that runs into the vectors.</summary>
+    [Fact]
+    public void DeckProgramRefusesWhatItCannotPack() {
+        Assert.Equal(expected: 0xC002, actual: new DeckProgram(origin: 0xC000).Bytes(Sei, Cld).Here);
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new DeckProgram(origin: 0xA000));
+        Assert.Throws<InvalidOperationException>(testCode: () => new DeckProgram().Label(name: "far").Bytes(new byte[200]).Branch(label: "far", opcode: Bpl).Build(chr: []));
+        Assert.Throws<ArgumentException>(testCode: () => new DeckProgram(origin: 0xC000).Build(chr: [], mapper: 1, prgRomSize: 40960));
+        Assert.Throws<ArgumentException>(testCode: () => new DeckProgram(origin: 0xC000).Bytes(new byte[0x3FFB]).Build(chr: [], mapper: 4, prgRomSize: 32768));
     }
     /// <summary>MMC3's R6 and R7 switch two 8 KiB windows, the last bank stays at $E000, and bank select bit 6 swaps $8000
     /// with $C000.</summary>

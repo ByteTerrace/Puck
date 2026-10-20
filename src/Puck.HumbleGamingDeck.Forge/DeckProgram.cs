@@ -92,8 +92,8 @@ public sealed class DeckProgram {
     /// <returns>The iNES image.</returns>
     /// <exception cref="InvalidOperationException">A branch target is out of range.</exception>
     /// <exception cref="KeyNotFoundException">A referenced label is missing.</exception>
-    /// <exception cref="ArgumentException"><paramref name="chr"/> is larger than 8 KiB, or the emitted program does not
-    /// fit in the image.</exception>
+    /// <exception cref="ArgumentException"><paramref name="chr"/> is larger than 8 KiB, or the emitted program overlaps
+    /// the interrupt vectors.</exception>
     /// <exception cref="ArgumentNullException">A referenced label is <see langword="null"/>.</exception>
     public byte[] Build(ReadOnlySpan<byte> chr) {
         var image = new byte[((16 + 32768) + 8192)];
@@ -108,19 +108,19 @@ public sealed class DeckProgram {
         return image;
     }
     /// <summary>Packs the program into an NES 2.0 image for a banked board, with vertical mirroring and 8 KiB of PRG-RAM.
-    /// The program fills the last 16 KiB of PRG ROM, which MMC1 (PRG mode 3) and MMC3 (PRG mode 0) map at $C000 from
-    /// power-on, so it is built with origin $C000; every other PRG byte is zero for the caller to fill.</summary>
+    /// The program and its vectors fill the last 32 KiB of PRG ROM; MMC1 (PRG mode 3) and MMC3 (PRG mode 0) keep its
+    /// last 16 KiB at $C000 from power-on, so a program that switches banks is built with origin $C000. Every other PRG
+    /// byte is zero for the caller to fill.</summary>
     /// <param name="chr">The CHR ROM, a whole number of 8 KiB banks, or empty for 8 KiB of CHR-RAM.</param>
     /// <param name="mapper">The iNES mapper number: 1 for MMC1, 4 for MMC3.</param>
     /// <param name="prgRomSize">The PRG ROM size in bytes, a multiple of 16 KiB from 32 KiB.</param>
     /// <param name="submapper">The NES 2.0 submapper number.</param>
     /// <param name="battery">Whether the PRG-RAM is battery-backed NVRAM rather than volatile RAM.</param>
     /// <returns>The NES 2.0 image.</returns>
-    /// <exception cref="InvalidOperationException">The program's origin is not $C000, or a branch target is out of
-    /// range.</exception>
+    /// <exception cref="InvalidOperationException">A branch target is out of range.</exception>
     /// <exception cref="KeyNotFoundException">A referenced label is missing.</exception>
-    /// <exception cref="ArgumentException">A size is not a whole number of banks, or the emitted program does not fit in
-    /// its 16 KiB.</exception>
+    /// <exception cref="ArgumentException">A size is not a whole number of banks, or the emitted program overlaps the
+    /// interrupt vectors.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mapper"/> or <paramref name="submapper"/> does not fit
     /// its header field.</exception>
     /// <exception cref="ArgumentNullException">A referenced label is <see langword="null"/>.</exception>
@@ -129,9 +129,6 @@ public sealed class DeckProgram {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: mapper, other: 255);
         ArgumentOutOfRangeException.ThrowIfNegative(value: submapper);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: submapper, other: 15);
-        if (m_origin != 0xC000) {
-            throw new InvalidOperationException(message: "A banked image holds the program in its last 16 KiB; build it with origin $C000.");
-        }
         if ((prgRomSize < 32768) || ((prgRomSize % 16384) != 0) || ((prgRomSize >> 14) > 255) || ((chr.Length % 8192) != 0) || ((chr.Length >> 13) > 255)) {
             throw new ArgumentException(message: "PRG ROM is a multiple of 16 KiB from 32 KiB and CHR ROM a multiple of 8 KiB, each at most 255 banks.");
         }

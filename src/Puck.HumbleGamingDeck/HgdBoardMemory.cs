@@ -47,8 +47,6 @@ public sealed class HgdBoardMemory {
     public int ChrLength {
         get;
     }
-    /// <summary>Gets whether pattern memory is writable RAM rather than ROM.</summary>
-    public bool ChrIsRam => m_cartridge.ChrRom.IsEmpty;
     /// <summary>Gets the battery-backed bytes a save file holds: PRG NVRAM, then CHR NVRAM.</summary>
     public Span<byte> BatteryRam => m_batteryRam;
 
