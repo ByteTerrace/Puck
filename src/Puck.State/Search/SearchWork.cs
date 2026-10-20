@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>What one search job may spend a step and what each indivisible unit of its walk costs, in the work
@@ -17,8 +19,8 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
 
     /// <summary>Gets the least allowance under which every step makes progress: a full replay that fails into a
     /// restart, then one unit.</summary>
-    public long Minimum => SaturatingAdd(
-        left: SaturatingAdd(
+    public long Minimum => BinaryIntegerFunctions.AddSaturating(
+        left: BinaryIntegerFunctions.AddSaturating(
             left: Restart,
             right: Replay(scopes: Scopes)
         ),
@@ -33,24 +35,13 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         val2: TreeStep
     );
 
-    private static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right))
-        ? long.MaxValue
-        : (left + right)
-    );
-    private static long SaturatingMultiply(long left, long right) => (((left == 0L) || (right == 0L))
-        ? 0L
-        : ((left > (long.MaxValue / right))
-            ? long.MaxValue
-            : (left * right)
-    ));
-
     /// <summary>Returns a job bounded by its judged-candidate quota alone: every unit is priced at its judge run
     /// and the allowance never binds.</summary>
     /// <param name="judge">The work units one judge run costs.</param>
     /// <returns>The prices.</returns>
     public static SearchWork NodeBounded(long judge) => new(
         Allowance: long.MaxValue,
-        Candidate: SaturatingAdd(
+        Candidate: BinaryIntegerFunctions.AddSaturating(
             left: judge,
             right: Cursor
         ),
@@ -59,7 +50,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         Outcome: Cursor,
         Restart: 0L,
         Scopes: 0,
-        TreeStep: SaturatingAdd(
+        TreeStep: BinaryIntegerFunctions.AddSaturating(
             left: judge,
             right: Cursor
         )
@@ -87,10 +78,10 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         var hops = 1L;
 
         foreach (var shape in shapes) {
-            candidates = SaturatingAdd(
+            candidates = BinaryIntegerFunctions.AddSaturating(
                 left: candidates,
-                right: SaturatingMultiply(
-                    left: tokens,
+                right: BinaryIntegerFunctions.MultiplySaturating(
+                    left: ((long)tokens),
                     right: shape.CandidateCount(cellCount: cellCount)
                 )
             );
@@ -104,28 +95,28 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
 
         // A resolution scans the tokens for an occupant at most twice a hop, and a chained jump also scans the
         // cells it has already visited.
-        var inspect = SaturatingAdd(
+        var inspect = BinaryIntegerFunctions.AddSaturating(
             left: 2L,
-            right: SaturatingMultiply(
+            right: BinaryIntegerFunctions.MultiplySaturating(
                 left: hops,
                 right: ((2L * tokens) + hops)
             )
         );
         // Applying writes a handful of cells and scans the tokens once for a capture.
         var apply = (8L + tokens);
-        var candidate = SaturatingAdd(
-            left: SaturatingAdd(
+        var candidate = BinaryIntegerFunctions.AddSaturating(
+            left: BinaryIntegerFunctions.AddSaturating(
                 left: inspect,
                 right: apply
             ),
-            right: SaturatingAdd(
-                left: SaturatingAdd(
+            right: BinaryIntegerFunctions.AddSaturating(
+                left: BinaryIntegerFunctions.AddSaturating(
                     left: judge,
                     right: score
                 ),
-                right: SaturatingAdd(
+                right: BinaryIntegerFunctions.AddSaturating(
                     left: (keyed
-                        ? SaturatingMultiply(
+                        ? BinaryIntegerFunctions.MultiplySaturating(
                             left: 2L,
                             right: position
                         )
@@ -137,12 +128,12 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         var tree = ((method == SearchMethod.MonteCarlo)
             // A tree step selects among a node's children or decodes one flat candidate, opens it, scores the
             // leaf, and folds the value back along the path.
-            ? SaturatingAdd(
-                left: SaturatingAdd(
+            ? BinaryIntegerFunctions.AddSaturating(
+                left: BinaryIntegerFunctions.AddSaturating(
                     left: candidate,
                     right: candidates
                 ),
-                right: SaturatingAdd(
+                right: BinaryIntegerFunctions.AddSaturating(
                     left: score,
                     right: ((2L * depth) + 4L)
                 )
@@ -156,13 +147,13 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
             Inspect: inspect,
             Judge: judge,
             Outcome: ((chanceCells > 0)
-                ? SaturatingAdd(
+                ? BinaryIntegerFunctions.AddSaturating(
                     left: (2L + chanceCells),
                     right: score
                 )
                 : 0L),
             // A restart reads every token's key and clears the root's outputs and the transposition table.
-            Restart: SaturatingAdd(
+            Restart: BinaryIntegerFunctions.AddSaturating(
                 left: (4L * tokens),
                 right: (keyed
                     ? ((3L * SearchCapacity.TranspositionEntries) / 8L)
@@ -179,7 +170,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
     /// <summary>Returns what reopening a suspended job's scopes costs.</summary>
     /// <param name="scopes">The scopes held open.</param>
     /// <returns>The work units.</returns>
-    public long Replay(int scopes) => SaturatingMultiply(
+    public long Replay(int scopes) => BinaryIntegerFunctions.MultiplySaturating(
         left: scopes,
         right: Candidate
     );

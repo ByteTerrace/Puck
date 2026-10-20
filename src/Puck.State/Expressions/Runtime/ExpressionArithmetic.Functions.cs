@@ -882,9 +882,7 @@ public static partial class ExpressionArithmetic {
     private const int MaskBits = 64;
     private const int NibbleSlots = 16;
 
-    // The fold 0, −1, 1, −2, 2, … ↦ 0, 1, 2, 3, 4, … that lets the shell walk over the naturals pair signed components.
-    private static ulong Fold(long component) => ((ulong)((component << 1) ^ (component >> 63)));
-    private static long Unfold(ulong folded) => ((long)(folded >> 1)) ^ (-((long)(folded & 1UL)));
+    // The zigzag fold 0, −1, 1, −2, 2, … ↦ 0, 1, 2, 3, 4, … lets the shell walk over the naturals pair signed components.
     private static bool TryPair(long x, long y, out long pair) {
         // Shifting the admitted range [−max, max] onto [0, 2·max] makes one unsigned comparison test both ends.
         if (
@@ -894,7 +892,7 @@ public static partial class ExpressionArithmetic {
             pair = 0L;
             return false;
         }
-        pair = ((long)Fold(component: x).ElegantPair<ulong, ulong>(other: Fold(component: y)));
+        pair = ((long)x.ZigZagEncode<long, ulong>().ElegantPair<ulong, ulong>(other: y.ZigZagEncode<long, ulong>()));
         return true;
     }
     private static bool TryUnpair(long pair, out long x, out long y) {
@@ -903,29 +901,11 @@ public static partial class ExpressionArithmetic {
             y = 0L;
             return false;
         }
-        // Restoring square root: keep the signed-pair state path entirely integer, including the root seed.
-        var remainder = ((ulong)pair);
-        var shell = 0UL;
 
-        for (var bit = (1UL << 62); (bit != 0UL); bit >>= 2) {
-            var candidate = (shell + bit);
+        var (foldedX, foldedY) = ((ulong)pair).ElegantUnpair<ulong, ulong>();
 
-            shell >>= 1;
-            if (remainder >= candidate) {
-                remainder -= candidate;
-                shell += bit;
-            }
-        }
-        // remainder is pair − shell², the offset along this alternating square shell.
-        var (foldedX, foldedY) = ((remainder < shell)
-            ? (shell, remainder)
-            : (((shell << 1) - remainder), shell)
-        );
-
-        if ((shell & 1UL) != 0UL) { (foldedX, foldedY) = (foldedY, foldedX); }
-
-        x = Unfold(folded: foldedX);
-        y = Unfold(folded: foldedY);
+        x = foldedX.ZigZagDecode<long, ulong>();
+        y = foldedY.ZigZagDecode<long, ulong>();
         return true;
     }
     private static bool TryLong(ulong count, out long value) {

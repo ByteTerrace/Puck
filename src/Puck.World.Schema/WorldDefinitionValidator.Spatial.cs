@@ -20,7 +20,7 @@ public static partial class WorldDefinitionValidator {
 
         // A spatial row's local scale participates in every compiled radius and half-extent.  Reject a
         // positive value that would disappear at the fixed-point boundary before it can become a silent point.
-        RequireNavigationFixedPositive(
+        RequireQuantizesNonZero(
             placement.Scale,
             $"{path}.scale",
             errors
@@ -79,17 +79,17 @@ public static partial class WorldDefinitionValidator {
                             $"{spatialPath}.shape.halfExtents.z",
                             errors
                         );
-                        RequireNavigationFixedPositive(
+                        RequireQuantizesNonZero(
                             volume.Shape.HalfExtents.X,
                             $"{spatialPath}.shape.halfExtents.x",
                             errors
                         );
-                        RequireNavigationFixedPositive(
+                        RequireQuantizesNonZero(
                             volume.Shape.HalfExtents.Y,
                             $"{spatialPath}.shape.halfExtents.y",
                             errors
                         );
-                        RequireNavigationFixedPositive(
+                        RequireQuantizesNonZero(
                             volume.Shape.HalfExtents.Z,
                             $"{spatialPath}.shape.halfExtents.z",
                             errors
@@ -105,7 +105,7 @@ public static partial class WorldDefinitionValidator {
                         $"{spatialPath}.shape.radius",
                         errors
                     );
-                    RequireNavigationFixedPositive(
+                    RequireQuantizesNonZero(
                         volume.Shape.Radius,
                         $"{spatialPath}.shape.radius",
                         errors

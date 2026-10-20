@@ -128,7 +128,7 @@ public static partial class RuleWorkBudget {
 
             var admitted = ((int)Math.Min(
                 val1: sums.Count,
-                val2: SaturatingAdd(
+                val2: BinaryIntegerFunctions.AddSaturating(
                     left: 1L,
                     right: writers.GetValueOrDefault(key: cell)
                 )
@@ -191,12 +191,12 @@ public static partial class RuleWorkBudget {
                 if (write.Key.IsValid) {
                     var cell = (write.RowOrdinal, write.Key);
 
-                    byCell[cell] = SaturatingAdd(
+                    byCell[cell] = BinaryIntegerFunctions.AddSaturating(
                         left: byCell.GetValueOrDefault(key: cell),
                         right: multiplier
                     );
                 } else {
-                    byRow[write.RowOrdinal] = SaturatingAdd(
+                    byRow[write.RowOrdinal] = BinaryIntegerFunctions.AddSaturating(
                         left: byRow.GetValueOrDefault(key: write.RowOrdinal),
                         right: multiplier
                     );
@@ -207,7 +207,7 @@ public static partial class RuleWorkBudget {
         var writers = new Dictionary<(int RowOrdinal, CellKey Key), long>();
 
         foreach (var (cell, count) in byCell) {
-            writers[cell] = SaturatingAdd(
+            writers[cell] = BinaryIntegerFunctions.AddSaturating(
                 left: count,
                 right: byRow.GetValueOrDefault(key: cell.RowOrdinal)
             );
@@ -403,7 +403,7 @@ public static partial class RuleWorkBudget {
         var slots = 0L;
 
         foreach (var contributor in contributors) {
-            slots = SaturatingAdd(
+            slots = BinaryIntegerFunctions.AddSaturating(
                 left: slots,
                 right: contributor.Multiplier
             );
@@ -451,13 +451,4 @@ public static partial class RuleWorkBudget {
             writers: writers
         )));
     }
-    /// <summary>Adds two evaluation counts, clamping at <see cref="long.MaxValue"/>. A clamped count is only ever
-    /// reported or compared with another count; work is priced through <see cref="RuleWork"/>, which overflows.</summary>
-    /// <param name="left">The left addend.</param>
-    /// <param name="right">The right addend.</param>
-    /// <returns>The sum.</returns>
-    public static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right))
-        ? long.MaxValue
-        : (left + right)
-    );
 }

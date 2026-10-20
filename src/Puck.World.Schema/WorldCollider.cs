@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
@@ -240,12 +239,6 @@ public readonly struct FixedWorldCollider {
             Rotation: FixedQuaternion.Identity,
             Radius: radius
         );
-    private static FixedQuaternion ToFixed(Quaternion value) => new FixedQuaternion(
-        X: FixedQ4816.FromDouble(value: value.X),
-        Y: FixedQ4816.FromDouble(value: value.Y),
-        Z: FixedQ4816.FromDouble(value: value.Z),
-        W: FixedQ4816.FromDouble(value: value.W)
-    ).Normalize();
 
     /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
     public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) {
@@ -294,7 +287,7 @@ public readonly struct FixedWorldCollider {
                             Z: FixedQ4816.Zero
                         ),
                         halfExtents: halfExtents,
-                        rotation: ToFixed(value: box.Rotation)
+                        rotation: FixedQuaternion.FromQuaternion(value: box.Rotation).Normalize()
                     ));
                     break;
                 }
@@ -371,7 +364,7 @@ public readonly record struct FixedWorldCollision(
     public static FixedWorldCollision Compile(WorldCollision collision) => new(
         ContactSkin: FixedQ4816.FromDouble(value: collision.ContactSkin),
         MaxIterations: collision.MaxIterations,
-        GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
+        GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: collision.MaxSlopeDegrees)),
         GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe),
         GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false),
         DefaultHold: collision.DefaultHold,

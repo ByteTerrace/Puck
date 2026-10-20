@@ -597,11 +597,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (
-            !float.IsFinite(f: lattice.Origin.X) ||
-            !float.IsFinite(f: lattice.Origin.Y) ||
-            !float.IsFinite(f: lattice.Origin.Z)
-        ) {
+        if (!VectorFunctions.IsFinite(vector: lattice.Origin)) {
             errors.Add(item: "fields.lattice.origin must contain finite coordinates.");
         }
 

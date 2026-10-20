@@ -101,7 +101,7 @@ public readonly record struct FixedWorldTether(
         );
 
         return new FixedWorldTether(
-            AimHalfAngle: FixedQ4816.FromDouble(value: (facet.AimHalfAngleDegrees * (Math.PI / 180.0))),
+            AimHalfAngle: FixedQ4816.FromDegrees(degrees: facet.AimHalfAngleDegrees),
             AttachChannelOrdinal: attachOrdinal,
             AttachThreshold: ((attachOrdinal >= 0)
             ? channels.Threshold(ordinal: attachOrdinal)

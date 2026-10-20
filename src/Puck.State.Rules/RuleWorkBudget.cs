@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 /// <summary>The static pricing every compiled shape reports its cost through. These are heuristic units, not
@@ -61,7 +63,7 @@ public static partial class RuleWorkBudget {
         foreach (var token in tokens) {
             var own = (token switch {
                 { Call: { } call } => call.Steps,
-                { Fold: { } fold } => SaturatingMultiply(
+                { Fold: { } fold } => BinaryIntegerFunctions.MultiplySaturating(
                     left: Math.Max(
                         val1: 1L,
                         val2: fold.Cells
@@ -71,8 +73,8 @@ public static partial class RuleWorkBudget {
                 _ => 0L,
             });
 
-            steps = SaturatingAdd(
-                left: SaturatingAdd(
+            steps = BinaryIntegerFunctions.AddSaturating(
+                left: BinaryIntegerFunctions.AddSaturating(
                     left: steps,
                     right: 1L
                 ),
@@ -83,10 +85,6 @@ public static partial class RuleWorkBudget {
         return steps;
     }
 
-    private static long SaturatingMultiply(long left, long right) => (((left != 0L) && (right > (long.MaxValue / left)))
-        ? long.MaxValue
-        : (left * right)
-    );
     // A body is shared by every site that calls it, so it is priced once per kind and the price reused: walking each
     // call site again would take as long as evaluating the chain does.
     private static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, IRuleCostContext context, Dictionary<(CompiledExpressionToken[] Body, CellKind Kind), RuleWork>? priced) {

@@ -61,13 +61,17 @@ public static class WorldBodyStateReads {
     /// <summary>Returns the number a stored slot presents, as raw <see cref="FixedQ4816"/> bits.</summary>
     /// <param name="kind">The slot's kind.</param>
     /// <param name="raw">The stored value: a counter's raw bits, or a timer's remaining engine ticks.</param>
-    /// <returns>A counter's raw bits unchanged, or a timer's remaining seconds.</returns>
+    /// <returns>A counter's raw bits unchanged, or a timer's remaining seconds rounded to nearest with ties to even
+    /// (<see cref="FixedTickConversion.SecondsOf"/>); a negative tick count presents as zero.</returns>
     public static long Presented(ActionStateKind kind, long raw) => ((kind == ActionStateKind.Counter)
         ? raw
-        : ((long)((((Int128)Math.Max(
-            val1: 0L,
-            val2: raw
-        )) << 16) / FixedTickConversion.TicksPerSecond))
+        : FixedTickConversion.SecondsOf(
+            ratePerSecond: FixedTickConversion.TicksPerSecond,
+            ticks: ((ulong)Math.Max(
+                val1: 0L,
+                val2: raw
+            ))
+        ).Value
     );
     /// <summary>Reads a render lane's state operand as a body-state binding: <c>bodyState($body, slot)</c> reads the
     /// wearing body's slot, <c>bodyState(body, n, slot)</c> body <c>n</c>'s.</summary>

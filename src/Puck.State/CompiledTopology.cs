@@ -375,10 +375,10 @@ public sealed partial class CompiledTopology {
             (Kind == TopologyKind.Ring) ||
             (m_wrap is TopologyWrap.X or TopologyWrap.Both)
         ) {
-            x = (((x % m_width) + m_width) % m_width);
+            x = x.FloorModulo(modulus: m_width);
         }
         if (m_wrap is TopologyWrap.Y or TopologyWrap.Both) {
-            y = (((y % m_depth) + m_depth) % m_depth);
+            y = y.FloorModulo(modulus: m_depth);
         }
         if (!m_coordinateIndex.TryGetValue(
             key: (x, y, z),

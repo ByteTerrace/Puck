@@ -287,12 +287,8 @@ public static class BodyActionSpecFactory {
             Effects: effects
         );
     }
-    // Seconds → engine ticks through the same FromDouble + round-up path the runtime tuning conversions ride.
-    // Puck.Maths.FixedTickConversion is the single-sourced conversion Puck.World.Server's WorldBody calls too — this
-    // project cannot reference WorldBody directly (Puck.World.Schema must not depend on Puck.World.Server).
-    private static ulong DurationTicks(float seconds) {
-        return FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: seconds));
-    }
+    // Authored seconds → engine ticks, rounded up from the decimal the float field was authored as.
+    private static ulong DurationTicks(float seconds) => FixedTickConversion.DurationEngineTicks(seconds: ((decimal)seconds));
     private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
         if (depth >= CompiledPredicateCapacity.MaxTokens) {
             throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");

@@ -222,7 +222,9 @@ public sealed partial class ArenaSearch {
         public long[]? Wide { get; set; }
         public long Work { get; set; }
 
-        public ulong Seed;
+        // The job's index among the installed jobs, which selects its draw stream.
+        public int Ordinal { get; init; }
+        public Pcg32XshRr Stream;
 
         // PassDepth is the depth the current pass searches to; Active is which ply (0 = root) is being expanded.
         public int PassDepth { get; set; } = 1;
@@ -391,6 +393,7 @@ public sealed partial class ArenaSearch {
                 tokenCapacity: m_arena.CellCount(rowOrdinal: plan.TokensOrdinal)
             ) {
                 Judge = judge,
+                Ordinal = index,
                 ReachKeys = ResolveReachKeys(plan: plan),
             };
 

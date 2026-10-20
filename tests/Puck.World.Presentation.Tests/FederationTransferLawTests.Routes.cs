@@ -216,15 +216,16 @@ public sealed partial class FederationTransferLawTests {
             what: "camera direction after the handoff"
         );
     }
-    // THE LAW: an accumulated arrival turn is reduced to [-pi, pi), so a reader refuses any other value by name: the
-    // federation commit and route leaves, and the destination's escrow for a colocated commit. -pi is the interval's
-    // closed end and is accepted; pi is its open end and is refused.
+    // THE LAW: an accumulated arrival turn is reduced by FixedQ4816.WrapAngle to the closed [-pi, pi], so a reader
+    // refuses any other value by name: the federation commit and route leaves, and the destination's escrow for a
+    // colocated commit. Both ends are accepted; one raw beyond either is refused.
     [Fact]
     public void AnUnreducedArrivalTurnIsRefusedByEveryReader() {
         using var fixture = Fixtures.FreshServer();
-        var pi = FixedQ4816.FromDouble(value: Math.PI);
+        var pi = FixedQ4816.Pi;
+        var beyond = FixedQ4816.FromRawBits(value: (pi.Value + 1L));
 
-        foreach (var turn in new[] { pi, FixedQ4816.FromInteger(value: 4), -FixedQ4816.FromInteger(value: 4) }) {
+        foreach (var turn in new[] { beyond, -beyond, FixedQ4816.FromInteger(value: 4), -FixedQ4816.FromInteger(value: 4) }) {
             Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
                 body: WorldFederationCodec.EncodeCommit(
                     members: [Turned(travelTurn: turn)],
@@ -279,7 +280,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
         Assert.Equal(
             actual: fixture.Server.CommitTransfer(
-                members: [Turned(travelTurn: pi)],
+                members: [Turned(travelTurn: beyond)],
                 reason: out var reason,
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId
@@ -292,23 +293,25 @@ public sealed partial class FederationTransferLawTests {
             expectedSubstring: "unreduced arrival turn"
         );
 
-        var closed = Route(travelTurn: -pi);
+        foreach (var end in new[] { -pi, pi }) {
+            var closed = Route(travelTurn: end);
 
-        Assert.True(condition: WorldFederationCodec.TryDecodeRoute(
-            body: WorldFederationCodec.EncodeRoute(
-                authority: "world/onward",
-                revision: 0,
-                route: in closed,
-                tier: WorldDisclosureTier.Replica,
-                time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
-            ),
-            failure: out var closedFailure,
-            route: out var decoded
-        ), userMessage: closedFailure.ToString());
-        Assert.Equal(
-            actual: decoded.TravelTurn,
-            expected: -pi
-        );
+            Assert.True(condition: WorldFederationCodec.TryDecodeRoute(
+                body: WorldFederationCodec.EncodeRoute(
+                    authority: "world/onward",
+                    revision: 0,
+                    route: in closed,
+                    tier: WorldDisclosureTier.Replica,
+                    time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
+                ),
+                failure: out var closedFailure,
+                route: out var decoded
+            ), userMessage: closedFailure.ToString());
+            Assert.Equal(
+                actual: decoded.TravelTurn,
+                expected: end
+            );
+        }
     }
     [Fact]
     public void RouteWire_PreservesOneCompleteAuthorityEpoch() {

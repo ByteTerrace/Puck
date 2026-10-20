@@ -32,12 +32,13 @@ public sealed record ArenaSearchLevelCheckpoint(
 /// <param name="Target">The candidate index within the shape.</param>
 public readonly record struct ArenaSearchScopeCheckpoint(int Shape, int Token, int Target);
 /// <summary>A job's tree search in flight: the node pool (parallel arrays, <see cref="Count"/> nodes used), the path
-/// from the root, the phase and its cursors, and the draw seed.</summary>
+/// from the root, the phase and its cursors, and the draw stream's state.</summary>
 /// <param name="Active">Whether the tree search is running.</param>
 /// <param name="Phase">The phase cursor.</param>
 /// <param name="Count">How many nodes the pool holds.</param>
 /// <param name="Iteration">How many iterations have completed.</param>
-/// <param name="Seed">The draw stream's position.</param>
+/// <param name="Seed">The draw stream's state word; the stream's increment is the job's own, derived from its plan's seed
+/// and its ordinal.</param>
 /// <param name="Scan">How many candidates the current playout ply has tried.</param>
 /// <param name="Start">The flat candidate index the current playout ply scans from.</param>
 /// <param name="PlayoutPlies">How many plies the playout has taken.</param>

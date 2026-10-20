@@ -457,7 +457,7 @@ public readonly record struct FixedWorldGravityArea(
         try {
             var scale = FixedQ4816.FromDouble(value: placement.Scale);
             var position = FixedVector3.FromVector3(value: frame.Position);
-            var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
+            var yaw = FixedQ4816.FromDegrees(degrees: frame.YawDegrees);
             var boundsKind = default(FixedWorldGravityAreaBoundsKind);
             var radiusSquared = FixedQ4816.Zero;
             var halfExtents = FixedVector3.Zero;
