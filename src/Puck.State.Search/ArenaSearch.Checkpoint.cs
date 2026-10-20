@@ -72,7 +72,7 @@ public sealed partial class ArenaSearch {
                 hash.Add(value: ((uint)job.Phase));
                 hash.Add(value: ((uint)job.TreeCount));
                 hash.Add(value: ((uint)job.Iteration));
-                hash.Add(value: job.Seed);
+                hash.Add(value: job.Stream.State);
                 hash.Add(value: ((uint)job.UScan));
                 hash.Add(value: ((uint)job.UStart));
                 hash.Add(value: ((uint)job.PlayoutPlies));
@@ -467,7 +467,7 @@ public sealed partial class ArenaSearch {
             Phase: job.Phase,
             Count: job.TreeCount,
             Iteration: job.Iteration,
-            Seed: job.Seed,
+            Seed: job.Stream.State,
             Scan: job.UScan,
             Start: job.UStart,
             PlayoutPlies: job.PlayoutPlies,
@@ -512,7 +512,15 @@ public sealed partial class ArenaSearch {
         job.Phase = carried.Phase;
         job.PlayCount = carried.PlayCount;
         job.PlayoutPlies = carried.PlayoutPlies;
-        job.Seed = carried.Seed;
+        // The checkpoint carries the stream's state word; its increment and multiplier are the job's own, rebuilt from
+        // the plan's seed and the job's ordinal.
+        var stream = StreamOf(job: job);
+
+        job.Stream = Pcg32XshRr.FromRawBits(
+            increment: stream.Increment,
+            multiplier: stream.Multiplier,
+            state: carried.Seed
+        );
         job.TreeActive = carried.Active;
         job.TreeCount = carried.Count;
         job.UScan = carried.Scan;
