@@ -119,7 +119,7 @@ public sealed partial class SdfFieldEvaluator {
                             return false;
                         }
 
-                        var scale = ((instruction.Data1Y > FixedQ4816.Zero) ? Units(value: instruction.Data1Y) : 0.0);
+                        var scale = ((instruction.Data1Y > FixedQ4816.Zero) ? ((double)instruction.Data1Y) : 0.0);
 
                         for (var member = scopeStart; (member < lowering.Count); member++) {
                             lowering[member] = lowering[member].Scaled(scale: scale, slack: (slackRaws * RawUnit));
@@ -177,7 +177,7 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         boxed &= shape.Boxed;
-                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: Units(value: FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
+                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
                         continue;
                     }
                 default: {

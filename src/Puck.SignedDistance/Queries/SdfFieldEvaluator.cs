@@ -42,7 +42,7 @@ namespace Puck.SignedDistance.Queries;
 // Skipping also skips the skipped slice's own point-transform chain, which nothing after it can observe: the program
 // refuses a stream whose next segment reads a point without a ResetPoint of its own
 // (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
-public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
+public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, ISdfFieldMarcher {
     // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
     private static readonly FixedQ4816 FarDistance = FixedQ4816.FromInteger(value: 1_000_000_000L);
@@ -158,17 +158,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // scale below one Q48.16 tick therefore becomes zero, authorizing no scaled advance at all: a radius cast reports
     // Bounded at its origin, a point cast reports Bounded after March's one-tick reach, and Overlap reports occupied,
     // rather than inventing a representable scale larger than the proof permits.
-    private static FixedQ4816 ConservativeStepScale(float value) {
-        const double RawOne = (1L << FixedQ4816.FractionBitCount);
-
-        var raw = ((long)Math.Floor(d: (((double)value) * RawOne)));
-
-        return FixedQ4816.FromRawBits(value: Math.Clamp(
-            max: ((long)RawOne),
-            min: 0L,
-            value: raw
-        ));
-    }
+    // A value the floor refuses (beyond the carrier, or not finite) authorizes the whole unit scale when positive and
+    // none otherwise, as the clamp would.
+    private static FixedQ4816 ConservativeStepScale(float value) =>
+        (FixedDirectedRounding.TryFloorFromDouble(result: out var floor, value: value)
+            ? FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: floor)
+            : ((value > 0f) ? FixedQ4816.One : FixedQ4816.Zero));
 
     /// <inheritdoc/>
     QueryCapabilities IWorldQuery.Capabilities =>
@@ -631,7 +626,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
     // advance rules. Every sample is exact, so the bound budget is never spent.
-    private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
+    MarchOutcome ISdfFieldMarcher.March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
         var sampler = new ExactSampler(evaluator: this);
 
         return SdfFieldMarch.Run(
@@ -1505,7 +1500,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>'s conservative non-convergence
     /// contract: "clear" is the assertion this verb makes, so it is the one an unfinished march may not make.</remarks>
     public bool LineOfSight(FixedPosition from, FixedPosition to) =>
-        SdfFieldMarch.LineOfSight(from: from, raycast: Raycast, to: to);
+        SdfFieldMarch.LineOfSight(from: from, marcher: this, to: to);
     /// <inheritdoc/>
     /// <remarks>The test is the SCALED field value against the radius, so the sphere is effectively widened by the
     /// program's Lipschitz factor: occupancy may over-report by that factor and never under-reports, which is the
@@ -1538,27 +1533,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// that never reached its obstruction claim the line was clear — the one answer a contact, visibility, or sweep
     /// consumer cannot recover from.</remarks>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
-        (March(
-            origin: origin,
-            direction: dir,
-            maxDistance: maxDist,
-            radius: FixedQ4816.Zero,
-            hit: out hit
-        ) != MarchOutcome.Miss);
+        SdfFieldMarch.Raycast(direction: dir, hit: out hit, marcher: this, maxDistance: maxDist, origin: origin);
     /// <inheritdoc/>
     /// <remarks>Non-convergence resolves as a hit, exactly as in
     /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>.</remarks>
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
-        (March(
-            direction: dir,
-            hit: out hit,
-            maxDistance: maxDist,
-            origin: origin,
-            radius: FixedQ4816.Max(
-                x: radius,
-                y: FixedQ4816.Zero
-            )
-        ) != MarchOutcome.Miss);
+        SdfFieldMarch.SphereCast(direction: dir, hit: out hit, marcher: this, maxDistance: maxDist, origin: origin, radius: radius);
     /// <inheritdoc/>
     public bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient) =>
         TryFieldGradient(
@@ -1635,48 +1615,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// body onto a fabricated Y is moved to a place the world does not have. A descent that runs out of iterations, or
     /// reaches a point the program's frame cannot express, proves nothing about what is below, so it answers
     /// <see langword="false"/> — "no ground within the probe range", the same answer an empty column gives.</remarks>
-    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
-        groundY = FixedQ4816.Zero;
-
-        var probeRange = (probeUp + probeDown);
-
-        if (probeRange <= FixedQ4816.Zero) {
-            return false;
-        }
-
-        var top = (position + new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: probeUp,
-            Z: FixedQ4816.Zero
-        ));
-
-        if (March(
-            origin: top,
-            direction: new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: -FixedQ4816.One,
-                Z: FixedQ4816.Zero
-            ),
-            maxDistance: probeRange,
-            radius: FixedQ4816.Zero,
-            hit: out var hit
-        ) != MarchOutcome.Hit) {
-            return false;
-        }
-
-        // World Y, rebased against the world origin exactly as TryDistance rebases its query point — never the hit's
-        // raw .Local, which is relative to whichever cell the descending march re-anchored into.
-        if (!hit.Point.TryDelta(
-            delta: out var world,
-            origin: FixedPosition.Zero
-        )) {
-            return false;
-        }
-
-        groundY = world.Y;
-
-        return true;
-    }
+    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) =>
+        SdfFieldMarch.GroundHeight(groundY: out groundY, marcher: this, position: position, probeDown: probeDown, probeUp: probeUp);
 
     // The march sampler over this evaluator's own field: every sample exact, the radius unread.
     private readonly struct ExactSampler(SdfFieldEvaluator evaluator) : ISdfMarchSampler {

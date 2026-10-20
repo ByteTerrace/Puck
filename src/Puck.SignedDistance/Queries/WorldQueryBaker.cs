@@ -154,12 +154,12 @@ public static class WorldQueryBaker {
             throw new ArgumentException(message: $"{kind} rectangle {index} has MaxZ {maxZ} below MinZ {minZ}.");
         }
     }
+    // A cell index clamped into [0, axisCells], the exclusive end a span may name.
     private static int ClampIndex(Int128 value, int axisCells) =>
-        ((value < Int128.Zero)
-            ? 0
-            : ((value > axisCells)
-                ? axisCells
-                : ((int)value)
+        ((int)Int128.Clamp(
+            max: axisCells,
+            min: Int128.Zero,
+            value: value
         ));
     private static void MarkBlocked(ulong[] blocked, int width, int height, long originXRaw, long originZRaw, WorldQueryBlockerInput blocker) {
         if (!TryCellSpan(

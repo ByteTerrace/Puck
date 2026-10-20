@@ -19,6 +19,12 @@ internal enum MarchOutcome {
 internal interface ISdfMarchSampler {
     bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact);
 }
+// An evaluator's march: Run over its own sampler, budgets and step scale. The query verbs (SdfFieldMarch.Raycast,
+// SphereCast, GroundHeight and LineOfSight) are written once over it, so the exact and banded evaluators answer them
+// with one body.
+internal interface ISdfFieldMarcher {
+    MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit);
+}
 // The one stepped sphere-trace march every query verb runs, shared by the exact evaluator and the banded one so the
 // two never diverge in their accept and advance rules. Two asymmetric uses of the field value, and they are NOT
 // interchangeable:
@@ -42,9 +48,31 @@ internal static class SdfFieldMarch {
     // there a clear line to that wall" query) never reads as self-obstructing.
     internal static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
-    internal delegate bool RaycastDelegate(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
-
-    internal static bool LineOfSight(FixedPosition from, FixedPosition to, RaycastDelegate raycast) {
+    // A point cast: a hit or a march that cannot prove the ray clear (Exhausted) obstructs.
+    internal static bool Raycast<TMarcher>(TMarcher marcher, FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, out RayHit hit)
+        where TMarcher : ISdfFieldMarcher =>
+        (marcher.March(
+            direction: direction,
+            hit: out hit,
+            maxDistance: maxDistance,
+            origin: origin,
+            radius: FixedQ4816.Zero
+        ) != MarchOutcome.Miss);
+    // A radius cast, a negative radius read as zero; Exhausted obstructs, as in Raycast.
+    internal static bool SphereCast<TMarcher>(TMarcher marcher, FixedPosition origin, FixedVector3 direction, FixedQ4816 radius, FixedQ4816 maxDistance, out RayHit hit)
+        where TMarcher : ISdfFieldMarcher =>
+        (marcher.March(
+            direction: direction,
+            hit: out hit,
+            maxDistance: maxDistance,
+            origin: origin,
+            radius: FixedQ4816.Max(
+                x: radius,
+                y: FixedQ4816.Zero
+            )
+        ) != MarchOutcome.Miss);
+    internal static bool LineOfSight<TMarcher>(TMarcher marcher, FixedPosition from, FixedPosition to)
+        where TMarcher : ISdfFieldMarcher {
         var delta = (to - from);
         var distance = delta.Length;
 
@@ -58,12 +86,59 @@ internal static class SdfFieldMarch {
             return true;
         }
 
-        return !raycast(
-            dir: delta,
+        return !Raycast(
+            direction: delta,
             hit: out _,
-            maxDist: probeDistance,
+            marcher: marcher,
+            maxDistance: probeDistance,
             origin: from
         );
+    }
+    // The ground below a point: a CONVERGED downward march from probeUp above it over probeUp + probeDown. Its true
+    // half asserts a surface, so an Exhausted descent (an iteration budget spent, or a point the program's frame cannot
+    // express) proves nothing below and answers false, as an empty column does. The Y is world Y, rebased against the
+    // world origin exactly as a distance query rebases its point, never the hit's raw local offset, which is relative to
+    // whichever cell the descending march re-anchored into.
+    internal static bool GroundHeight<TMarcher>(TMarcher marcher, FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY)
+        where TMarcher : ISdfFieldMarcher {
+        groundY = FixedQ4816.Zero;
+
+        var probeRange = (probeUp + probeDown);
+
+        if (probeRange <= FixedQ4816.Zero) {
+            return false;
+        }
+
+        var top = (position + new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: probeUp,
+            Z: FixedQ4816.Zero
+        ));
+
+        if (marcher.March(
+            direction: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: -FixedQ4816.One,
+                Z: FixedQ4816.Zero
+            ),
+            hit: out var hit,
+            maxDistance: probeRange,
+            origin: top,
+            radius: FixedQ4816.Zero
+        ) != MarchOutcome.Hit) {
+            return false;
+        }
+
+        if (!hit.Point.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
+        )) {
+            return false;
+        }
+
+        groundY = world.Y;
+
+        return true;
     }
     // Fills the non-convergence hit: the last point the march reached, carrying WorldQueryConfidence.Bounded because
     // the answer is a conservative stand-in for a surface never proven, not a measured one.
