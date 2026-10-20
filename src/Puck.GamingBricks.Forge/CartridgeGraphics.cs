@@ -44,6 +44,65 @@ public static class CartridgeGraphics {
 
         return bytes;
     }
+    /// <summary>
+    /// Bakes the monochrome machine's three shade registers at every fade step: the background register, then the two
+    /// object registers, from the same faded colours <see cref="FadeTable"/> produces for a colour machine.
+    /// </summary>
+    /// <param name="background">The background palettes at rest; only the first is shaded.</param>
+    /// <param name="objects">The object palettes at rest; the first two are shaded, and a missing one shades as the first.</param>
+    /// <param name="steps">The number of steps; the returned table holds steps + 1 register triples.</param>
+    /// <param name="toWhite">Whether the fade runs toward white rather than black.</param>
+    /// <returns>Three register bytes per step, step zero first.</returns>
+    public static byte[] MonochromeFadeTable(int[][] background, int[][] objects, int steps, bool toWhite) {
+        ArgumentNullException.ThrowIfNull(argument: background);
+        ArgumentNullException.ThrowIfNull(argument: objects);
+
+        var bank = new[] { background[0], objects[0], objects[Math.Min(val1: 1, val2: (objects.Length - 1))] };
+        var faded = FadeTable(
+            bank: bank,
+            steps: steps,
+            toWhite: toWhite
+        );
+        var bytes = new byte[((steps + 1) * bank.Length)];
+        var cursor = 0;
+
+        for (var register = 0; (register < bytes.Length); ++register) {
+            var colors = new int[4];
+
+            for (var index = 0; (index < 4); ++index) {
+                colors[index] = (faded[cursor] | (faded[(cursor + 1)] << 8));
+                cursor += 2;
+            }
+
+            bytes[register] = MonochromePalette(palette: colors);
+        }
+
+        return bytes;
+    }
+    /// <summary>
+    /// Encodes a four-colour palette as the monochrome machine's shade register: two bits per colour index, index zero
+    /// lowest, each the darkness of that colour from 0 (white) to 3 (black).
+    /// </summary>
+    /// <param name="palette">The four RGB555 colours.</param>
+    /// <returns>The register byte.</returns>
+    /// <remarks>Darkness is the colour's luma (ITU-R BT.601 weights over the five-bit channels) rounded to the nearest
+    /// of four even steps, in integers so the same document always yields the same register.</remarks>
+    public static byte MonochromePalette(int[] palette) {
+        ArgumentNullException.ThrowIfNull(argument: palette);
+
+        var register = 0;
+
+        for (var index = 0; (index < 4); ++index) {
+            var color = palette[index];
+            var luma = ((((color & 0x1F) * 299) + (((color >> 5) & 0x1F) * 587)) + (((color >> 10) & 0x1F) * 114));
+            // luma runs 0..31000; three even steps across it, rounded to the nearest.
+            var lightness = (((luma * 3) + 15500) / 31000);
+
+            register |= ((3 - lightness) << (index * 2));
+        }
+
+        return ((byte)register);
+    }
     /// <summary>Encodes RGB555 colors or map entries as little-endian halfwords.</summary>
     /// <param name="values">Validated unsigned halfwords.</param>
     /// <returns>The encoded bytes.</returns>

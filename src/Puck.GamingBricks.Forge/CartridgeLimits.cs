@@ -35,6 +35,10 @@ public static class CartridgeLimits {
     public const int FadeSteps = 16;
     /// <summary>The maximum number of background or object palettes on the humble machine.</summary>
     public const int HumblePaletteCount = 8;
+    /// <summary>The background palettes the monochrome machine carries: its one shade register.</summary>
+    public const int MonochromeBackgroundPaletteCount = 1;
+    /// <summary>The object palettes the monochrome machine carries: its two object shade registers.</summary>
+    public const int MonochromeObjectPaletteCount = 2;
     /// <summary>The maximum number of scrolling backgrounds beside the document's own.</summary>
     /// <remarks>A turning background occupies the nearer of the two, so declaring one leaves room for a single layer.</remarks>
     public const int LayerCount = 2;

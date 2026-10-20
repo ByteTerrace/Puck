@@ -275,7 +275,7 @@ public static class CartridgeCostMeasurement {
     /// measured inside the loop because the queue they feed is bounded per frame. The advanced machine sustains several
     /// times what the Color one does and the outer count cannot pass 255, so it is swept at a coarser grain.
     /// </summary>
-    /// <param name="target">The target, <c>cgb</c> or <c>agb</c>.</param>
+    /// <param name="target">The target, <c>cgb</c>, <c>dmg</c> or <c>agb</c>.</param>
     /// <returns>The shapes.</returns>
     public static IReadOnlyList<CartridgeCostShape> Shapes(string target) {
         var grain = ((target == "agb")
@@ -420,6 +420,8 @@ public static class CartridgeCostMeasurement {
                 )],
                 name: "light-condition"
             );
+        }
+        if (target != "agb") {
             Add(
                 body: [Step],
                 load: new CartridgeCostLoad(Music: true),

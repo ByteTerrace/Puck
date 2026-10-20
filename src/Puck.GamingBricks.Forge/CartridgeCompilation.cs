@@ -28,8 +28,8 @@ public sealed class CartridgeCapacityException : Exception {
 }
 /// <summary>Compiles validated authored data to standalone native cartridge instructions and assets.</summary>
 public interface ICartridgeCompiler : IMachineContentProvider {
-    /// <summary>Gets the supported target token.</summary>
-    string Target { get; }
+    /// <summary>Gets the target tokens this compiler accepts; one machine family can carry several.</summary>
+    IReadOnlyList<string> Targets { get; }
 
     /// <summary>Validates and compiles a cartridge without reading files, environment variables or host time.</summary>
     /// <param name="document">The complete cartridge source.</param>

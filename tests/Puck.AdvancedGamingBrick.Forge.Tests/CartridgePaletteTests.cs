@@ -71,12 +71,70 @@ public sealed class CartridgePaletteTests {
             Path: "sprites[0].palette",
             Fragment: "object palette that is not declared"
         ),
+        new(
+            Name: "a second monochrome background palette",
+            Document: Monochrome() with { Palettes = new CartridgePalettes(
+                Background: [Palette(
+                        colors: 4,
+                        ink: 0
+                    ), Palette(
+                        colors: 4,
+                        ink: 0
+                    )],
+                Object: [Palette(
+                        colors: 4,
+                        ink: 0
+                    )]
+            ) },
+            Path: "palettes.background",
+            Fragment: "Expected an array with 1..1"
+        ),
+        new(
+            Name: "a monochrome cell palette map",
+            Document: Monochrome() with { MapPalettes = new int[1024] },
+            Path: "mapPalettes",
+            Fragment: "the dmg target shades every cell from its one background palette"
+        ),
+        new(
+            Name: "a monochrome map write naming a palette",
+            Document: Monochrome() with {
+                Rules = [new CartridgeRule(
+                    Name: "r",
+                    Body: [new CartridgeStatement(
+                        Kind: "map",
+                        Row: CartridgeExpressions.Of(constant: 0),
+                        Column: CartridgeExpressions.Of(constant: 0),
+                        Tile: CartridgeExpressions.Of(constant: 0),
+                        Palette: CartridgeExpressions.Of(constant: 0)
+                    )]
+                )],
+            },
+            Path: "rules[0].body[0].palette",
+            Fragment: "needs a colour machine"
+        ),
+        new(
+            Name: "a monochrome screen with cell palettes",
+            Document: Monochrome() with {
+                Screens = [new CartridgeScreen(
+                    Name: "panel",
+                    Width: 1,
+                    Tiles: [0],
+                    Palettes: [0]
+                )],
+            },
+            Path: "screens[0].palettes",
+            Fragment: "needs a colour machine"
+        ),
     ];
 
     public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
 
     private static CartridgeDocument Bad() => CartridgeDocuments.Create(
         target: "cgb",
+        title: "PALBAD"
+    );
+    private static CartridgeDocument Monochrome() => CartridgeDocuments.Create(
+        target: "dmg",
         title: "PALBAD"
     );
     private static int[] Palette(int colors, int ink) {
@@ -178,6 +236,59 @@ public sealed class CartridgePaletteTests {
                 x: 76,
                 y: 12
             )
+        );
+    }
+    [Fact]
+    public void MonochromeObjectsPickTheirShadeRegister() {
+        // Object palette zero inks black and palette one light grey; the background is white.
+        var white = new[] { 0x7FFF, 0x7FFF, 0x7FFF, 0x7FFF };
+        var solid = new CartridgeTile(
+            Name: "solid",
+            Pixels: [.. Enumerable.Repeat(
+                count: 8,
+                element: "11111111"
+            )]
+        );
+        var document = CartridgeDocuments.Create(
+            target: "dmg",
+            title: "SHADES"
+        ) with {
+            Palettes = new CartridgePalettes(
+                Background: [white],
+                Object: [[0, 0, 0, 0], [0, 0x56B5, 0, 0]]
+            ),
+            Tiles = [CartridgeDocuments.Create(target: "dmg", title: "T").Tiles[0], solid],
+            Sprites = [.. new[] { 0, 1 }.Select(selector: slot => new CartridgeSprite(
+                Name: $"s{slot}",
+                Tile: CartridgeExpressions.Of(constant: 1),
+                X: CartridgeExpressions.Of(constant: (16 + (slot * 32))),
+                Y: CartridgeExpressions.Of(constant: 16),
+                Visible: CartridgeExpressions.Of(constant: 1),
+                Palette: CartridgeExpressions.Of(constant: slot)
+            ))],
+        };
+        using var machine = CartridgeProbe.Boot(
+            document: document,
+            frames: 20,
+            label: "shades"
+        );
+
+        var background = machine.Pixel(
+            x: 100,
+            y: 100
+        );
+        var first = machine.Pixel(
+            x: 20,
+            y: 20
+        );
+        var second = machine.Pixel(
+            x: 52,
+            y: 20
+        );
+
+        Assert.Equal(
+            expected: 3,
+            actual: new[] { background, first, second }.Distinct().Count()
         );
     }
     [MemberData(memberName: nameof(RefusalNames))]

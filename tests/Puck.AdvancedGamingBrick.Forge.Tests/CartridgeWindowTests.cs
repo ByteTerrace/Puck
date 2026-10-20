@@ -63,6 +63,7 @@ public sealed class CartridgeWindowTests {
     }
 
     [InlineData("cgb")]
+    [InlineData("dmg")]
     [InlineData("agb")]
     [Theory]
     public void ThePanelCoversTheBackgroundBelowAndRightOfItsCorner(string target) {

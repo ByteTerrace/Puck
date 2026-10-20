@@ -86,7 +86,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "A rotating background needs the advanced machine; the cgb target's backgrounds only scroll.",
+                message: $"A rotating background needs the advanced machine; the {document.Target} target's backgrounds only scroll.",
                 path: "affine"
             );
             return;
@@ -227,7 +227,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "A per-pixel surface needs the advanced machine; the cgb target draws only from tiles.",
+                message: $"A per-pixel surface needs the advanced machine; the {document.Target} target draws only from tiles.",
                 path: "bitmap"
             );
             return;
@@ -277,7 +277,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 (document.Target != "agb")
             ) {
                 Error(
-                    message: $"A calendar {field} needs the advanced machine; the cgb clock counts days rather than dates.",
+                    message: $"A calendar {field} needs the advanced machine; the {document.Target} clock counts days rather than dates.",
                     path: ("clock." + field)
                 );
             }
@@ -576,7 +576,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
 
         if (document.Target != "agb") {
             Error(
-                message: "Extra scrolling backgrounds need the advanced machine; the cgb target has one background and a panel.",
+                message: $"Extra scrolling backgrounds need the advanced machine; the {document.Target} target has one background and a panel.",
                 path: "layers"
             );
             return;
@@ -733,7 +733,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
         }
     }
-    private void Palettes(int colors, int limit) {
+    private void Palettes(int colors, int backgroundLimit, int objectLimit) {
         if (document.Palettes is not { } palettes) {
             Error(
                 message: "A cartridge declares its palettes.",
@@ -745,15 +745,28 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
         Bank(
             bank: palettes.Background,
             colors: colors,
-            limit: limit,
+            limit: backgroundLimit,
             path: "palettes.background"
         );
         Bank(
             bank: palettes.Object,
             colors: colors,
-            limit: limit,
+            limit: objectLimit,
             path: "palettes.object"
         );
+    }
+    // The monochrome machine has one background shade register and no per-cell attributes, so a per-cell palette has
+    // nothing to select.
+    private void CellPalettes(object? palettes, string path) {
+        if (
+            (palettes is not null) &&
+            (document.Target == "dmg")
+        ) {
+            Error(
+                message: "A per-cell palette needs a colour machine; the dmg target shades every cell from its one background palette.",
+                path: path
+            );
+        }
     }
     private void Raster() {
         var previous = -1;
@@ -1028,6 +1041,10 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             }
 
             if (screen.Palettes is { } shades) {
+                CellPalettes(
+                    palettes: shades,
+                    path: (path + ".palettes")
+                );
                 if (shades.Length != screen.Tiles.Length) {
                     Error(
                         message: "Expected one palette index per tile.",
@@ -1110,7 +1127,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             if (sound.Sample is { } pcm) {
                 if (document.Target != "agb") {
                     Error(
-                        message: "Recorded sound needs the advanced machine's digital sound path; the cgb target has none.",
+                        message: $"Recorded sound needs the advanced machine's digital sound path; the {document.Target} target has none.",
                         path: (path + ".sample")
                     );
                     continue;
@@ -1354,6 +1371,10 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                         path: (path + ".palette"),
                         value: cellPalette
                     );
+                    CellPalettes(
+                        palettes: cellPalette,
+                        path: (path + ".palette")
+                    );
                     if (Literal(value: cellPalette) >= (document.Palettes?.Background?.Length ?? 0)) {
                         Error(
                             message: "The write names a background palette that is not declared.",
@@ -1496,7 +1517,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                     // The Color machine has no blend unit; its fade works by rebaking palettes, which cannot mix two
                     // surfaces because a palette entry knows nothing about what is drawn beneath it.
                     Error(
-                        message: "Blending two surfaces is an agb capability; the cgb target has no blend unit.",
+                        message: $"Blending two surfaces is an agb capability; the {document.Target} target has no blend unit.",
                         path: path
                     );
                 }
@@ -1774,9 +1795,9 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
             return m_errors;
         }
-        if (document.Target is not ("cgb" or "agb")) {
+        if (document.Target is not ("cgb" or "dmg" or "agb")) {
             Error(
-                message: "Expected cgb or agb.",
+                message: "Expected cgb, dmg or agb.",
                 path: "target"
             );
         }
@@ -1807,14 +1828,24 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             ? 16
             : 4
         );
-        var paletteCount = ((document.Target == "agb")
-            ? CartridgeLimits.AdvancedPaletteCount
-            : CartridgeLimits.HumblePaletteCount
-        );
+        var (backgroundPalettes, objectPalettes) = document.Target switch {
+            "agb" => (CartridgeLimits.AdvancedPaletteCount, CartridgeLimits.AdvancedPaletteCount),
+            "dmg" => (CartridgeLimits.MonochromeBackgroundPaletteCount, CartridgeLimits.MonochromeObjectPaletteCount),
+            _ => (CartridgeLimits.HumblePaletteCount, CartridgeLimits.HumblePaletteCount),
+        };
 
         Palettes(
+            backgroundLimit: backgroundPalettes,
             colors: colors,
-            limit: paletteCount
+            objectLimit: objectPalettes
+        );
+        CellPalettes(
+            palettes: document.MapPalettes,
+            path: "mapPalettes"
+        );
+        CellPalettes(
+            palettes: document.Window?.MapPalettes,
+            path: "window.mapPalettes"
         );
         if (
             !Count(
@@ -2107,7 +2138,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             if (sprite.Turn is { } turn) {
                 if (document.Target != "agb") {
                     Error(
-                        message: "Turning an object needs the advanced machine; the cgb target can only mirror one.",
+                        message: $"Turning an object needs the advanced machine; the {document.Target} target can only mirror one.",
                         path: (path + ".turn")
                     );
                 } else {

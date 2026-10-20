@@ -55,7 +55,11 @@ public sealed class CartridgeFadeTests {
         );
         var palette = new int[colors];
 
-        palette[1] = 0x3DEF;
+        // A grey whose monochrome shade moves at half a fade and again at full: lighter when fading to black, darker
+        // when fading to white.
+        palette[1] = ((toward == "black")
+            ? 0x5294
+            : 0x294A);
 
         var document = CartridgeDocuments.Create(
             target: target,
@@ -113,6 +117,8 @@ public sealed class CartridgeFadeTests {
 
     [InlineData("cgb", "black")]
     [InlineData("cgb", "white")]
+    [InlineData("dmg", "black")]
+    [InlineData("dmg", "white")]
     [InlineData("agb", "black")]
     [InlineData("agb", "white")]
     [Theory]

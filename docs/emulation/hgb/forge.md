@@ -1,6 +1,13 @@
-﻿# Humble Gaming Brick cartridge compiler and firmware tooling
+# Humble Gaming Brick cartridge compiler and firmware tooling
 
-`HgbCartridgeCompiler` compiles `puck.cartridge.v1` data into a native CGB ROM.
+`HgbCartridgeCompiler` compiles `puck.cartridge.v1` data into a native ROM for
+the Color machine (target `cgb`) or the monochrome one (target `dmg`). A cgb
+image runs at double speed, writes Color palette memory and keeps cell
+attributes in video bank one, so a DMG cannot run it: the speed switch's STOP
+parks a monochrome processor until a key is pressed. A dmg image stays at single
+speed, writes the three shade registers (BGP, OBP0, OBP1) its palettes reduce to,
+drains map writes without the attribute pass, and carries a monochrome header
+flag.
 Players edit documents through Puck's in-engine console. The shared
 [cartridge authoring guide](../shared/cartridge-forge.md) documents
 commands, schema, limits and the host-independent compiler/editor APIs.
@@ -24,7 +31,7 @@ existing Tune audio compiler and authored boot-ROM tools remain available.
 - `Sm83Emitter`—the machine-code emitter every routine is written through:
   labels, forward-reference fixups, byte-exact deterministic output.
 - `Framework/`—the game framework: `FrameworkCartridge` (32 KiB
-  MBC1+RAM+BATTERY, Color-required header, code window 0x0150..0x3FFF and data
+  MBC1+RAM+BATTERY, a Color-required or monochrome header, code window 0x0150..0x3FFF and data
   window 0x4000..0x7FFF, both banks visible without a bank switch),
   `FrameworkKernel` (interrupt-driven `halt` main loop, HRAM OAM-DMA
   trampoline, BG write queue), `FrameworkMemoryMap` (the WRAM source of truth

@@ -100,6 +100,7 @@ public sealed class CartridgeMapWriteTests {
     );
 
     [InlineData("cgb")]
+    [InlineData("dmg")]
     [InlineData("agb")]
     [Theory]
     public void MapWritesReachTheBackgroundOnBothMachines(string target) {

@@ -19,16 +19,17 @@ public sealed class VerifyMachineDriver : IDisposable {
     /// <param name="rom">The cartridge image.</param>
     /// <param name="label">The diagnostic label failures are reported under.</param>
     /// <param name="bootRom">A boot image to execute from reset, or null to start from the seeded post-boot state.</param>
+    /// <param name="model">The hardware revision to run, the Color machine's when omitted.</param>
     /// <remarks>
     /// With a boot image the machine spends its first frames inside the boot program, so a caller that wants the
     /// cartridge running must step past the handoff.
     /// </remarks>
-    public VerifyMachineDriver(byte[] rom, string label, byte[]? bootRom = null) {
+    public VerifyMachineDriver(byte[] rom, string label, byte[]? bootRom = null, ConsoleModel model = ConsoleModel.CgbE) {
         m_label = label;
         m_machine = MachineFactory.Create(
             configuration: new MachineConfiguration(
                 bootRom: bootRom,
-                model: ConsoleModel.CgbE,
+                model: model,
                 cartridgeRom: rom
             ),
             compose: static services => services.AddHumbleGamingBrickComponents()

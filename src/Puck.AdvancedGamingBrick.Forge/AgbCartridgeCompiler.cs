@@ -33,14 +33,14 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     /// <inheritdoc />
     public string EngineId => "advanced-gaming-brick";
     /// <inheritdoc />
-    public string Target => "agb";
+    public IReadOnlyList<string> Targets { get; } = ["agb"];
 
     /// <inheritdoc />
     public CartridgeCompilation Compile(CartridgeDocument document) {
         var source = CartridgeDocuments.Canonicalize(document: document);
 
         document = source.Document;
-        if (document.Target != Target) {
+        if (document.Target != "agb") {
             throw new ArgumentException(message: "This compiler requires target agb.", paramName: nameof(document));
         }
 
@@ -463,7 +463,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             throw new CartridgeCapacityException(message: $"The document does not fit the advanced machine's cartridge: {overrun.Message}", innerException: overrun);
         }
 
-        return new CartridgeCompilation(Rom: rom, SourceHash: source.Hash, Target: Target, Variables: variables, Arrays: arrays);
+        return new CartridgeCompilation(Rom: rom, SourceHash: source.Hash, Target: document.Target, Variables: variables, Arrays: arrays);
 
         // Publishes every queued cell into the screenblock, then empties the queue.
         void EmitQueueDrain() {

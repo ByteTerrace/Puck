@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: "Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/AGB native compilers, cost. Emulator core is gaming-bricks."
+description: "Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.dmg.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/DMG/AGB native compilers, cost. Emulator core is gaming-bricks."
 ---
 
 # ROM documents and native compilers
@@ -15,12 +15,12 @@ this file is corrected in the same change.
 |---|---|
 | The `puck.cartridge.v1` model, validation, canonicalization, the `CartridgeDraft` editor, `ICartridgeCompiler`, the cost model | `src/Puck.GamingBricks.Forge` (`CartridgeDocuments`, `CartridgeValidation`, `CartridgeCost`, `CartridgeLimits`); its README has the source contract |
 | The cartridge `.puck` vocabulary | `src/Puck.GamingBricks.Transpiler` |
-| Native CGB compiler (SM83 code, 2bpp tiles, maps, palettes) | `HgbCartridgeCompiler` in `src/Puck.HumbleGamingBrick.Forge` |
+| Native SM83 compiler for the cgb and dmg targets (code, 2bpp tiles, maps, palettes or shade registers) | `HgbCartridgeCompiler` in `src/Puck.HumbleGamingBrick.Forge` |
 | Native AGB compiler (Thumb code, mode-0 4bpp graphics) | `AgbCartridgeCompiler` in `src/Puck.AdvancedGamingBrick.Forge` |
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
 | Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
-| Shipped sources | `src/Puck.World/Assets/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/` and `agb/`, which a world names as a machine's `contentFolder`), each with its committed `.cartridge.json` |
+| Shipped sources | `src/Puck.World/Assets/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world names as a machine's `contentFolder`), each with its committed `.cartridge.json` |
 
 Both compilers consume the same rules, variables, sprites and input conditions.
 Source data determines behavior: never add a game-name switch or copy gameplay
@@ -71,11 +71,21 @@ export and play always validate.
   `play`/`stop`/`save`/`load`). An operand is a `Puck.State.ExpressionProgram`;
   `CartridgeExpressions.Reads` is the admitted operation subset and anything
   outside it is refused at its own spelling.
-- **Targets differ; validation says how.** cgb and agb; byte and two-byte
-  state; no DMG and no ROM banking. Consult the validator before calling a
-  feature portable. The light sensor `$light` exists only on `cgb`.
+- **Targets differ; validation says how.** cgb, dmg and agb; byte and two-byte
+  state; no ROM banking. Consult the validator before calling a feature
+  portable. The light sensor `$light` exists only on `cgb`.
 - **Colour is per-palette:** up to 8 palettes on cgb and 16 on agb,
-  `mapPalettes` per background cell, a sprite picks an object palette.
+  `mapPalettes` per background cell, a sprite picks an object palette. The dmg
+  target has one background palette and two object palettes and no per-cell
+  palette anywhere (`mapPalettes`, a map step's `palette`, a screen's
+  `palettes`); the compiler reduces each colour to one of four shades by its
+  luma (`CartridgeGraphics.MonochromePalette`), and a fade is a table of shade
+  registers. A dmg image runs at single speed, so it sustains half the cgb
+  work per frame (`CartridgeCostProfile.Monochrome`).
+- **A Color-only image cannot run on the DMG.** The cgb image arms the speed
+  switch and executes STOP, which parks a monochrome processor until a key is
+  pressed, and it writes palette memory and video bank one, which the DMG does
+  not have. Port the source to `target: "dmg"` instead.
 - **Map writes land a frame late on both targets:** they queue and drain in the
   next vertical blank. Validation bounds a frame's map writes to the queue's 24
   entries.

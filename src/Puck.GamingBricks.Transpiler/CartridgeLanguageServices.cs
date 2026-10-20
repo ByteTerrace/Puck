@@ -21,7 +21,7 @@ public static class CartridgeLanguageServices {
             label: "schema"
         );
         Add(
-            insertText: "target: \"${1|cgb,agb|}\"",
+            insertText: "target: \"${1|cgb,dmg,agb|}\"",
             label: "target"
         );
         Add(

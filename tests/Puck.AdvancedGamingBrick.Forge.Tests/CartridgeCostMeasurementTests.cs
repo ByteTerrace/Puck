@@ -26,6 +26,7 @@ public sealed class CartridgeCostMeasurementTests {
     );
 
     [InlineData("cgb")]
+    [InlineData("dmg")]
     [InlineData("agb")]
     [Theory]
     public void TheHarnessCanStillReachTheMachine(string target) {
@@ -105,6 +106,7 @@ public sealed class CartridgeCostMeasurementTests {
         );
     }
     [InlineData("cgb")]
+    [InlineData("dmg")]
     [InlineData("agb")]
     [Theory]
     public void EveryShapeBuildsAValidProbe(string target) {

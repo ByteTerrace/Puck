@@ -6,8 +6,11 @@ using Puck.State;
 
 namespace Puck.HumbleGamingBrick.Forge;
 
-/// <summary>Compiles cartridge documents into native CGB machine code and graphics.</summary>
+/// <summary>Compiles cartridge documents into native SM83 machine code and graphics, for the Color machine (target
+/// <c>cgb</c>) or the monochrome one (target <c>dmg</c>).</summary>
 /// <remarks>
+/// A dmg image runs at single speed, shades through the three monochrome registers its palettes reduce to, and never
+/// touches the Color machine's palette memory, second video bank or work-RAM bank register.
 /// Work-RAM layout above <c>FrameworkMemoryMap.GameRam</c>:
 /// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283 the frame's scene snapshot, 0xC284..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
 /// </remarks>
@@ -28,7 +31,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
     /// <inheritdoc />
     public string EngineId => "gaming-brick";
     /// <inheritdoc />
-    public string Target => "cgb";
+    public IReadOnlyList<string> Targets { get; } = ["cgb", "dmg"];
 
     private static byte Key(string key) => key switch {
         "right" => 1,
@@ -54,12 +57,14 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
         var source = CartridgeDocuments.Canonicalize(document: document);
 
         document = source.Document;
-        if (document.Target != Target) {
+        if (!Targets.Contains(value: document.Target)) {
             throw new ArgumentException(
-                message: "This compiler requires target cgb.",
+                message: "This compiler requires target cgb or dmg.",
                 paramName: nameof(document)
             );
         }
+
+        var monochrome = (document.Target == "dmg");
 
         var layout = new CartridgeStateLayout(document: document);
         var variables = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
@@ -113,13 +118,19 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             fontTileBase: 0
         ));
         var input = new InputModule(emitter: emitter);
-        var backgroundPalettes = data.Add(
-            name: "bg-palettes",
-            bytes: CartridgeGraphics.PaletteBank(bank: document.Palettes.Background)
+        var backgroundPalettes = (monochrome
+            ? default
+            : data.Add(
+                name: "bg-palettes",
+                bytes: CartridgeGraphics.PaletteBank(bank: document.Palettes.Background)
+            )
         );
-        var objectPalettes = data.Add(
-            name: "obj-palettes",
-            bytes: CartridgeGraphics.PaletteBank(bank: document.Palettes.Object)
+        var objectPalettes = (monochrome
+            ? default
+            : data.Add(
+                name: "obj-palettes",
+                bytes: CartridgeGraphics.PaletteBank(bank: document.Palettes.Object)
+            )
         );
         // Copied into video memory once at boot, so these may ride in a switchable bank when the fixed window is full.
         var banked = new Sm83BankedData();
@@ -133,14 +144,18 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             bytes: document.Map.Select(selector: static tile => ((byte)tile)).ToArray()
         );
         // Video bank one holds one attribute byte per cell; the low three bits select the background palette.
-        var attributePlacement = Place(
-            name: "bg-attributes",
-            bytes: (document.MapPalettes ?? new int[1024]).Select(selector: static entry => ((byte)(entry & 0x07))).ToArray()
+        var attributePlacement = (monochrome
+            ? default
+            : Place(
+                name: "bg-attributes",
+                bytes: (document.MapPalettes ?? new int[1024]).Select(selector: static entry => ((byte)(entry & 0x07))).ToArray()
+            )
         );
         var fadesToBlack = data.Add(
             name: "fade-black",
             bytes: FadeBanks(
                 document: document,
+                monochrome: monochrome,
                 toWhite: false
             )
         );
@@ -148,6 +163,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             name: "fade-white",
             bytes: FadeBanks(
                 document: document,
+                monochrome: monochrome,
                 toWhite: true
             )
         );
@@ -158,7 +174,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 bytes: document.Window.Map.Select(selector: static tile => ((byte)tile)).ToArray()
             )
         );
-        var windowAttributes = ((document.Window is null)
+        var windowAttributes = (((document.Window is null) || monochrome)
             ? default
             : Place(
                 name: "window-attributes",
@@ -277,25 +293,33 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             ),
             Lcdc: BaseControl(document: document),
             InitialState: 0,
-            BgAttributes: new RomTable(
-                Address: attributePlacement.Address,
-                Length: 0x400
-            ),
+            BgAttributes: (monochrome
+                ? null
+                : new RomTable(
+                    Address: attributePlacement.Address,
+                    Length: 0x400
+                )),
             SelectTileBank: Select(placement: tilePlacement),
             SelectMapBank: Select(placement: mapPlacement),
-            SelectAttributeBank: Select(placement: attributePlacement),
+            SelectAttributeBank: (monochrome
+                ? null
+                : Select(placement: attributePlacement)),
             RestoreFixedBank: ((banked.Banks.Count == 0)
             ? null
             : static emitter => Sm83BankedData.EmitSelect(
                     bank: 1,
                     emitter: emitter
                 )),
-            RasterRows: document.Raster.Length
+            RasterRows: document.Raster.Length,
+            Monochrome: (monochrome
+                ? Shades(document: document)
+                : null)
         );
 
         FrameworkKernel.EmitPrologue(
             emitter: emitter,
             bootLabel: boot,
+            monochrome: monochrome,
             rasterRearm: ((document.Raster.Length == 0)
             ? null
             : EmitRasterRearm)
@@ -339,6 +363,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             clock: (document.Clock is not null),
             // A forged cartridge is this house's, and says so on the screen the machine shows before it hands over.
             logo: CartridgeHeader.HouseLogo.ToArray(),
+            monochrome: monochrome,
             statHandlerAddress: ((document.Raster.Length == 0)
                 ? (ushort)0
                 : emitter.LabelAddress(
@@ -347,7 +372,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                     )));
         } catch (Exception overrun) when ((overrun is ArgumentException or ArgumentOutOfRangeException)) {
             throw new CartridgeCapacityException(
-                message: $"The document does not fit the Color machine's cartridge: {overrun.Message}",
+                message: $"The document does not fit the {(monochrome ? "monochrome" : "Color")} machine's cartridge: {overrun.Message}",
                 innerException: overrun
             );
         }
@@ -355,7 +380,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
         return new CartridgeCompilation(
             Rom: rom,
             SourceHash: source.Hash,
-            Target: Target,
+            Target: document.Target,
             Variables: variables,
             Arrays: arrays
         );
@@ -396,6 +421,15 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 destinationAddress: Hw.VramWindowMap,
                 byteCount: 0x400
             );
+            if (monochrome) {
+                Sm83BankedData.EmitSelect(
+                    bank: 1,
+                    emitter: emitter
+                );
+
+                return;
+            }
+
             emitter.LoadAImmediate(value: 0x01);
             emitter.StoreAToHighPage(port: Hw.PortVramBank);
             Select(placement: windowAttributes)?.Invoke(obj: emitter);
@@ -870,9 +904,12 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                                 pair: Reg16.Hl,
                                 value: table.Address
                             );
+                            // A monochrome step is its three shade registers.
                             emitter.LoadImmediate(
                                 pair: Reg16.De,
-                                value: ((ushort)backgroundBytes)
+                                value: ((ushort)(monochrome
+                                    ? 3
+                                    : backgroundBytes))
                             );
                             emitter.MarkLabel(label: stride);
                             emitter.Load(
@@ -891,6 +928,12 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                             emitter.Decrement(register: Reg8.B);
                             emitter.JumpRelative(label: stride);
                             emitter.MarkLabel(label: placed);
+                            if (monochrome) {
+                                FrameworkKernel.EmitShadesFromHl(emitter: emitter);
+
+                                break;
+                            }
+
                             FrameworkKernel.EmitPaletteRepublish(
                                 byteCount: backgroundBytes,
                                 dataPort: Hw.PortBgPaletteData,
@@ -1268,7 +1311,8 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             );
         }
 
-        // The object attribute byte: palette in bits 0..2, horizontal mirror at 5, vertical at 6, behind-background at 7.
+        // The object attribute byte: palette in bits 0..2 (bit 4 on the monochrome machine), horizontal mirror at 5,
+        // vertical at 6, behind-background at 7.
         void EmitAttributes(CartridgeSprite sprite, int index) {
             if (
                 (sprite.Palette is null) &&
@@ -1283,10 +1327,27 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreAToAddress(address: ScratchAddress);
             if (sprite.Palette is { } slot) {
                 Load(expression: slot);
-                emitter.ArithmeticImmediate(
-                    op: AluOp.And,
-                    value: 0x07
-                );
+                if (monochrome) {
+                    // The monochrome machine picks between its two object shade registers with bit 4.
+                    var first = emitter.NewLabel();
+
+                    emitter.ArithmeticImmediate(
+                        op: AluOp.And,
+                        value: 0x01
+                    );
+                    emitter.JumpRelative(
+                        condition: Condition.Zero,
+                        label: first
+                    );
+                    emitter.LoadAImmediate(value: 0x10);
+                    emitter.MarkLabel(label: first);
+                } else {
+                    emitter.ArithmeticImmediate(
+                        op: AluOp.And,
+                        value: 0x07
+                    );
+                }
+
                 emitter.StoreAToAddress(address: ScratchAddress);
             }
 
@@ -1319,8 +1380,29 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreAToAddress(address: ((ushort)(0xC103 + (index * 4))));
         }
 
-        // The two banks sit back to back, which is the order the palette ports expect them republished in.
-        static byte[] FadeBanks(CartridgeDocument document, bool toWhite) => [
+        static FrameworkShades Shades(CartridgeDocument document) {
+            var objects = document.Palettes.Object;
+
+            return new FrameworkShades(
+                Background: CartridgeGraphics.MonochromePalette(palette: document.Palettes.Background[0]),
+                Object0: CartridgeGraphics.MonochromePalette(palette: objects[0]),
+                Object1: CartridgeGraphics.MonochromePalette(palette: objects[Math.Min(
+                    val1: 1,
+                    val2: (objects.Length - 1)
+                )])
+            );
+        }
+
+        // The two banks sit back to back, which is the order the palette ports expect them republished in. The
+        // monochrome machine's table is its three shade registers per step instead.
+        static byte[] FadeBanks(CartridgeDocument document, bool monochrome, bool toWhite) => (monochrome
+            ? CartridgeGraphics.MonochromeFadeTable(
+                background: document.Palettes.Background,
+                objects: document.Palettes.Object,
+                steps: CartridgeLimits.FadeSteps,
+                toWhite: toWhite
+            )
+            : [
             .. CartridgeGraphics.FadeTable(
                 bank: document.Palettes.Background,
                 steps: CartridgeLimits.FadeSteps,
@@ -1331,8 +1413,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 steps: CartridgeLimits.FadeSteps,
                 toWhite: toWhite
             ),
-        ];
-
+        ]);
 
         // Each frame republishes the rows, so a document can drive them from ordinary state.
         void EmitRasterUpdate() {

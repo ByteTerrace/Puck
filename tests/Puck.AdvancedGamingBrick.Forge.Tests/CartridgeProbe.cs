@@ -44,7 +44,10 @@ public sealed class CartridgeProbe : IDisposable {
         } else {
             m_hgb = new VerifyMachineDriver(
                 rom: result.Rom,
-                label: label
+                label: label,
+                model: ((result.Target == "dmg")
+                    ? ConsoleModel.DmgC
+                    : ConsoleModel.CgbE)
             );
         }
     }
