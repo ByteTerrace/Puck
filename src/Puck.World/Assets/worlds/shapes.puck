@@ -1,7 +1,8 @@
 // The shape gallery: every authorable signed-distance construct, one prototype an exhibit, each held 1.2 m over a
 // labelled plinth so it reads from every side, underside included. The debug world expands `galleryPrototypes()` inside
-// its `prototypes` block and `galleryPlacements()` inside its `placements` block; the rows stand on the open ground at
-// +X/+Z, every exhibit 3 m from the next, its label facing -Z, toward the origin:
+// its `prototypes` block, `galleryPlacements()` inside its `placements` block and `galleryState()` (the motion rows'
+// console controls) inside its `state.world` block. The rows stand on the open ground at +X/+Z, every exhibit 3 m from
+// the next, its label facing -Z, toward the origin:
 //
 //   z 14  each primitive at a uniform scale
 //   z 19  each primitive stretched unevenly, where an exact distance is hardest to keep
@@ -11,9 +12,12 @@
 //   z 39  every shape blend, a box and a sphere in two colours
 //   z 44  the domain folds, erosion and creation noise
 //   z 49  parameter forms: exponents, tapers, rounded and chamfered profiles, path holes, shears and closed strokes
-//   z 54  surfaces: palette channels, weathering, panels, trims, paints, text runs, volumes
+//   z 54  surfaces: palette channels, weathering, panels, trims, paints, text runs, volumes, a state-bound colour
+//   z 59  motion through the stamp pool: rotation, swing, slide, parent chains, moving blends and cuts, moving folds
+//   z 64  motion II: paints and an inset on moving surfaces, twist and bend, a radial pulse, cells, a volume, IK, frames
 //
-// shapes.md beside this file holds the coverage table and the operator camera line that frames each exhibit.
+// shapes.md beside this file holds the coverage table, the operator camera line that frames each exhibit and the
+// console controls the motion rows answer to.
 
 let galleryX = 14
 let gallerySpacing = 3
@@ -25,10 +29,13 @@ let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", 
 let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
 let foldRow = ["shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped", "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m", "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"]
 let formRow = ["shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle", "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid", "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"]
-let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud"]
+let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color"]
+let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend", "motion-carve", "motion-mirror", "motion-polar"]
+let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
 
 let foldZ = 44
 let surfaceZ = 54
+let motionZB = 64
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
 
@@ -77,6 +84,63 @@ template galleryPlacements() {
   galleryRow(names: foldRow, z: foldZ)
   galleryRow(names: formRow, z: 49)
   galleryRow(names: surfaceRow, z: surfaceZ)
+  galleryRow(names: motionRow, z: 59)
+  galleryRow(names: motionRowB, z: motionZB)
+}
+
+// The gallery's motion controls. Every driver in the motion rows reads `galleryClock`, gallery seconds advancing at the
+// row's rate; a rate of zero freezes every pose where it stands, and writing the cell scrubs it. Each driver is gated on
+// `galleryMotion.all` and on its exhibit's own `galleryMotion` key: a zero eases that exhibit back to its rest pose.
+// `galleryInputs` holds text cells three exhibits read: `probe` places motion-state-blend's sphere, `reach` is the world
+// point motion-ik's arm reaches for, and `tint` colours shape-state-color. shapes.md gives the console lines.
+let reachX = (galleryX + (gallerySpacing * 7))
+
+template galleryState() {
+  slot galleryClock = 0.5 advance(perSecond: 1)
+
+  table galleryMotion {
+    all = 1
+    spin = 1
+    rock = 1
+    slide = 1
+    chain = 1
+    blend = 1
+    carve = 1
+    mirror = 1
+    polar = 1
+    paint = 1
+    inset = 1
+    twist = 1
+    bend = 1
+    pulse = 1
+    cells = 1
+    volume = 1
+    ik = 1
+  }
+
+  table galleryInputs {
+    probe = "[0.3, 1.35, 0.05]"
+    reach = $"[{reachX + 0.35}, 1.45, {motionZB - 0.25}]"
+    tint = "#D9822B"
+  }
+}
+
+// The one driver every motion exhibit runs on: the gallery clock times `cadence` radians a gallery second, gated on
+// the whole gallery and on the exhibit's own key, its weight easing over `ease` seconds as a gate opens or closes.
+template clockDriver(key, cadence = 1, ease = 0.3) {
+  drivers [
+    {
+      name: "clock"
+      signal: "state.galleryClock"
+      cadence: cadence
+      blendInSeconds: ease
+      blendOutSeconds: ease
+      "when" [
+        "state.galleryMotion.all"
+        $"state.galleryMotion.{key}"
+      ]
+    }
+  ]
 }
 
 // Every shape blend: the box first, then the sphere in the accent colour blended into it, so a seam's material winner
@@ -119,6 +183,16 @@ template blendPrototypes() {
     }
   }
 }
+
+// The six petals motion-pulse slides out from its core and back, sixty degrees apart in the plane facing the label.
+let pulsePetals = [
+  { name: "petal-0", at [0.22, 1.2, 0], out [1, 0, 0] }
+  { name: "petal-1", at [0.11, 1.3905, 0], out [0.5, 0.866025, 0] }
+  { name: "petal-2", at [-0.11, 1.3905, 0], out [-0.5, 0.866025, 0] }
+  { name: "petal-3", at [-0.22, 1.2, 0], out [-1, 0, 0] }
+  { name: "petal-4", at [-0.11, 1.0095, 0], out [-0.5, -0.866025, 0] }
+  { name: "petal-5", at [0.11, 1.0095, 0], out [0.5, -0.866025, 0] }
+]
 
 // The domain folds, erosion and creation noise. A fold acts in creation space before the shape's own transform, and
 // a repeat or polar origin is engine-frame: an author-frame point [x, y, z] is origin [-x, y, -z].
@@ -667,8 +741,8 @@ template formPrototypes() {
 // space, so the stripe names its own exhibit's place in the surface row (index 12).
 let paintX = (galleryX + (gallerySpacing * 12))
 
-// Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs and volumes, each on slot
-// 3.
+// Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
+// colour, each on slot 3.
 template surfacePrototypes() {
   prototype "shape-metal" {
     document {
@@ -922,6 +996,578 @@ template surfacePrototypes() {
         }
       ]
       exhibit(label: "VOLUME CLOUD")
+    }
+  }
+  prototype "shape-state-color" {
+    document {
+      shape Sphere "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.45, 0.45, 0.45]
+      }
+      exhibit(label: "STATE COLOR", extra: [{ color: "state.galleryInputs.tint", roughness: 0.45, specular: 0.3 }])
+    }
+  }
+}
+
+// Motion through the stamp pool: every prototype here carries a driver (or frames, or an effector), so its placement
+// replays through the dynamic stamp path rather than stamping statically. Blends between shapes ride only inside a
+// nonzero `group` there; an ungrouped shape unions.
+template motionPrototypes() {
+  prototype "motion-spin" {
+    document {
+      clockDriver(key: "spin", cadence: 0.8, ease: 0)
+      shape Box "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.4, 0.15, 0.25]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 1
+            pivot [0, 1.2, 0]
+            wave: "linear"
+          }
+        ]
+      }
+      exhibit(label: "SPIN", extra: [{ color: "#7A2E2E", roughness: 0.5, weathering { lines: 0.6, floor: 1, scale: 4, seed: 9, under [{ threshold: 0.2, surface { color: "#C0C4C8", roughness: 0.3, metal: 1 } }] } }])
+    }
+  }
+  prototype "motion-rock" {
+    document {
+      clockDriver(key: "rock", cadence: 2)
+      shape Sphere "hook" {
+        material: exhibitMaterial
+        position [0, 1.65, 0]
+        scale [0.05, 0.05, 0.05]
+      }
+      shape Capsule "subject" {
+        material: accentMaterial
+        position [0, 1.15, 0]
+        scale [0.12, 0.2, 0.12]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.6
+            pivot [0, 1.65, 0]
+          }
+        ]
+      }
+      exhibit(label: "ROCK", extra: [accent])
+    }
+  }
+  prototype "motion-slide" {
+    document {
+      clockDriver(key: "slide", cadence: 1.5)
+      shape Sphere "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.22, 0.22, 0.22]
+        slides [
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.35
+          }
+        ]
+      }
+      exhibit(label: "SLIDE", extra: [accent])
+    }
+  }
+  prototype "motion-chain" {
+    document {
+      clockDriver(key: "chain", cadence: 1.6)
+      shape Box "upper" {
+        material: exhibitMaterial
+        position [0, 1.45, 0]
+        scale [0.05, 0.2, 0.05]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.5
+            pivot [0, 1.65, 0]
+          }
+        ]
+      }
+      shape Box "lower" {
+        material: exhibitMaterial
+        parent: "upper"
+        position [0, 1.07, 0]
+        scale [0.04, 0.18, 0.04]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.8
+            phase: 1.2
+            pivot [0, 1.25, 0]
+            wave: "halfSine"
+          }
+        ]
+      }
+      shape Sphere "bob" {
+        material: accentMaterial
+        parent: "lower"
+        position [0, 0.85, 0]
+        scale [0.07, 0.07, 0.07]
+      }
+      exhibit(label: "PARENT CHAIN", extra: [accent])
+    }
+  }
+  // The sphere slides through a smooth union with the still box. The group bakes once, at the pose its program
+  // arrived in, and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves away.
+  prototype "motion-smooth-blend" {
+    document {
+      clockDriver(key: "blend", cadence: 1.2)
+      shape Box "anchor" {
+        group: 1
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      shape Sphere "visitor" {
+        blend: SmoothUnion
+        group: 1
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.18, 0.18, 0.18]
+        smooth: 0.15
+        slides [
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.45
+          }
+        ]
+      }
+      exhibit(label: "MOVING BLEND", extra: [accent])
+    }
+  }
+  // The same pair stamped statically, its sphere placed by the galleryInputs probe cell: each write re-emits the creation
+  // and rebakes the seam exactly, where motion-smooth-blend skins one baked seam.
+  prototype "motion-state-blend" {
+    document {
+      shape Box "anchor" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      shape Sphere "visitor" {
+        blend: SmoothUnion
+        material: accentMaterial
+        position: "state.galleryInputs.probe"
+        scale [0.18, 0.18, 0.18]
+        smooth: 0.15
+      }
+      exhibit(label: "STATE BLEND", extra: [accent])
+    }
+  }
+  // A cutter sliding across the face of a still box: a cut face keeps the slot of the shape it shapes.
+  prototype "motion-carve" {
+    document {
+      clockDriver(key: "carve", cadence: 1.2)
+      shape Box "block" {
+        group: 1
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.3, 0.3, 0.3]
+      }
+      shape Sphere "cutter" {
+        blend: Subtraction
+        group: 1
+        material: accentMaterial
+        position [0, 1.25, 0.3]
+        scale [0.2, 0.2, 0.2]
+        slides [
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.3
+          }
+        ]
+      }
+      exhibit(label: "MOVING CUT", extra: [accent])
+    }
+  }
+  // A folded shape may not swing, but it rides its parent: the symmetry plane yaws with the hinge.
+  prototype "motion-mirror" {
+    document {
+      clockDriver(key: "mirror", cadence: 1.4)
+      shape Box "hinge" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.06, 0.06, 0.06]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.7
+            pivot [0, 1.2, 0]
+          }
+        ]
+      }
+      shape Capsule "wing" {
+        domain [
+          symmetry(normal: [1, 0, 0])
+        ]
+        material: accentMaterial
+        parent: "hinge"
+        position [0.28, 1.25, 0]
+        rotation [0, 0, 0.5, 0.866025]
+        scale [0.06, 0.16, 0.06]
+      }
+      exhibit(label: "MOVING MIRROR", extra: [accent])
+    }
+  }
+  // The hub spins about Z through its centre, and the polar-folded blade rides it: one shape, eight spinning copies.
+  prototype "motion-polar" {
+    document {
+      clockDriver(key: "polar", cadence: 0.9, ease: 0)
+      shape Cylinder "hub" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rotation [0.707107, 0, 0, 0.707107]
+        scale [0.08, 0.05, 0.08]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 1
+            pivot [0, 1.2, 0]
+            wave: "linear"
+          }
+        ]
+      }
+      shape Box "blade" {
+        domain [
+          polar(count: 8, axis: Z, origin: [0, 1.2, 0])
+        ]
+        material: accentMaterial
+        parent: "hub"
+        position [0, 1.45, 0]
+        scale [0.035, 0.14, 0.02]
+      }
+      exhibit(label: "MOVING POLAR", extra: [accent])
+    }
+  }
+}
+
+template motionPrototypesB() {
+  // Parented paints ride their shape's own slot: a stroked plane stripe, a stroked ellipse ring, a filled pentagon and
+  // a swept line, each in the panel's local frame.
+  prototype "motion-paint" {
+    document {
+      clockDriver(key: "paint", cadence: 1.2)
+      shape Box "panel" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.35, 0.3, 0.1]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.6
+            pivot [0, 1.2, 0]
+          }
+        ]
+      }
+      exhibit(label: "MOVING PAINT", extra: [{ color: "#E8E4DA", roughness: 0.5, paints [{ parent: "panel", type: "Plane", position [0, 0.16, 0], stroke: 0.025, color: "#E4572E" }, { parent: "panel", type: "Prism", position [0.15, -0.08, 0], scale [0.09, 0.09, 0.2], profile { kind: "Ellipse" }, stroke: 0.012, color: "#1F4E79" }, { parent: "panel", type: "Prism", position [-0.17, -0.1, 0], scale [0.08, 0.08, 0.2], profile { kind: "Polygon", sides: 5 }, color: "#3FA34D" }, { parent: "panel", type: "Sweep", curve { a [-0.25, -0.22, 0.1], b [0, -0.12, 0.1], c [0.25, -0.22, 0.1], radiusStart: 0.012, radiusEnd: 0.012 }, color: "#171210" }] }])
+    }
+  }
+  // An eye: a radial ramp of pupil, iris, limbus and sclera on a plane under a clear cornea, in the winning slot's
+  // frame. The half-turn about Y faces the plane toward the label side, where the camera stands.
+  prototype "motion-inset" {
+    document {
+      clockDriver(key: "inset", cadence: 0.9)
+      shape Sphere "eye" {
+        material: accentMaterial
+        position [0, 1.25, 0]
+        scale [0.25, 0.25, 0.25]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.5
+            pivot [0, 1.25, 0]
+          }
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.2
+            phase: 1.5708
+            pivot [0, 1.25, 0]
+          }
+        ]
+      }
+      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 0, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.035, color: "#0B0B0B" }, { radius: 0.09, color: "#3A7BD5" }, { radius: 0.1, color: "#1A2A40" }, { radius: 0.11, color: "#F5F3EE" }], softness: 0.01, modulationAmplitude: 0.15, modulationFrequency: 24 } } }])
+    }
+  }
+  // Twist and bend emit only on the stamp-pool path; a static placement ignores both. The twist's constant-wave swing is
+  // a pose the driver's weight blends in: a lean that eases in and out with the exhibit's gate.
+  prototype "motion-twist" {
+    document {
+      clockDriver(key: "twist", cadence: 0.8)
+      shape Box "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.15, 0.4, 0.15]
+        twist: 1.5
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.5
+            pivot [0, 1.2, 0]
+          }
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.25
+            pivot [0, 0.8, 0]
+            wave: "constant"
+          }
+        ]
+      }
+      exhibit(label: "TWIST", extra: [accent])
+    }
+  }
+  prototype "motion-bend" {
+    document {
+      clockDriver(key: "bend", cadence: 0.8)
+      shape Box "subject" {
+        bend: 1.2
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.08, 0.4, 0.08]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.5
+            pivot [0, 1.2, 0]
+          }
+        ]
+      }
+      exhibit(label: "BEND", extra: [accent])
+    }
+  }
+  // A dynamic slot carries a rigid pose and no scale, so a pulse is six petals sliding out from a core and back, all
+  // smooth-unioned in one group.
+  prototype "motion-pulse" {
+    document {
+      clockDriver(key: "pulse", cadence: 2.5)
+      shape Sphere "core" {
+        group: 1
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.16, 0.16, 0.16]
+      }
+      for petal in pulsePetals {
+        shape Sphere $"{petal.name}" {
+          blend: SmoothUnion
+          group: 1
+          material: accentMaterial
+          position: petal.at
+          scale [0.1, 0.1, 0.1]
+          smooth: 0.08
+          slides [
+            {
+              driver: "clock"
+              axis: petal.out
+              amplitude: 0.1
+            }
+          ]
+        }
+      }
+      exhibit(label: "RADIAL PULSE", extra: [accent])
+    }
+  }
+  prototype "motion-cells" {
+    document {
+      clockDriver(key: "cells", cadence: 1)
+      shape Sphere "subject" {
+        cells {
+          amplitude: 0.12
+          frequency: 4
+          mode: "F1"
+          randomness: 0.46
+          seed: 3751
+        }
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.35, 0.35, 0.35]
+        swings [
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.5
+            pivot [0, 1.2, 0]
+          }
+        ]
+      }
+      exhibit(label: "MOVING CELLS", extra: [accent])
+    }
+  }
+  // The plume rides the nozzle's slot, so it tilts with the swing.
+  prototype "motion-volume" {
+    document {
+      clockDriver(key: "volume", cadence: 1.2)
+      shape Cylinder "nozzle" {
+        material: exhibitMaterial
+        position [0, 0.8, 0]
+        scale [0.07, 0.15, 0.07]
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.4
+            pivot [0, 0.65, 0]
+          }
+        ]
+      }
+      volumes [
+        {
+          kind: "flow"
+          parent: "nozzle"
+          position [0, 0.55, 0]
+          rotation [1, 0, 0, 0]
+          halfExtent [0.2, 0.4, 0.2]
+          axis: 0.8
+          width: 0.06
+          spread: 3
+          fade: 1.2
+          noiseScale: 0.06
+          noiseDepth: 0.5
+          speed: 1.2
+          seed: 7
+          steps: 40
+          intensity: 30
+          ramp [
+            {
+              density: 0
+              color: "#0B3A7A"
+            }
+            {
+              density: 0.4
+              color: "#1E8FE2"
+            }
+            {
+              density: 1
+              color: "#D8F4FF"
+            }
+          ]
+        }
+      ]
+      exhibit(label: "MOVING VOLUME")
+    }
+  }
+  // A two-bone arm solving toward the world point the galleryInputs reach cell holds.
+  prototype "motion-ik" {
+    document {
+      shape Cylinder "base" {
+        material: exhibitMaterial
+        position [0, 0.95, 0]
+        scale [0.07, 0.05, 0.07]
+      }
+      shape Capsule "upper" {
+        joint [0, 1.0, 0]
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.04, 0.15, 0.04]
+      }
+      shape Capsule "lower" {
+        joint [0, 1.4, 0]
+        material: exhibitMaterial
+        parent: "upper"
+        position [0, 1.57, 0]
+        scale [0.035, 0.14, 0.035]
+      }
+      shape Sphere "hand" {
+        material: accentMaterial
+        parent: "lower"
+        position [0, 1.76, 0]
+        scale [0.06, 0.06, 0.06]
+      }
+      effectors [
+        {
+          name: "reach"
+          chain [
+            "upper"
+            "lower"
+          ]
+          tip: "hand"
+          "when" [
+            "state.galleryMotion.all"
+            "state.galleryMotion.ik"
+          ]
+          target {
+            kind: "state"
+            reference: "state.galleryInputs.reach"
+          }
+        }
+      ]
+      exhibit(label: "IK REACH", extra: [accent])
+    }
+  }
+  // A hold-style timeline: the stamp pool steps an animated row's frames on the render clock, eight 60 Hz frames
+  // each, whatever the gallery clock reads.
+  prototype "motion-frames" {
+    document {
+      shape Box "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.15, 0.15, 0.15]
+      }
+      frames [
+        {
+          name: "left"
+          transforms [
+            {
+              id: 0
+              position [-0.25, 1.2, 0]
+              rotation [0, 0, 0, 1]
+              scale [0.15, 0.15, 0.15]
+            }
+          ]
+        }
+        {
+          name: "up"
+          transforms [
+            {
+              id: 0
+              position [0, 1.45, 0]
+              rotation [0, 0, 0.382683, 0.92388]
+              scale [0.15, 0.15, 0.15]
+            }
+          ]
+        }
+        {
+          name: "right"
+          transforms [
+            {
+              id: 0
+              position [0.25, 1.2, 0]
+              rotation [0, 0, 0, 1]
+              scale [0.15, 0.15, 0.15]
+            }
+          ]
+        }
+        {
+          name: "down"
+          transforms [
+            {
+              id: 0
+              position [0, 0.95, 0]
+              rotation [0, 0.382683, 0, 0.92388]
+              scale [0.15, 0.15, 0.15]
+            }
+          ]
+        }
+      ]
+      exhibit(label: "FRAMES", extra: [accent])
     }
   }
 }
@@ -1662,4 +2308,6 @@ template galleryPrototypes() {
   foldPrototypes()
   formPrototypes()
   surfacePrototypes()
+  motionPrototypes()
+  motionPrototypesB()
 }

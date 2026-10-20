@@ -172,9 +172,17 @@ placements {
     solid
   }
 
-  // The shape gallery (shapes.puck): every authorable construct on the open ground at +X/+Z.
+  // The shape gallery (shapes.puck): every authorable construct, and two rows of motion, on the open ground at +X/+Z.
   galleryPlacements()
   studioPlacements()
+}
+
+// The shape gallery's motion controls (shapes.md): its clock, the per-exhibit motion gates and the cells its
+// state-bound exhibits read.
+state {
+  world {
+    galleryState()
+  }
 }
 
 prototypes {
