@@ -60,7 +60,7 @@ internal static partial class Subjects {
     );
     // A knot on a circle of the given radius, evenly spaced by turnRadians — a circle's own curvature (signed
     // 1/radius) and tangent direction (perpendicular to the radius) are exact by construction, the
-    // Puck.SdfVm.Tests.SdfCurvePathTests.CircleKnot precedent, in double.
+    // CompiledCurvatureSpline circle construction, in double.
     private static CurvatureSplineKnot CurvatureSplineCircleKnotAt(double radius, double elevation, int knotIndex, double turnRadians, double signedCurvature) {
         var angle = (knotIndex * turnRadians);
 
