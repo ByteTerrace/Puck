@@ -112,32 +112,22 @@ public sealed partial class WorldRuleHost {
         )
         ) { return false; }
         var a = image.Positions[observer]; var b = image.Positions[candidate];
-        // Reject far/extreme coordinates before subtraction or fixed-point norms can overflow.
-        var radius = ((UInt128)((ulong)neighbors.Range.Value));
-        var x = ((UInt128)Int128.Abs(value: (((Int128)a.X.Value) - b.X.Value)));
-        var y = ((UInt128)Int128.Abs(value: (((Int128)a.Y.Value) - b.Y.Value)));
-        var z = ((UInt128)Int128.Abs(value: (((Int128)a.Z.Value) - b.Z.Value)));
 
+        // An offset the carrier cannot hold is farther than any range.
         if (
-            (x > radius) ||
-            (y > radius) ||
-            (z > radius) ||
-            ((((x * x) + (y * y)) + (z * z)) > (radius * radius))
+            !FixedVector3.TrySubtract(
+            difference: out var offset,
+            left: b,
+            right: a
+        ) ||
+            !offset.IsWithin(radius: neighbors.Range)
         ) { return false; }
-        var offset = (b - a);
-        var forward = image.Orientations[observer].Rotate(vector: new(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.Zero,
-            Z: -FixedQ4816.One
-        ));
+        var forward = image.Orientations[observer].Rotate(vector: -FixedVector3.UnitZ);
 
-        if (
-            (offset != FixedVector3.Zero) &&
-            (FixedVector3.Dot(
-            left: forward,
-            right: offset.Normalize()
-        ) < neighbors.MinimumDot)
-        ) { return false; }
+        if (!offset.IsWithinCone(
+            cosineHalfAngle: neighbors.MinimumDot,
+            forward: forward
+        )) { return false; }
         if (!neighbors.Source.RequiresLineOfSight) { return true; }
         m_decisionWork = m_decisionWork with { SightTests = (m_decisionWork.SightTests + 1) };
         return Host.Population.HasLineOfSight(
