@@ -417,7 +417,7 @@ public static class WorldCameraRigCompiler {
                             name: pathOp.Curve
                         ) is { } curveRow) {
                             operations.Add(item: new SdfCameraOp.Path(
-                                Curve: new SdfCurvePath(compiled: curveRow.Compiled),
+                                Curve: curveRow.Compiled,
                                 Fraction: Scalar(
                                     fallback: 0f,
                                     field: WorldValueFields.PathFraction,
