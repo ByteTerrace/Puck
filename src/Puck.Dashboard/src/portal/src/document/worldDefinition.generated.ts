@@ -6548,6 +6548,10 @@ export type WorldMachine = {
    * The optional standing cable endpoint owned by this machine instance.
    */
   cable?: WorldMachineCable | null;
+  /**
+   * The folder holding the content this device can swap to, relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. machine.content lists the files in it the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folder is listed. Omitted from the wire when null.
+   */
+  contentFolder?: string | null;
 };
 
 export type WorldMachineCable = {

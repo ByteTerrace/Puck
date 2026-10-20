@@ -40,9 +40,11 @@ public sealed class MachineCartridgeLawTests {
     // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
     // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
+    // A shipped cartridge sits in the folder its target names: <name>.<target>.cartridge.json under cartridges/<target>.
     private static string CartridgePath(string file) => Path.Combine(
         path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
-        path2: file
+        path2: file.Split(separator: '.')[1],
+        path3: file
     );
     private static CartridgeCompilation CompileOutOfBand(string engine, string path) =>
         ((ICartridgeCompiler)TestMachines.Catalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));

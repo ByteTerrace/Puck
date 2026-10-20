@@ -259,6 +259,7 @@ public static class WorldDocumentPaths {
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "source", ["views", "graphs"]),
         new(typeof(Puck.Text.TextFontDefinition), nameof(Puck.Text.TextFontDefinition.Source), "source", ["text", "fonts"]),
         new(typeof(WorldHostDefaults), nameof(WorldHostDefaults.Icon), "icon", ["host"]),
+        new(typeof(WorldMachine), nameof(WorldMachine.ContentFolder), "contentFolder", ["machines"]),
     ];
 
     private static void RelocateMember(JsonObject row, string member, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins) {

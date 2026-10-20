@@ -23,4 +23,8 @@ public interface IMachineValidationCatalog {
     /// <param name="engineId">The ordinal engine identifier.</param>
     /// <param name="contentPath">The logical content path.</param>
     bool CanPrepare(string engineId, string contentPath);
+    /// <summary>Determines whether the selected engine prepares its content through a registered provider, so that a
+    /// file the provider does not recognize is not content for it.</summary>
+    /// <param name="engineId">The ordinal engine identifier.</param>
+    bool HasContentProvider(string engineId);
 }

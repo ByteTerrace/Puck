@@ -62,7 +62,7 @@ public sealed class ColourIdleEquivalenceLawTests {
     [InlineData("tetromino.cgb", ConsoleModel.DmgC, false)]
     [Theory]
     public void TheColourMachineIdlesExactlyAsTheReferenceClockSteps(string cartridge, ConsoleModel model, bool rastered) {
-        var document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/cartridges/{cartridge}.cartridge.json")));
+        var document = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/cartridges/cgb/{cartridge}.cartridge.json")));
 
         if (rastered) {
             document = (document with {

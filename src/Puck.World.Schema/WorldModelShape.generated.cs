@@ -3843,6 +3843,7 @@ public static partial class WorldModelShape {
                 M("running", typeof(global::System.Boolean), typeof(global::Puck.World.WorldMachine), "Running", Read | Write, static value => ((global::Puck.World.WorldMachine)value).Running),
                 M("memory", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldMachineMemory>), typeof(global::Puck.World.WorldMachine), "Memory", Read | Write, static value => ((global::Puck.World.WorldMachine)value).Memory),
                 M("cable", typeof(global::Puck.World.WorldMachineCable), typeof(global::Puck.World.WorldMachine), "Cable", Read | Write, static value => ((global::Puck.World.WorldMachine)value).Cable),
+                M("contentFolder", typeof(global::System.String), typeof(global::Puck.World.WorldMachine), "ContentFolder", Read | Write, static value => ((global::Puck.World.WorldMachine)value).ContentFolder),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineCable), true, JsonTypeInfoKind.Object, null,

@@ -92,6 +92,15 @@ world validation precede runtime commit; a successful configuration change becom
 the canonical machine declaration. `screen.insert` and `forge.play` resolve their
 named producer and use this same operation path. `screen.eject` detaches the display.
 
+A declaration's optional `contentFolder` names the folder, beside the declaring
+document, that holds what the machine can swap to. `machine.content <instance>`
+lists the files directly in it that the machine's engine can mount (the files its
+content provider recognizes, or every file for an engine that mounts raw bytes)
+and marks the one mounted; `machine.swap <instance> <name>` mounts one by file
+name, or by the part before its first `.` when only one listed file has it,
+through the same `content.insert` operation. Nothing outside the folder is
+listed or mounted by name (`WorldMachineContentFolder`).
+
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;
 a restricted host supplies its own immutable policy at construction.

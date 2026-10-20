@@ -1,0 +1,50 @@
+schema: "puck.cartridge.v1"
+
+target: "agb"
+
+title: "TESTCARD"
+
+gameCode: "TCRD"
+
+// A test card: eight colour bars, each four map columns wide, drifting one pixel left every frame. The background map
+// is 32 columns (256 pixels) wide and `drift` is a byte, so the scroll wraps exactly where the map does and the bars
+// cycle without a seam. A picture that stops drifting is a machine that stopped running.
+let mapColumns = 32
+let barColumns = 4
+
+// White, yellow, cyan, green, magenta, red, blue and black, as 15-bit BGR words.
+let bars = [32767, 1023, 32736, 992, 31775, 31, 31744, 0]
+let palette = concat(bars, map(range(0, 8), slot => 0))
+
+palettes {
+  background [palette]
+  object [palette]
+}
+
+tiles: map(range(0, 8), bar => { name: $"bar{bar}", pixels: map(range(0, 8), row => $"{bar}{bar}{bar}{bar}{bar}{bar}{bar}{bar}") })
+
+map: map(range(0, mapColumns * mapColumns), cell => floor(cell % mapColumns / barColumns))
+
+variables [
+  { name: "drift", initial: 0 }
+]
+
+arrays []
+
+screens []
+
+sprites []
+
+layers []
+
+raster []
+
+sounds []
+
+scrollX: "drift"
+
+scrollY: "0"
+
+rule "drift" {
+  drift += 1
+}
