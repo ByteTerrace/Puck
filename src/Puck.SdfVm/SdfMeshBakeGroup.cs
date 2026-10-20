@@ -82,6 +82,40 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: create);
 
+        return PlanGroups(create: create, farDistance: farDistance, onlySlot: -1, program: program, snap: null, transforms: transforms);
+    }
+    /// <summary>Plans the group of one dynamic slot of a program as <see cref="Plan{T}"/> plans it, with every other slot
+    /// its instances read keyed at its pose rounded to the given steps (<see cref="SdfMeshGeometryBuilder.Snap"/>): the
+    /// settled pose a skinned group bakes again at (<see cref="SdfMeshPathBake"/>).</summary>
+    /// <typeparam name="T">The group type the caller keeps.</typeparam>
+    /// <param name="program">The program.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <param name="farDistance">The frame's far distance, which clamps a bound past it.</param>
+    /// <param name="slot">The dynamic slot whose group is planned.</param>
+    /// <param name="positionSteps">The steps a metre another slot's position rounds to.</param>
+    /// <param name="orientationSteps">The steps a unit another slot's orientation components round to.</param>
+    /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
+    /// <returns>The group, or <see langword="null"/> when no active instance rides the slot.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
+    /// <paramref name="create"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative, or a step count is not
+    /// positive.</exception>
+    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: create);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
+
+        var groups = PlanGroups(create: create, farDistance: farDistance, onlySlot: slot, program: program, snap: (positionSteps, orientationSteps), transforms: transforms);
+
+        return ((groups.Count > 0) ? groups[0] : null);
+    }
+
+    // Plans every group, or with a non-negative `onlySlot` that slot's group alone, its other slots' poses snapped to
+    // `snap`'s steps when it is given.
+    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int onlySlot, (float Position, float Orientation)? snap, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         var groups = new List<T>();
         var bySlot = new Dictionary<int, T>();
         var instances = program.Instances;
@@ -94,6 +128,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             var instance = instances[index];
 
             if (!instance.Active) { continue; }
+            if ((onlySlot >= 0) && (!instance.IsDynamic || (instance.Slot != onlySlot))) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
@@ -108,6 +143,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             if (instance.IsDynamic) {
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
                     group = create(arg1: instance.Slot, arg2: true);
+                    if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
                     group.Low = (center - new Vector3(value: radius));
                     group.High = (center + new Vector3(value: radius));
                     bySlot.Add(key: instance.Slot, value: group);
@@ -150,6 +186,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
             group.Seal();
         }
+        if (onlySlot >= 0) { return groups; }
 
         // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
         // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.

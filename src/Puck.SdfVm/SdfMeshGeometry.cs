@@ -25,7 +25,8 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// <item>a dynamic instance's transform into its own slot by that role rather than the slot's number, which each program
 /// assigns;</item>
 /// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, or world space),
-/// rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/>, and, under a slot of the group's own, by
+/// rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/> (or the coarser steps <see cref="Snap"/>
+/// sets), and, under a slot of the group's own, by
 /// that slot's offset from it, which names the member a vertex of the mesh rides (<see cref="SdfMesh.Members"/>). The bake samples such an instruction
 /// through that slot's transform in the frame, so the shapes of a stamp-pool blend group, each riding its own slot inside
 /// the group's instance, take their places and turns from the frame's transforms rather than from the
@@ -53,6 +54,28 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private readonly SortedDictionary<int, DynamicTransform> m_poses = [];
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
     private int m_chainSlot = -1;
+    // The steps another slot's pose rounds to: PositionSteps and OrientationSteps unless Snap coarsened them.
+    private float m_positionSteps = PositionSteps;
+    private float m_orientationSteps = OrientationSteps;
+
+    /// <summary>Rounds every other slot's pose this builder appends to coarser steps than <see cref="PositionSteps"/> and
+    /// <see cref="OrientationSteps"/>, so poses that settle near one another key one geometry and share its mesh
+    /// (<see cref="SdfMeshPathBake"/>'s settle rebake). The steps join the hash, so a snapped geometry never keys alike
+    /// with one rounded at the defaults. Call before the first append.</summary>
+    /// <param name="positionSteps">The steps a metre a position rounds to; positive.</param>
+    /// <param name="orientationSteps">The steps a unit an orientation quaternion's components round to; positive.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A step count is not positive.</exception>
+    public void Snap(float positionSteps, float orientationSteps) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
+
+        m_positionSteps = positionSteps;
+        m_orientationSteps = orientationSteps;
+
+        var steps = new Vector2(x: positionSteps, y: orientationSteps);
+
+        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(in steps)));
+    }
 
     /// <summary>Gets the materials the appended instances' shapes carry, in the order the geometry numbers them.</summary>
     public IReadOnlyList<int> Materials => m_materials;
@@ -95,7 +118,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {
-            Keep(slot: ownSlot, pose: Pose.Identity, transforms: transforms);
+            Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: ownSlot, transforms: transforms);
             if (ownSlot < transforms.Count) { BoundTurn = Quaternion.Inverse(value: PoseOf(transform: transforms[ownSlot]).Orientation); }
         }
 
@@ -148,15 +171,15 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                 m_chainSlot = slot;
                 if (slot == ownSlot) {
                     instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
-                    Keep(slot: slot, pose: Pose.Identity, transforms: transforms);
+                    Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
                 } else {
-                    var pose = RelativePose(ownSlot: ownSlot, slot: slot, transforms: transforms);
+                    var pose = RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
                     var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                     instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
                     m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(in pose)));
                     m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(in offset)));
-                    Keep(slot: slot, pose: pose, transforms: transforms);
+                    Keep(orientationSteps: m_orientationSteps, pose: pose, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
                 }
                 break;
             }
@@ -190,17 +213,17 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Rounded4>(in lanes)));
     }
     // Keeps a slot's rounded pose as the bake reads it: its position, its orientation, renormalized in double precision
-    // so the same rounded components always turn alike, and its lanes rounded as AppendLanes rounds them. A missing slot
-    // is left out.
-    private void Keep(int slot, Pose pose, IReadOnlyList<DynamicTransform> transforms) {
+    // so the same rounded components always turn alike, and its lanes rounded as AppendLanes rounds them; the steps are
+    // the ones the pose was rounded to. A missing slot is left out.
+    private void Keep(int slot, Pose pose, float positionSteps, float orientationSteps, IReadOnlyList<DynamicTransform> transforms) {
         if ((pose == Pose.Missing) || (slot < 0) || (slot >= transforms.Count) || m_poses.ContainsKey(key: slot)) { return; }
 
-        var turn = pose.Orientation.Value(steps: OrientationSteps);
+        var turn = pose.Orientation.Value(steps: orientationSteps);
         var length = Math.Sqrt(d: ((((double)turn.X * turn.X) + ((double)turn.Y * turn.Y)) + (((double)turn.Z * turn.Z) + ((double)turn.W * turn.W))));
         var orientation = ((length > 0d)
             ? new Quaternion(x: (float)(turn.X / length), y: (float)(turn.Y / length), z: (float)(turn.Z / length), w: (float)(turn.W / length))
             : Quaternion.Identity);
-        var position = pose.Position.Value(steps: PositionSteps);
+        var position = pose.Position.Value(steps: positionSteps);
 
         var lanes = new Rounded4(steps: PositionSteps, value: transforms[slot].Lanes);
 
@@ -208,7 +231,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     }
     // A slot's pose in the frame of the group's own slot (world space under none), rounded: where a sample the bake
     // carries into the group's frame lands in that slot's frame. A slot the frame holds no transform for is Missing.
-    private static Pose RelativePose(int ownSlot, int slot, IReadOnlyList<DynamicTransform> transforms) {
+    private static Pose RelativePose(int ownSlot, int slot, float positionSteps, float orientationSteps, IReadOnlyList<DynamicTransform> transforms) {
         if ((slot < 0) || (slot >= transforms.Count) || (ownSlot >= transforms.Count)) { return Pose.Missing; }
 
         var (framePosition, frameOrientation) = ((ownSlot < 0) ? (Vector3.Zero, Quaternion.Identity) : PoseOf(transform: transforms[ownSlot]));
@@ -220,8 +243,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         if (relative.W < 0f) { relative = Quaternion.Negate(value: relative); }
 
         return new Pose(
-            Orientation: new Rounded4(steps: OrientationSteps, value: new Vector4(x: relative.X, y: relative.Y, z: relative.Z, w: relative.W)),
-            Position: new Rounded4(steps: PositionSteps, value: new Vector4(value: Vector3.Transform(value: (position - framePosition), rotation: inverse), w: 0f))
+            Orientation: new Rounded4(steps: orientationSteps, value: new Vector4(x: relative.X, y: relative.Y, z: relative.Z, w: relative.W)),
+            Position: new Rounded4(steps: positionSteps, value: new Vector4(value: Vector3.Transform(value: (position - framePosition), rotation: inverse), w: 0f))
         );
     }
     // A transform's position and orientation, an unset orientation read as the identity, as the bake reads it.

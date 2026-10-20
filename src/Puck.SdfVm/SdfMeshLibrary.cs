@@ -1,3 +1,5 @@
+using Puck.Abstractions.Counting;
+
 namespace Puck.SdfVm;
 
 /// <summary>
@@ -24,6 +26,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
+    /// <summary>Gets the settle rebakes' counts (<see cref="SdfMeshSettle"/>) every bake holding the library counts
+    /// into, so one source reads a presentation's residencies together.</summary>
+    public WorkCounterSet Settles { get; } = SdfMeshSettle.Counters();
 
     /// <summary>Gets how many geometries the library holds.</summary>
     public int Count {
@@ -127,7 +132,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
             renumbered[triangle] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : source[triangle]);
         }
 
-        return new SdfMesh(indices: mesh.Indices, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered);
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered, vertexMembers: mesh.VertexMembers);
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);

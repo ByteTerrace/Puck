@@ -146,8 +146,10 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// bake's <see cref="Identity"/> loads from disk off the frame's thread (<see cref="SdfMeshStore"/>), baking only when the
 /// store refuses the entry. The bake reports its counted work, the groups it loaded and the wall time it took
 /// (<see cref="Describe"/>).</para>
+/// <para>A dynamic group whose shapes ride slots besides its own is planned again once those shapes settle away from the
+/// pose it was baked at, and its new mesh replaces the skinned one when it lands (<see cref="SdfMeshSettle"/>).</para>
 /// </summary>
-public sealed class SdfMeshPathBake {
+public sealed partial class SdfMeshPathBake {
     /// <summary>The field evaluations one frame's bake dispatch makes at most, past its first lattice, in a frame of
     /// <see cref="ReferenceFrameSeconds"/>: the bake pass's share of the frame. A longer frame takes the same share of its
     /// time (<see cref="FrameBudget"/>), and every lattice is sized by this share alone, so the meshes do not depend on the
@@ -268,6 +270,7 @@ public sealed class SdfMeshPathBake {
             if (!ReferenceEquals(objA: frame.Program, objB: m_program)) {
                 Restart(frame: frame);
             }
+            Settle(frame: frame);
 
             var finished = 0;
             var moved = (!ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision));
@@ -604,27 +607,13 @@ public sealed class SdfMeshPathBake {
                 continue;
             }
 
-            // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
-            var center = ((group.Low + group.High) * 0.5f);
-            var half = (MathF.Max((group.High.X - group.Low.X), MathF.Max((group.High.Y - group.Low.Y), (group.High.Z - group.Low.Z))) * 0.5f);
-
-            group.Low = (center - new Vector3(value: half));
-            group.High = (center + new Vector3(value: half));
-            group.Next = Lattice(group: group, longest: CoarseSamples, minimum: CoarseSamples, gradients: false);
             if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
                 group.Mesh = old.Mesh;
                 group.DrawnPosition = old.DrawnPosition;
                 group.DrawnOrientation = old.DrawnOrientation;
             }
-            group.Identity = Identity;
-            // Geometry the library's store kept from an earlier run loads from disk off the frame's thread, and bakes only
-            // when the store refuses its entry.
-            if (Library.Holds(geometry: group.Sealed, identity: group.Identity)) {
-                group.Deferred = group.Next;
-                group.Next = null;
-                group.Contouring = true;
+            if (Begin(group: group)) {
                 loading++;
-                _ = Task.Run(action: () => Load(group: group));
                 continue;
             }
             rebaked++;
@@ -647,6 +636,25 @@ public sealed class SdfMeshPathBake {
         if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
+    }
+    // Starts a group the library holds no mesh of at the coarse lattice over its box, under the bake's identity. Geometry
+    // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
+    // store refuses its entry; true when it loads.
+    private bool Begin(Group group) {
+        // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
+        var center = ((group.Low + group.High) * 0.5f);
+        var half = (MathF.Max((group.High.X - group.Low.X), MathF.Max((group.High.Y - group.Low.Y), (group.High.Z - group.Low.Z))) * 0.5f);
+
+        group.Low = (center - new Vector3(value: half));
+        group.High = (center + new Vector3(value: half));
+        group.Next = Lattice(group: group, longest: CoarseSamples, minimum: CoarseSamples, gradients: false);
+        group.Identity = Identity;
+        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity)) { return false; }
+        group.Deferred = group.Next;
+        group.Next = null;
+        group.Contouring = true;
+        _ = Task.Run(action: () => Load(group: group));
+        return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
     // never fewer than `minimum` samples along any. A final lattice's spacing is never finer than MinimumCell, so a small
@@ -1213,6 +1221,8 @@ public sealed class SdfMeshPathBake {
             group.Contouring = false;
             group.Done = true;
             group.Mesh = mesh;
+            // A group drawing the mesh it replaces counts as drawn already, so the draws are rebuilt by name.
+            m_drawnMeshes = -1;
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
             group.Skin = null;
             group.Points = null;
@@ -1236,7 +1246,9 @@ public sealed class SdfMeshPathBake {
             }
             m_loaded++;
             group.Done = true;
+            group.Stored = true;
             group.Mesh = mesh;
+            m_drawnMeshes = -1;
             Finish();
         }
     }
@@ -1411,6 +1423,36 @@ public sealed class SdfMeshPathBake {
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
+        // Whether the mesh came from the library or its store rather than a bake of this group.
+        public bool Stored { get; set; }
+
+        // The settle watch (SdfMeshPathBake.Settle): the group a settle rebake replaces until it lands, the slots besides
+        // its own its geometry reads and their poses in its frame as baked, as this frame reads them, and as they stood
+        // when the group last saw them change, when that was, and whether a settle rebake at that pose was refused.
+        public Group? Replaces { get; set; }
+        public int[]? MemberSlots { get; private set; }
+        public Vector3[]? BakedPositions { get; private set; }
+        public Quaternion[]? BakedOrientations { get; private set; }
+        public Vector3[]? CurrentPositions { get; private set; }
+        public Quaternion[]? CurrentOrientations { get; private set; }
+        public Vector3[]? StillPositions { get; private set; }
+        public Quaternion[]? StillOrientations { get; private set; }
+        public float StillSince { get; set; }
+        public bool Seeded { get; set; }
+        public bool Blocked { get; set; }
+
+        // Takes the member slots and their baked poses from the group's geometry, once.
+        public void Watch() {
+            var members = Geometry.Poses.Where(predicate: pose => (pose.Key != Slot)).ToArray();
+
+            MemberSlots = [.. members.Select(selector: static pose => pose.Key)];
+            BakedPositions = [.. members.Select(selector: static pose => pose.Value.Position)];
+            BakedOrientations = [.. members.Select(selector: static pose => pose.Value.Orientation)];
+            CurrentPositions = new Vector3[members.Length];
+            CurrentOrientations = new Quaternion[members.Length];
+            StillPositions = new Vector3[members.Length];
+            StillOrientations = new Quaternion[members.Length];
+        }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from
     // them and the stage of points it is answering: refinement's fine samples, bracketed edge roots, then the samples

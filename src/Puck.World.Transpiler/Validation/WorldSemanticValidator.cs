@@ -4,6 +4,7 @@ using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Vocabulary;
 using Puck.Transpiler.Diagnostics;
 using Puck.Abstractions.Machines;
+using Puck.World.Authoring;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -258,7 +259,41 @@ public static class WorldSemanticValidator {
             );
         }
 
+        foreach (var warning in MovingBlends(definition: definition)) {
+            diagnostics.ReportWarning(
+                code: PuckDiagnosticCodes.MovingBlend,
+                message: warning,
+                span: ExtractSpanFromError(
+                    composed: loweredJson,
+                    error: warning,
+                    source: source,
+                    sourceMap: sourceMap
+                )
+            );
+        }
+
         return (errors.Count == 0);
+    }
+    /// <summary>Returns a warning for each blend of an animated creation's pooled groups that joins shapes moving
+    /// independently (<see cref="CreationMotion.MovingBlends"/>), naming the creation, the two shapes, what moves each
+    /// and the blend, its path first as a refusal's is.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype and shape order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var warnings = new List<string>();
+        var creations = definition.Creations;
+
+        for (var index = 0; (index < creations.Count); index++) {
+            if (creations[index]?.Document is not { } document) { continue; }
+            foreach (var blend in CreationMotion.MovingBlends(document: document)) {
+                warnings.Add(item: $"prototypes[{index}].doc.shapes[{blend.Shape}].blend: creation '{creations[index].Id}' {CreationMotion.Describe(blend: blend, document: document)}");
+            }
+        }
+
+        return warnings;
     }
 
     // The engine words each refusal once (WorldDefinitionValidator.UndeclaredRowEnum and UndeclaredRecordFieldEnum);

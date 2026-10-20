@@ -260,8 +260,11 @@ to step along it.
 - **Moving blend seam.** `view.override camera look 26 1.9 56.2 26 1.2 59`,
   `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
   box and sphere stretches as the sphere slides away from the pose it baked in.
-  Scrub `galleryClock` and compare against `motion-state-blend` at x = 29 with
-  `galleryInputs probe` at the same offset.
+  Pause or scrub `galleryClock` and the group bakes again at the held pose
+  half a second later (`world.wait bakes 30`, then capture); compare against
+  `motion-state-blend` at x = 29 with `galleryInputs probe` at the same offset.
+  `world.counters sdf.mesh-settle` read twice while the clock runs shows
+  `moving` climbing and `queued` still.
 - **Moving cut.** `motion-carve` at x = 32: the carved face rides the cutter's
   slot, so `world.debug-view motion` shows it moving with the cutter while the
   rest of the box stays still.
@@ -296,7 +299,10 @@ Each of these was seen in a Direct3D 12 capture of the gallery.
   `world.row.set creations shape-capsule document.shapes[name=subject].scale [0.3, 1.6, 0.3]`
   applies, and `creation.shape shape-capsule subject` reads the new scale,
   but the capsule draws at its old size; a position edit shows.
-- **Moving blends keep their baked pose.** `motion-smooth-blend` and
-  `motion-pulse` bake their blend group once and skin it. The seam stretches,
-  and the pulse's petals stay fused into the core's baked silhouette as they
-  slide.
+- **Moving blends stretch while they move.** `motion-smooth-blend`,
+  `motion-carve` and `motion-pulse` join shapes that move independently
+  (PUCK122 names each at authoring time) and skin one baked seam while they
+  run: the seam stretches, and the pulse's petals stay fused into the core's
+  baked silhouette as they slide. Paused or scrubbed, the pose settles and the
+  group bakes again there within about a second (`world.counters
+  sdf.mesh-settle`).

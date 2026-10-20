@@ -33,6 +33,14 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         name: SdfMovedTransforms.SourceName
     );
 
+    /// <summary>The <c>sdf.mesh-settle</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshSettle"/>):
+    /// registered with the probe before the screen binder exists, and pointed at its mesh library's counts when the
+    /// binder is built, so they read every residency sharing that library.</summary>
+    public ForwardingWorkCounterSource MeshSettle { get; } = new(
+        kinds: SdfMeshSettle.Kinds,
+        name: SdfMeshSettle.SourceName
+    );
+
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }
     /// <inheritdoc/>

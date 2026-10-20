@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 /// the bake kernel would (<c>sdf-mesh-bake.comp.hlsl</c>), from a field of boxes it evaluates itself, one value, material
 /// and tetrahedral gradient a sample.
 /// </summary>
-public sealed class SdfMeshPathBakeLawTests {
+public sealed partial class SdfMeshPathBakeLawTests {
     // A static copy of two shapes turned 30 degrees about up: a wide plate and a small block standing on it, the block
     // baking with the plate (one run), then a lone block elsewhere.
     private static readonly Quaternion Turn = Quaternion.CreateFromAxisAngle(angle: (MathF.PI / 6f), axis: Vector3.UnitY);

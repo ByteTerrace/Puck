@@ -1108,34 +1108,7 @@ public sealed partial class WorldStampPool {
     // Resolves each shape's `parent` name to the index of an EARLIER shape (−1 = the root); the canonicalizer refuses a
     // parent that is missing or declared later, so an unresolved name here can only be a bypassed document.
     private static void ResolvePartParents(Registration live, IReadOnlyList<ShapeDocument> shapes) {
-        Array.Fill(
-            array: live.PartParent,
-            value: -1
-        );
-
-        var bound = Math.Min(
-            val1: shapes.Count,
-            val2: WorldPlacementPolicy.MaxAnimatedStampShapes
-        );
-
-        for (var child = 0; (child < bound); child++) {
-            if (shapes[child].Parent is not { } parent) {
-                continue;
-            }
-
-            for (var candidate = 0; (candidate < child); candidate++) {
-                if (string.Equals(
-                    a: shapes[candidate].Name?.Value,
-                    b: parent,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    live.PartParent[child] = candidate;
-
-                    break;
-                }
-            }
-        }
-
+        CreationMotion.ResolveParents(parents: live.PartParent, shapes: shapes);
         live.PartParentsResolved = true;
     }
 
