@@ -60,7 +60,14 @@ public sealed class WorldTextAuthoringLawTests {
         var (box, text) = (program.Instances[0], program.Instances[1]);
 
         Assert.True(condition: (box.IsDynamic && text.IsDynamic));
-        Assert.Equal(expected: (text.Slot + 1), actual: box.Slot);
+        // The box rides its shape slot after the root, the text the slot after the shapes', which the pack poses as the
+        // root: a group of its own, whatever blend group rides the root.
+        Assert.Equal(expected: (box.Slot + 1), actual: text.Slot);
+        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+
+        CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
+        Assert.Equal(expected: transforms[box.Slot - 1], actual: transforms[text.Slot]);
+        Assert.NotEqual(expected: transforms[text.Slot + 1].Position, actual: transforms[text.Slot].Position);
         Assert.Equal(expected: 0f, actual: box.Detail);
         // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, at the body's scale of 2.
         Assert.Equal(expected: 0.04f, actual: text.Detail, tolerance: 1e-6f);

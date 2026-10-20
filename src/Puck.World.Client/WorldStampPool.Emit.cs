@@ -6,6 +6,24 @@ using Puck.World.Authoring;
 namespace Puck.World.Client;
 
 public sealed partial class WorldStampPool {
+    // Whether a creation's text runs bake apart from its shapes on a slot of their own: every run embossed (an engraved
+    // run carves the shapes, so it shares their instance) and a slot free after the shapes'. KEEP IN SYNC: EmitOne emits
+    // the text on that slot and PackTransforms packs it with the root's pose.
+    // Indexed, since the pack asks every registration each frame.
+    private static bool TextApart(CreationDocument document) {
+        if ((document.TextRuns is not { Count: > 0 } runs) || ((document.Shapes?.Count ?? 0) >= WorldPlacementPolicy.MaxAnimatedStampShapes)) {
+            return false;
+        }
+        for (var index = 0; (index < runs.Count); index++) {
+            if (string.Equals(a: runs[index].Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // The text slot's offset from a registration's root slot: the first after its shapes'.
+    private static int TextSlot(int shapeCount) => (1 + shapeCount);
     // Whether a blend group keeps any member the isolation does not hide; a wholly hidden group emits no instance.
     private static bool AnyKept(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, bool[]? hidden) {
         if (hidden is null) {
@@ -185,9 +203,9 @@ public sealed partial class WorldStampPool {
 
         var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
         // Engraved text carves the shapes, so it couples them into one scoped instance; embossed text only adds relief, so
-        // the shapes keep their own instances and the text bakes as its own detailed instance on the root slot, as the
-        // static stamper bakes a text group apart (its relief inside the shapes' group falls below their lattice).
-        var textApart = (hasText && !document!.TextRuns!.Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)));
+        // the shapes keep their own instances and the text bakes as its own detailed group on a slot of its own (TextSlot),
+        // as the static stamper bakes a text group apart: inside a group of shapes its relief falls below their lattice.
+        var textApart = (hasText && TextApart(document: document!));
         var coupled = (hasText && !textApart);
 
         if (coupled) {
@@ -379,15 +397,17 @@ public sealed partial class WorldStampPool {
             );
         }
 
-        // Pass 3 — the creation's text runs, riding the ROOT slot (a run sits on the creation frame, so frame replay
+        // Pass 3 — the creation's text runs, riding the root's pose (a run sits on the creation frame, so frame replay
         // moves the boxes while the lettering holds its authored surface). Emitted after the shapes so an engrave
         // run's Subtraction carves only this creation's scoped geometry, exactly as the static stamper orders it.
         if (hasText) {
-            // The text's own reach bounds its instance, so the region the bake refines toward the glyphs is the text's
-            // rather than the whole creation's, which a blend group riding the root slot beside it would share.
+            // Apart, the text rides its own slot, which holds the root's pose, so its group holds the glyphs alone (a blend
+            // group riding the root would otherwise bake with them at its own spacing), bounded by their reach.
+            var textSlot = (textApart ? (rootSlot + TextSlot(shapeCount: shapes.Count)) : rootSlot);
+
             if (textApart) {
                 _ = builder.BeginInstanceDynamic(
-                    slot: rootSlot,
+                    slot: textSlot,
                     boundOffset: Vector3.Zero,
                     boundRadius: (CreationStampEmitter.TextReach(document: document!, fontFor: textCatalog!.Resolve, scale: placementScale, textLayouts: textLayouts) + GroupBoundMargin),
                     detail: WorldPlacementStamper.TextDetail(creation: document!, scale: placementScale)
@@ -396,7 +416,7 @@ public sealed partial class WorldStampPool {
             CreationStampEmitter.EmitTextDynamic(
                 builder: builder,
                 document: document!,
-                dynamicSlot: rootSlot,
+                dynamicSlot: textSlot,
                 scale: placementScale,
                 fontFor: textCatalog!.Resolve,
                 materialFor: run => paletteIds[((run.Material ?? 0) % paletteIds.Length)],

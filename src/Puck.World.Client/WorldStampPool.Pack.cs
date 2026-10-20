@@ -108,6 +108,8 @@ public sealed partial class WorldStampPool {
                 val1: (document.Shapes?.Count ?? 0),
                 val2: WorldPlacementPolicy.MaxAnimatedStampShapes
             );
+            // The root, the shapes, and the slot text baked apart rides (TextApart).
+            var packedSlots = (TextApart(document: document) ? (TextSlot(shapeCount: shapeCount) + 1) : (1 + shapeCount));
 
             if (
                 !moved.Everything &&
@@ -117,10 +119,10 @@ public sealed partial class WorldStampPool {
             )
             ) {
                 WorldTransformOwners.Park(
-                    count: ((SlotsPerPlacement - 1) - shapeCount),
+                    count: (SlotsPerPlacement - packedSlots),
                     moved: moved,
                     parkPosition: parkPosition,
-                    start: ((rootSlot + 1) + shapeCount),
+                    start: (rootSlot + packedSlots),
                     table: transforms
                 );
             }
@@ -135,7 +137,7 @@ public sealed partial class WorldStampPool {
                 rootRotation: rootRotation
             )) {
                 var previous = m_previousSlots.AsSpan(
-                    length: (1 + shapeCount),
+                    length: packedSlots,
                     start: 0
                 );
 
@@ -155,6 +157,9 @@ public sealed partial class WorldStampPool {
                     shapeCount: shapeCount,
                     transforms: transforms
                 );
+                if (packedSlots > (1 + shapeCount)) {
+                    transforms[rootSlot + TextSlot(shapeCount: shapeCount)] = transforms[rootSlot];
+                }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
                     moved: moved.Commit(
