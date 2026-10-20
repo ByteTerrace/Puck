@@ -19,7 +19,7 @@ BIOS the BIOS-dependent stages skip.
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
 | `--parallelism <n>` | Cases measured at once inside a corpus stage; default one per logical processor. |
-| `--bios <file>` | The 16 KiB comparison/test BIOS; a zeroed diagnostic stub without it. Bundled-firmware stages always use the packaged Puck image. |
+| `--bios <file>` | The 16 KiB comparison/test BIOS. Without it the battery runs a zeroed stub, on which its BIOS-dependent stages skip, and the diagnostics (`--render`, `--probe`, `--trace-crash` and the rest) run the bundled Puck firmware a World boots. Bundled-firmware stages always use the packaged Puck image. |
 | `--roms <directory>` | A conformance-corpus root instead of the cached `gba-tests` corpus. |
 | `--fuzz <directory>` | A fuzz-corpus root instead of the cached `fuzzarm` corpus. |
 | `--games <directory>` | The commercial-ROM directory for the render-hash floors. |
