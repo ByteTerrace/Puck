@@ -105,11 +105,12 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool, hidden: hidden),
+                Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool),
                 EmissiveLane: entry?.EmissiveLane
             ));
         }
     }
+
     // A palette slot's paints. A pooled placement resolves a parented paint to its parent shape's own dynamic slot and
     // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
     // draws only the paints that ride the winning frame, as authored. A paint parented to a shape the isolation hides
@@ -146,7 +147,6 @@ public static class WorldPlacementStamper {
 
         return [.. resolved];
     }
-
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
@@ -374,13 +374,14 @@ public static class WorldPlacementStamper {
             visitor: ref visitor
         );
     }
+
     // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke, about
     // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldStampPool).
     internal static float TextDetail(CreationDocument creation, float scale) {
         var detail = float.PositiveInfinity;
 
         foreach (var run in (creation.TextRuns ?? [])) {
-            detail = MathF.Min(detail, MathF.Min((run.Depth ?? 0.02f), (0.1f * run.EmHeight)));
+            detail = MathF.Min(x: detail, y: MathF.Min(x: (run.Depth ?? 0.02f), y: (0.1f * run.EmHeight)));
         }
 
         return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
@@ -393,19 +394,19 @@ public static class WorldPlacementStamper {
         // need their own spacing even when the unwarped primitive or the containing creation has a large bound.
         private static float ShapeDetail(ShapeDocument shape, float scale) {
             var detail = float.PositiveInfinity;
-            Vector3 size = shape.Scale ?? Vector3.One;
+            Vector3 size = (shape.Scale ?? Vector3.One);
 
             if (shape.Cells is { } cells) {
-                detail = MathF.Min(detail, (1f / (32f * cells.Frequency)));
+                detail = MathF.Min(x: detail, y: (1f / (32f * cells.Frequency)));
             }
             if (shape.Curve is { } curve) {
-                detail = MathF.Min(detail, ((MathF.Min(curve.RadiusStart, curve.RadiusEnd) * size.X) / 8f));
+                detail = MathF.Min(x: detail, y: ((MathF.Min(x: curve.RadiusStart, y: curve.RadiusEnd) * size.X) / 8f));
             }
             if (shape.Onion is > 0f) {
-                detail = MathF.Min(detail, (shape.Onion.Value / 4f));
+                detail = MathF.Min(x: detail, y: (shape.Onion.Value / 4f));
             }
             if (shape.Profile is { CornerRadius: > 0f, Kind: SdfPrismProfileKind.Convex or SdfPrismProfileKind.RoundedRectangle } profile) {
-                var radius = (profile.CornerRadius * MathF.Min(size.X, size.Y));
+                var radius = (profile.CornerRadius * MathF.Min(x: size.X, y: size.Y));
 
                 if (profile.Kind == SdfPrismProfileKind.Convex) {
                     var vertices = new Vector2[profile.Vertices!.Count];
@@ -422,30 +423,32 @@ public static class WorldPlacementStamper {
                         liftAmount: size.Z
                     );
                 }
-                if (radius > 0f) { detail = MathF.Min(detail, (radius / 4f)); }
+                if (radius > 0f) { detail = MathF.Min(x: detail, y: (radius / 4f)); }
             }
-            if ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Twist is not null) || (shape.Bend is not null) || (shape.Bumps is { Count: > 0 })) {
+            // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document
+            // reads it as authored.
+            if ((shape.Flare is not null) || (shape.Shear is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f) || (shape.Bumps is { Count: > 0 })) {
                 var lift = (shape.Lift ?? SdfLift.Extrude);
                 var x = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitX);
                 var y = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitY);
                 var z = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitZ);
-                var extent = MathF.Min(x, MathF.Min(y, z));
+                var extent = MathF.Min(x: x, y: MathF.Min(x: y, y: z));
 
-                if (extent > 0f) { detail = MathF.Min(detail, (extent / 32f)); }
+                if (extent > 0f) { detail = MathF.Min(x: detail, y: (extent / 32f)); }
             }
 
-            return (float.IsFinite(detail) ? (detail * scale) : 0f);
+            return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
         }
         private static float CreationDetail(CreationDocument document, float scale) {
             var detail = float.PositiveInfinity;
 
             foreach (var shape in (document.Shapes ?? [])) {
-                var own = ShapeDetail(shape: shape, scale: scale);
+                var own = ShapeDetail(scale: scale, shape: shape);
 
-                if (own > 0f) { detail = MathF.Min(detail, own); }
+                if (own > 0f) { detail = MathF.Min(x: detail, y: own); }
             }
 
-            return (float.IsFinite(detail) ? detail : 0f);
+            return (float.IsFinite(f: detail) ? detail : 0f);
         }
         private void EmitTextRuns(CreationStampInstance instance) {
             // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
@@ -469,6 +472,7 @@ public static class WorldPlacementStamper {
                 textLayouts: textLayouts
             );
         }
+
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
@@ -831,7 +835,6 @@ public static class WorldPlacementStamper {
             }
         }
     }
-
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter

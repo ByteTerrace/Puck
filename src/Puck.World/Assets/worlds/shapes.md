@@ -291,6 +291,10 @@ to step along it.
 Each of these was seen in a Direct3D 12 capture of the gallery.
 `docs/plans/open-items.md` tracks them.
 
+- **A live scale edit does not change the drawn size.**
+  `world.row.set creations shape-capsule document.shapes[name=subject].scale [0.3, 1.6, 0.3]`
+  applies, and `creation.shape shape-capsule subject` reads the new scale,
+  but the capsule draws at its old size; a position edit shows.
 - **Moving blends keep their baked pose.** `motion-smooth-blend` and
   `motion-pulse` bake their blend group once and skin it. The seam stretches,
   and the pulse's petals stay fused into the core's baked silhouette as they
