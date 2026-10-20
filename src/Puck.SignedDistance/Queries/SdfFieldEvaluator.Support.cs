@@ -1,8 +1,8 @@
 namespace Puck.SignedDistance.Queries;
 
 public sealed partial class SdfFieldEvaluator {
-    /// <summary>Returns whether the evaluator interprets <paramref name="op"/>; a program holding any other op is refused
-    /// at construction.</summary>
+    /// <summary>Returns whether the evaluator interprets <paramref name="op"/> as physical clearance
+    /// (<see cref="SdfFieldReading.Contact"/>); a program holding any other op is refused at construction.</summary>
     /// <param name="op">The op.</param>
     /// <returns><see langword="true"/> when the op is interpreted.</returns>
     public static bool IsSupportedOp(SdfOp op) {
@@ -24,16 +24,32 @@ public sealed partial class SdfFieldEvaluator {
             _ => false,
         };
     }
-    /// <summary>Gets the warps the evaluator interprets under <see cref="SdfFieldReading.Render"/> alone, each with a point
-    /// rule and an inclusion rule: <see cref="SdfOp.AxialProfile"/> and <see cref="SdfOp.RotatePlane"/>.</summary>
-    public static IReadOnlyList<SdfOp> RenderWarpOps { get; } = [SdfOp.AxialProfile, SdfOp.RotatePlane];
+    /// <summary>Gets the ops the evaluator interprets under <see cref="SdfFieldReading.Render"/> alone, each with a point
+    /// rule mirroring <c>mapCore</c>'s case (<c>SdfFieldEvaluator.RenderOps.cs</c>) and an inclusion rule: every warp,
+    /// fold and relief the renderer draws but no contact field reads. <see cref="SdfOp.TransformDynamic"/> stays out of
+    /// both readings: the evaluator carries no per-frame transform table to resolve a slot against, and the mesh audit
+    /// poses each slot as a translate and rotate before it reads a group (<c>SdfMeshAudit.Field</c>).</summary>
+    public static IReadOnlyList<SdfOp> RenderWarpOps { get; } = [
+        SdfOp.AxialProfile,
+        SdfOp.RotatePlane,
+        SdfOp.Shear,
+        SdfOp.GaussianPush,
+        SdfOp.DomainWarp,
+        SdfOp.RepeatPolar,
+        SdfOp.WallpaperFold,
+        SdfOp.LogSphere,
+        SdfOp.CellJitter,
+        SdfOp.LaneErode,
+        SdfOp.Displace,
+        SdfOp.NoiseDisplace,
+    ];
     /// <summary>Returns whether the evaluator interprets <paramref name="op"/> under a reading; a program holding any other
     /// op is refused at construction.</summary>
     /// <param name="op">The op.</param>
     /// <param name="reading">The reading.</param>
     /// <returns><see langword="true"/> when the op is interpreted.</returns>
     public static bool IsSupportedOp(SdfOp op, SdfFieldReading reading) =>
-        (IsSupportedOp(op: op) || ((reading == SdfFieldReading.Render) && (op is SdfOp.AxialProfile or SdfOp.RotatePlane)));
+        (IsSupportedOp(op: op) || ((reading == SdfFieldReading.Render) && RenderWarpOps.Contains(value: op)));
     /// <summary>Returns whether the evaluator interprets <paramref name="shape"/>; a program holding any other shape in its
     /// contact field is refused at construction.</summary>
     /// <param name="shape">The shape.</param>
@@ -55,8 +71,8 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.ScreenSlab or
             SdfShapeType.Superellipsoid or
             SdfShapeType.ConvexPolygon or
-            // strands > 1 is refused separately, at Compile time (see Compile's isSweep check) — this type-keyed
-            // gate cannot see the instruction's own strand count.
+            // strands > 1 is refused separately for contact, at Compile time (see Compile's isSweep check) — this
+            // type-keyed gate cannot see the instruction's own strand count. The render reading takes every strand.
             SdfShapeType.Sweep => true,
             _ => false,
         };

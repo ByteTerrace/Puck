@@ -19,6 +19,8 @@ namespace Puck.World.Authoring;
 [JsonDerivedType(typeof(Repeat), typeDiscriminator: "repeat")]
 [JsonDerivedType(typeof(Polar), typeDiscriminator: "polar")]
 [JsonDerivedType(typeof(Wallpaper), typeDiscriminator: "wallpaper")]
+[JsonDerivedType(typeof(Jitter), typeDiscriminator: "jitter")]
+[JsonDerivedType(typeof(LogSphere), typeDiscriminator: "logSphere")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ShapeDomainOp {
     private ShapeDomainOp() {
@@ -100,6 +102,33 @@ public abstract record ShapeDomainOp {
             }
         }
     }
+    /// <summary>Stochastic lattice fold — <see cref="SdfDomainOp.Jitter"/>: a repeat whose every cell displaces,
+    /// tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy
+    /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
+    /// <param name="Spacing">The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).</param>
+    /// <param name="Amount">The peak-to-peak hashed displacement per axis, creation units; it must stay under the
+    /// least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their
+    /// cell walls and the program refuses them.</param>
+    /// <param name="Seed">The hash seed (null = 0).</param>
+    /// <param name="Tumble">The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).</param>
+    /// <param name="MaterialVariants">The hashed palette rows a copy's material strides over (null = 0, geometric
+    /// only); the palette must hold the rows the stride reaches.</param>
+    /// <param name="Flavor">How the displacement is distributed over the cell (null = White).</param>
+    /// <param name="Origin">The point the lattice folds around, creation units (null = the creation origin).</param>
+    public sealed record Jitter(DocumentVector3 Spacing, float Amount, uint? Seed = null, float? Tumble = null, int? MaterialVariants = null, SdfNoiseFlavor? Flavor = null, DocumentVector3? Origin = null) : ShapeDomainOp;
+    /// <summary>Log-spherical shell fold — <see cref="SdfDomainOp.LogSphere"/>: space tiled into self-similar shells
+    /// about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every
+    /// scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is
+    /// refused by name at validation.</summary>
+    /// <param name="ShellRatio">The ratio between neighbouring shells' radii, above 1 (clamped to at least
+    /// <see cref="MinShellRatio"/>).</param>
+    /// <param name="Twist">The spin each shell turns about the fold's Z axis, in radians per shell (null = 0,
+    /// concentric shells).</param>
+    /// <param name="Origin">The point the shells centre on, creation units (null = the creation origin).</param>
+    public sealed record LogSphere(float ShellRatio, float? Twist = null, DocumentVector3? Origin = null) : ShapeDomainOp {
+        /// <summary>The least shell ratio a fold admits: shells any closer repeat at every scale a float resolves.</summary>
+        public const float MinShellRatio = 1.05f;
+    }
 }
 /// <summary>
 /// Maps a shape's authored <see cref="ShapeDomainOp"/> list onto the SDF VM's own <see cref="SdfDomainOp"/> vocabulary
@@ -153,6 +182,20 @@ public static class ShapeDomainOps {
             Limit: (wallpaper.Limit ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit)),
             MaterialStride: (wallpaper.MaterialStride ?? 0),
             Plane: (wallpaper.Plane ?? SdfPlane.XZ)
+        ),
+            ShapeDomainOp.Jitter jitter => new SdfDomainOp.Jitter(
+            Amount: jitter.Amount,
+            Flavor: (jitter.Flavor ?? SdfNoiseFlavor.White),
+            MaterialVariants: (jitter.MaterialVariants ?? 0),
+            Origin: (jitter.Origin?.Value ?? Vector3.Zero),
+            Seed: (jitter.Seed ?? 0u),
+            Spacing: jitter.Spacing,
+            Tumble: (jitter.Tumble ?? 0f)
+        ),
+            ShapeDomainOp.LogSphere logSphere => new SdfDomainOp.LogSphere(
+            Origin: (logSphere.Origin?.Value ?? Vector3.Zero),
+            ShellRatio: logSphere.ShellRatio,
+            Twist: (logSphere.Twist ?? 0f)
         ),
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(op),
@@ -214,6 +257,8 @@ public static class ShapeDomainOps {
                     : (repeat.Spacing.Value * repeat.Limit!.Value).Length()),
                 ShapeDomainOp.Polar polar => (2f * (polar.Origin?.Length() ?? 0f)),
                 ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
+                // A jitter lattice has no edge, and a log-sphere's shells reach every radius: neither has a bound.
+                ShapeDomainOp.Jitter or ShapeDomainOp.LogSphere => SdfBoundAlgebra.Unbounded,
                 _ => 0f,
             };
         }

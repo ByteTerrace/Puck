@@ -8,17 +8,48 @@ clock, so motion, skinning and motion vectors can be inspected, paused and
 scrubbed. [`shapes.puck`](shapes.puck) holds the exhibits; `debug.puck` imports
 it, expands `galleryPrototypes()` in its `prototypes` block,
 `galleryPlacements()` in its `placements` block and `galleryState()` in its
-`state.world` block, and declares the font the labels emboss in. The gaming
-devices stand on their own row west of the spawn: [`devices.md`](devices.md),
-and the chess table ahead and left of it: [`chess.md`](chess.md).
+`state.world` block, concatenates `gallerySpawns` into its `spawnPoints` and
+`galleryCommands` into its `commands`, and declares the font the labels emboss
+in. The gaming devices stand on their own row west of the spawn:
+[`devices.md`](devices.md), and the chess table ahead and left of it:
+[`chess.md`](chess.md).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, toward the
-origin. The plinth is the exhibit's last shape, so an exhibit's subtraction or
-intersection never cuts it. A plinth that renders wrong shows the exhibit's
-scope or bound reaching its siblings. Exhibits stand 3 m apart from x = 14.
-Slot 0 is the exhibit's grey, slot 1 the plinth, slot 2 the label, and slot 3
-the exhibit's own second material: a blend's tool, the palette channel under
-test, or a moving part.
+origin, with a plaque in small type under the label saying what the exhibit
+demos and what to look for. The plinth is the exhibit's last shape, so an
+exhibit's subtraction or intersection never cuts it. A plinth that renders
+wrong shows the exhibit's scope or bound reaching its siblings. Exhibits stand
+3 m apart from x = 14. Slot 0 is the exhibit's grey, slot 1 the plinth, slot 2
+the label, and slot 3 the exhibit's own second material: a blend's tool, the
+palette channel under test, or a moving part.
+
+## Walking the gallery
+
+The entrance is the `gallery` spawn point (`places.puck`, (14, 0, 9) facing
++Z): `debug.go gallery` stands a player there, looking up the first row, with
+the map board ahead and to the right at (16.5, 0, 11.5) listing every row and
+the z it stands on. A sign stands 3 m before each row's first exhibit, at
+x = 11, naming the row and what it shows. Every exhibit has a spawn point
+named after its prototype, 2.8 m in front of its plinth facing it, so a line
+reaches any exhibit by name; a player walks the rows (+Z, 5 m apart) and reads
+the plaques, and an agent drives the same through the gallery's authored
+commands (`shapes.puck`'s `galleryCommands`, composed from existing verbs;
+`help --names gallery.` lists them):
+
+| To | Console line |
+|---|---|
+| Walk to an exhibit, facing it, in the chase camera | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
+| Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
+| Flag an exhibit that looks wrong | `gallery.flag <exhibit> [note]`: writes `<exhibit>:<note>` to `galleryFlags.last` and prints the body's pose; then `world.screenshot worlds/debug/flags/<exhibit>.png` captures it into the git-ignored `worlds/debug/flags/` folder an agent reads back |
+| Read the last flag | `world.state galleryFlags` |
+
+Each exhibit's and sign's in-world text is a text run on its placement: the
+debug world draws no HUD, so there is nothing to show or hide. An authored
+command may call only verbs every presentation registers and a binding may
+name, which keeps `world.debug-view`, `world.slice` and `world.screenshot` out
+of them: the debug views and the slice stay the console lines under "Looking
+at one exhibit", and a binding row may name `world.debug-view normals` directly
+to cycle a view from a key or a pad button.
 
 ## Rows
 
@@ -38,6 +69,7 @@ for the moving ones; the rows' arrays in `shapes.puck` list them in order.
 | Surfaces | 54 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
 | Motion | 59 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
 | Motion II | 64 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
+| Warps II | 69 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
 
 ## Coverage
 
@@ -75,7 +107,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
 | GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
 | Blends between moving shapes (pooled `group`) | `motion-smooth-blend`, `motion-carve`, `motion-pulse` |
-| Morph, StairsUnion, StairsSubtraction | not exhibited: they compose only at a field-scope pop, and a shape carrying one validates but fails at emission |
+| StairsUnion, StairsSubtraction (`steps`), Morph (`morph { lane, from, to }`) | `shape-stairs-union`, `shape-stairs-subtraction`, `shape-morph`: each composes at the pop of a scope the shape opens for itself, inside its creation's or group's scope too; a static placement reads the morph's lane as zero, halfway through its −1..1 window |
 
 ### Per-shape facets
 
@@ -85,6 +117,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | `chamfer` (Box, Cylinder, extruded Prism) | `shape-chamfer`, `shape-cylinder-chamfer`, `shape-prism-chamfer` |
 | `onion`, `dilate` | `shape-onion`, `shape-dilate` |
 | `flare`, `shear`, `bumps` | `shape-flare`, `shape-shear`, `shape-bumps` |
+| `warp` (DomainWarp), `displace` (Displace), `elongate` (Elongate) | `shape-warp`, `shape-displace`, `shape-elongate` |
 | `cells` F1 and F2 − F1 | `shape-cells-f1`, `shape-cells-f2`, `shape-wrap-soften`, `motion-cells` |
 | `erode` | `shape-erode`: a static placement's lane reads zero, halfway through its −1..1 window |
 | `twist`, `bend` | `motion-twist`, `motion-bend`: only the stamp-pool path emits them, so a static placement ignores both |
@@ -104,7 +137,8 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | Folds riding a moving parent | `motion-mirror`, `motion-polar` |
 | Creation `noise` | `shape-noise` (it displaces the whole creation, plinth and label included) |
 | The other thirteen wallpaper groups | not exhibited: the program refuses every group whose walls are not all mirrors |
-| ISA ops Elongate, LogSphere, CellJitter, Displace, DomainWarp; shape types Vesica, Star | not exhibited: no creation document field emits them; they are builder-only |
+| `jitter` (CellJitter: hashed displacement, tumble, material variants, a noise flavour), `logSphere` (LogSphere) | `shape-jitter`, `shape-jitter-tumble`, `shape-log-sphere`: render only, each clipped by an intersection inside the creation scope, since neither lattice has an edge |
+| Shape types Vesica, Star | not exhibited: no creation primitive lowers to them; they are builder-only |
 | ScreenSlab, SampledRegion | not exhibited: screens and world `fields` emit them, not creations |
 
 ### Surfaces
@@ -295,10 +329,50 @@ to step along it.
   `galleryInputs reach` around `[35.35, 1.45, 63.75]`: the hand follows, and the
   arm folds rather than stretches.
 
+## Evidence per operation
+
+`puck mesh audit --world worlds/debug/debug.puck --cpu` bakes every exhibit on
+the CPU and measures the mesh against the field it was baked from, and the same
+verb with `--build <a World build's directory>` measures the meshes that build's
+boot stored (the owner's Direct3D 12 bakes) against the CPU field, so a GPU
+mesh lying on the CPU field is the two interpreters agreeing on the op. The
+fixed-point evaluator's render reading reads every op the renderer draws, each
+a twin of its `mapCore` case held to the kernel's own formula by
+`SdfRenderOpsLawTests`, so every exhibit but the Path profiles (which only the
+kernels read) is audited. Off-surface p99 of the GPU mesh against the CPU
+field, in millimetres, and what the exhibit's score is made of:
+
+| Operation | Exhibit | GPU mesh off the CPU field (p99) | Verdict |
+|---|---|---|---|
+| Sweep, tapered, three and four strands | `shape-sweep*`, `shape-sweep-braid` | 0.08 to 0.09 | correct; the strand search and the CPU's agree to the search's resolution |
+| Rounding, chamfer, onion, dilate | `shape-rounding`, `-chamfer`, `-onion`, `-dilate` | 0.05 to 0.5 | correct |
+| Flare (AxialProfile) | `shape-flare` | 0.02 | field correct; the bake is coarse (a 57 mm cell against 27 mm on its neighbours), since the final lattice is sized by the shape's inflated influence sphere, so the flare reads faceted |
+| Shear, bumps (GaussianPush) | `shape-shear`, `shape-bumps` | 0.02, 0.05 | correct; the shear bakes at a 69 mm cell for the same reason as the flare |
+| Cells F1, F2 − F1 | `shape-cells-f1`, `-f2` | 0.06 to 0.09 | correct; the slope deficit the audit reports is the relief's own, not a defect |
+| Polar fold, mirrored, about Z, material stride | `shape-polar-*` | 0.14 to 1.3 | correct; the mirrored fold's crease at the sector bisector is the kaleidoscope's, where its box straddles the mirror |
+| Wallpaper Pmm, P4M, stride | `shape-wallpaper-pmm`, `-p4m`, `-stride` | 0.15 to 0.35 | correct; `shape-wallpaper-pmm` alone has two small patches 17 mm off the field at x = 38 ± 0.43 in the GPU bake, which the CPU bake does not have (open) |
+| Wallpaper P3M1, P6M | `shape-wallpaper-p3m1`, `-p6m` | 3.4, 4.2 | field correct on both interpreters; both bakes crease and flip triangles along the twelve mirrors of a cell (open) |
+| Erode (LaneErode), creation noise (NoiseDisplace) | `shape-erode`, `shape-noise` | 0.05, 0.27 | correct |
+| Smooth, chamfer, groove, pipe blends | `shape-smooth-*`, `-chamfer-*`, `-groove-*`, `-pipe-*` | 0.1 to 0.5 | correct; creases score as normal error at hard seams |
+| Subtraction, intersection, xor | `shape-blend-*` | 0.2 to 0.7 | correct; `shape-blend-union` bakes 48 open edges where box and sphere meet (open) |
+| Moving blends, twist, bend | `motion-smooth-blend`, `motion-twist`, `motion-bend` | 0.15 to 0.4 | correct at their baked pose; PUCK122 and the settle rebake cover the motion |
+| Domain warp, sine relief, elongate, jitter, log sphere, stairs, morph | `shape-warp` and the rest of the z 69 row | CPU bake only until the owner's World boots this document | field correct by `SdfRenderOpsLawTests` and `SeamBlendLawTests`; see the GPU capture list under open items |
+
 ## Known defects the gallery shows
 
-Each of these was seen in a Direct3D 12 capture of the gallery.
-`docs/plans/open-items.md` tracks them.
+Each of these was seen in a Direct3D 12 capture of the gallery or in
+`puck mesh audit`. `docs/plans/open-items.md` tracks them.
+
+- **Warped shapes bake coarse.** `shape-flare` bakes at a 57 mm cell and
+  `shape-shear` at 69 mm where their neighbours bake at 21 to 30 mm: a group's
+  final lattice takes its spacing from each member's influence sphere, which
+  a warp inflates by its reach factor, so the lattice is sized for a shape up
+  to twice the size of the one it meshes and the flare's barrel reads faceted
+  (`normal face p50 18 deg` in the audit).
+- **Hex wallpaper creases.** `shape-wallpaper-p3m1` and `-p6m` fold and flip
+  hundreds of triangles along their mirrors in both the CPU and the GPU bake
+  while the field itself matches `SdfWallpaperFold.Fold` to 2 mm: the contour
+  reads the mirror seams as creases a cell wide.
 
 - **Moving blends stretch while they move.** `motion-smooth-blend`,
   `motion-carve` and `motion-pulse` join shapes that move independently

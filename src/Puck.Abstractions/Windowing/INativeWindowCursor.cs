@@ -8,7 +8,7 @@ namespace Puck.Abstractions.Windowing;
 /// </summary>
 public interface INativeWindowCursor {
     /// <summary>Gets or sets whether the pointer is locked to the window for a drag that reads only its motion. While
-    /// locked, the window hides the cursor, holds the mouse capture, confines the cursor to its client area, reports no
+    /// locked, the window hides the cursor, holds the mouse capture wherever the cursor roams, reports no
     /// new pointer position, and returns the cursor to the client area's centre whenever it wanders far from it, so the
     /// relative motion it reports never ends at a window or screen edge, absolute-mode input (a remote desktop session's
     /// mouse) included. Clearing it frees the cursor where the lock began. Losing the window's focus clears it.

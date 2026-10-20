@@ -36,15 +36,18 @@ the window, so the drag keeps turning however far the mouse travels, Remote
 Desktop included; releasing the button shows the cursor again where the drag
 began.
 
+Every control the controller bar shows has a keyboard equivalent (the owner's
+rule): the bar is the debug world's only on-screen UI.
+
 | Keyboard and mouse | Gamepad | Action |
 |---|---|---|
-| W / S, up / down arrows | Left stick | Move forward / backward |
-| A / D | Left stick | Strafe |
+| W / S, up / down arrows | Left stick, d-pad up / down | Move forward / backward |
+| A / D | Left stick, d-pad left / right | Strafe |
 | Left / right arrows | | Turn |
 | Left mouse drag | | Orbit the gameplay camera |
 | Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
 | Left and right mouse buttons held | | Walk forward while the right button steers |
-| | Right stick press (hold) | Recenter the camera behind the body |
+| R (hold) | Right stick press (hold) | Recenter the camera behind the body |
 | F | North | Switch flight mode on or off |
 | Space | South | Jump, twice before landing; in flight mode, rise |
 | Ctrl | East | In flight mode, descend and land |

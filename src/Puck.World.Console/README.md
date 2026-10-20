@@ -118,7 +118,7 @@ server's own counters), `world.lighting` (`WorldLightingCommandModule`, the
 `render` section's lights, sky, grounding and tonemap), `world.timeline`
 (`WorldTimelineCommandModule`, the named clocks), `world.extensions`
 (`WorldExtensionsCommandModule`, the host-approved extension runtime), and
-`machine.state`/`machine.operation`/`machine.content`/`machine.swap` (`WorldMachineCommandModule`).
+`machine.state`/`machine.operation`/`machine.content`/`machine.swap`/`machine.default` (`WorldMachineCommandModule`).
 
 `WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
 `IWorldNarrationSink` implementation every composition root binds so a

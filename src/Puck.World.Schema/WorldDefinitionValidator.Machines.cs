@@ -96,6 +96,8 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{path}.contentFolders[{folderIndex}] '{folder}' is listed twice.");
                     }
                 }
+            } else if (machine.PreferFolderDefault) {
+                errors.Add(item: $"{path}.preferFolderDefault needs contentFolders to hold the default.");
             }
             ValidateMachineBindings(
                 definition: definition,
@@ -123,8 +125,7 @@ public static partial class WorldDefinitionValidator {
                 );
                 foreach (var error in configurationErrors) {
                     errors.Add(item: $"{path}.{error}");
-                }
-            }
+                }            }
         }
     }
     private static void ValidateMachineBindings(WorldDefinition definition, WorldMachine machine, string path, List<string> errors) {

@@ -1303,6 +1303,71 @@ public static partial class CreationCanonicalizer {
 
                         break;
                     }
+                case ShapeDomainOp.Jitter jitter: {
+                        if (!VectorFunctions.IsFinite(vector: jitter.Spacing)) {
+                            errors.Add(item: new(
+                                Message: "spacing is non-finite.",
+                                Path: $"{opPath}.spacing"
+                            ));
+                        }
+                        // The builder's own containment rule, read against the clamped spacing it packs.
+                        var least = MathF.Min(x: MathF.Max(x: MathF.Abs(x: jitter.Spacing.X), y: 0.001f), y: MathF.Min(x: MathF.Max(x: MathF.Abs(x: jitter.Spacing.Y), y: 0.001f), y: MathF.Max(x: MathF.Abs(x: jitter.Spacing.Z), y: 0.001f)));
+
+                        if (!float.IsFinite(f: jitter.Amount) || (MathF.Abs(x: jitter.Amount) >= least)) {
+                            errors.Add(item: new(
+                                Message: $"amount must be finite and under the least spacing ({least}), or a copy crosses its cell wall.",
+                                Path: $"{opPath}.amount"
+                            ));
+                        }
+                        if ((jitter.Tumble is { } tumble) && (!float.IsFinite(f: tumble) || (tumble < 0f) || (tumble > 1f))) {
+                            errors.Add(item: new(
+                                Message: "tumble must be a finite share of a half turn in [0, 1].",
+                                Path: $"{opPath}.tumble"
+                            ));
+                        }
+                        if ((jitter.MaterialVariants is { } variants) && (variants < 0)) {
+                            errors.Add(item: new(
+                                Message: "materialVariants must be at least zero.",
+                                Path: $"{opPath}.materialVariants"
+                            ));
+                        }
+                        if ((jitter.Flavor is { } flavor) && !Enum.IsDefined(value: flavor)) {
+                            errors.Add(item: new(
+                                Message: $"flavor '{flavor}' is not recognized.",
+                                Path: $"{opPath}.flavor"
+                            ));
+                        }
+                        if ((jitter.Origin is { } origin) && !VectorFunctions.IsFinite(vector: origin)) {
+                            errors.Add(item: new(
+                                Message: "origin is non-finite.",
+                                Path: $"{opPath}.origin"
+                            ));
+                        }
+
+                        break;
+                    }
+                case ShapeDomainOp.LogSphere logSphere: {
+                        if (!float.IsFinite(f: logSphere.ShellRatio) || (logSphere.ShellRatio < ShapeDomainOp.LogSphere.MinShellRatio)) {
+                            errors.Add(item: new(
+                                Message: $"shellRatio must be finite and at least {ShapeDomainOp.LogSphere.MinShellRatio}.",
+                                Path: $"{opPath}.shellRatio"
+                            ));
+                        }
+                        if ((logSphere.Twist is { } twist) && !float.IsFinite(f: twist)) {
+                            errors.Add(item: new(
+                                Message: "twist is non-finite.",
+                                Path: $"{opPath}.twist"
+                            ));
+                        }
+                        if ((logSphere.Origin is { } origin) && !VectorFunctions.IsFinite(vector: origin)) {
+                            errors.Add(item: new(
+                                Message: "origin is non-finite.",
+                                Path: $"{opPath}.origin"
+                            ));
+                        }
+
+                        break;
+                    }
             }
         }
     }
@@ -1861,6 +1926,20 @@ public static partial class CreationCanonicalizer {
                 ? (wallpaper.Plane ?? SdfPlane.XZ)
                 : SdfPlane.XZ)
             ),
+            ShapeDomainOp.Jitter jitter => new ShapeDomainOp.Jitter(
+                Amount: (float.IsFinite(f: jitter.Amount) ? MathF.Abs(x: jitter.Amount) : 0f),
+                Flavor: (Enum.IsDefined(value: (jitter.Flavor ?? SdfNoiseFlavor.White)) ? (jitter.Flavor ?? SdfNoiseFlavor.White) : SdfNoiseFlavor.White),
+                MaterialVariants: Math.Max(val1: (jitter.MaterialVariants ?? 0), val2: 0),
+                Origin: NormalizeOptionalOrigin(value: jitter.Origin),
+                Seed: (jitter.Seed ?? 0u),
+                Spacing: NormalizeSpacing(value: jitter.Spacing),
+                Tumble: Math.Clamp(value: (float.IsFinite(f: (jitter.Tumble ?? 0f)) ? (jitter.Tumble ?? 0f) : 0f), min: 0f, max: 1f)
+            ),
+            ShapeDomainOp.LogSphere logSphere => new ShapeDomainOp.LogSphere(
+                Origin: NormalizeOptionalOrigin(value: logSphere.Origin),
+                ShellRatio: (float.IsFinite(f: logSphere.ShellRatio) ? MathF.Max(x: logSphere.ShellRatio, y: ShapeDomainOp.LogSphere.MinShellRatio) : ShapeDomainOp.LogSphere.MinShellRatio),
+                Twist: (float.IsFinite(f: (logSphere.Twist ?? 0f)) ? (logSphere.Twist ?? 0f) : 0f)
+            ),
             _ => op,
         };
     }
@@ -2173,6 +2252,10 @@ public static partial class CreationCanonicalizer {
                 Flare = NormalizeFlare(flare: shape.Flare),
                 Bumps = NormalizeBumps(bumps: shape.Bumps),
                 Shear = NormalizeShear(shear: shape.Shear),
+                Warp = NormalizeWarp(warp: shape.Warp),
+                Displace = NormalizeDisplace(displace: shape.Displace),
+                Elongate = NormalizeElongate(elongate: shape.Elongate),
+                Steps = ((shape.Steps is { } steps) ? Math.Clamp(value: steps, min: 1, max: ShapeScope.MaxSteps) : null),
             });
             _ = shapeIds.Add(item: shape.Id);
         }
@@ -2328,6 +2411,7 @@ public static partial class CreationCanonicalizer {
                 path: $"shapes[{i}].bumps",
                 shape: shape
             );
+            ValidateWarpFacets(errors: errors, index: i, shape: shape);
             if ((shape.Exponent is { } exponent) && ((shape.Type != SdfSolidPrimitive.Superellipsoid) || !float.IsFinite(f: exponent) || (exponent < SdfProgramBuilder.MinSuperellipsoidExponent) || (exponent > SdfProgramBuilder.MaxSuperellipsoidExponent))) {
                 errors.Add(item: new(Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}].", Path: $"shapes[{i}].exponent"));
             }
@@ -2339,11 +2423,31 @@ public static partial class CreationCanonicalizer {
                     Message: $"blend '{blend}' is not recognized.",
                     Path: $"shapes[{i}].blend"
                 ));
-            } else if (shape.Blend is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
-                errors.Add(item: new(
-                    Message: $"blend '{shape.Blend}' composes a closed field scope and cannot blend a shape; use a shape blend such as Union, SmoothUnion, Subtraction, or ChamferUnion.",
-                    Path: $"shapes[{i}].blend"
-                ));
+            } else if (shape.Blend is SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
+                // A stairs seam needs a radius to step over, and the VM's two scope levels leave none for a shape's own
+                // scope under a grouped, text-bearing creation's outer scope.
+                if (!((shape.Smooth ?? 0f) > 0f)) {
+                    errors.Add(item: new(Message: $"blend '{shape.Blend}' needs a smooth radius above zero to step over.", Path: $"shapes[{i}].smooth"));
+                }
+                if ((shape.Steps is { } steps) && ((steps < 1) || (steps > ShapeScope.MaxSteps))) {
+                    errors.Add(item: new(Message: $"steps must be in [1, {ShapeScope.MaxSteps}].", Path: $"shapes[{i}].steps"));
+                }
+                if ((shape.Group is not (null or 0)) && (document.TextRuns is { Count: > 0 })) {
+                    errors.Add(item: new(Message: $"blend '{shape.Blend}' needs a scope of its own, which a grouped shape of a text-bearing creation has no depth left for.", Path: $"shapes[{i}].blend"));
+                }
+            } else if (shape.Blend is SdfBlendOp.Morph) {
+                if (shape.Morph is not { } morph) {
+                    errors.Add(item: new(Message: "blend 'Morph' needs a morph facet naming its lane and range.", Path: $"shapes[{i}].morph"));
+                } else if ((morph.Lane < 0) || (morph.Lane > 3) || !float.IsFinite(f: morph.From) || !float.IsFinite(f: morph.To) || (morph.From == morph.To)) {
+                    errors.Add(item: new(Message: "morph requires a lane in [0, 3] and finite, differing from and to values.", Path: $"shapes[{i}].morph"));
+                }
+                if ((shape.Group is not (null or 0)) && (document.TextRuns is { Count: > 0 })) {
+                    errors.Add(item: new(Message: "blend 'Morph' needs a scope of its own, which a grouped shape of a text-bearing creation has no depth left for.", Path: $"shapes[{i}].blend"));
+                }
+            } else if (shape.Steps is not null) {
+                errors.Add(item: new(Message: "steps requires a stairs blend.", Path: $"shapes[{i}].steps"));
+            } else if (shape.Morph is not null) {
+                errors.Add(item: new(Message: "morph requires blend 'Morph'.", Path: $"shapes[{i}].morph"));
             }
             if (!VectorFunctions.IsFinite(vector: shape.Position)) {
                 errors.Add(item: new(

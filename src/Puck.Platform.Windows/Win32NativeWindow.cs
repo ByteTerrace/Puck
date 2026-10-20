@@ -264,12 +264,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             _ = User32.SetCapture(windowHandle: m_windowHandle);
         }
 
-        _ = User32.ClipCursor(rectangle: new Rectangle {
-            Bottom = (origin.Y + client.Bottom),
-            Left = origin.X,
-            Right = (origin.X + client.Right),
-            Top = origin.Y,
-        });
+        // No ClipCursor: the capture already routes every mouse message here wherever the cursor is, the recentre
+        // brings it back, and confining it could only move the cursor a Remote Desktop client reports from without
+        // the window knowing.
         _ = User32.SetCursor(cursorHandle: 0);
         RecentrePointer();
     }
@@ -281,7 +278,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
 
         m_locksPointer = false;
-        _ = User32.FreeCursor(rectangle: 0);
 
         if (restore) {
             WarpPointer(screen: m_lockRestore);
@@ -1410,7 +1406,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
     private nint HandleMouseLeave() {
         m_pointerLeaveTracked = false;
 
-        if (m_pointerButtons != 0) {
+        // A drag, held button or locked pointer, keeps the pointer until it ends: the cursor may roam outside meanwhile.
+        if (
+            (m_pointerButtons != 0) ||
+            m_locksPointer
+        ) {
             return 0;
         }
 

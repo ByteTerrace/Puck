@@ -9,6 +9,12 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
 [mutations.md](mutations.md) (ordinals 39–43).
 
+**Owner's rulings for the debug world.** The controller bar is the only
+on-screen UI the debug world wants: add no other panel, chip or hint row (a
+mouse chord stays off the bar; the bar's `modifiers` row stays off). Every
+control the bar shows has a sensible keyboard equivalent bound beside it, for
+example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
+
 ## Contents
 
 - Schema and caps
