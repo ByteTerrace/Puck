@@ -545,7 +545,10 @@ public static partial class RuleCompiler {
             );
         }
 
-        return decimal.ToInt64(d: decimal.Ceiling(d: (seconds * ratePerSecond)));
+        return ((long)FixedTickConversion.DurationTicks(
+            ratePerSecond: ((ulong)ratePerSecond),
+            seconds: seconds
+        ));
     }
     /// <summary>Converts a non-negative duration in seconds to an exact whole engine-tick count, refusing one that
     /// has none.</summary>

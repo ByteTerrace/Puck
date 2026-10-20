@@ -38,28 +38,24 @@ public static class WorldSimulationTickConversion {
             seconds: seconds
         )));
     }
-    /// <summary>Converts a duration to the smallest whole simulation-tick count no less than its exact value — the
-    /// engine's one round-up rule, <see cref="FixedTickConversion.DurationTicks(FixedQ4816, ulong)"/>, at the world's
-    /// authored rate. Rounds up rather than refusing an inexact duration; a world-rule countdown authored via
+    /// <summary>Converts an authored duration to the smallest whole simulation-tick count no less than its decimal
+    /// value — the engine's one round-up rule, <see cref="FixedTickConversion.DurationTicks(decimal, ulong)"/>, at the
+    /// world's authored rate. The <c>float</c> field reaches the rule as a decimal of seven significant digits, which
+    /// recovers every authored value of seven digits or fewer, never through its binary quantization, so <c>0.1</c> at
+    /// 30 Hz is three ticks. Rounds up rather than refusing an inexact duration; a world-rule countdown authored via
     /// <c>valueSeconds</c> must use <see cref="FixedTickConversion.TryDurationEngineTicksExact"/> instead, which
     /// refuses.</summary>
-    /// <param name="seconds">The duration to convert.</param>
+    /// <param name="seconds">The authored duration, in seconds.</param>
     /// <param name="ratePerSecond">The simulation rate (Hz) to convert against — a world's own
     /// <see cref="WorldDefinition.SimulationRateHz"/>.</param>
     /// <returns><paramref name="seconds"/> in simulation ticks, rounded up; <c>0</c> when <paramref name="seconds"/>
     /// is zero or negative.</returns>
-    public static ulong DurationTicks(FixedQ4816 seconds, uint ratePerSecond) => FixedTickConversion.DurationTicks(
+    /// <exception cref="OverflowException"><paramref name="seconds"/> is not finite or lies outside the decimal range,
+    /// or the rounded tick count exceeds the 64-bit tick carrier.</exception>
+    public static ulong DurationTicks(float seconds, uint ratePerSecond) => FixedTickConversion.DurationTicks(
         ratePerSecond: ratePerSecond,
-        seconds: seconds
+        seconds: ((decimal)seconds)
     );
-    /// <summary>Convenience overload for the common <c>float</c>-authored document case — see
-    /// <see cref="DurationTicks(FixedQ4816, uint)"/>.</summary>
-    public static ulong DurationTicks(float seconds, uint ratePerSecond) {
-        return DurationTicks(
-            seconds: FixedQ4816.FromDouble(value: seconds),
-            ratePerSecond: ratePerSecond
-        );
-    }
     /// <summary>The inverse of <see cref="DurationTicks(float, uint)"/> — the number of seconds a whole
     /// simulation-tick count spells, for round-tripping an authored value on save/read-back. Exact whenever
     /// <paramref name="ticks"/> is a multiple of <paramref name="ratePerSecond"/>; otherwise the nearest
