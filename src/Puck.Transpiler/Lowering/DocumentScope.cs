@@ -98,25 +98,30 @@ public interface IDocumentVocabulary {
     /// <param name="scope">The active scope, positioned at the member's value type.</param>
     /// <returns>The document value. The default leaves it unchanged.</returns>
     JsonNode? NormalizeMemberValue(JsonNode? value, DocumentValueForm form, DocumentScope scope) => value;
-    /// <summary>Returns whether a runtime document import (an <c>import</c> not naming a <c>.puck</c> module) names a
-    /// document that exists beside the importing source.</summary>
+    /// <summary>Resolves what an <c>import</c> names beside the importing source. A name is either a module library,
+    /// a <c>.puck</c> source that emits no document, whose <c>let</c> and template declarations the import brings
+    /// into the importer's compile; or a document, which the importer's own document composes in at load. Which one
+    /// is the named file's own to say, never the import's spelling.</summary>
     /// <param name="directory">The full path of the importing source's directory.</param>
-    /// <param name="name">The imported name as written.</param>
-    /// <param name="reason">The named refusal when the import names nothing this vocabulary can read, or empty.</param>
-    /// <returns><see langword="true"/> when the document exists. The default reads <paramref name="name"/> as a file
-    /// path.</returns>
-    bool TryFindDocumentImport(string directory, string name, out string reason) {
+    /// <param name="name">The imported name as written, carrying no file suffix.</param>
+    /// <param name="library">The library source's full path when the name names a module library;
+    /// <see langword="null"/> when it names a document, or on failure.</param>
+    /// <param name="reason">The named refusal when the name names nothing this vocabulary can read, or empty.</param>
+    /// <returns><see langword="true"/> when the name resolves. The default reads <paramref name="name"/> as the
+    /// library <c>&lt;name&gt;.puck</c>, since a vocabulary without documents composes none.</returns>
+    bool TryResolveImport(string directory, string name, out string? library, out string reason) {
         var path = Path.GetFullPath(path: Path.Combine(
             path1: directory,
-            path2: name
+            path2: (name + ".puck")
         ));
 
-        reason = (CompileInputs.Exists(path: path)
+        library = (CompileInputs.Exists(path: path) ? path : null);
+        reason = ((library is not null)
             ? string.Empty
-            : $"Imported document '{name}' could not be found at '{path}'."
+            : $"Imported module '{name}' could not be found at '{path}'."
         );
 
-        return (reason.Length == 0);
+        return (library is not null);
     }
 }
 /// <summary>How the value of a call argument is written in source.</summary>

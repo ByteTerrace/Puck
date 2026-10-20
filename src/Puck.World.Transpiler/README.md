@@ -33,7 +33,7 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 
 `WorldCompiler.Compile`/`CompileFile` ([`WorldCompiler.cs`](WorldCompiler.cs)) is the one entry point into that
 pipeline: source text in, canonical document out, having parsed with this vocabulary, walked the import graph
-(`ImportHandling` picks validate, bundle, or neither) and resolved authored vector text against the
+(`ImportHandling` picks validate or neither) and resolved authored vector text against the
 `.embeddings.json` lock beside the source. `asset "path"` additionally checks the `<stem>.assets.json` lock beside the root
 source; explicit refresh prepares pins without writing until the caller saves after validation. See
 [pinning file assets](../../docs/authoring/README.md#pinning-file-assets) for the CLI workflow.
@@ -90,7 +90,7 @@ A document name resolves through one index per directory,
 spells and each `.puck` source exactly the names it emits (`WorldCompilation.EmittedNames`), whatever its stem, read
 from its parse alone (`WorldSourceDeclaration`) — never a compile, since a compile reads its own basis through the
 same index. A source emits nothing when it names no schema or basis, declares no world, and holds only `let`,
-`template`/`module`, `.puck` imports and `test` blocks at its top level (a module library); each world it declares
+`template`/`module`, `import` and `test` blocks at its top level (a module library); each world it declares
 when it declares any; and its stem otherwise. The lowering admits a world only as the parse reads it, declared at the
 top level under a written name, so the index and every compile agree by construction, and a law holds them to agree
 over every tracked source. The composer, `puck compile --tree` and the official build all resolve names through it.
@@ -137,7 +137,7 @@ basis: "worlds/base"
 
 let name = expression                 // compile-time constant
 template name(param, param2 = default) { ... }
-import "path" [as alias]
+import "name" [as alias]                // a library's lets and templates, or a document composed in (never "name.puck")
 export read|action|binding name, name2       // names may wrap onto lines indented under the keyword;
                                              // a facet word alone on its line is an empty exported array
 

@@ -12,8 +12,8 @@ let feltColor = #1b4d3e
 let accentColor = #ffaa00ff
 let doubleFps = 60 * 2
 
-// Module imports
-import "extensions/rules.world.puck" as rules
+// Imports: a module library and a document
+import "extensions/rules"
 import "modules/arcade"
 
 // Parametric templates
@@ -229,3 +229,6 @@ rule "choose-seat" {
     }
   }
 }
+
+// A rule a module library authors, expanded from its template.
+resetTable()

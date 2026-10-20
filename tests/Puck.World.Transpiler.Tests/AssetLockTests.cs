@@ -309,7 +309,7 @@ public sealed class AssetLockTests {
             """u8, name: "modules/cabinet.puck");
         const string Source = """
             schema: "puck.world.definition.v1"
-            import "../modules/cabinet.puck"
+            import "../modules/cabinet"
             use cabinet()
             """;
 

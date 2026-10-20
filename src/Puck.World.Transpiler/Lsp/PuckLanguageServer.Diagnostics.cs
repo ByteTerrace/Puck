@@ -53,8 +53,8 @@ public sealed partial class PuckLanguageServer {
         ? version
         : null
     );
-    // The files a document names through its basis and its imports: a document name resolves beside the document to
-    // both its source and its document file, and a module import is the path it spells.
+    // The files a document names through its basis and its imports: a name resolves beside the document to both its
+    // source, which is a module library's file too, and its document file.
     private static HashSet<string> ReadDependencies(DocumentNode document, string sourcePath) {
         var names = new List<string>();
         var dependencies = new HashSet<string>(comparer: PuckPaths.Comparer);
@@ -77,14 +77,6 @@ public sealed partial class PuckLanguageServer {
             )) {
                 _ = dependencies.Add(item: PuckPaths.Normalize(path: documentPath));
                 _ = dependencies.Add(item: PuckPaths.Normalize(path: resolvedSource));
-            }
-            try {
-                _ = dependencies.Add(item: PuckPaths.Normalize(path: Path.Combine(
-                    path1: (Path.GetDirectoryName(path: sourcePath) ?? ""),
-                    path2: name
-                )));
-            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-                // A name no path can carry depends on nothing a file edit can change.
             }
         }
 

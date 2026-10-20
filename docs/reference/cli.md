@@ -92,7 +92,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
-| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)` and `creation.shape`: list registered sculpts, apply one to a world file, report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
@@ -3022,7 +3022,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -3063,13 +3063,15 @@ deterministic across processes; [`puck affected`](#puck-affectedthe-checks-a-cha
 chooses it when a shipped world or the code the compile's output depends on
 changes.
 A world source that names no schema or basis, declares no world, and holds only
-`let`, `template` or `module`, `.puck` import and `test` statements at its top
-level, such as a module library like `worlds/rulepush/hub.puck` that only
-declares `module hub(...)`, emits no document: `compile` writes nothing for it,
-prints nothing, and succeeds, so it never stands under the name of a world a
-composition beside it declares. A document import names a document (`import "klondike"`), and
-resolves to its `.puck` source or its `.world.json` document beside the
-importer, so no source depends on another's compiled output.
+`let`, `template` or `module`, `import` and `test` statements at its top
+level, such as a module library like `skies.puck` that only declares sky
+templates, emits no document: `compile` writes nothing for it, prints nothing,
+and succeeds, so it never stands under the name of a world a composition beside
+it declares. An import names a source or document, never its file
+(`import "klondike"`; `import "klondike.puck"` is PUCK121), and resolves to its
+`.puck` source or its `.world.json` document beside the importer, so no source
+depends on another's compiled output. A module library hands the importer its
+`let`s and templates; anything else is a document the importer composes.
 
 Beside every world document it writes, `compile` writes that document's
 [compiled world](../architecture/worlds.md#compiled-worlds), `<name>.puckb`,

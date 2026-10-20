@@ -302,8 +302,8 @@ cartridge-hosted checks resolve — no separate registration step), then
 `puck compile <file> --validate` (lowers to JSON AND runs the SAME semantic
 engine schema rules `WorldDefinitionValidator` enforces at boot — this is the
 DSL-side closure with "The validator" in
-[documents-composition.md](documents-composition.md); `--bundle` inlines
-imports, the DSL-side counterpart of `basis`/`imports` composition there).
+[documents-composition.md](documents-composition.md), which also says what an
+`import` brings in).
 `puck decompile <path.json> [-o path.puck]` runs the reverse for an
 existing hand-authored or generator-produced JSON world. None of the three
 verbs touch a running `Puck.World`. Grammar, flags, and diagnostics beyond

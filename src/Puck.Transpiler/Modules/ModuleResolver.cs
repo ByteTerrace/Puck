@@ -8,14 +8,47 @@ using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Modules;
 
-/// <summary>Resolves multi-document import dependency graphs, detects cycles, and supports optional bundling.</summary>
+/// <summary>Resolves a source's import graph: each import names a module library, whose <c>let</c> and template
+/// declarations it brings into the importer's compile, or a document, which the importer's document composes at load
+/// (<see cref="IDocumentVocabulary.TryResolveImport"/>). The walk reports a name that resolves to nothing, a cycle
+/// among libraries, and a library importing a document, which would compose nowhere.</summary>
 public static class ModuleResolver {
     private sealed class ImportContext(IDocumentVocabulary? vocabulary, CancellationToken cancellationToken) {
+        private readonly Dictionary<(string Directory, string Name), string?> m_libraries = [];
+
         public Dictionary<string, DocumentNode> Documents { get; } = new(comparer: StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, int> SourceLengths { get; } = new(comparer: StringComparer.OrdinalIgnoreCase);
         public IDocumentVocabulary? Vocabulary { get; } = vocabulary;
         public CancellationToken CancellationToken { get; } = cancellationToken;
 
+        // Resolves a name once per walk; library is the library's full path, or null for a document.
+        public bool TryResolve(string directory, string name, out string? library, out string reason) {
+            reason = string.Empty;
+
+            if (m_libraries.TryGetValue(key: (directory, name), value: out library)) {
+                return true;
+            }
+            if (!(Vocabulary ?? FileDocuments.Instance).TryResolveImport(
+                directory: directory,
+                library: out library,
+                name: name,
+                reason: out reason
+            )) {
+                return false;
+            }
+
+            library = ((library is null) ? null : Path.GetFullPath(path: library));
+            m_libraries.Add(key: (directory, name), value: library);
+
+            return true;
+        }
+        // The library an import brings declarations from, or null when it names a document or nothing.
+        public string? Library(string directory, ImportNode import) => ((!import.NamesFile && TryResolve(
+            directory: directory,
+            library: out var library,
+            name: import.Path,
+            reason: out _
+        )) ? library : null);
         public DocumentNode Read(string path) {
             CancellationToken.ThrowIfCancellationRequested();
             if (!Documents.TryGetValue(key: path, value: out var document)) {
@@ -40,7 +73,7 @@ public static class ModuleResolver {
             value2: StringComparer.Ordinal.GetHashCode(obj: obj.Namespace)
         );
     }
-    // The vocabulary-free reading of a runtime document import: the name is a file path beside the importer.
+    // The vocabulary-free reading of an import: the name is a library beside the importer.
     private sealed class FileDocuments : IDocumentVocabulary {
         public static FileDocuments Instance { get; } = new();
 
@@ -52,52 +85,6 @@ public static class ModuleResolver {
         val1: (DocumentEvaluationBudget.WorkLimit + 1L),
         val2: (left + right)
     );
-    private static void CollectStatements(
-        string currentDir,
-        DocumentNode doc,
-        HashSet<string> loadedFiles,
-        List<StatementNode> outputStatements,
-        DiagnosticBag diagnostics,
-        IDocumentVocabulary? vocabulary = null
-    ) {
-        foreach (var stmt in doc.Statements) {
-            if (stmt is ImportNode importNode) {
-                var resolvedTarget = Path.GetFullPath(path: Path.Combine(
-                    path1: currentDir,
-                    path2: importNode.Path
-                ));
-
-                if (
-                    loadedFiles.Add(item: resolvedTarget) &&
-                    resolvedTarget.EndsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: ".puck"
-                )
-                ) {
-                    if (CompileInputs.Exists(path: resolvedTarget)) {
-                        var subText = CompileInputs.ReadAllText(path: resolvedTarget);
-                        var subDoc = PuckParser.ParseDocument(source: subText, vocabulary: vocabulary);
-                        var subDir = (Path.GetDirectoryName(path: resolvedTarget) ?? "");
-                        var importedStatements = new List<StatementNode>();
-
-                        CollectStatements(
-                            currentDir: subDir,
-                            diagnostics: diagnostics,
-                            doc: subDoc,
-                            loadedFiles: loadedFiles,
-                            outputStatements: importedStatements,
-                            vocabulary: vocabulary
-                        );
-                        outputStatements.AddRange(collection: ((importNode.Alias is { } alias)
-                            ? PrefixModuleSymbols(alias: alias, statements: importedStatements)
-                            : importedStatements));
-                    }
-                }
-            } else {
-                outputStatements.Add(item: stmt);
-            }
-        }
-    }
     private static IReadOnlyList<StatementNode> PrefixModuleSymbols(IReadOnlyList<StatementNode> statements, string alias) {
         var symbols = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -222,66 +209,65 @@ public static class ModuleResolver {
 
         var success = true;
 
-        foreach (var stmt in doc.Statements) {
-            if (stmt is ImportNode importNode) {
-                var resolvedTarget = Path.GetFullPath(path: Path.Combine(
-                    path1: currentDir,
-                    path2: importNode.Path
-                ));
-                var module = resolvedTarget.EndsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: ".puck"
+        // Every source the walk reads past the root is a library: a document import is never walked here.
+        var inLibrary = (activeChain.Count > 1);
+
+        foreach (var importNode in doc.Statements.OfType<ImportNode>()) {
+            // The parser refuses a file spelling wherever it reads one: into the root's diagnostics, and as a parse
+            // failure of the library that holds it.
+            if (importNode.NamesFile) {
+                continue;
+            }
+
+            if (!context.TryResolve(
+                directory: currentDir,
+                library: out var library,
+                name: importNode.Path,
+                reason: out var missing
+            )) {
+                diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.ImportTargetMissing,
+                    message: missing,
+                    span: importNode.Span
                 );
+                success = false;
 
-                if (!module) {
-                    // A runtime document import: which files can carry the named document is the vocabulary's own rule.
-                    if (!(context.Vocabulary ?? FileDocuments.Instance).TryFindDocumentImport(
-                        directory: currentDir,
-                        name: importNode.Path,
-                        reason: out var missing
-                    )) {
-                        diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.ImportTargetMissing,
-                            message: missing,
-                            span: importNode.Span
-                        );
-                        success = false;
-                    }
+                continue;
+            }
 
-                    continue;
-                }
-
-                if (!CompileInputs.Exists(path: resolvedTarget)) {
-                    diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.ImportTargetMissing,
-                        message: $"Imported module '{importNode.Path}' could not be found at '{resolvedTarget}'.",
-                        span: importNode.Span
-                    );
-                    success = false;
-                    continue;
-                }
-
-                try {
-                    var subDoc = context.Read(path: resolvedTarget);
-
-                    if (!TraverseImports(
-                        activeChain: activeChain,
-                        context: context,
-                        currentPath: resolvedTarget,
-                        diagnostics: diagnostics,
-                        doc: subDoc,
-                        visited: visited
-                    )) {
-                        success = false;
-                    }
-                } catch (Exception ex) when ((ex is not OperationCanceledException)) {
+            if (library is null) {
+                if (inLibrary) {
                     diagnostics.ReportError(
                         code: PuckDiagnosticCodes.ImportGraph,
-                        message: $"Failed to parse imported document '{importNode.Path}': {ex.Message}",
+                        message: $"Module library '{Path.GetFileName(path: fullPath)}' imports the document '{importNode.Path}'. A library emits no document, so the document would compose into nothing; import '{importNode.Path}' from the document that composes it.",
                         span: importNode.Span
                     );
                     success = false;
                 }
+
+                continue;
+            }
+
+            try {
+                var subDoc = context.Read(path: library);
+
+                if (!TraverseImports(
+                    activeChain: activeChain,
+                    context: context,
+                    currentPath: library,
+                    diagnostics: diagnostics,
+                    doc: subDoc,
+                    visited: visited
+                )) {
+                    success = false;
+                }
+            } catch (Exception ex) when ((ex is not OperationCanceledException)) {
+                diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.ImportGraph,
+                    message: $"Failed to parse imported module '{importNode.Path}': {ex.Message}",
+                    span: importNode.Span
+                );
+                success = false;
             }
         }
 
@@ -289,58 +275,17 @@ public static class ModuleResolver {
         return success;
     }
 
-    /// <summary>Recursively inlines imported AST statements into a single bundled document.</summary>
-    /// <param name="rootDoc">The root document AST.</param>
-    /// <param name="rootPath">The root document filesystem path.</param>
-    /// <param name="diagnostics">The DiagnosticBag to report resolution errors into.</param>
-    /// <param name="vocabulary">Optional document vocabulary providing schema-specific lexical rules.</param>
-    /// <param name="cancellationToken">Stops import traversal and bundling.</param>
-    /// <returns>A bundled DocumentNode with inlined statements, or null if errors occurred.</returns>
-    public static DocumentNode? BundleDocument(
-        DocumentNode rootDoc,
-        string rootPath,
-        DiagnosticBag diagnostics,
-        IDocumentVocabulary? vocabulary = null,
-        CancellationToken cancellationToken = default
-    ) {
-        if (!ValidateImportGraph(
-            cancellationToken: cancellationToken,
-            diagnostics: diagnostics,
-            rootDoc: rootDoc,
-            rootPath: rootPath,
-            vocabulary: vocabulary
-        )) {
-            return null;
-        }
-
-        var bundledStatements = new List<StatementNode>();
-        var loadedFiles = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var rootDir = (Path.GetDirectoryName(path: Path.GetFullPath(path: rootPath)) ?? "");
-
-        CollectStatements(
-            currentDir: rootDir,
-            diagnostics: diagnostics,
-            doc: rootDoc,
-            loadedFiles: loadedFiles,
-            outputStatements: bundledStatements,
-            vocabulary: vocabulary
-        );
-
-        return new DocumentNode(
-            Schema: rootDoc.Schema,
-            Basis: rootDoc.Basis,
-            Statements: bundledStatements,
-            Offset: rootDoc.Offset,
-            Length: rootDoc.Length,
-            Line: rootDoc.Line,
-            Column: rootDoc.Column
-        ) {
-            BasisSpan = rootDoc.BasisSpan,
-        };
-    }
-    /// <summary>Loads module, template, and constant declarations from source imports.</summary>
-    /// <remarks>An import makes source modules available to <c>use</c>, but it does not instantiate the imported
-    /// document's ordinary statements. World lowering removes source imports; they are not runtime composition entries.</remarks>
+    /// <summary>Walks the root's import graph and brings every module library's <c>let</c> and template
+    /// declarations into the root, ahead of its own statements, each under its import's alias when it has one, and
+    /// removes the library's import. A library's other statements stay where they are written, and a document import
+    /// stays in the root for the vocabulary to lower as a composition entry.</summary>
+    /// <param name="rootDoc">The root source's parsed tree.</param>
+    /// <param name="rootPath">The root source's path; its imports resolve beside it.</param>
+    /// <param name="diagnostics">The bag the walk reports into.</param>
+    /// <param name="vocabulary">The vocabulary that resolves an import's name; names are libraries when omitted.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>The root with the imported declarations, or <see langword="null"/> when the graph does not
+    /// resolve.</returns>
     public static DocumentNode? ImportModules(
         DocumentNode rootDoc,
         string rootPath,
@@ -374,7 +319,13 @@ public static class ModuleResolver {
         var collected = new List<StatementNode>();
 
         CollectModules(rootDoc, rootDir, "", new(comparer: ModuleImportIdentityComparer.Instance), collected, context);
-        return rootDoc with { Statements = [.. collected, .. rootDoc.Statements] };
+        // A library's import is spent once its declarations are in, so the imports left each name a document.
+        return rootDoc with {
+            Statements = [
+                .. collected,
+                .. rootDoc.Statements.Where(predicate: statement => !((statement is ImportNode import) && (context.Library(directory: rootDir, import: import) is not null))),
+            ],
+        };
     }
 
     private static ImportCost MeasureImportedModules(
@@ -397,9 +348,7 @@ public static class ModuleResolver {
 
         foreach (var import in document.Statements.OfType<ImportNode>()) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            var path = Path.GetFullPath(path: Path.Combine(path1: currentDir, path2: import.Path));
-
-            if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) { continue; }
+            if (context.Library(directory: currentDir, import: import) is not { } path) { continue; }
             if (!memo.TryGetValue(key: path, value: out var child)) {
                 var imported = context.Read(path: path);
                 var ownDeclarations = imported.Statements.LongCount(predicate: static statement => (statement is LetNode or TemplateNode));
@@ -435,11 +384,10 @@ public static class ModuleResolver {
         context.CancellationToken.ThrowIfCancellationRequested();
         foreach (var import in document.Statements.OfType<ImportNode>()) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            var path = Path.GetFullPath(path: Path.Combine(path1: currentDir, path2: import.Path));
+            if (context.Library(directory: currentDir, import: import) is not { } path) { continue; }
             var nextNamespace = (string.IsNullOrEmpty(value: namespacePath) ? (import.Alias ?? "") : QualifiedName.Parse(text: namespacePath).Append(member: (import.Alias ?? "")).ToString());
-            var identity = new ModuleImportIdentity(Namespace: nextNamespace, Path: path);
 
-            if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck") || !loaded.Add(item: identity)) { continue; }
+            if (!loaded.Add(item: new ModuleImportIdentity(Namespace: nextNamespace, Path: path))) { continue; }
             var imported = context.Read(path: path);
             var nested = new List<StatementNode>();
 

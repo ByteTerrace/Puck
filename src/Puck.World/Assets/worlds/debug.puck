@@ -10,9 +10,9 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "debug"
 
-import "skies.puck"
-import "shapes.puck"
-import "studio.puck"
+import "skies"
+import "shapes"
+import "studio"
 import "theme"
 import "controls"
 

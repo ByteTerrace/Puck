@@ -197,10 +197,14 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// <inheritdoc />
     public UnitDimension ClassifyField(string fieldKey) => WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey);
     /// <inheritdoc />
-    /// <remarks>An import names a world document (<see cref="WorldDocumentName"/>): it exists when its <c>.puck</c>
-    /// source or its <c>.world.json</c> document stands beside the importer, the files the composer reads at run
-    /// time. A file-form spelling is refused by name.</remarks>
-    public bool TryFindDocumentImport(string directory, string name, out string reason) {
+    /// <remarks>A name resolves as a world document name does (<see cref="WorldDocumentName"/>): to the <c>.puck</c>
+    /// source beside the importer, or else its <c>.world.json</c> document. A source that emits no document
+    /// (<see cref="WorldSourceDeclaration.EmitsDocument"/>) is a module library; any other source, and a
+    /// <c>.world.json</c> document, is a document the composer reads at run time. A source that does not parse is
+    /// refused by name.</remarks>
+    public bool TryResolveImport(string directory, string name, out string? library, out string reason) {
+        library = null;
+
         if (!WorldDefinitionFileSource.TryResolveDocumentIn(
             directory: directory,
             documentPath: out var documentPath,
@@ -211,11 +215,25 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             return false;
         }
 
-        if (CompileInputs.Exists(path: sourcePath) || CompileInputs.Exists(path: documentPath)) {
+        if (CompileInputs.Exists(path: sourcePath)) {
+            // A source that does not parse cleanly cannot say whether it is a library or a document, so the importer
+            // is refused rather than left to compose or drop it.
+            if (Composition.WorldSourceIndex.Declaration(path: sourcePath) is not { } declaration) {
+                reason = $"Imported '{name}' does not parse; compile '{sourcePath}' alone to read its faults.";
+
+                return false;
+            }
+
+            library = (declaration.EmitsDocument ? null : sourcePath);
+
             return true;
         }
 
-        reason = $"Imported document '{name}' has neither a source nor a document.";
+        if (CompileInputs.Exists(path: documentPath)) {
+            return true;
+        }
+
+        reason = $"Imported '{name}' has neither a source nor a document.";
 
         return false;
     }

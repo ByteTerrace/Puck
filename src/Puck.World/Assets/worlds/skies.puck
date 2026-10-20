@@ -3,7 +3,7 @@
 // one. Import the module and expand a sky preset inside a world's `sky` block, which then holds the preset's layers, and
 // its air inside the `atmosphere` block:
 //
-//   import "skies.puck"
+//   import "skies"
 //   render {
 //     sky { clearDay(cloudiness: 0.4) }
 //     atmosphere { clearDayAir() }

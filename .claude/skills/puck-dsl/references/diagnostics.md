@@ -11,6 +11,7 @@ restated catalog drifts the moment a code is added or reworded.
 | Code | Severity | Fires on | Fix |
 |---|---|---|---|
 | PUCK040 | Error | A colon in front of a block or array (`host: {`, `variables: [`). | Drop the colon: `host {`, `variables [`. |
+| PUCK121 | Error | An import spelling a file (`import "skies.puck"`, `import "theme.world.json"`). | Name what the file carries: `import "skies"`. A library's declarations or a document's composition follows from the named file, never the spelling. |
 | PUCK002 | Error | Operand text an effect/`when`/`score` position handed to `Puck.State.ExpressionSpelling` failed to parse. | Fix the operand's own syntax — it is the rule language's expression grammar, not this document's. |
 | PUCK024 | Error | A unit suffix on a field the vocabulary's dimension table doesn't cover. | Drop the suffix, or confirm the field name is the one the vocabulary actually declares. |
 | PUCK025 | Error | A unit suffix the field's own dimension doesn't admit (e.g. `deg` on a field classified as time). | Use a unit from that field's dimension. |

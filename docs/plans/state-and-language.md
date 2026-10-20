@@ -1104,7 +1104,7 @@ module cabinet(at: Point, facing: Angle, engine: Engine, cartridge: Asset) {
 ```puck
 // districts/arcade.puck
 module arcade(origin: Point) {
-  import "buildings/cabinet.puck"
+  import "buildings/cabinet"
 
   use cabinet as left(
     at: origin + [-1.5m, 0, -2.5m], facing: 0deg,
@@ -1198,12 +1198,12 @@ identity {
   self : Traveller
 }
 
-import "island.puck"
-import "quilt/corner.puck"
-import "quilt/biomes/glacier.puck"
-import "quilt/biomes/mesa.puck"
-import "quilt/biomes/mangrove.puck"
-import "quilt/biomes/forest.puck"
+import "island"
+import "quilt/corner"
+import "quilt/biomes/glacier"
+import "quilt/biomes/mesa"
+import "quilt/biomes/mangrove"
+import "quilt/biomes/forest"
 
 world island = island()
 
@@ -1279,9 +1279,9 @@ module parlor(game: Module exporting seats, outcome) {
 
 ```puck
 // in quilt.puck: the arch ring
-import "quilt/parlor.puck"
-import "games/reversi.puck"
-import "worlds/parlor/chess.puck"
+import "quilt/parlor"
+import "games/reversi"
+import "worlds/parlor/chess"
 
 world reversiParlor = parlor(game: reversi)
 world chessParlor   = parlor(game: chess)

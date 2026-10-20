@@ -38,8 +38,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   written as a call or a name keeps its colon even when it produces a
   container: `pixels: map(range(0, 8), row => "00000000")`, `origin: bounds`.
 - `let name = expr` is a compile-time constant; `template name(p, q = d) { }` a
-  parametric block; `import "path" [as alias]`, `export` and
+  parametric block; `import "name" [as alias]`, `export` and
   `use m as a(args)` compose modules.
+- **An import names, never spells a file.** `import "skies"`, not
+  `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
+  module library (a source emitting no document) hands over its `let`s and
+  templates; anything else is a document the importer composes at load, whose
+  own `let`s stay its own. A library importing a document is refused (PUCK017).
 - **Compile-time `for` generates rows; builtins generate values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time, and the document carries the rows they produce. Inside one

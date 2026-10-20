@@ -13,7 +13,7 @@ namespace Puck.World.Transpiler.Tests;
 /// process-wide <see cref="WorldCompileCache.Shared"/> is never touched.</summary>
 public sealed class WorldCompileCacheConcurrencyLawTests {
     private const string Module = "let initial = {0}\nmodule counter() {{ state {{ world {{ slot score = initial }} }} }}";
-    private const string Root = "import \"counter.puck\"\nuse counter as root()";
+    private const string Root = "import \"counter\"\nuse counter as root()";
     private const int Threads = 8;
 
     private static string ModuleAt(int version) => string.Format(

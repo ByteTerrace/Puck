@@ -40,7 +40,7 @@ public sealed class WorldWatchLawTests {
         using var files = new TemporaryDirectory();
         using var unrelated = new TemporaryDirectory();
         var module = files.WriteText(name: "counter.puck", text: Module);
-        var root = files.WriteText(name: "root.puck", text: "import \"counter.puck\"\nuse counter as root()");
+        var root = files.WriteText(name: "root.puck", text: "import \"counter\"\nuse counter as root()");
         var count = 0;
         var watch = new WorldSourceWatch(() => root);
 
@@ -79,7 +79,7 @@ public sealed class WorldWatchLawTests {
     public void AnUnchangedTreeHashesNoContentPerPoll() {
         using var files = new TemporaryDirectory();
         var module = files.WriteText(name: "counter.puck", text: Module);
-        var root = files.WriteText(name: "root.puck", text: "import \"counter.puck\"\nuse counter as root()");
+        var root = files.WriteText(name: "root.puck", text: "import \"counter\"\nuse counter as root()");
         var old = DateTime.UtcNow.AddHours(value: -1);
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: module);
@@ -125,7 +125,7 @@ public sealed class WorldWatchLawTests {
         var watch = new WorldSourceWatch(() => current);
 
         watch.Start(submitReload: () => count++);
-        File.WriteAllText(contents: "import \"counter.puck\"\nuse counter as root()", path: first);
+        File.WriteAllText(contents: "import \"counter\"\nuse counter as root()", path: first);
         watch.Poll(now: At(milliseconds: 1000));
         watch.Poll(now: At(milliseconds: 1150));
         Assert.Equal(actual: count, expected: 1);

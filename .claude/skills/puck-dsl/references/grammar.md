@@ -101,16 +101,26 @@ Refusals PUCK070–PUCK076 enforce type safety, non-empty primary keys, and exac
 ```
 let name = expression                          // compile-time constant, lexically scoped
 template name(param, param2 = default) { }     // parametric block; defaults may reference earlier params
-import "path" [as alias]
+import "name" [as alias]
 export read|action|binding name, name2         // names may wrap across indented lines
 ```
 
-The path decides the kind of import. A path ending `.puck` (`import "skies.puck"`)
-loads a module: its `let` and `template` declarations become usable in the importer,
-and any section it authors is not carried. A path without the extension
-(`import "theme"`, `import "../quality"`) is a document import: it lowers to an
-`imports` entry, and the named document's sections compose over the basis at load,
-refining or appending its keyed rows.
+An import has one spelling: the name of a source or document beside the
+importer, never its file (`import "skies"`, `import "../quality"`). A file
+spelling (`import "skies.puck"`, `import "theme.world.json"`) is **PUCK121**.
+What the import brings in is the named file's to say, never the spelling's
+(`IDocumentVocabulary.TryResolveImport`):
+
+- a **module library**, a `.puck` source that emits no document (only `let`,
+  `template`, `module`, `import` and `test` at its top level, no `schema:`, no
+  `basis:`, no `world`), hands its `let` and `template` declarations to the
+  importer's compile, under `alias.` when the import has one;
+- anything else is a **document**: the import lowers to an `imports` entry, and
+  the document's sections compose over the basis at load, refining or appending
+  its keyed rows. A document's own `let`s and templates stay its own.
+
+A library imports only libraries: a document imported from a library would
+compose into nothing, so the import walk refuses it by name (PUCK017).
 
 Each `let`'s unit conversion is checked separately per destination field.
 Duplicate declarations, missing/duplicate template arguments, unknown

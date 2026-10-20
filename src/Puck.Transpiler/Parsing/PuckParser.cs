@@ -473,8 +473,17 @@ public static partial class PuckParser {
             }
 
             var len = (context.Scanner.Cursor.Offset - startOffset);
+            var import = new ImportNode(Alias: alias, Column: col, Length: len, Line: line, Offset: startOffset, Path: importPath);
 
-            return new ImportNode(Alias: alias, Column: col, Length: len, Line: line, Offset: startOffset, Path: importPath);
+            if (import.NamesFile) {
+                diagnostics?.ReportError(
+                    code: PuckDiagnosticCodes.ImportNamesFile,
+                    message: $"'import \"{importPath}\"' spells a file; an import names what the file carries: use 'import \"{import.Name}\"'",
+                    span: new SourceSpan(Column: col, Length: len, Line: line, Offset: startOffset)
+                );
+            }
+
+            return import;
         }
 
         if (TryMatchKeyword(context: context, keyword: "export")) {
