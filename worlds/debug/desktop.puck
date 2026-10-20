@@ -8,17 +8,11 @@
 
 let claudeTitle = "Claude"
 
-// The capture's output extent and cadence. The window is scaled into this extent, and the pane shows it at the window's
-// own aspect ratio whatever the extent's, so the extent sets only how many pixels the capture keeps: about a maximized
-// window's shape on a 2560 by 1440 display, at three quarters of its size.
+// The capture's output extent and cadence, the pane's and the wall screen's alike: the window at its own size and shape
+// (2560 by 1392, maximized on a 2560 by 1440 display), so its text stays sharp. The pane shows it at the window's own
+// aspect ratio whatever this extent's; the wall slab is cut to this shape, so a window of another shape reads stretched
+// there until the profile and the slab follow it.
 let claudeCapture = {
-  windowTitle: claudeTitle
-  profile { width: 1920, height: 1044, refreshRateHz: 30 }
-}
-
-// The wall screen's capture: the window at its own size and shape (2560 by 1392 here), so its text stays sharp on the
-// wall. A window of another shape reads stretched until `wallCapture.profile` and the slab follow it.
-let wallCapture = {
   windowTitle: claudeTitle
   profile { width: 2560, height: 1392, refreshRateHz: 30 }
 }
@@ -49,7 +43,7 @@ views {
 
 // The same window as a wall screen: a 4 m wide glass slab, its height following the window's 2560 by 1392 shape, eight
 // metres ahead of the spawn and eight to the right, facing +Z, beside the portal frame. It is its own capture of the
-// window, at `wallCapture`'s full size.
+// window, at the same settings as the pane's.
 screens [
   {
     index: 16
@@ -60,7 +54,7 @@ screens [
     halfHeight: 1.0875
     halfDepth: 0.02
     round: 0
-    source: producer(id: "capture", settings: wallCapture)
+    source: producer(id: "capture", settings: claudeCapture)
     filter: Linear
     route {
       engageable: false

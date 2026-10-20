@@ -27,7 +27,8 @@ slot's `x`, `y`, `width` and `height` are fractions of the display, origin top
 left. To capture another window, change `claudeTitle`. The `claude` row's
 `fit: Contain` shows the window at its own aspect ratio, centred in the slot
 with dark bars beside it, whatever the slot's shape, the display's size or the
-capture's `profile` extent (which sets only how many pixels the capture keeps).
+capture's `profile` extent (which sets only how many pixels the capture keeps;
+the pane and the wall screen share `claudeCapture`, at the window's own size).
 `world.view.panes` lists the pane's source at the window's own size (`source
 2560x1392` for a maximized window) with `fit Contain`. The display follows the
 World's window, so maximizing it re-lays the pane over the larger display.
