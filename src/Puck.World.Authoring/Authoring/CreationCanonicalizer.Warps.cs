@@ -60,6 +60,53 @@ public static partial class CreationCanonicalizer {
 
         return normalized;
     }
+    private static ShapeWarpDocument? NormalizeWarp(ShapeWarpDocument? warp) =>
+        ((warp is null)
+            ? null
+            : warp with {
+                Amplitude = Magnitude(value: warp.Amplitude, max: ShapeWarpDocument.MaxAmplitude),
+                Frequency = Frequencies(value: warp.Frequency, max: ShapeWarpDocument.MaxFrequency),
+            });
+    private static ShapeDisplaceDocument? NormalizeDisplace(ShapeDisplaceDocument? displace) =>
+        ((displace is null)
+            ? null
+            : displace with {
+                Amplitude = Magnitude(value: displace.Amplitude, max: ShapeDisplaceDocument.MaxAmplitude),
+                Frequency = Frequencies(value: displace.Frequency, max: ShapeDisplaceDocument.MaxFrequency),
+            });
+    private static DocumentVector3? NormalizeElongate(DocumentVector3? elongate) {
+        if (elongate is not { } extents) { return null; }
+
+        var clamped = new Vector3(
+            x: Math.Clamp(value: (float.IsFinite(f: extents.X) ? MathF.Abs(x: extents.X) : 0f), min: 0f, max: ShapeDocument.MaxElongate),
+            y: Math.Clamp(value: (float.IsFinite(f: extents.Y) ? MathF.Abs(x: extents.Y) : 0f), min: 0f, max: ShapeDocument.MaxElongate),
+            z: Math.Clamp(value: (float.IsFinite(f: extents.Z) ? MathF.Abs(x: extents.Z) : 0f), min: 0f, max: ShapeDocument.MaxElongate)
+        );
+
+        return ((clamped == Vector3.Zero) ? null : clamped);
+    }
+    private static float Magnitude(float value, float max) => Math.Clamp(value: (float.IsFinite(f: value) ? value : 0f), min: -max, max: max);
+    private static Vector3 Frequencies(Vector3 value, float max) => new(
+        x: Magnitude(value: value.X, max: max),
+        y: Magnitude(value: value.Y, max: max),
+        z: Magnitude(value: value.Z, max: max)
+    );
+    private static void ValidateWarpFacets(ShapeDocument shape, List<DocumentValidationError> errors, int index) {
+        if ((shape.Warp is { } warp) && (!VectorFunctions.IsFinite(vector: warp.Frequency) || !float.IsFinite(f: warp.Amplitude))) {
+            errors.Add(item: new(Message: "warp requires a finite frequency and amplitude.", Path: $"shapes[{index}].warp"));
+        }
+        if (shape.Displace is { } displace) {
+            if (!VectorFunctions.IsFinite(vector: displace.Frequency) || !float.IsFinite(f: displace.Amplitude)) {
+                errors.Add(item: new(Message: "displace requires a finite frequency and amplitude.", Path: $"shapes[{index}].displace"));
+            }
+            if (shape.Type == SdfSolidPrimitive.Sweep) {
+                errors.Add(item: new(Message: "displace requires a closed primitive; Sweep has no bounded solid offset contract.", Path: $"shapes[{index}].displace"));
+            }
+        }
+        if ((shape.Elongate is { } elongate) && !VectorFunctions.IsFinite(vector: elongate)) {
+            errors.Add(item: new(Message: "elongate is non-finite.", Path: $"shapes[{index}].elongate"));
+        }
+    }
     private static ShapeShearDocument? NormalizeShear(ShapeShearDocument? shear) {
         if (shear is null) { return null; }
         static float Coefficient(float value) => Math.Clamp(

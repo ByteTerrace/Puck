@@ -8266,6 +8266,50 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
+      } | {
+        $type?: "jitter";
+        /**
+         * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
+         */
+        spacing: unknown;
+        /**
+         * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
+         */
+        amount: number;
+        /**
+         * The hash seed (null = 0).
+         */
+        seed?: number | null;
+        /**
+         * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
+         */
+        tumble?: number | null;
+        /**
+         * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
+         */
+        materialVariants?: number | null;
+        /**
+         * How the displacement is distributed over the cell (null = White).
+         */
+        flavor?: "White" | "Blue" | "Gaussian" | null;
+        /**
+         * The point the lattice folds around, creation units (null = the creation origin).
+         */
+        origin?: unknown;
+      } | {
+        $type?: "logSphere";
+        /**
+         * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
+         */
+        shellRatio: number;
+        /**
+         * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
+         */
+        twist?: number | null;
+        /**
+         * The point the shells centre on, creation units (null = the creation origin).
+         */
+        origin?: unknown;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
@@ -8576,6 +8620,65 @@ export type WorldPrototype = {
         seed: number;
         mode: "F1" | "F2MinusF1";
         randomness: number;
+      } | null;
+      /**
+       * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
+       */
+      warp?: {
+        /**
+         * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+         */
+        frequency: unknown;
+        /**
+         * The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+         */
+        amplitude: number;
+        /**
+         * The farthest the warp carries any point: the amplitude on every axis at once.
+         */
+        reach?: number;
+      } | null;
+      /**
+       * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
+       */
+      displace?: {
+        /**
+         * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+         */
+        frequency: unknown;
+        /**
+         * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+         */
+        amplitude: number;
+        /**
+         * The farthest the relief carries the surface outward.
+         */
+        reach?: number;
+      } | null;
+      /**
+       * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
+       */
+      elongate?: unknown;
+      /**
+       * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
+       */
+      steps?: number | null;
+      /**
+       * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
+       */
+      morph?: {
+        /**
+         * Which dynamic-slot lane drives the morph, in [0, 3].
+         */
+        lane: number;
+        /**
+         * The lane value where the field before the shape shows alone (t = 0).
+         */
+        from: number;
+        /**
+         * The lane value where the shape shows alone (t = 1); must differ from From.
+         */
+        to: number;
       } | null;
     } | null)[] | null;
     /**

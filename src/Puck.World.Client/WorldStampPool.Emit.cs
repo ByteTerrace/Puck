@@ -82,6 +82,11 @@ public sealed partial class WorldStampPool {
                 bumps: shape.Bumps,
                 erode: shape.Erode,
                 cells: shape.Cells,
+                warp: shape.Warp,
+                displace: shape.Displace,
+                elongate: shape.Elongate,
+                steps: shape.Steps,
+                morph: shape.Morph,
                 inGroupScope: true,
                 material: paletteIds[((shape.Material ?? 0) % paletteIds.Length)],
                 onion: ((shape.Onion ?? 0f) * placementScale),
@@ -257,7 +262,7 @@ public sealed partial class WorldStampPool {
                 ((primitiveReach / placementScale) + (placed?.Cells?.PrimitiveReachPadding(placed.Scale, placed.Flare) ?? 0f)),
                 (probeWorstCase ? new(ShapeFlareDocument.MaxAmount, ShapeFlareDocument.MaxBulge, 1f, StartScale: ShapeFlareDocument.MaxStartScale) : placed?.Flare),
                 (probeWorstCase ? new(ShapeDocument.MaxShear, ShapeDocument.MaxShear, ShapeDocument.MaxShear) : placed?.Shear),
-                (probeWorstCase ? (ShapeBumpDocument.MaxBumps * ShapeBumpDocument.MaxPushMagnitude) : ShapeBumpDocument.ReachExtra(bumps: placed?.Bumps))) * placementScale);
+                (probeWorstCase ? ShapeWarpReach.ProbePointReach : ((placed is null) ? 0f : ShapeWarpReach.PointReach(shape: placed)))) * placementScale);
 
             // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
             // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
@@ -280,7 +285,8 @@ public sealed partial class WorldStampPool {
                 : 0f)
             ));
             var dilateWorld = ((placed?.Dilate ?? 0f) * placementScale);
-            var onionWorld = ((placed?.Onion ?? 0f) * placementScale);
+            // A sine relief carries the surface outward by its amplitude, as a dilation does.
+            var onionWorld = (((placed?.Onion ?? 0f) + (probeWorstCase ? ShapeDisplaceDocument.MaxAmplitude : (placed?.Displace?.Reach ?? 0f))) * placementScale);
             // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset) before
             // it can ever win the Union race against this same shape's plain instance — reserved unconditionally
             // under the probe, since a live slot's real Trims are not known until content loads.
@@ -318,6 +324,11 @@ public sealed partial class WorldStampPool {
                 bumps: placed?.Bumps,
                 erode: placed?.Erode,
                 cells: placed?.Cells,
+                warp: placed?.Warp,
+                displace: placed?.Displace,
+                elongate: placed?.Elongate,
+                steps: placed?.Steps,
+                morph: placed?.Morph,
                 material: material,
                 onion: ((placed?.Onion ?? 0f) * placementScale),
                 panel: placed?.Panel,

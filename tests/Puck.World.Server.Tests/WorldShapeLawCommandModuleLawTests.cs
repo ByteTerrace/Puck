@@ -106,7 +106,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.StartsWith(
             actualString: result.Output,
             comparisonType: StringComparison.Ordinal,
-            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=5 contact-refused=6 unlowered=0]"
+            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=1 contact-refused=6 unlowered=0]"
         );
 
         var output = result.Output;
@@ -114,8 +114,8 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.Contains(expectedSubstring: "lowered=Box distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "box"), comparisonType: StringComparison.Ordinal);
         // The generic scale's gain is its smallest component over its largest.
         Assert.Contains(expectedSubstring: "lowered=Scale(0.2,0.5,0.4)·Capsule distance=bound gain=0.4 ", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "cpu=refuses (SdfFieldEvaluator cannot interpret non-uniform Scale", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "contact=refused (SdfFieldEvaluator cannot interpret non-uniform Scale", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
+        // The render reading takes the scale as the renderer's minimum-axis bound; only contact refuses it.
+        Assert.Contains(expectedSubstring: "cpu=interprets contact=refused (SdfFieldEvaluator cannot interpret non-uniform Scale", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Scale(0.6,0.6,0.15)·Trapezoid distance=bound gain=0.25 ", actualString: Line(output: output, shape: "cone-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Scale(1,0.5,0.5)·Torus distance=bound gain=0.5 ", actualString: Line(output: output, shape: "torus-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Ellipse distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "torus-alike"), comparisonType: StringComparison.Ordinal);
@@ -126,7 +126,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.Contains(expectedSubstring: "contact=refused (uses profile Path)", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=refused (lifts by revolve)", actualString: Line(output: output, shape: "revolve"), comparisonType: StringComparison.Ordinal);
         Assert.Matches(expectedRegexPattern: @"lowered=AxialProfile·PushField·Scale\(0\.4\)·Sphere·PopField distance=uncertified \(no certified gain\) step=0\.\d+ \(L=\d", actualString: Line(output: output, shape: "flared"));
-        Assert.Contains(expectedSubstring: "contact=admitted contact-omits=AxialProfile+PushField+PopField", actualString: Line(output: output, shape: "flared"), comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "cpu=interprets contact=admitted contact-omits=AxialProfile+PushField+PopField", actualString: Line(output: output, shape: "flared"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Sweep distance=uncertified (no certified gain) cpu=interprets contact=omitted (a sweep is not a closed solid)", actualString: Line(output: output, shape: "sweep"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "facets=detail lowered=Scale(0.1)·Box(detail)", actualString: Line(output: output, shape: "detail"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=omitted (detail)", actualString: Line(output: output, shape: "detail"), comparisonType: StringComparison.Ordinal);

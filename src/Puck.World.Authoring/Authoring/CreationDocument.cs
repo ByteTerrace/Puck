@@ -124,6 +124,19 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, System.Numerics.Vector3, SdfLift)"/>, so it needs no
 /// separate authored magnitude.</param>
 /// <param name="Cells">Shape-local cellular relief, evaluated after geometry within its own field scope.</param>
+/// <param name="Warp">The shape's cross-coupled sinusoidal domain warp (null = none) — see
+/// <see cref="ShapeWarpDocument"/>. Applied to the shape's own local point after <see cref="Bumps"/>, before
+/// <see cref="Elongate"/>. Render-only.</param>
+/// <param name="Displace">The shape's sine relief (null = none) — see <see cref="ShapeDisplaceDocument"/>. Added to
+/// the shape's own field inside its own scope. Render-only.</param>
+/// <param name="Elongate">The half-extents the primitive's cross-section is swept over, creation units (null = none):
+/// <see cref="SdfProgramBuilder.Elongate"/>, the capsule-from-sphere operator, applied last to the shape's own local
+/// point. Each component is clamped to [0, <see cref="MaxElongate"/>]. Render-only.</param>
+/// <param name="Steps">Only with a stairs <see cref="Blend"/> (<see cref="SdfBlendOp.StairsUnion"/>,
+/// <see cref="SdfBlendOp.StairsSubtraction"/>): the steps the seam takes over the blend radius
+/// <see cref="Smooth"/>, in [1, <see cref="ShapeScope.MaxSteps"/>] (null = <see cref="ShapeScope.DefaultSteps"/>).</param>
+/// <param name="Morph">Only with a <see cref="SdfBlendOp.Morph"/> <see cref="Blend"/>, and required by it: the lane
+/// and range the morph runs over — see <see cref="ShapeMorphDocument"/>.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -158,8 +171,15 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeShearDocument? Shear = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeErodeDocument? Erode = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCellsDocument? Cells = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCellsDocument? Cells = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeWarpDocument? Warp = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeDisplaceDocument? Displace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Elongate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Steps = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeMorphDocument? Morph = null
 ) {
+    /// <summary>The largest half-extent <see cref="Elongate"/> sweeps a cross-section over, per axis.</summary>
+    public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
     /// <see cref="SdfProgramBuilder.BendZ"/>'s remarks).</summary>
