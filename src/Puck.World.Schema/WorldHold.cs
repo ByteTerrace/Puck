@@ -122,8 +122,6 @@ public sealed record WorldHold(
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
 /// seam <see cref="FixedSpeed.HeldOrdinal"/> uses.</summary>
 public static class WorldHoldFactory {
-    private const double DegreesToRadians = (Math.PI / 180.0);
-
     /// <summary>Compiles one authored hold list against a world's channel table.</summary>
     /// <param name="holds">The authored rows in preference order, or <see langword="null"/> for a kit authoring
     /// none.</param>
@@ -154,8 +152,8 @@ public static class WorldHoldFactory {
                 Bond: hold.Bond,
                 ConeAdmitsAbove: (cone.Y >= 90f),
                 ConeAdmitsBelow: (cone.X <= 90f),
-                ConeCosFar: FixedQ4816.FromDouble(value: Math.Cos(d: (((double)cone.Y) * DegreesToRadians))),
-                ConeCosNear: FixedQ4816.FromDouble(value: Math.Cos(d: (((double)cone.X) * DegreesToRadians))),
+                ConeCosFar: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: cone.Y)),
+                ConeCosNear: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: cone.X)),
                 DriveAlignment: FixedQ4816.FromDouble(value: hold.DriveAlignment),
                 Envelope: CompileEnvelope(envelope: hold.Envelope),
                 Forward: hold.Forward,

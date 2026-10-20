@@ -481,8 +481,6 @@ public static partial class WorldFactsCompiler {
                 );
             }
 
-            const double DegreesToRadians = (Math.PI / 180.0);
-
             return new WorldPoseEffect(
                 describe: string.Create(
                     provider: CultureInfo.InvariantCulture,
@@ -491,10 +489,10 @@ public static partial class WorldFactsCompiler {
                 index: index,
                 keyFrom: keyFrom,
                 pose: new CompiledWorldPose(
-                    PitchRadians: FixedQ4816.FromDouble(value: (effect.PitchDegrees * DegreesToRadians)),
+                    PitchRadians: FixedQ4816.FromDegrees(degrees: effect.PitchDegrees),
                     Position: FixedVector3.FromVector3(value: position),
-                    RollRadians: FixedQ4816.FromDouble(value: (effect.RollDegrees * DegreesToRadians)),
-                    YawRadians: FixedQ4816.FromDouble(value: (effect.YawDegrees * DegreesToRadians))
+                    RollRadians: FixedQ4816.FromDegrees(degrees: effect.RollDegrees),
+                    YawRadians: FixedQ4816.FromDegrees(degrees: effect.YawDegrees)
                 ),
                 spawnPoint: string.Empty
             );

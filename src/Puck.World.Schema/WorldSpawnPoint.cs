@@ -53,6 +53,6 @@ public readonly record struct FixedSpawnPoint(FixedVector3 Position, FixedQ4816 
     /// <returns>The compiled pose.</returns>
     public static FixedSpawnPoint Compile(in WorldSpawnPoint point) => new(
         Position: FixedVector3.FromVector3(value: point.Position),
-        YawRadians: FixedQ4816.FromDouble(value: (point.YawDegrees * (Math.PI / 180.0)))
+        YawRadians: FixedQ4816.FromDegrees(degrees: point.YawDegrees)
     );
 }
