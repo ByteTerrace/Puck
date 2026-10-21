@@ -10,6 +10,95 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "chess-tests"
 
+// Seat 1 stands at White's edge, sits down with the context button and plays e2-e4 with the keys (lift, two steps up
+// the board, put down), then e7-e5 by dragging with the pointer (press over e7, move over e5, release).
+test "a seated player plays e4 with the keys and e5 with a pointer drag" {
+  when {
+    seat1: world.state.cell.set aiSide $value -1
+    seat1: body.pose -6 0.2 -13.5 0 0 0 0
+    ticks 150
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press boardPick
+    ticks 5
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press boardPick
+    ticks 150
+    seat1: source.pointer.origin -5.9 3 -11.5
+    seat1: source.pointer.direction 0 -1 0
+    ticks 3
+    seat1: body.press boardPick 1 1.0
+    ticks 10
+    seat1: source.pointer.origin -5.9 3 -11.9
+    ticks 190
+  }
+  expect {
+    pieceCell[piece12] == 28
+    pieceCell[piece20] == 36
+    verdict == 1
+    turn == 0
+    illegalCount == 0
+    play[held] == -1
+  }
+}
+
+// Seat 1 sits down, lifts the e2 pawn and puts it back with the cancel button, steps right to d2 (from White's side
+// right is towards the a-file), puts the d2 pawn down on d5, which is judged illegal and put back as it stood, steps back
+// down and plays d2-d4, and the context button stands her up. Had the cancel not put e2 back, the d2 press would take
+// nothing and no legal move would follow.
+test "a seated player cancels a lift, an illegal put-down is put back and the context button stands her up" {
+  when {
+    seat1: world.state.cell.set aiSide $value -1
+    seat1: body.pose -6 0.2 -13.5 0 0 0 0
+    ticks 150
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press boardPick
+    ticks 5
+    seat1: body.press boardCancel
+    ticks 150
+    seat1: body.press strafe 1
+    ticks 4
+    seat1: body.press boardPick
+    ticks 5
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press boardPick
+    ticks 250
+    seat1: body.press forward -1
+    ticks 4
+    seat1: body.press forward -1
+    ticks 4
+    seat1: body.press forward -1
+    ticks 4
+    seat1: body.press boardPick
+    ticks 5
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press boardPick
+    ticks 200
+    seat1: body.press interact
+    ticks 10
+  }
+  expect {
+    pieceCell[piece12] == 12
+    pieceCell[piece11] == 27
+    illegalCount == 1
+    turn == 1
+    play[held] == -1
+    board(engaged, board, 1) == 0
+  }
+}
+
 test "pieces settle and derive initial board cells" {
   when {
     seat1: world.state.cell.set aiSide $value -1

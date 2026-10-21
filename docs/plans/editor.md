@@ -627,6 +627,11 @@ drag; Escape or a right click cancels and sends nothing. A gamepad drags along
 the camera-relative plane with the sticks, with the same commit rule, as the
 sculptor's pad model did. Before adding the ghost, check whether
 `world.reflow.preview` already draws proposed positions (AGENTS.md rule 7).
+A pointer ray meeting a horizontal plane in fixed point already exists for
+tabletops (`WorldTabletopFrame.TryPointerCell`, read by rules as
+`board(pointer, …)`), with the debug world's chess table lifting a piece on
+press and putting it down on a click or a release elsewhere; the plane solve
+here is its sibling.
 
 **Touches:** `Puck.Overlays`, `Puck.World.Client` (the stamper's presentation
 override, the drag state), `Puck.World.Authoring` (`GridSnap`), the editor

@@ -5,7 +5,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// Produces the pointer ray a <c>Simulation</c> screen reads: once per host frame, before the frame's ticks are
+/// Produces the pointer ray a <c>Simulation</c> screen and a tabletop's rules read: once per host frame, before the frame's ticks are
 /// snapshotted, it casts the OS pointer through the camera of the seat whose mouse moved it
 /// (<see cref="SourceRay.Through"/> over the view <see cref="WorldSeatViewports"/> published for the frame on screen)
 /// and sustains the ray on that seat's lane as the <see cref="SourcePointerCommands.Origin"/> and
@@ -13,8 +13,8 @@ namespace Puck.World;
 /// runs carries it, a catch-up burst included. Only a seat that still holds the mouse the position is attributed to
 /// points: the ray ends when that mouse leaves the seat or the position names no mouse (a platform that reports only
 /// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
-/// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen; the server then
-/// reads <c>on</c> 0.
+/// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares neither a <c>Simulation</c> screen nor an
+/// engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
 /// </summary>
 /// <remarks>The camera is presentation float state; the ray enters the command plane as the float values the tick's
 /// snapshot records and is quantized once into simulation at the seat verb, so a replay reproduces it exactly.
@@ -51,9 +51,19 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
         m_viewports = viewports;
     }
 
-    private bool DeclaresSimulationScreen() {
-        foreach (var screen in m_definition().Screens) {
+    // Whether anything in the world reads a pointer ray: a Simulation screen, or a tabletop a seat may sit at, whose
+    // rules read the cell the ray meets (board(pointer, …)).
+    private bool DeclaresPointerTarget() {
+        var definition = m_definition();
+
+        foreach (var screen in definition.Screens) {
             if (screen.Route.Input == SourceDestination.Simulation) {
+                return true;
+            }
+        }
+
+        foreach (var placement in definition.Placements) {
+            if (placement.Board?.Engage is not null) {
                 return true;
             }
         }
@@ -83,7 +93,7 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
             (m_pointer.Positioned is not (var slot, var device)) ||
             (m_roster.DeviceSlot(device: device) != slot) ||
             (m_roster.KindOf(device: device) != InputDeviceKind.Mouse) ||
-            !DeclaresSimulationScreen()
+            !DeclaresPointerTarget()
         ) {
             End();
 

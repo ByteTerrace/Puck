@@ -476,6 +476,11 @@ rule writes a body's transient into a world row through (an eased
 persisted fact lane. `$bodyPosition:<bodyRef>:x|y|z` reads one axis of a
 body's live position (fixed-point metres, 0 for no live body).
 See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the debug world's chess table, `worlds/debug/chess.puck` (`chessBoard`), is the worked example.
+A board facet's `engage` block makes the table something a seat sits down at
+with its context button (`placement:<id>` control application, board-view
+camera, `engagement` context `tabletop`), and its rules read the seated seat
+through `board(engaged|pointer|side, <row>, <seat>)`
+([engagement.md](engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)).
 
 ## Authored randomness — SOURCE x SITE x MOMENT
 

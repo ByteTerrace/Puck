@@ -24076,6 +24076,45 @@
                 "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
                 "type": "integer",
                 "default": 1
+              },
+              "engage": {
+                "description": "How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat\u0027s pointer meets.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "channel": {
+                    "description": "The declared channel whose press engages and leaves the table.",
+                    "type": "string"
+                  },
+                  "radius": {
+                    "description": "How near the board\u0027s centre, on the ground plane in world units, a seat must stand to engage. Positive.",
+                    "type": "number",
+                    "default": 2.5
+                  },
+                  "pitch": {
+                    "description": "The board view\u0027s elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat\u0027s side. In (0, 90].",
+                    "type": "number",
+                    "default": 60
+                  },
+                  "margin": {
+                    "description": "World units of room the board view leaves around the board\u0027s footprint. Non-negative.",
+                    "type": "number",
+                    "default": 0.1
+                  },
+                  "surface": {
+                    "description": "The height above the topology\u0027s origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "channel"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldTabletopEngage"
               }
             },
             "required": [

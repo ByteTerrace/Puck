@@ -22,22 +22,15 @@ namespace Puck.World.Client;
 /// here feeds the simulation.
 /// </summary>
 public sealed class WorldScreenFraming {
-    // The weight within this of its goal settles onto it, so a finished ease is exactly the chase or the framing.
-    private const float SettleEpsilon = 1e-3f;
-
-    private SdfCameraDynamics m_cachedDynamics;
-    private SecondOrderResponse m_cachedResponse;
-    private bool m_hasCachedResponse;
+    private readonly WorldFramingEase m_ease = new();
     private Vector3 m_frameEye;
     private float m_frameNear;
     private Vector3 m_frameTarget;
     private bool m_hasFrame;
-    private float m_velocity;
-    private float m_weight;
 
     /// <summary>Gets how far the seat's camera stands toward the framing, which is also the view's screen fidelity: 0 is
     /// the seat's ordinary camera, 1 the framed picture.</summary>
-    public float Weight => m_weight;
+    public float Weight => m_ease.Weight;
     /// <summary>Gets the screen whose framing the ease has settled on as of the last <see cref="Apply"/>, whose matte
     /// the seat's view narrows to, or <see langword="null"/> while the seat engages none, is easing in or out, or the
     /// screen's frame is degenerate.</summary>
@@ -258,20 +251,20 @@ public sealed class WorldScreenFraming {
             return 0f;
         }
 
-        Ease(
+        var weight = m_ease.Step(
             deltaSeconds: deltaSeconds,
             dynamics: in dynamics,
             goal: goal
         );
 
-        if (m_weight <= 0f) {
+        if (weight <= 0f) {
             m_hasFrame = false;
 
             return 0f;
         }
         if (
             (goal >= 1f) &&
-            (m_weight >= 1f)
+            (weight >= 1f)
         ) {
             Framed = screen;
         }
@@ -279,60 +272,14 @@ public sealed class WorldScreenFraming {
         eye = Vector3.Lerp(
             value1: eye,
             value2: m_frameEye,
-            amount: m_weight
+            amount: weight
         );
         target = Vector3.Lerp(
             value1: target,
             value2: m_frameTarget,
-            amount: m_weight
+            amount: weight
         );
 
-        return (m_weight * m_frameNear);
-    }
-    private void Ease(in SdfCameraDynamics dynamics, float goal, float deltaSeconds) {
-        if (!dynamics.IsLive) {
-            m_weight = goal;
-            m_velocity = 0f;
-            m_hasCachedResponse = false;
-
-            return;
-        }
-
-        if (
-            !m_hasCachedResponse ||
-            (m_cachedDynamics != dynamics)
-        ) {
-            m_cachedResponse = SecondOrderResponse.Create(
-                dampingRatio: dynamics.Damping,
-                frequencyHz: dynamics.Frequency,
-                initialResponse: dynamics.Response
-            );
-            m_cachedDynamics = dynamics;
-            m_hasCachedResponse = true;
-        }
-
-        var weight = m_weight;
-        var velocity = m_velocity;
-
-        SecondOrderResponse.Step(
-            position: ref weight,
-            propagator: m_cachedResponse.Propagator(deltaSeconds: deltaSeconds),
-            target: goal,
-            targetVelocity: 0f,
-            targetVelocityGain: m_cachedResponse.TargetVelocityGain,
-            velocity: ref velocity
-        );
-
-        if (MathF.Abs(x: (goal - weight)) < SettleEpsilon) {
-            weight = goal;
-            velocity = 0f;
-        }
-
-        m_weight = Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: weight
-        );
-        m_velocity = velocity;
+        return (weight * m_frameNear);
     }
 }

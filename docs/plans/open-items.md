@@ -179,6 +179,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] G1 Go.
 - [ ] S6's remainder: the forcing world, and the island, districts, and shards onto its modules.
 - [ ] A `test` block in a source that takes its state from a `basis` or an import resolves its `given` lines and enum member names against the source's own `state` section alone, so `worlds/debug/chess-tests.puck` (on the debug world as basis) sets cells through `seat1: world.state.cell.set` steps and writes enum members as numbers. Done when a test's `given` and `expect` lines resolve against the composed document, and those scenarios use `given` and the chess enums.
+- [ ] The debug world's chess board is a mirror image of a real one: White's back rank is on the table's -Z side and files run toward +X, and a camera looking toward +Z has -X on its right (`CameraSnapshot.LookAt`: right is forward crossed with up), so from White's seat the a-file lies on the right, h1 on the left is dark, and the queen stands right of the king. Done when White's seat sees a1 on its left (White on the +Z side with ranks running toward -Z, or files running toward -X), with `chess.md`'s square formula, the seated cursor's step directions and `chess-tests.puck`'s coordinates moved with it.
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
 
 ## [Runtime and delivery](runtime-and-delivery.md)
@@ -467,7 +468,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E4 debug views everywhere (startable today).
 - [x] E5 the inspector (`world.inspect`; its selection line fills when E2 lands).
 - [ ] E6 why is this dark or invisible.
-- [ ] E7 gizmos and pointer dragging.
+- [ ] E7 gizmos and pointer dragging. Pointer dragging on a tabletop is in place: a seated seat's pointer ray meets the board's playing surface in fixed point (`board(pointer, …)`, `WorldTabletopFrame.TryPointerCell`) and the debug world's chess rules lift a piece on press and put it down on a click or a release elsewhere ([engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)). The gizmos and the placement drag the editor needs are open.
 - [ ] E8 editor camera.
 - [x] E9 cost per object and GPU pass timing (`world.cost`, `world.gpu-timing`).
 - [x] E10 live reload and before-and-after: watched source and import changes use ordinary authenticated reloads, preserve editor state and report refusals. Per-seat held frames support split, bindable wipe and difference through ordinary capture and `place`, with the image-difference metric shared with the canaries. `editor-compare` checks both backends, including cropped sampling and return to the live view.
