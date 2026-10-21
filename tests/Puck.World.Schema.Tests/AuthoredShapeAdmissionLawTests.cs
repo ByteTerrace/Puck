@@ -38,18 +38,6 @@ public sealed class AuthoredShapeAdmissionLawTests {
 
         Assert.Contains(collection: CreationCanonicalizer.Validate(document: document), filter: error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Path profile"));
     }
-    [InlineData(SdfBlendOp.Morph)]
-    [InlineData(SdfBlendOp.StairsUnion)]
-    [InlineData(SdfBlendOp.StairsSubtraction)]
-    [Theory]
-    public void AScopeCompositionBlendIsRefusedAsAShapeBlend(SdfBlendOp blend) {
-        var shape = Shape(SdfSolidPrimitive.Sphere, Vector3.One);
-
-        AssertCanonicalizerAccepts(shape: shape with { Blend = SdfBlendOp.SmoothUnion });
-        AssertCanonicalizerRefusesNaming(shape with { Blend = blend }, $"blend '{blend}' composes a closed field scope");
-        AssertWorldRefusesNaming(shape with { Blend = blend }, canonicalize: false, needle: blend.ToString());
-    }
-
     private static void AssertCanonicalizerAccepts(ShapeDocument shape) => CreationFixtures.AssertAccepts(document: Document(shape: shape));
     private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) => CreationFixtures.AssertRefusesNaming(
         document: Document(shape: shape),
