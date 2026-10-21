@@ -100,11 +100,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
             name: Pane,
             window: window
         );
-        var passthrough = new WorldSourcePassthrough(
-            graphs: m_host,
-            viewports: new WorldSeatViewports(),
-            windows: windows
-        );
+        var passthrough = Door(windows: windows);
 
         Assert.True(
             condition: passthrough.TryOpen(
@@ -168,7 +164,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: Vector2.Zero));
         Assert.EndsWith(
             actualString: passthrough.Describe(),
-            expectedEndString: "none opened"
+            expectedEndString: "none opened; pad idle"
         );
     }
 
@@ -210,18 +206,34 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
     // The window a 32x64 pane's capture shows: a frame that is all client area, at a DPI scale of 1.
     private sealed class PassthroughWindow : ISourcePassthroughWindow {
+        public List<(KeyCode Key, CommandPhase Phase)> Keys { get; } = [];
+        public List<Vector2> Moves { get; } = [];
         public List<Vector2> Presses { get; } = [];
+        public List<(int Button, Vector2 At)> Releases { get; } = [];
         public string Title => "pane window";
+        public List<Vector2> Wheels { get; } = [];
 
         public void DeliverKey(in WindowInputEvent inputEvent) {
+            Keys.Add(item: (inputEvent.Key, inputEvent.Phase));
         }
         public void DeliverPointer(in WindowInputEvent inputEvent, SourcePassthroughPoint point) {
-            // Presses only: a release follows its press to the same window.
-            if (
-                (inputEvent.Kind == WindowInputKind.PointerButton) &&
-                (inputEvent.Phase == CommandPhase.Started)
-            ) {
-                Presses.Add(item: point.Logical);
+            switch (inputEvent.Kind) {
+                case WindowInputKind.PointerButton when (inputEvent.Phase == CommandPhase.Started):
+                    Presses.Add(item: point.Logical);
+
+                    break;
+                case WindowInputKind.PointerButton:
+                    Releases.Add(item: (inputEvent.ButtonIndex, point.Logical));
+
+                    break;
+                case WindowInputKind.PointerPosition:
+                    Moves.Add(item: point.Logical);
+
+                    break;
+                case WindowInputKind.PointerWheel:
+                    Wheels.Add(item: inputEvent.Vector);
+
+                    break;
             }
         }
         public bool TryDescribe(out SourcePassthroughWindow window) {

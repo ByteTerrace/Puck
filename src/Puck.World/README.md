@@ -1758,9 +1758,20 @@ is drawn, and a pointer on a bar is the game's. `source.passthrough close <insta
 `source.passthrough` with no argument echoes where the keyboard is and each
 open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
-attachment (`world.control`) is that console too. No binding, seat, peer,
-addon, schedule or world document can open a passthrough source or send it
-input. A source that stops showing the window it was opened on (its instance
+attachment (`world.control`) is that console too. The local user's own press
+on the framed picture of an engaged window capture's screen opens one too: a
+physical click, or a local pad's bound press. No seat, peer, addon, schedule,
+script or world document can open a passthrough source or send it input: a
+binding page names which pad control means which pointer act
+(`source.passthrough.pointer`, `.scroll`, `.button.<left|right|middle|back|forward>`,
+`.arrow.<up|down|left|right>`), and those verbs act only for a local pad's
+own control, refusing a typed line, an authored command, a wheel sector,
+`player.signal` and a probe by name. The pad's stick moves the system cursor
+across the framed picture at the screen route's `padPointer` feel, and
+`source.passthrough` echoes the pad (`pad p<n> screen <n> … stick … scroll …
+buttons … keys … feel …`, or `pad idle`). While a seat frames such a window,
+Control+Alt+Escape leaves in one step, whoever has the keyboard: it returns the
+keyboard, closes the window's source and leaves the seat's engagement. A source that stops showing the window it was opened on (its instance
 stops, its capture reopens onto another window, or a row of the same name
 replaces it) is closed before the next event routes. A source whose pane is
 only not published for a while stays open: its window receives nothing while the

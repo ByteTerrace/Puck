@@ -78,6 +78,14 @@ internal sealed partial class ScreenCommandModule {
                 ? $" display:fill={(screen.Route.Display?.Fill ?? WorldScreenDisplay.DefaultFill)}"
                 : ""
             );
+            // How a local pad's sticks drive the pointer over the framed window.
+            var padText = ((screen.Route.PadPointer is { } pad)
+                ? string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" padPointer:speed={pad.Speed:0.###},curve={pad.Curve:0.###},boost={pad.Boost:0.###},ramp={pad.RampSeconds:0.###}s,scroll={pad.ScrollSpeed:0.###}"
+                )
+                : ""
+            );
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -87,7 +95,7 @@ internal sealed partial class ScreenCommandModule {
                 ? "bound"
                 : "unbound")} {(screen.Route.Engageable
                 ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{displayText}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
+                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{displayText}{padText}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
             );
         }
 
