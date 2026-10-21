@@ -570,18 +570,6 @@ seat no longer frames the screen, as when it leaves
 (`WorldSourcePassthrough`). A document still never authors a passthrough
 destination: `route.input: Passthrough` is refused by name.
 
-**An engaged screen is framed in the world, never replaced by a separate
-image.** The owner's ruling: the engaged view is diegetic. The seat's own camera
-pans and zooms onto the in-world screen's picture, square-on, at a whole number
-of window pixels per source row, and once framed the window is
-indistinguishable from a desktop emulator; easing out reveals the screen and the
-room. One per-view value, the screen fidelity the ease drives, turns the CRT
-treatment, the atmosphere and the tone map off for the framed picture, and the
-root's own placement of the seat's view shows only the picture's part of it on
-the matte's fill, so no pass draws the source a second time. A 2D emulator view that cut to the source after the ease was
-rejected because it was a separate thing that could disagree with the screen
-(it cropped the picture the screen showed whole).
-
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model
 owns, `sdf-isa.hlsli` and the `*.interface.hlsli` of each engine package and
@@ -704,7 +692,12 @@ stands in for it. Framed, the picture is source-exact: whole window pixels per
 source row, no CRT treatment, post or bezel on those pixels, and the matte's
 fill around it, so the window is indistinguishable from a desktop emulator.
 Easing out fades the screen's glass, the CRT look and the room back in, which
-is the reveal that the player was in the world all along.
+is the reveal that the player was in the world all along. One per-view value,
+the screen fidelity the ease drives, turns the treatment and post off, and the
+root's own placement of the seat's view shows only the picture's part of it, so
+no pass draws the source a second time. A 2D emulator view that cut to the
+source after the ease was rejected: it was a separate image that could disagree
+with the screen (it cropped lines the screen showed).
 
 **A device is modelled at the size a person who used one expects, and its
 screen glass is exactly its picture (the owner's ruling).** A screen row's half
