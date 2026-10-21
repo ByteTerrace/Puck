@@ -9436,6 +9436,44 @@
                 },
                 "additionalProperties": false,
                 "title": "WorldScreenDisplay"
+              },
+              "padPointer": {
+                "description": "How a local pad\u0027s sticks drive the pointer over this screen\u0027s framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad\u0027s buttons still click and press keys. Omitted from the wire when null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "speed": {
+                    "description": "The pointer\u0027s speed at full deflection before any boost, in heights of the framed picture per second. Positive.",
+                    "type": "number"
+                  },
+                  "curve": {
+                    "description": "The exponent the deflection\u0027s length is raised to; 1 is a linear response. At least 1.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "boost": {
+                    "description": "The speed\u0027s multiplier once a deflection has been held for RampSeconds, rising linearly from 1 while it is held and back to 1 once the stick rests. At least 1.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "rampSeconds": {
+                    "description": "How long a held deflection takes to reach Boost; 0 applies it at once. Non-negative.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "scrollSpeed": {
+                    "description": "The wheel\u0027s speed at full deflection of the scrolling stick, in wheel notches per second, its deflection raised to Curve too. Non-negative; 0 scrolls nothing.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "speed"
+                ],
+                "additionalProperties": false,
+                "title": "WorldScreenPadPointer"
               }
             },
             "additionalProperties": false,

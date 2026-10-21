@@ -4,8 +4,10 @@
 // file while it runs.
 //
 // The capture finds its window by title: the first visible top-level window whose title contains `claudeTitle`,
-// compared without regard to case. Nothing here sends the window input: only the local user's own console opens a
-// passthrough source (`source.passthrough open claude Claude`), and the engine refuses a document that tries.
+// compared without regard to case. Nothing here sends the window input: only the local user's own console
+// (`source.passthrough open claude Claude`) or own press on the engaged monitor opens a passthrough source, and the
+// desktop page below only says which pad control means which pointer act; the engine acts on a local pad's own press
+// alone and refuses a document that tries more.
 
 let claudeTitle = "Claude"
 
@@ -298,6 +300,57 @@ screens [
       engageRadius: 3
       engageChannel: "interact"
       display { fill: "#000000" }
+      // A pad's sticks over the framed window (the desktop page below): at full tilt the pointer crosses half the
+      // picture's height a second, a squared response for fine placement, tripling over 0.6 s of held tilt; the right
+      // stick scrolls up to 12 notches a second.
+      padPointer {
+        speed: 0.5
+        curve: 2
+        boost: 3
+        rampSeconds: 0.6
+        scrollSpeed: 12
+      }
+    }
+  }
+]
+
+// The desktop page: while a seat is engaged on the monitor (the engagement family's `passthrough` state, a captured
+// screen showing a window capture), a pad drives the window the way a controller's desktop mode does. Only the local
+// user's own pad acts through these verbs, and only on the window the seat frames; the first click on the picture opens
+// it, as a mouse click does. X (or E) leaves through the context button, as at every device.
+bindingOverlays [
+  {
+    id: "desktop-pad"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      contexts [
+        { family: "engagement", state: "passthrough", group: "desktop" }
+      ]
+      chords [
+        {
+          chord []
+          group: "desktop"
+          page {
+            id: "desktop"
+            label: "Desktop"
+            entries [
+              { command: "source.passthrough.pointer", id: "deskPointer", label: "Pointer", sources ["gamepad.leftStick"] }
+              { command: "source.passthrough.scroll", id: "deskScroll", label: "Scroll", sources ["gamepad.rightStick"] }
+              { command: "source.passthrough.button.left", id: "deskClick", label: "Click", sources ["gamepad.buttonSouth"] }
+              { command: "source.passthrough.button.right", id: "deskRightClick", label: "Right click", sources ["gamepad.buttonNorth"] }
+              { command: "source.passthrough.button.middle", id: "deskMiddleClick", label: "Middle click", sources ["gamepad.buttonEast"] }
+              { command: "source.passthrough.button.back", id: "deskBack", label: "Back", sources ["gamepad.leftShoulder"] }
+              { command: "source.passthrough.button.forward", id: "deskForward", label: "Forward", sources ["gamepad.rightShoulder"] }
+              { command: "source.passthrough.arrow.up", id: "deskUp", sources ["gamepad.dpadUp"] }
+              { command: "source.passthrough.arrow.down", id: "deskDown", sources ["gamepad.dpadDown"] }
+              { command: "source.passthrough.arrow.left", id: "deskLeft", sources ["gamepad.dpadLeft"] }
+              { command: "source.passthrough.arrow.right", id: "deskRight", sources ["gamepad.dpadRight"] }
+              { channel: "interact", id: "deskLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.buttonWest"] }
+            ]
+          }
+        }
+      ]
     }
   }
 ]

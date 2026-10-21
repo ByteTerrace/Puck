@@ -216,7 +216,8 @@ public static class WorldPostBuildWiring {
             roster: services.GetRequiredService<PlayerRoster>(),
             grants: services.GetRequiredService<WorldServer>().Grants,
             anchor: services.GetRequiredService<WorldPerceptionAnchor>(),
-            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName
+            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName,
+            screens: services.GetRequiredService<WorldServer>().Definition.Screens
         );
 
         // Close the lever path here, where both halves are resolvable in EVERY shape: an accepted lever reaches the

@@ -973,6 +973,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 output.Image.IsSameDeviceImage &&
                 Withholds(
                     previousFrame: binding.PreviousFrame,
+                    rendersThisFrame: RendersIn(producer: binding.Producer, schedule: schedule),
                     tainted: output.Tainted
                 )
             ) {

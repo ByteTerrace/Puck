@@ -222,7 +222,12 @@ A window captured into a pane, such as an editor, can take the keyboard.
 - The reserved chord, Control and Alt held with Escape pressed, returns focus to
   the game whenever a source has it, and that Escape reaches neither the game
   nor the source. While the game has focus the chord has nothing to return, so
-  its Escape is the game's like any other key.
+  its Escape is the game's like any other key, unless the host claims the chord
+  (`SourceFocus.ClaimsChord`). A fired chord is reported once to the host
+  (`SourceFocus.TakeChord`). The World claims it while a local seat frames a
+  window it may open, and answers it by leaving: it returns the keyboard, closes
+  the window's source and leaves the seat's engagement, so the chord is one step
+  out whoever has the keyboard.
 
 A world document never creates a passthrough source: the world validator
 refuses a screen whose `input` is `Passthrough`. Focus sits inside the input the
@@ -272,6 +277,13 @@ the pointer, which is the World's. On Win32 the change applies at once to a
 pointer resting over the client area, and `WM_SETCURSOR` keeps it as the pointer
 moves.
 
+The policy also moves the cursor for a pad driving the pointer
+(`IWindowCursorPolicy.TryTakeWarp`): the pump hands the client point to
+`INativeWindowCursor.WarpPointer`, which on Win32 moves the cursor only for the
+foreground window and never while the pointer is locked, rebases the
+window-message fallback so the move reads as no relative motion, and reports
+the new position with the next pump of events, as a mouse's move would.
+
 The same policy locks the pointer for a drag that reads only its motion
 (`IWindowCursorPolicy.LocksPointer`; the World's is any seat holding
 `player.orbit` or `player.steer`). While `INativeWindowCursor.LocksPointer` is
@@ -311,8 +323,20 @@ or per-monitor-aware window each receives its own units. Keys outside `KeyCode`,
 or Home, never reach the engine, so they never reach a source either.
 
 The World host opens a passthrough source only through `source.passthrough`,
-which only its own console may run as typed text (see
-[the World guide](../../src/Puck.World/README.md)). A recorded run on real
+which only its own console may run as typed text, or on the local user's own
+press on an engaged window capture's framed picture: a physical click, or a
+local pad's bound press (see
+[the World guide](../../src/Puck.World/README.md)). A pad drives such a window
+the way a controller's desktop mode does, through verbs a world's binding page
+names and that act only for a local pad's own control
+(`WorldPassthroughPad.IsLocalPad`): the left stick moves the system cursor
+across the framed picture at the screen route's `padPointer` feel, integrated
+exactly over each frame so its speed does not depend on the frame rate, the
+right stick turns the wheel, its buttons press pointer buttons (back and
+forward are the fourth and fifth), and its d-pad presses arrow keys on a window
+the local user has opened. Its presses take the same door a physical press does
+(the router above), so a drag, a release going where its press went and a
+revocation behave as a mouse's do. A recorded run on real
 hardware, in which a click reaches a captured editor window at the mapped point,
 is [deferred to the end](../plans/rendering.md#deferred-to-the-end) of the
 rendering programme.

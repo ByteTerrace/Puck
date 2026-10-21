@@ -10861,6 +10861,29 @@ export type WorldScreenMagazine = {
   wrap?: boolean;
 };
 
+export type WorldScreenPadPointer = {
+  /**
+   * The pointer's speed at full deflection before any boost, in heights of the framed picture per second. Positive.
+   */
+  speed: number;
+  /**
+   * The exponent the deflection's length is raised to; 1 is a linear response. At least 1.
+   */
+  curve?: number;
+  /**
+   * The speed's multiplier once a deflection has been held for RampSeconds, rising linearly from 1 while it is held and back to 1 once the stick rests. At least 1.
+   */
+  boost?: number;
+  /**
+   * How long a held deflection takes to reach Boost; 0 applies it at once. Non-negative.
+   */
+  rampSeconds?: number;
+  /**
+   * The wheel's speed at full deflection of the scrolling stick, in wheel notches per second, its deflection raised to Curve too. Non-negative; 0 scrolls nothing.
+   */
+  scrollSpeed?: number;
+};
+
 /**
  * How a Session face's destination render projects onto the face — an ordinary head-on camera image, or a WINDOW whose image shears with the viewer's own eye so the destination scene parallaxes against the aperture the way a real opening would.
  */
@@ -10909,6 +10932,10 @@ export type WorldScreenRoute = {
    * How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.
    */
   display?: WorldScreenDisplay | null;
+  /**
+   * How a local pad's sticks drive the pointer over this screen's framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad's buttons still click and press keys. Omitted from the wire when null.
+   */
+  padPointer?: WorldScreenPadPointer | null;
 };
 
 /**
