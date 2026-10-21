@@ -10,9 +10,9 @@ shape gallery from x = 14. Its top is 0.8 m up, White's back rank on the table's
 
 The 32 pieces are rigid bodies on a tabletop board (the
 [tabletop primitive](../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
-Nothing reads a move from input: whenever the physics comes to rest for one
-second, the rules read the settled arrangement off the board and judge it
-against the last legal position. A legal arrangement becomes the new position
+However a piece was moved, the judge reads no move from input: whenever the
+physics comes to rest for one second, the rules read the settled arrangement off
+the board and judge it against the last legal position. A legal arrangement becomes the new position
 and passes the turn; any other is recorded as illegal (`illegalCount`) and the
 game waits for the pieces to be put right. The rules cover captures, promotion
 (the computer always queens), castling, en passant, check, the 75-move rule and
@@ -23,7 +23,39 @@ The computer plays Black by default. It searches one ply, judging each candidate
 with the game's own rules and scoring material, central squares and pawn
 progress, then moves its piece itself and puts a piece it takes beside the board.
 
-## Moving a piece
+## Playing at the table
+
+Walk up to the table and press the context button (E, or the pad's X) within
+2.5 m of the board's centre: the Moth sits down, stands still, and the camera
+eases to a view of the whole board from the side she stands on (White's side is
+-Z, the far side from the spawn). The controls switch to the board page while
+she sits; the same button stands her up again and the camera eases back.
+
+A blue outline marks the cursor's square. Lift a piece of the side to move
+from under it, and it hovers over the cursor wherever the cursor goes; put it
+down on another square and the move is played. Up the board is away from the
+side she sits on.
+
+| Device | Move the cursor | Lift and put down | Put the piece back | Stand up |
+|---|---|---|---|---|
+| Mouse | Point at a square | Click a piece, then click a square; or press on a piece, drag and release over a square | Right-click, or click the square it came from | E |
+| Keyboard | W A S D or the arrows, one square a press | Space or Enter | Escape or Backspace | E |
+| Pad | Left stick or d-pad, one square a push | South (A) | East (B) | West (X) |
+
+A put-down takes a captured piece beside the board, moves the rook of a castle,
+lifts the pawn an en-passant capture takes and queens a pawn that reaches the
+last rank, then the board rests and is judged as ever. An arrangement judged
+illegal is put back as it stood before the put-down (`illegalCount` still
+counts it). A piece lifts only once the board has rested, only on its side's
+turn, and not while the computer is moving; a square holding a piece of the side
+to move takes nothing, so a put-down there is refused and the piece stays up.
+Seat 1 plays every side the computer does not (`aiSide`).
+
+`world.state play` reads the seated seat's cursor, the piece it holds
+(`held`, a piece ordinal or -1) and the square it left. Body 40 is the cursor
+outline; it rests inside the tabletop while nobody sits at the table.
+
+## Moving a piece from the console
 
 A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
 `39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23. Square
@@ -38,7 +70,7 @@ posing its body 1.3 m up over the square's centre; it drops onto the board:
 | Take a piece off the board | pose its body onto the table beside the board, as `body.pose -5.1 1.3 -12.3 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as
-the console. No key or pad binding moves a piece.
+the console.
 
 ## Reading the game
 
@@ -68,7 +100,8 @@ through how it plays.
 ## Tests
 
 [`chess-tests.puck`](chess-tests.puck) holds the table's scenarios, each booted
-in the whole debug world: legal and illegal moves, captures, castling through
+in the whole debug world: a seated player playing a move with the keys and one
+with a pointer drag, legal and illegal moves, captures, castling through
 and clear of attack, en passant, a move left in check, threefold repetition and
 the opponent on either side. Run them with
 `puck test worlds/debug/chess-tests.puck`.

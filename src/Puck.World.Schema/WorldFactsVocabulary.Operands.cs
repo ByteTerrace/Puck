@@ -12,6 +12,9 @@ namespace Puck.World;
 public static partial class WorldFactsVocabulary {
     private sealed class WorldFactsOperandFamily : OperandFamily {
         private const string BoardCellOfPrefix = "$board:cellOf:";
+        private const string BoardEngagedPrefix = "$board:engaged:";
+        private const string BoardPointerPrefix = "$board:pointer:";
+        private const string BoardSidePrefix = "$board:side:";
 
         public override IReadOnlyList<string> Spellings { get; } = [
             WorldRuleFacts.Population,
@@ -36,6 +39,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError",
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
+            "$board:engaged|pointer|side:<row>:<seat>",
         ];
 
         private static WorldArgBodyOperand ArgBody(string name, StateChannelRef? cell, in OperandSite site, WorldFactsCompileContext world) {
@@ -1158,9 +1162,117 @@ public static partial class WorldFactsVocabulary {
                     valueKind: CellKind.Int,
                     world: world
                 );
+            } else if (BoardSeatFacetOf(name: name) is { } seatFacet) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+                fact = BoardSeat(
+                    facet: seatFacet,
+                    name: name,
+                    ruleName: ruleName,
+                    tokens: call!.Texts(start: 1),
+                    world: world
+                );
             }
 
             return (fact is not null);
+        }
+        private static BoardSeatFacet? BoardSeatFacetOf(string name) {
+            if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: BoardEngagedPrefix
+            )) {
+                return BoardSeatFacet.Engaged;
+            }
+
+            if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: BoardPointerPrefix
+            )) {
+                return BoardSeatFacet.Pointer;
+            }
+
+            return (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: BoardSidePrefix
+            )
+                ? BoardSeatFacet.Side
+                : null);
+        }
+        // $board:engaged|pointer|side:<row>:<seat> — the row a board row whose topology a placement's board facet
+        // anchors with an engagement, the seat 1-based within the document's local seats.
+        private static WorldBodyFactOperand BoardSeat(BoardSeatFacet facet, string name, string ruleName, string[] tokens, WorldFactsCompileContext world) {
+            var seats = world.Definition.Population.LocalSeats;
+            var row = ((tokens.Length == 2)
+                ? world.FindRow(name: tokens[0])
+                : null);
+
+            if (
+                (row?.EffectiveDomain is not StateDomain.CellsOf board) ||
+                (world.FindTopology(name: board.Topology) is not { } topology) ||
+                !int.TryParse(
+                s: tokens[1],
+                style: NumberStyles.None,
+                provider: CultureInfo.InvariantCulture,
+                result: out var seat
+            ) ||
+                (seat < 1) ||
+                (seat > seats)
+            ) {
+                throw new RuleException(
+                    detail: $"'{name}' does not spell '$board:engaged|pointer|side:<row>:<seat>' over a discrete board row with seat in 1..{seats}",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: ruleName
+                );
+            }
+
+            WorldPlacement? anchor = null;
+
+            foreach (var placement in world.Definition.Placements) {
+                if (
+                    (placement.Board is { Engage: not null } facetBoard) &&
+                    string.Equals(
+                    a: facetBoard.Topology,
+                    b: board.Topology,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    anchor = placement;
+
+                    break;
+                }
+            }
+
+            if (anchor is null) {
+                throw new RuleException(
+                    detail: $"'{name}' names board row '{tokens[0]}', whose topology '{board.Topology}' no placement's board facet anchors with an engage block",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: ruleName
+                );
+            }
+
+            var operand = new BoardSeatOperand(
+                facet: facet,
+                placementId: anchor.Id,
+                row: row.Name.Value,
+                seat: (seat - 1),
+                surface: Puck.Maths.FixedQ4816.FromDouble(value: anchor.Board!.Engage!.Surface),
+                topology: topology
+            );
+
+            return BodyFact(
+                bodyA: default,
+                bodyB: default,
+                cost: 1L,
+                describe: name,
+                read: reader => reader.Read(operand: operand),
+                rowOrdinal: -1,
+                valueKind: CellKind.Int,
+                world: world
+            );
         }
     }
 }

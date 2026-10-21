@@ -7635,6 +7635,44 @@
       ],
       "title": "WorldBoardEnforcement"
     },
+    "WorldTabletopEngage": {
+      "description": "A tabletop\u0027s engagement: a seat standing within Radius of the board\u0027s centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:\u003Cid\u003E application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world\u0027s rules read the seat\u0027s channels as play (channel(...)), and the board reads where the seat points (board(pointer, \u003Crow\u003E, \u003Cseat\u003E)), whether the seat sits at it (board(engaged, \u2026)) and from which side (board(side, \u2026)), so the game itself stays document rules.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "channel": {
+          "description": "The declared channel whose press engages and leaves the table.",
+          "type": "string"
+        },
+        "radius": {
+          "description": "How near the board\u0027s centre, on the ground plane in world units, a seat must stand to engage. Positive.",
+          "type": "number",
+          "default": 2.5
+        },
+        "pitch": {
+          "description": "The board view\u0027s elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat\u0027s side. In (0, 90].",
+          "type": "number",
+          "default": 60
+        },
+        "margin": {
+          "description": "World units of room the board view leaves around the board\u0027s footprint. Non-negative.",
+          "type": "number",
+          "default": 0.1
+        },
+        "surface": {
+          "description": "The height above the topology\u0027s origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false,
+      "title": "WorldTabletopEngage"
+    },
     "WorldPlacementBoard": {
       "description": "A placement\u0027s board facet \u2014 the tabletop primitive. Anchors a state.lattices Grid topology (which already carries its own world-space origin/cellSize frame) to this placement, so a chess set, a checkers board, or a card table is one placement/body carrying one topology \u2014 carriable as a unit once an attachment primitive picks it up. A topology is carried by at most one placement (validated). Occupancy is the only row the engine reads; Turn/Verdict/ Move/Plan are author-named convenience bindings world.tabletop echoes together \u2014 ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive rather than a chess-specific feature.",
       "type": [
@@ -7691,6 +7729,11 @@
           "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
           "type": "integer",
           "default": 1
+        },
+        "engage": {
+          "$ref": "#/$defs/WorldTabletopEngage",
+          "description": "How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat\u0027s pointer meets.",
+          "default": null
         }
       },
       "required": [

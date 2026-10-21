@@ -465,7 +465,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E4 debug views everywhere (startable today).
 - [x] E5 the inspector (`world.inspect`; its selection line fills when E2 lands).
 - [ ] E6 why is this dark or invisible.
-- [ ] E7 gizmos and pointer dragging.
+- [ ] E7 gizmos and pointer dragging. Pointer dragging on a tabletop is in place: a seated seat's pointer ray meets the board's playing surface in fixed point (`board(pointer, …)`, `WorldTabletopFrame.TryPointerCell`) and the debug world's chess rules lift a piece on press and put it down on a click or a release elsewhere ([engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)). The gizmos and the placement drag the editor needs are open.
 - [ ] E8 editor camera.
 - [x] E9 cost per object and GPU pass timing (`world.cost`, `world.gpu-timing`).
 - [x] E10 live reload and before-and-after: watched source and import changes use ordinary authenticated reloads, preserve editor state and report refusals. Per-seat held frames support split, bindable wipe and difference through ordinary capture and `place`, with the image-difference metric shared with the canaries. `editor-compare` checks both backends, including cropped sampling and return to the live view.

@@ -71,7 +71,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult EngageHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: "[body.engage: expected a target (a screen index or body:<n>) — plus an optional capture:on|off and an optional body index]");
+            return CommandResult.Error(output: "[body.engage: expected a target (a screen index, body:<n> or placement:<id> for a tabletop) — plus an optional capture:on|off and an optional body index]");
         }
 
         // capture:on|off, when present, is ALWAYS the LAST token — this keeps the target and the (optional) body
@@ -97,7 +97,7 @@ internal sealed partial class PlayerCommandModule {
             token: args[0],
             target: out var target
         )) {
-            return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index or body:<n>]");
+            return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index, body:<n> or placement:<id>]");
         }
 
         // The driving body is the optional 0-based body index at token 1, default body 0 (seat 1's body), read and
@@ -286,7 +286,7 @@ internal sealed partial class PlayerCommandModule {
         return false;
     }
     // Parses body.engage's target token: a bare non-negative integer names a SCREEN (the historical, unchanged
-    // shape); "screen:<n>"/"body:<n>" name either explicitly — the SAME grammar
+    // shape); "screen:<n>"/"body:<n>" name either explicitly, and "placement:<id>" a tabletop — the SAME grammar
     // world.grant's subject token already uses, so an operator who knows one already knows the other. Any other
     // GrantSubject shape (all/section/profile/composition) is not a legitimate engage target and is rejected.
     private static bool TryParseEngageTarget(ReadOnlySpan<char> token, out GrantSubject target) {
@@ -295,7 +295,7 @@ internal sealed partial class PlayerCommandModule {
             subject: out target,
             token: token
         ) &&
-            (target.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body)
+            (target.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body or GrantSubjectKind.Placement)
         ) {
             return true;
         }

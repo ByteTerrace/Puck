@@ -16,6 +16,8 @@ public sealed partial class WorldTick {
     // Reused scratch for the possessed-inhabitant walk — cleared and refilled on every check rather than allocated
     // per call. Single-threaded on the host tick, like every other tick-facade buffer.
     private readonly List<int> m_possessedInhabitantScratch = [];
+    // Each local seat's context-button target this tick (ResolveEngageProbes): a screen or a tabletop placement.
+    private readonly GrantSubject[] m_engageProbeTargets = new GrantSubject[WorldBodiesLimits.LocalSeatCount];
     // The (entity, principal) pairs an ALLOWED intent has already written THIS TICK — the seat drain plus every mounted
     // addon's contributions. Sized at AttachAddons to the local-seat lane count (Client.WorldClient.SubmitSeatIntents
     // produces one per live roster slot) plus two per mounted addon, which covers the ordinary case of a guest driving

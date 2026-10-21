@@ -81,7 +81,7 @@ export, and says so once on stderr. `principal` is `seat1`..`seat4` only —
 proves nothing about authority; author the step's power in the document's own
 `grants`), as are `peer:`/`addon:`. `command` must open with a verb in
 `WorldScheduleCommands.Admitted` — state mutations, guarded transforms, body
-intents/poses, `player.join`/`player.leave` — and every process, clock, file
+intents/poses, a seat's pointer ray (`source.pointer.origin`/`direction`/`clear`), `player.join`/`player.leave` — and every process, clock, file
 or authority verb (`quit`, `world.rate`, `world.save`, `world.load`,
 `world.grant`) is refused at validation with the row's index. The tick pins
 the SUBMISSION — an `Immediate` verb runs inline in it, a `Simulation` verb

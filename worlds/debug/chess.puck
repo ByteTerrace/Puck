@@ -4,9 +4,9 @@
 // (-6, 0, -12), ahead and left of the spawn, White's back rank on its -Z side. chess.md beside this file says how to
 // move a piece, read the game and set the opponent.
 
-// The Moth basis seats eight bodies; the 32 pieces take the rest.
+// The Moth basis seats eight bodies; the 32 pieces and the board cursor take the rest.
 bodies {
-  capacity: 40
+  capacity: 41
 }
 
 // The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
@@ -25,7 +25,7 @@ let pieceLooks = concat(
 )
 
 looks {
-  rows: map(pieceLooks, name => {
+  rows: map(concat(pieceLooks, ["boardCursor"]), name => {
     motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
     name: name
     scale: 1
@@ -177,6 +177,33 @@ kits {
         rollingFriction: 0.15
       }
     }
+    // The board cursor: volumeless and overlapping, so it touches no piece, and posed by the rules every tick.
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "walk"
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "held"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "boardCursor"
+    }
   ]
 }
 
@@ -198,9 +225,41 @@ placements {
       topology: "chessBoard"
       turn: "turn"
       verdict: "verdict"
+      // The context button within 2.5 m of the board's centre sits the seat down at the table and the next press
+      // stands it up; seated, the camera looks down on the board from the seat's side and the pointer picks squares
+      // on their tops, 6 cm above the board's frame.
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.06
+      }
     }
     position: chessTable
     solid
+  }
+
+  // The square cursor a seated player moves (body 40 in the debug world, before the pieces so they keep 8 to 39): the
+  // rules pose it on the cursor's square while the seat sits at the table and park it inside the tabletop otherwise.
+  placement "boardCursor" {
+    prototype: "boardCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "boardCursor"
+      source: "Idle"
+    }
+    parent: "chessTable"
+    position [0, 1.25, 0]
   }
 
   for i in range(0, 8) {
@@ -265,6 +324,41 @@ prototypes {
 
   squareProto("boardSquareLight", "light")
   squareProto("boardSquareDark", "dark")
+
+  // A square's outline, one cell across: four flat bars around the square the cursor stands on.
+  prototype "boardCursor" {
+    document {
+      name: "boardCursor"
+      palette [
+        {
+          color: "state.boardColors.cursor"
+          roughness: 0.4
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0, -0.088]
+        scale [0.1, 0.004, 0.012]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0, 0.088]
+        scale [0.1, 0.004, 0.012]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.088, 0, 0]
+        scale [0.012, 0.004, 0.1]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.088, 0, 0]
+        scale [0.012, 0.004, 0.1]
+      }
+    }
+  }
 }
 
 rule "tabletop-settle-hold-advance" {
@@ -667,6 +761,242 @@ rule "chess-ai-finish" {
   settleHold = 0
 }
 
+// ---- Playing at the table --------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and plays with the board page below: the cursor
+// follows the pointer, the movement keys, the d-pad or the stick, one square a press, up the board being away from the
+// side the seat sits on. The pick button lifts the side to move's piece under the cursor, which then hovers over the
+// cursor; the next press puts it down there, or a release away from the square it left does (a drag). Pressing on the
+// square it left, the cancel button or standing up puts it back. A put-down hands the move to the computer's own apply
+// path (ai[from], ai[to], ai[pending]): it takes a captured piece beside the board, moves a castling rook, lifts the
+// pawn an en-passant capture takes and queens a pawn on the last rank, then the settled arrangement is judged as ever.
+// An arrangement judged illegal is put back as it stood before the put-down.
+
+// The seated seat's buttons this tick, each 1 while held past half way.
+rule "chess-play-buttons" {
+  mode: Level
+  play[pickNow] = 0
+  play[cancelNow] = 0
+  play[aheadNow] = 0
+  play[behindNow] = 0
+  play[rightNow] = 0
+  play[leftNow] = 0
+  if board(engaged, board, 1) == 1 and channel(1, boardPick) >= 0.5 {
+    play[pickNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, boardCancel) >= 0.5 {
+    play[cancelNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, forward) >= 0.5 {
+    play[aheadNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, forward) <= -0.5 {
+    play[behindNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, strafe) >= 0.5 {
+    play[rightNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, strafe) <= -0.5 {
+    play[leftNow] = 1
+  }
+}
+
+// The press images: each binary is this tick's press on a rising edge, and each step is +1 or -1 on a rising edge.
+rule "chess-play-edges" {
+  mode: Level
+  local pick = play[pickNow]
+  local cancel = play[cancelNow]
+  local ahead = play[aheadNow]
+  local behind = play[behindNow]
+  local rightward = play[rightNow]
+  local leftward = play[leftNow]
+  play[pickEdge] = pick & (play[pickDown] == 0)
+  play[releaseEdge] = (pick == 0) & (play[pickDown] == 1)
+  play[cancelEdge] = cancel & (play[cancelDown] == 0)
+  play[stepAhead] = (ahead & (play[aheadDown] == 0)) - (behind & (play[behindDown] == 0))
+  play[stepRight] = (rightward & (play[rightDown] == 0)) - (leftward & (play[leftDown] == 0))
+  play[pickDown] = pick
+  play[cancelDown] = cancel
+  play[aheadDown] = ahead
+  play[behindDown] = behind
+  play[rightDown] = rightward
+  play[leftDown] = leftward
+}
+
+// The pointer moves the cursor whenever it moves onto another square.
+rule "chess-play-point" {
+  local pointed = board(pointer, board, 1)
+  when board(engaged, board, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != play[pointer] {
+    play[cursor] = pointed
+  }
+  play[pointer] = pointed
+}
+
+// A step moves the cursor one square in the seat's own frame: from the -Z side up the board is +rank and right is
+// -file (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+rule "chess-play-step" {
+  when play[stepAhead] != 0 or play[stepRight] != 0
+  mode: Level
+  local seatSide = board(side, board, 1)
+  local file = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  local rank = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  play[cursor] = clamp(rank, 0, 7) * 8 + clamp(file, 0, 7)
+}
+
+// A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.
+rule "chess-play-lift" {
+  when (((play[pickEdge] == 1) & (play[held] < 0) & (play[judging] == 0) & (pieceCell[$each] == play[cursor]) & (pieceCode[$each] * (1 - 2 * turn) > 0) & (aiSide != turn) & (ai[pending] == 0) & (settleHold == chessSettleTicks)) == 1 : Int)
+  mode: Level
+  forEach: pieceCode
+  play[held] = pieceOrdinal[$each]
+  play[from] = play[cursor]
+  play[lifted] = 1
+}
+
+// A put-down: a fresh press on another square, or the release of the lifting press away from the square the piece
+// left. A square holding a piece of the side to move takes nothing.
+rule "chess-play-put" {
+  local press = (play[pickEdge] == 1) & (play[lifted] == 0)
+  local drop = (play[releaseEdge] == 1) & (play[lifted] == 1)
+  local open = (play[cursor] != play[from]) & (board[play[cursor]] * (1 - 2 * turn) <= 0)
+  when (((play[held] >= 0) & (press | drop) & open & (pieceOrdinal[$each] == play[held])) == 1 : Int)
+  mode: Level
+  forEach: pieceCode
+  pieceCell[$each] = play[from]
+  ai[from] = play[from]
+  ai[to] = play[cursor]
+  ai[mover] = pieceCode[$each]
+  ai[pending] = 1
+  play[held] = -1
+  play[judging] = 1
+}
+
+// What the put-down is judged against, captured the tick it is made.
+rule "chess-play-before" {
+  when play[judging] == 1 and ai[pending] == 1
+  mode: Level
+  forEach: pieceCode
+  playBefore[$each] = pieceCell[$each]
+  playBeforeCode[$each] = pieceCode[$each]
+}
+
+// Putting the piece back: the cancel button, a press on the square it left, or standing up from the table.
+rule "chess-play-cancel" {
+  local back = (play[pickEdge] == 1) & (play[lifted] == 0) & (play[cursor] == play[from])
+  when (((play[held] >= 0) & ((play[cancelEdge] == 1) | back | (board(engaged, board, 1) == 0))) == 1 : Int)
+  mode: Level
+  play[returning] = play[held]
+  play[held] = -1
+}
+
+rule "chess-play-release" {
+  when play[releaseEdge] == 1
+  mode: Level
+  play[lifted] = 0
+}
+
+// The verdict on a put-down: an illegal arrangement is put back as it stood before it.
+rule "chess-play-judged" {
+  when play[judging] == 1 and ai[pending] == 0 and settleHold == chessSettleTicks
+  mode: Level
+  play[judging] = 0
+  play[revert] = verdict == 0
+}
+
+rule "chess-play-revert-codes" {
+  when play[revert] == 1
+  mode: Level
+  forEach: pieceCode
+  pieceCode[$each] = playBeforeCode[$each]
+}
+
+for i in range(0, 32) {
+  // The held piece hovers over the cursor, out of the board's band, so the board never rests while it is up.
+  rule $"chess-play-hold-{i}" {
+    when play[held] == i
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: play[cursor], offset: [0, 0.6, 0])
+  }
+  rule $"chess-play-return-{i}" {
+    when play[returning] == i
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: play[from], offset: [0, 0.3, 0])
+  }
+  rule $"chess-play-revert-{i}" {
+    when play[revert] == 1 and playBefore[$"piece{i}"] >= 0 and pieceCell[$"piece{i}"] != playBefore[$"piece{i}"]
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: playBefore[$"piece{i}"], offset: [0, 0.3, 0])
+  }
+}
+
+rule "chess-play-settled" {
+  mode: Level
+  play[returning] = -1
+  play[revert] = 0
+}
+
+// The cursor stands on its square while the seat sits at the table, and rests inside the tabletop otherwise.
+rule "chess-play-cursor-shown" {
+  when board(engaged, board, 1) == 1
+  mode: Level
+  poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0.066, 0])
+}
+
+rule "chess-play-cursor-parked" {
+  when board(engaged, board, 1) == 0
+  mode: Level
+  poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0, 0])
+}
+
+// The pick and cancel buttons a seated player presses; the seat's movement channels move the cursor.
+channels [
+  {
+    composition: true
+    name: "boardPick"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "boardCancel"
+    shape: Binary
+  }
+]
+
+// The board page, which the seat's controls switch to while it sits at a tabletop.
+bindingOverlays [
+  {
+    id: "tabletop"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      contexts [
+        { family: "engagement", state: "tabletop", group: "tabletop" }
+      ]
+      chords [
+        {
+          chord []
+          group: "tabletop"
+          page {
+            id: "board"
+            label: "Board"
+            entries [
+              { channel: "forward", id: "boardUp", scale: 1, sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"] }
+              { channel: "forward", id: "boardDown", scale: -1, sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"] }
+              { channel: "strafe", id: "boardLeft", scale: -1, sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"] }
+              { channel: "strafe", id: "boardRight", scale: 1, sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"] }
+              { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
+              { channel: "boardPick", id: "boardPick", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
+              { channel: "boardCancel", id: "boardCancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
+              { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.buttonWest"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
 search {
   jobs [
     {
@@ -824,6 +1154,54 @@ state {
       cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
     }
 
+    // Seat 1 at the table: the cursor's square, the piece it holds (its ordinal, -1 for none) and the square it
+    // left, the last pointed square, this tick's presses (the *Edge and step keys) and last tick's buttons (*Down),
+    // whether the held piece was lifted by the press still down, whether a put-down awaits its verdict, and the piece
+    // being put back or the arrangement being restored this tick.
+    table play {
+      cursor = 12
+      held = -1
+      from = -1
+      pointer = -1
+      pickNow = 0
+      cancelNow = 0
+      aheadNow = 0
+      behindNow = 0
+      rightNow = 0
+      leftNow = 0
+      pickEdge = 0
+      releaseEdge = 0
+      cancelEdge = 0
+      stepAhead = 0
+      stepRight = 0
+      pickDown = 0
+      cancelDown = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+      lifted = 0
+      judging = 0
+      returning = -1
+      revert = 0
+    }
+    row {
+      name: "playBefore"
+      kind: "Int"
+      capacity: 32
+      min: -1
+      max: 63
+      cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
+    }
+    row {
+      name: "playBeforeCode"
+      kind: "Int"
+      capacity: 32
+      min: -6
+      max: 6
+      cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
+    }
+
     slot turn = 0 bounds(0..1)
 
     slot verdict = 1 bounds(0..1)
@@ -915,6 +1293,7 @@ state {
     table boardColors {
       light = "#F0D9B5"
       dark = "#8B5A2B"
+      cursor = "#3FA9F5"
     }
 
     slot castleRights = 0 bounds(0..15)

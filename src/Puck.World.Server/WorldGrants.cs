@@ -717,6 +717,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind is GrantSubjectKind.Composition or GrantSubjectKind.History) && trustedWildcard) ||
                 ((subject.Kind == GrantSubjectKind.Machine) && !string.IsNullOrWhiteSpace(value: subject.Id)) ||
+                // A tabletop: a placement whose board facet a seat sits down at (WorldTabletopEngage), by its id.
+                ((subject.Kind == GrantSubjectKind.Placement) && !string.IsNullOrWhiteSpace(value: subject.Id)) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
             // Mutate additionally admits the two ROW-SCOPED dispatch subjects — one creations row, one placements
             // row — for any principal. They are an alternative to the section hold, never a narrowing beneath it,
@@ -942,7 +944,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             WorldCapability.Observe => (trusted
             ? "observe must name a concrete body or state row (observe body:<n> | observe state:<name>) or the wildcard 'all' — screen/region/seat/adjacency are event-only subjects with no trusted-principal consumer"
             : "observe must name a concrete body, state row, screen, region, seat, or adjacency (observe body:<n> | observe state:<name> | observe screen:<n> | observe region:<name> | observe seat:<n> | observe adjacency:<name>)"),
-            WorldCapability.Control => $"control must name a concrete screen, body, or machine (control screen:<n> | control body:<n> | control machine:<name>){((trusted || (principal.Kind == PrincipalKind.Peer))
+            WorldCapability.Control => $"control must name a concrete screen, body, machine, or tabletop placement (control screen:<n> | control body:<n> | control machine:<name> | control placement:<id>){((trusted || (principal.Kind == PrincipalKind.Peer))
             ? " or the wildcard 'all'"
             : "")}",
             WorldCapability.Mutate => $"mutate must name a document section (mutate section:<name>), one creations or placements row (mutate creation:<id> | mutate placement:<id>), or a concrete state row for the cross-document write-back channel (mutate state:<name>){(trusted

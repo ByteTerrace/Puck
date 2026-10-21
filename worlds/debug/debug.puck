@@ -101,10 +101,11 @@ spawnPoints: concat([
 
 commands: galleryCommands
 
-// The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck) and the chess
-// pieces the 32 below it (chess.puck); both imports name a population, so this body settles it.
+// The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck), the chess
+// board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
+// settles it.
 bodies {
-  capacity: 41
+  capacity: 42
 }
 
 placements {
