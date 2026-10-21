@@ -7,9 +7,12 @@ namespace Puck.World;
 /// volume is decided.
 /// </summary>
 /// <remarks>
-/// <para>The band is one-sided along <see cref="WorldFaceFrame.Normal"/>: a door fires from the side it faces, and
-/// walking into its back is not a crossing. Width and height are the frame's own, so a bigger door has a bigger
-/// threshold — the volume moves and resizes with the drawn face.</para>
+/// <para>The slab lies behind the glass, against <see cref="WorldFaceFrame.Normal"/>, and is entered only from the
+/// front: a door fires when a body's origin passes through its glass from the side it faces, and walking into its
+/// back is not a crossing. Width and height are the frame's own, so a bigger door has a bigger opening — the volume
+/// moves and resizes with the drawn face. While a body stands in the opening, contact with geometry behind the glass
+/// is ignored (<c>Puck.World.Server.WorldPortalHoleContactField</c>), so a door laid on solid ground lets a body drop
+/// through it.</para>
 /// <para>Depth is <c>max(frame half-depth, crossing floor)</c>. The floor exists because a frame can be authored
 /// thinner than one step of travel, which would leave a walk-through detectable only by the swept clip; it is a
 /// sampling term, not a soundness one. Soundness is the swept clip's
@@ -98,6 +101,40 @@ public static class WorldFacePortalPolicy {
         }
 
         return ceiling;
+    }
+    /// <summary>Returns the opening of every portal face a document declares, in document order.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <returns>Each portal face's box aperture.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static WorldFaceAperture.Box[] PortalApertures(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var catalog = WorldFaceCatalog.For(definition: definition);
+        var crossingFloor = CrossingFloor(definition: definition);
+        var openings = new List<WorldFaceAperture.Box>();
+
+        foreach (var placement in definition.Placements) {
+            foreach (var face in (placement?.FaceSources ?? [])) {
+                if (
+                    (face?.Portal is not null) &&
+                    catalog.TryFind(
+                    placementId: placement!.Id,
+                    faceName: face.Face,
+                    out var row
+                ) &&
+                    TryAperture(
+                    aperture: out var aperture,
+                    crossingFloor: crossingFloor,
+                    row: in row
+                ) &&
+                    (aperture is WorldFaceAperture.Box box)
+                ) {
+                    openings.Add(item: box);
+                }
+            }
+        }
+
+        return [.. openings];
     }
     /// <summary>Builds the enterable region a portal face opens.</summary>
     /// <param name="row">The derived face row.</param>

@@ -1,8 +1,8 @@
 // The mesh pass's and the surface and views passes' reads of the mesh region, SdfMeshRegion's raw word layout: one
-// thirty-three-word record a draw (its row-vector object-to-world matrix row by row, its material, the word its first
+// forty-four-word record a draw (its row-vector object-to-world matrix row by row, its material, the word its first
 // index sits at, its index count, the word its first vertex sits at, its attribute flags, the word its first triangle
 // material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
-// slot whose frame its mesh is stored in, or -1, and the word its mesh's members sit at), then the vertices, six words
+// slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry and its clip plane), then the vertices, six words
 // each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
 // flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-isa.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
 // sdfDynamicTransforms: sdf-world and sdf-mesh both do.
@@ -79,8 +79,30 @@ float3 sdfMeshObjectPosition(uint record, uint k) {
     uint word = sdfMeshVertexAt(record, k);
     return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
 }
+// A world direction under the draw's carry rotation (SDF_MESH_CARRY_ROTATION_WORD).
+float3 sdfMeshCarryDirection(uint record, float3 v) {
+    uint word = (record + SDF_MESH_CARRY_ROTATION_WORD);
+
+    return rotatePointByQuaternion(v, asfloat(uint4(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)], sdfMeshRegion[(word + 3u)])));
+}
+// A world point under the draw's carry: its rotation, then its translation (SDF_MESH_CARRY_TRANSLATION_WORD). The carry is
+// the last step of every world position the draw resolves, so a copy of a body drawn through a portal pair is the body,
+// moved through the pair.
+float3 sdfMeshCarryPoint(uint record, float3 p) {
+    uint word = (record + SDF_MESH_CARRY_TRANSLATION_WORD);
+
+    return (sdfMeshCarryDirection(record, p) + asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)])));
+}
+// A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
+// drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.
+float sdfMeshClipDistance(uint record, float3 world) {
+    uint word = (record + SDF_MESH_CLIP_PLANE_WORD);
+    float4 plane = asfloat(uint4(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)], sdfMeshRegion[(word + 3u)]));
+
+    return (dot(plane.xyz, world) + plane.w);
+}
 // Its world position: under the draw's row-vector matrix, whose fourth row carries translation, or, for a vertex riding a
-// member, under that member's slot in this frame.
+// member, under that member's slot in this frame; then under the draw's carry.
 float3 sdfMeshWorldPosition(uint record, uint k) {
     float3 object = sdfMeshObjectPosition(record, k);
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
@@ -88,10 +110,10 @@ float3 sdfMeshWorldPosition(uint record, uint k) {
     if (entry != 0u) {
         uint slot = sdfMeshMemberSlot(record, entry);
 
-        return (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz);
+        return sdfMeshCarryPoint(record, (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz));
     }
 
-    return (sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u));
+    return sdfMeshCarryPoint(record, (sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u)));
 }
 // An object-space normal under a draw's normal matrix (the inverse transpose of its matrix, so a nonuniform scale keeps
 // the normal perpendicular to the surface).
@@ -112,10 +134,10 @@ float3 sdfMeshWorldNormal(uint record, uint k) {
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
 
     if (entry != 0u) {
-        return rotatePointByQuaternion(sdfMeshMemberLocal(entry, normal, false), sdfDynamicTransforms[((3u * sdfMeshMemberSlot(record, entry)) + 1u)]);
+        return sdfMeshCarryDirection(record, rotatePointByQuaternion(sdfMeshMemberLocal(entry, normal, false), sdfDynamicTransforms[((3u * sdfMeshMemberSlot(record, entry)) + 1u)]));
     }
 
-    return sdfMeshNormalToWorld(record, normal);
+    return sdfMeshCarryDirection(record, sdfMeshNormalToWorld(record, normal));
 }
 // The barycentric weights of a point on the triangle (a, b, c), in that order, or false for a triangle with no area.
 bool sdfMeshBarycentric(float3 a, float3 b, float3 c, float3 p, out float3 weights) {
@@ -241,6 +263,7 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
 // measures the ray parameter to, and the triangle, which the surface pass resolves the surface of.
 struct MeshVertex {
     float4 position : SV_Position;
+    float clip : SV_ClipDistance0;
     float3 world : WORLD;
     nointerpolation uint triangleIndex : MESHTRIANGLE;
 };

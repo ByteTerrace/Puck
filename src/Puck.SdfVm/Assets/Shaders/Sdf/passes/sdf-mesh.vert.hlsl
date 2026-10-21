@@ -26,6 +26,7 @@ MeshVertex VSMain(uint vertexId : SV_VertexID) {
         worldSurfaceNearDistance(view),
         w
     );
+    output.clip = sdfMeshClipDistance(record, world);
     output.world = world;
     output.triangleIndex = (vertexId / 3u);
 

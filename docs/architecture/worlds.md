@@ -422,11 +422,16 @@ half turn in it, and a body dropped off the rim arrives on the far side of the p
 backwards. `world.adjacencies` echoes the turn in force (`turn=`) beside the ownership threshold
 (`threshold=`) so an author can read a twisted seam off the console rather than off a body.
 The depth past the threshold carries through unchanged: a deliberate continuity property. A
-portal door pair maps the same way: a traveller fires a door's band one band depth in front of its
-face and lands one band depth behind the counterpart's face, walking out through it. The counterpart's band is
-one-sided and the arrival latches the traveller as already inside it, so walking out through the
-counterpart's glass fires nothing and a crossing never bounces; only turning round and walking back
-into its front fires the way back. Scanning
+portal door pair maps the same way: a door fires when a traveller's origin passes through its glass,
+within its opening, and the traveller lands just as far through the counterpart's glass, walking out
+of it ([decision](../decisions/engine-design.md#a-portal-is-a-plane-a-body-passes-through)). While a
+traveller stands in an opening, contact with its world's geometry behind the glass is ignored, so a
+door laid on the ground lets a body drop through it. A counterpart fires only for an origin passing in
+through its front, and the arrival latches the traveller as already through any door it lands behind,
+so walking out of the counterpart's glass fires nothing and a crossing never bounces; only turning
+round and walking back into its front fires the way back. A pair standing in one world carries the
+traveller in place, as continuous motion: its index and state stay, and its points and directions move
+through the isometry. Scanning
 is swept per actual step, so a high-speed body cannot tunnel through a face between samples, and a
 body crossing several faces in one step resolves to exactly one winner. The neighbour arrives over
 the session-mirror observation plane—wire-shaped delivered data, never a reach into a sibling

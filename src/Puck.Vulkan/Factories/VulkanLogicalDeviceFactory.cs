@@ -78,6 +78,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const uint FragmentStoresAndAtomicsFeatureIndex = 26u;
     // R8 and R8G8 storage images hold the policy-sized incoming shadow visibilities.
     private const uint StorageImageExtendedFormatsFeatureIndex = 29u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderClipDistance: the SDF mesh and shadow passes' vertex stages
+    // write a clip distance, which clips a body straddling a portal at the portal's glass.
+    private const uint ClipDistanceFeatureIndex = 37u;
 
     // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
     // it; a device reporting any of them absent is refused naming it.
@@ -85,6 +88,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
+        (ClipDistanceFeatureIndex, "shaderClipDistance", "the SDF mesh and shadow passes clip a body straddling a portal at its glass"),
     ];
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
     // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
@@ -243,7 +247,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return (extensions, featureStructureTypes);
     }
-
     private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
         FeatureIndicesOf(support: m_physicalDeviceApi.GetFeatureSupport(
             instance: instance,
@@ -252,8 +255,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
     /// <summary>Returns the <c>VkPhysicalDeviceFeatures</c> flag indices a device is created with: the required
     /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading's indexed screen sources and samplers
-    /// need, and <c>fragmentStoresAndAtomics</c>, with which the SDF mesh pass's fragments count the texels they write,
-    /// then each optional feature the device reports.</summary>
+    /// need, <c>fragmentStoresAndAtomics</c>, with which the SDF mesh pass's fragments count the texels they write, and
+    /// <c>shaderClipDistance</c>, with which the mesh and shadow passes clip a body at a portal's glass, then each
+    /// optional feature the device reports.</summary>
     /// <param name="support">The device's base features, one flag per <c>VkPhysicalDeviceFeatures</c> member in
     /// declaration order.</param>
     /// <returns>The flag indices to enable.</returns>

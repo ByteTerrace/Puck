@@ -52,7 +52,14 @@ subject names them:
   active local-seat party) or `Body` (one seat). It is the world-scope default
   a placement face's own `WorldPlacementPortal` facet falls back to when it
   authors no `Travel`; a null section resolves every facet to `Body`. A door
-  may lie at any orientation (a shape turned a quarter about +X lays it flat;
+  fires when a body's origin passes through its glass, within the opening
+  (`WorldFaceAperture.Box`'s slab is `[-Depth, 0]` behind the glass, entered
+  only from the front), never on a band in front of it; while a body stands in
+  the opening, pushes out of the door from this world's geometry behind the
+  glass are taken back (`WorldPortalHoleContactField`), so a door on the ground
+  drops a body that walks onto it
+  ([decision](../../../../docs/decisions/engine-design.md#a-portal-is-a-plane-a-body-passes-through)).
+  A door may lie at any orientation (a shape turned a quarter about +X lays it flat;
   `WorldFaceCatalog` snaps such a quarter-turn frame to exact axes); a mapped
   pair is refused at the crossing, by name, unless it maps world up onto itself
   (`WorldFrameIsometry.PreservesWorldUp`: two walls, or a floor and a ceiling).

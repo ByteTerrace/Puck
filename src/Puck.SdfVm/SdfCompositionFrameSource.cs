@@ -115,15 +115,16 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly DynamicTransform[] m_transforms;
 
     private readonly SdfMovedTransforms m_moved = new();
+
     // The table as it stood before a repack, which the repack is compared with; made at the first repack.
     private DynamicTransform[]? m_repackedTransforms;
     private bool m_transformsPacked;
 
     // The background build in flight, if any, and the components it was emitted from.
     private readonly int[] m_buildingRevisions;
+
     private Task<(SdfProgram Program, SdfProgramDelta? Delta)>? m_building;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
-
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
@@ -369,6 +370,26 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         return moved;
     }
+    // Reads every emitter's straddling slot runs after packing: one emitter's list passes through as it is, several are
+    // copied into a new list, and none is the one empty list, so a frame no body straddles a portal in costs nothing.
+    private IReadOnlyList<SdfSlotClip> ComposeSlotClips() {
+        IReadOnlyList<SdfSlotClip> composed = [];
+
+        foreach (var emitter in m_emitters) {
+            var clips = emitter.SlotClips;
+
+            if (clips.Count == 0) {
+                continue;
+            }
+
+            composed = ((composed.Count == 0)
+                ? clips
+                : [.. composed, .. clips]
+            );
+        }
+
+        return composed;
+    }
     // Reads every emitter's mesh draws after packing and recomposes them only when an emitter's list or revision moved:
     // one emitter's list passes through as it is, several are copied in list order into the host's own list. Either way
     // the composed revision moves, so an engine repacks even a list rewritten in place.
@@ -549,7 +570,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 m_building = Task.Run(function: () => {
                     var built = Build(builder: builder);
 
-                    return (built, (SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built));
+                    return (built, ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
                 });
             }
         }
@@ -570,6 +591,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         );
 
         dressed.PickMap = ComposePickMap();
+        dressed.SlotClips = ComposeSlotClips();
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         Frames++;
         return dressed;

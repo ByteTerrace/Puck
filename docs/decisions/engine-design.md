@@ -178,6 +178,32 @@ keep their verbs and wait, unrun, until the owner calls for qualification; the
 A quarantined world returns by being rewritten or re-admitted under the gate,
 never by building it in place.
 
+## A portal is a plane a body passes through
+
+A door fires when the body's origin passes through its glass, from the side the
+glass faces and within the opening. The test is swept, so no speed tunnels past
+it. A door does not fire when the body enters a band in front of the glass.
+While a body stands in a door's opening, contact with this world's geometry
+behind the glass is ignored, so a door laid on solid ground lets a body walk
+onto it and drop through, and a door on a wall lets a body walk into it. The
+crossing then maps the body through the pair's isometry: it comes out just
+through the counterpart's glass, moving as it went in. Every door follows this
+rule, a door onto another world as much as a pair standing in one world.
+
+A pair standing in one world carries the body in place rather than
+transferring it. The body keeps its index and state. Its every point and
+direction, its previous position included, moves through the isometry, and
+presentation carries what it latched the same way, so the crossing reads as
+continuous motion, never a teleport. A body straddling a door is drawn on both
+sides of it, each copy clipped by its own glass, and a chase camera whose boom
+reaches through a door's glass stands past the counterpart's glass, looking
+back through it at the body.
+
+Why: a door that fires early moves the body, and the camera that follows it,
+to the far side before it has reached the glass. A floor door also needs the
+ground under it to give way, or a falling body stops on it in the same step it
+passes through.
+
 ## Verification must match the claim
 
 Validate physical limits and report useful failures rather than silently

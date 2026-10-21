@@ -903,6 +903,22 @@ mesh replaces the skinned one when it lands (`SdfMeshSettle`). A pose still
 changing never rebakes, and a residency starts at most two such rebakes at once
 and four a second; `world.counters sdf.mesh-settle` counts them.
 
+A body straddling a portal whose counterpart stands in the same world is drawn
+on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding
+the body's slots is clipped to the front of the glass it straddles, and gains a
+copy carried through the pair's rigid motion and clipped to the front of the
+counterpart's glass. The draw record ends with that carry, a rotation
+quaternion and a translation every resolved world position and normal goes
+through last (words 33 to 39), and the world-space clip plane (words 40 to 43,
+`dot(n, x) + d`, all zeros for none), which the mesh and shadow vertex stages
+write to `SV_ClipDistance0`. Vulkan devices are created with
+`shaderClipDistance` for it. Only stamp-pool bodies are covered: a catalog
+avatar or a prototype mesh draw is still drawn whole on one side. The frame
+that carries a body through such a door reseats its slots' history, so
+reprojection never reads the 6 m jump as motion. A chase camera whose boom
+passes through a same-world door's glass stands past the counterpart's glass
+instead (`WorldPortalStraddle.CarryBoom`), looking back through it at the body.
+
 The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a
 frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`),

@@ -276,6 +276,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_NORMAL_MATRIX_WORD", value: SdfMeshRecord.NormalMatrixWord);
         declarations.Count(name: "SDF_MESH_FRAME_SLOT_WORD", value: SdfMeshRecord.FrameSlotWord);
         declarations.Count(name: "SDF_MESH_SKIN_WORD", value: SdfMeshRecord.SkinWord);
+        declarations.Count(name: "SDF_MESH_CARRY_ROTATION_WORD", value: SdfMeshRecord.CarryRotationWord);
+        declarations.Count(name: "SDF_MESH_CARRY_TRANSLATION_WORD", value: SdfMeshRecord.CarryTranslationWord);
+        declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
@@ -307,7 +310,7 @@ public static class SdfIsaHlsl {
         declarations.Signed(name: "SDF_DEBUG_VIEW_COUNT", value: DebugViewModes.Count);
 
         for (var mode = 0; (mode < DebugViewModes.Count); mode++) {
-            declarations.Signed(name: $"SDF_DEBUG_VIEW_{DebugViewModes.Names[mode].Replace(oldChar: '-', newChar: '_').ToUpperInvariant()}", value: mode);
+            declarations.Signed(name: $"SDF_DEBUG_VIEW_{DebugViewModes.Names[mode].Replace(newChar: '_', oldChar: '-').ToUpperInvariant()}", value: mode);
         }
 
         return declarations.Text();

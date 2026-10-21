@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/b0cf80053677087f9fbb0baacdc048b9e96450f6141df2d9def2b568a3d481d6). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/b5b8cbfb31038310aa3928a01564bcd27b349ecd9f82550f1796b9ea8090814f). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -211,8 +211,8 @@ struct SdfResolvePass {
     [[vk::offset(1824)]] uint workCounterRow;
     [[vk::offset(1828)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa7AC6F574 : register(b0, space3);
-#define passGroup passGroupIsa7AC6F574
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaC9CF3F47 : register(b0, space3);
+#define passGroup passGroupIsaC9CF3F47
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

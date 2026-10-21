@@ -561,6 +561,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
+            SlotClips = m_pool.SlotClips,
         };
     }
     /// <inheritdoc/>

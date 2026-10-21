@@ -156,7 +156,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Every kit's compiled collider, indexed by kit row, for the definition it was compiled from: the volume a chase
     // eye keeps out of when it frames a body of that kit.
     private FixedWorldCollider?[] m_subjectColliders = [];
+
     private WorldDefinition? m_subjectCollidersFor;
+
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot).
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
@@ -732,6 +734,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
         }
 
+        // A boom through a same-world door puts the eye past the counterpart's glass, looking back through it.
+        _ = WorldPortalStraddle.CarryBoom(
+            anchor: bodyPosition,
+            doors: WorldPortalStraddle.Doors(definition: definition),
+            eye: ref eye,
+            target: ref target
+        );
+
         var placed = PlacedExtent(height: height, region: region, width: width);
         // A seat captured on a screen of the world it is presented in frames that screen (the emulator view), easing
         // in and out on the chase rig's own dynamics.
@@ -754,7 +764,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             viewportHeight: placed.Y,
             viewportWidth: placed.X
         ) with {
-            Near = near
+            Near = near,
         };
     }
     // The screen row the seat is captured on, or null when it engages none or the row is gone.
@@ -1273,6 +1283,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             var instanceDeltaSeconds = entry.AdvanceClock(presentedSeconds: presented.Time);
+
             UpdatePipelinePointer(
                 entry: entry,
                 height: height,
@@ -1760,6 +1771,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
+            // The stamp pool's bodies straddling a same-world door, drawn on both sides of it.
+            SlotClips = m_animator.SlotClips,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),

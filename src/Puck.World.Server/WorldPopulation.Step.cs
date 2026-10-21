@@ -815,7 +815,7 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        if (m_contactField is WorldColliderSet colliders) {
+        if (m_baseContactField is WorldColliderSet colliders) {
             colliders.RefreshAttached(population: this);
 
             // Every body standing on a moving attached solid rides it before any body advances, seats included.

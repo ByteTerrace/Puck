@@ -127,6 +127,11 @@ public sealed record SdfFrame(
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }
 
+    /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
+    /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
+    /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
+    /// carried copy (<see cref="SdfSlotClip.Apply"/>). Empty when no body straddles a portal.</summary>
+    public IReadOnlyList<SdfSlotClip> SlotClips { get; set; } = [];
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
     /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore
@@ -210,6 +215,7 @@ public sealed record SdfFrame(
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
+
     /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;
 }
