@@ -277,18 +277,18 @@ The same policy locks the pointer for a drag that reads only its motion
 `player.orbit` or `player.steer`). While `INativeWindowCursor.LocksPointer` is
 set, the Win32 window hides the cursor, holds the mouse capture (so the cursor
 may roam outside the client area and every mouse message still arrives; it is
-not confined, since confining it would move the cursor a Remote Desktop client
-reports from without the window knowing), freezes the reported pointer
-position, and, after a
-pump of its events leaves the cursor a quarter of the client's width or height
-from the centre, moves it back to the centre, so the drag's relative motion
-never ends at a window or screen edge. Raw relative input sees no motion from
-that move; the window-message fallback and absolute-mode input (a Remote
-Desktop session's mouse) rebase on it (`Win32AbsolutePointer`): an absolute
-report nearer the centre than the last report is the first the device sent
-after following the move, and one nearer the last report was sent before.
-Moving only that far keeps the two apart, and no move happens while an
-absolute device has yet to follow the last. Clearing the lock frees the cursor
+not confined, since confining it pins a Remote Desktop session's cursor and stops
+its motion), freezes the reported pointer position, and, after a pump of its
+events leaves the cursor off the centre, moves it back there, so the drag's
+relative motion never ends at a window or screen edge. Raw relative input sees
+no motion from that move, and the window-message fallback rebases on it. An
+absolute-mode device (a Remote Desktop session's mouse) reports where its own
+cursor is and puts the cursor straight back after any move, so the lock does
+not hold a cursor an absolute report moved last (`Win32AbsolutePointer`): it
+stays shown and its position is reported as it moves, so it never hides through
+a drag and reappears somewhere else, and the drag ends where the device's
+cursor meets the edge of its screen.
+Clearing the lock frees a relative device's cursor
 where the drag began; losing focus or the capture ends it without moving the
 cursor.
 

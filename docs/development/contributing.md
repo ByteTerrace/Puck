@@ -750,20 +750,15 @@ unverified when no device run exists.
   the system arrow instead (`INativeWindowCursor`). The session's mouse arrives
   as absolute raw input, which the window turns into relative motion; the
   pointer position, the pane hit and the passthrough client point come from
-  `WM_MOUSEMOVE` either way. An absolute position stops at the edge of the
-  session's screen, so a camera drag holds the window's pointer lock
-  (`INativeWindowCursor.LocksPointer`), which moves the cursor back to the
-  window's centre once it wanders a quarter of the client away. The Remote
-  Desktop client the development machine is reached through follows the
-  session's pointer-position updates: World of Warcraft's mouse look spins
-  freely over that same session, so a mouse-look limit in Puck is Puck's own
-  defect, never the remote session's. The client moves its cursor to a warp
-  some reports late, and the window tells the first report from the warp's
-  target by its distance (`Win32AbsolutePointer`), which only a far warp makes
-  unambiguous: a warp on every pump would make steady motion read as almost
-  none, turning the camera by one pump's motion and then stopping.
-  `Win32AbsolutePointerTests` models such a client, since nothing on a test
-  machine reports like one. Only the
+  `WM_MOUSEMOVE` either way. The client never follows a warp: the session's
+  `SetCursorPos` succeeds and the client's next report puts the cursor back
+  where its own cursor is, windowed or fullscreen, with or without
+  `ClipCursor` (which only pins the session's cursor and stops all motion). So
+  a camera drag over Remote Desktop ends where the client's cursor meets the
+  edge of its screen, as World of Warcraft's mouse look does over the same
+  session, and the window's pointer lock never warps a cursor an absolute
+  report moved last (`Win32AbsolutePointer`). A local mouse, or a remote tool
+  that sends relative motion, drags without end. Only the
   foreground window locks, and a test World an agent drives with
   `player.signal` locks the session's real mouse while it is foreground:
   minimize it first (a minimized window has no client area to lock to). The
