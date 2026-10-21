@@ -175,7 +175,15 @@ history (§5) and has tainted lighting sources derived again from the fills on
 their next recording (`SdfWorldTables.ProjectTaintedSourcesAgain`), which
 stand reported as tainted until then. Because it runs every frame, taint that
 comes back (a source a frame late, a reload, a lights change) is discarded
-again rather than holding the capture. A capture still waiting names the state
+again rather than holding the capture. A read the capture frame cannot render
+again is withheld instead (`RenderGraphRuntime.Withholds`): a previous-frame
+read, and a read of an instance the frame does not render, such as a portal's
+innermost level that nothing shown reaches and that its outer level reads only
+as a screen source; on a capture frame its tainted latest output binds nothing
+(a stand-in, or an unbound screen), so a stale image from before the capture
+armed can hold no capture
+(`RenderGraphRuntimeLawTests.ACaptureWithholdsAnUnrenderedTaintedScreenSourceAndCompletes`).
+A capture still waiting names the state
 in its reason (`IRenderGraphPackageFactory.TaintOf`, followed through the
 instances that passed it on), so `world.wait ready` says what holds it. The SDF
 package tells a views render that itself read external content this frame
