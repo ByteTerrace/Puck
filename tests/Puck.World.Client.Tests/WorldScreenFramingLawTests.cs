@@ -124,7 +124,8 @@ public sealed class WorldScreenFramingLawTests {
         Assert.Equal(expected: 0f, actual: framing.Apply(aspectRatio: 1.5f, deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: null, target: ref target));
         Assert.Equal(expected: chaseEye, actual: eye);
 
-        // Engaged, the weight climbs monotonically and settles on the framing.
+        // Engaged, the weight climbs monotonically and settles on the framing; only the settled framing hands the seat
+        // its emulator view.
         var last = 0f;
 
         for (var frame = 0; (frame < 120); frame++) {
@@ -132,17 +133,20 @@ public sealed class WorldScreenFramingLawTests {
             target = chaseTarget;
             _ = framing.Apply(aspectRatio: 1.5f, deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: screen, target: ref target);
             Assert.True(condition: (framing.Weight >= last));
+            Assert.Equal(expected: (framing.Weight >= 1f), actual: (framing.Framed is not null));
             last = framing.Weight;
         }
 
         Assert.Equal(expected: 1f, actual: framing.Weight);
+        Assert.Same(expected: screen, actual: framing.Framed);
         Assert.Equal(expected: (Vector3)screen.Origin, actual: target);
 
-        // Left, it eases back to the seat's camera, from the framing it last held.
+        // Left, it eases back to the seat's camera, from the framing it last held, and shows no emulator view.
         eye = chaseEye;
         target = chaseTarget;
         _ = framing.Apply(aspectRatio: 1.5f, deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: null, target: ref target);
         Assert.InRange(actual: framing.Weight, high: 0.999f, low: 0.001f);
+        Assert.Null(@object: framing.Framed);
         Assert.NotEqual(expected: chaseEye, actual: eye);
 
         for (var frame = 0; (frame < 120); frame++) {
@@ -160,6 +164,74 @@ public sealed class WorldScreenFramingLawTests {
         var near = framing.Apply(aspectRatio: 1.5f, deltaSeconds: (1f / 60f), dynamics: SdfCameraDynamics.None, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: screen, target: ref target);
 
         Assert.Equal(expected: 1f, actual: framing.Weight);
+        Assert.Same(expected: screen, actual: framing.Framed);
         Assert.True(condition: (near > 0f));
+    }
+    // THE LAW: an emulator view shows its display's crop at the display's pixel aspect, whole and centred inside the
+    // seat's view, reaching the view's edges on its limiting axis; a crop that leaves nothing shows the whole source.
+    [Fact]
+    public void AnEmulatorViewFitsItsCropAtItsPixelAspectInsideTheSeatsView() {
+        var whole = new Puck.Abstractions.Presentation.NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
+        var deck = new WorldScreenDisplay(
+            Crop: new WorldScreenDisplayCrop(Bottom: 8, Top: 8),
+            PixelAspect: (8f / 7f)
+        );
+
+        // The deck's 256 by 224 lines at 8:7 pixels are 1.306 wide for each 1 tall: on a 1920 by 1080 display they
+        // reach top to bottom and sit centred across.
+        Assert.True(condition: WorldEmulatorView.TryFit(
+            crop: out var crop,
+            display: deck,
+            displayHeight: 1080,
+            displayWidth: 1920,
+            drawn: out var drawn,
+            frame: whole,
+            sourceHeight: 240,
+            sourceWidth: 256
+        ));
+        Assert.Equal(expected: new Puck.Commands.SourcePixelRect(Height: 224, Width: 256, X: 0, Y: 8), actual: crop);
+        Assert.Equal(expected: 1f, actual: drawn.Height, tolerance: 1e-6f);
+        Assert.Equal(expected: (((1080f * 256f * 8f) / (7f * 224f)) / 1920f), actual: drawn.Width, tolerance: 1e-5f);
+        Assert.Equal(expected: (0.5f * (1f - drawn.Width)), actual: drawn.X, tolerance: 1e-6f);
+        Assert.Equal(expected: 0f, actual: drawn.Y, tolerance: 1e-6f);
+
+        // A square-pixel brick in the right half of a tall display is limited by the half's width instead.
+        var right = new Puck.Abstractions.Presentation.NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
+
+        Assert.True(condition: WorldEmulatorView.TryFit(
+            crop: out crop,
+            display: null,
+            displayHeight: 1920,
+            displayWidth: 1080,
+            drawn: out drawn,
+            frame: right,
+            sourceHeight: 144,
+            sourceWidth: 160
+        ));
+        Assert.Equal(expected: new Puck.Commands.SourcePixelRect(Height: 144, Width: 160, X: 0, Y: 0), actual: crop);
+        Assert.Equal(expected: 0.5f, actual: drawn.Width, tolerance: 1e-6f);
+        Assert.Equal(expected: 0.5f, actual: drawn.X, tolerance: 1e-6f);
+        Assert.Equal(expected: (((540f * 144f) / 160f) / 1920f), actual: drawn.Height, tolerance: 1e-6f);
+        Assert.Equal(expected: (0.5f * (1f - drawn.Height)), actual: drawn.Y, tolerance: 1e-6f);
+
+        // A crop leaving nothing shows the whole source; no extent or an empty view fits nothing.
+        Assert.True(condition: WorldEmulatorView.TryFit(
+            crop: out crop,
+            display: new WorldScreenDisplay(Crop: new WorldScreenDisplayCrop(Left: 100, Right: 100)),
+            displayHeight: 64,
+            displayWidth: 64,
+            drawn: out _,
+            frame: whole,
+            sourceHeight: 144,
+            sourceWidth: 160
+        ));
+        Assert.Equal(expected: new Puck.Commands.SourcePixelRect(Height: 144, Width: 160, X: 0, Y: 0), actual: crop);
+        Assert.False(condition: WorldEmulatorView.TryFit(crop: out _, display: null, displayHeight: 64, displayWidth: 64, drawn: out _, frame: whole, sourceHeight: 0, sourceWidth: 160));
+        Assert.False(condition: WorldEmulatorView.TryFit(crop: out _, display: null, displayHeight: 64, displayWidth: 64, drawn: out _, frame: (whole with { Width = 0f }), sourceHeight: 144, sourceWidth: 160));
+
+        // The fill reaches the display as authored, opaque; an unauthored one is black.
+        Assert.Equal(expected: new Vector4(x: 1f, y: 0f, z: 0f, w: 1f), actual: WorldEmulatorView.FillOf(display: new WorldScreenDisplay(Fill: "#FF0000")));
+        Assert.Equal(expected: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), actual: WorldEmulatorView.FillOf(display: null));
+        Assert.Equal(expected: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), actual: WorldEmulatorView.FillOf(display: new WorldScreenDisplay(Fill: "red")));
     }
 }

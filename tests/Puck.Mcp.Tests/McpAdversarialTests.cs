@@ -268,6 +268,32 @@ public sealed class McpAdversarialTests {
         await adapter.StopAsync();
         Assert.True(condition: adapter.Input.Closed);
     }
+    // Law: the capture tool's mode, frames and region cross the wire to the World as its capture options, frames or a
+    // region alone asking for a presented capture, and options the World would refuse are refused by name first.
+    [Fact]
+    public async Task CaptureOptionsReachTheWorldAndInvalidOnesAreRefusedFirst() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        var seen = new List<ControlCapture?>();
+        await using var adapter = new InProcessAdapter(createSession: () => new CaptureRecordingSession(seen: seen));
+
+        async Task<JsonElement> CaptureAsync(int id, string arguments) {
+            adapter.Send(line: InProcessAdapter.Request(id: id, parameters: ("""{"name":"puck_capture_frame","arguments":""" + arguments + "}")));
+
+            return await adapter.ResultAsync(id: id);
+        }
+
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 1, arguments: """{"mode":"presented","frames":4,"region":{"x":0,"y":0.25,"width":0.5,"height":0.5}}""")));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 2, arguments: """{"frames":2}""")));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 3, arguments: """{"mode":"settled"}""")));
+        Assert.StartsWith(expectedStartString: "A settled capture is one frame", actualString: Output(result: await CaptureAsync(id: 4, arguments: """{"mode":"settled","frames":2}""")), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: "Invalid argument: region.", actual: Output(result: await CaptureAsync(id: 5, arguments: """{"region":{"x":0}}""")));
+        Assert.Equal(expected: 3, actual: seen.Count);
+        Assert.Equal(expected: (ControlCapture.Presented, 4), actual: (seen[0]!.Mode, seen[0]!.Frames));
+        Assert.Equal(expected: new[] { 0, 0.25, 0.5, 0.5 }, actual: seen[0]!.Region);
+        Assert.Equal(expected: (ControlCapture.Presented, 2), actual: (seen[1]!.Mode, seen[1]!.Frames));
+        Assert.Equal(expected: ControlCapture.Settled, actual: seen[2]!.Mode);
+        await adapter.StopAsync();
+    }
     // Law: an adapter following a directory attaches to the newest World there that answers, skipping a capability
     // file whose World is gone, and after its attachment closes follows to whichever World now answers, with no
     // adapter restart.
@@ -566,6 +592,18 @@ public sealed class McpAdversarialTests {
                 Assert.True(condition: m_lines.Writer.TryWrite(item: Encoding.UTF8.GetString(bytes: [.. m_partial])));
                 m_partial.Clear();
             }
+        }
+    }
+    // Records each capture's options as the World received them, and answers a burst with a report and anything else
+    // with a one-pixel PNG.
+    private sealed class CaptureRecordingSession(List<ControlCapture?> seen) : IControlSession {
+        public void Dispose() { }
+        public Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
+            lock (seen) { seen.Add(item: request.Capture); }
+
+            return Task.FromResult(result: ((request.Capture is { IsBurst: true })
+                ? new ControlResponse(request.Id, "completed", "[capture: presented]")
+                : new ControlResponse(request.Id, "completed", "frame", Png: [137, 80, 78, 71])));
         }
     }
     // Answers each exec line with its name, or echoes the line; "stall" signals entry and waits for cancellation.

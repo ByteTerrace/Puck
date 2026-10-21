@@ -1,8 +1,12 @@
 # Debug world device row
 
 The debug world shows one of each gaming device the World hosts, on a row of
-labelled plinths at z = -6 west of the spawn, 3 m apart and facing +Z. Each
-plinth carries the device's own name.
+labelled plinths in the gallery hall's lobby ([`shapes.md`](shapes.md#the-hall)),
+on its level 0 floor at z = 28, 2.5 m apart and facing -Z, toward the entrance,
+so their screens light the lobby's floor and walls; the lobby's room lights
+start off so that light shows, and its wall switch or `gallery.lights 0 on`
+turns them on ([the hall's lighting](shapes.md#the-hall)). Each plinth carries the
+device's own name. `debug.go devices` stands you in front of the middle one.
 [`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
 it running, and each lists the folders its swappable content comes from in
@@ -11,9 +15,9 @@ git-ignored `roms/` at the repository root.
 
 | x | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
 |---|---|---|---|---|---|---|
-| -10 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
-| -13 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
-| -16 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
+| 17.5 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
+| 15 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
+| 12.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
 
 A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
 resolves when the world boots from its package in the checkout
@@ -101,13 +105,13 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Reset a device on its current content | `machine.operation <instance> <generation> machine.reset {"schema":"puck.<engine>.machine-reset.v1"}` |
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
 | Change a brick's revision live | `machine.operation <instance> <generation> device.model {"schema":"puck.gaming-brick.device-model-set.v1","model":"sgb"}` |
-| Stand at a device, facing it | `body.pose <x> 0 -4.5 0 0 0` |
+| Stand at a device, facing it | `body.pose <x> 0.05 26.5 180 0 0` |
 | Engage it (within 3 m), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
-| Frame the whole row | `view.override camera look -13 2.2 -1.5 -13 0.6 -6`, then `view.override camera auto` |
-| Frame one device | `view.override camera look <x> 1.1 -4.4 <x> 0.75 -6` |
+| Frame the whole row | `view.override camera look 15 2.2 23.5 15 0.65 28`, then `view.override camera auto` |
+| Frame one device | `view.override camera look <x> 1.15 26.4 <x> 0.8 28` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
 `advanced-gaming-brick` or `humble-gaming-deck`. `machine.state <instance>`
@@ -124,8 +128,20 @@ debug world's only on-screen UI. Engaging captures the seat, so the
 Moth stands still, and brings up the emulator view: the camera eases in until
 the device's screen fills the window's limiting axis, square-on, with
 everything between the camera and the screen (the Moth included) left out, and
-the binding bar and the cursor step aside. The same button leaves the device
-and the camera eases back to the Moth. The device's pad does not play the context button, so it never
+the binding bar and the cursor step aside. Once the camera settles, the window
+cuts to the console's picture alone, centred and as large as fits, on black,
+the way a desktop emulator shows it:
+
+| Device | Picture shown | Pixels |
+|---|---|---|
+| Humble Gaming Brick | the whole 160 by 144 screen | square |
+| Advanced Gaming Brick | the whole 240 by 160 screen | square |
+| Humble Gaming Deck | 256 by 224, its 8 overscan lines cropped top and bottom | 8:7, so the picture is about 4:3 |
+
+Each screen route's `display` authors this (`crop`, `pixelAspect`, `fill`), and
+`world.screens` echoes it. Pixels stay crisp cells at any window size. The same
+button leaves the device: the window cuts back to the framed device and the
+camera eases back to the Moth. The device's pad does not play the context button, so it never
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,

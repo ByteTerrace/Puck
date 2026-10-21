@@ -1,8 +1,8 @@
 # Debug world chess table
 
 The debug world stands a chess table on the open ground ahead and left of the
-spawn, at (-6, 0, -12): clear of the portal frame at (3, 0, -8), the device row
-at z = -6 from x = -10 west, the reference cubes and test room on +Z and the
+spawn, at (-6, 0, -12): clear of the portal frame at (3, 0, -8), the reference
+cubes and test room on +Z and the
 shape gallery from x = 14. Its top is 0.8 m up, White's back rank on the table's
 -Z side and Black's on the +Z side, which faces the spawn.
 [`chess.puck`](chess.puck) holds it and `debug.puck` imports it whole

@@ -1,17 +1,20 @@
 // The device row: one of each gaming device the World hosts, each a labelled body on a plinth whose screen
 // shows the machine running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug
-// world imports this file whole. The row stands on the open ground west of the spawn at z = -6, every device 3 m from
-// the next and facing +Z, toward the origin:
+// world imports this file whole. The row stands in the gallery hall's lobby (hall.puck) on its level 0 floor, at z = 28,
+// every device 2.5 m from the next and facing -Z, toward the entrance, so a visitor walking in faces the screens and
+// sees their light on the lobby's floor and walls:
 //
-//   x -10  the Humble Gaming Brick
-//   x -13  the Advanced Gaming Brick
-//   x -16  the Humble Gaming Deck, running its test cartridges on the set above it
+//   x 17.5  the Humble Gaming Brick
+//   x 15    the Advanced Gaming Brick
+//   x 12.5  the Humble Gaming Deck, running its test cartridges on the set above it
 //
 // Walk up to a device and press the context button (E, or X on a pad) to engage it: the camera frames its screen and
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list,
 // swap, engage, reset and eject each one.
 
-let deviceZ = -6
+let deviceZ = 28
+// The lobby floor's top (hall.puck's level 0).
+let deviceFloor = 0.05
 
 // Slot 0 the shell, 1 the plinth, 2 the label, 3 the screen bezel, 4 the face buttons, 5 the d-pad and small keys.
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
@@ -187,20 +190,20 @@ prototypes {
 placements {
   placement "device-humble-gaming-brick" {
     prototype: "device-humble-gaming-brick"
-    position [-10, 0, deviceZ]
-    yawDegrees: 180
+    position [17.5, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 
   placement "device-advanced-gaming-brick" {
     prototype: "device-advanced-gaming-brick"
-    position [-13, 0, deviceZ]
-    yawDegrees: 180
+    position [15, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 
   placement "device-humble-gaming-deck" {
     prototype: "device-humble-gaming-deck"
-    position [-16, 0, deviceZ]
-    yawDegrees: 180
+    position [12.5, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 }
 
@@ -304,14 +307,18 @@ hud {
 
 // Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. The brick's screen is
 // 160 by 144, the advanced brick's 240 by 160 and the deck's 256 by 240, at 2 mm a pixel.
-// Each engages on the Moth's context button (`interact`), which the pad does not play, so the same press leaves.
-let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact", kit: "devicePad" }
+// Each engages on the Moth's context button (`interact`), which the pad does not play, so the same press leaves. Once
+// the camera has framed the glass, the window shows the console's picture alone (its route's `display`): the bricks'
+// whole screens at square pixels, and the deck's 256 by 224 lines a television shows (8 overscan lines cropped top and
+// bottom) at its 8:7 pixels, each centred on black.
+let handheldDisplay = { pixelAspect: 1, fill: "#000000" }
+let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact", kit: "devicePad", display: handheldDisplay }
 
 screens [
   {
     index: 0
-    origin [-10, 0.88, (deviceZ + 0.067)]
-    right [1, 0, 0]
+    origin [17.5, (deviceFloor + 0.88), (deviceZ - 0.067)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
     halfHeight: 0.144
@@ -322,8 +329,8 @@ screens [
   }
   {
     index: 1
-    origin [-13, 0.6, (deviceZ + 0.077)]
-    right [1, 0, 0]
+    origin [15, (deviceFloor + 0.6), (deviceZ - 0.077)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.24
     halfHeight: 0.16
@@ -334,8 +341,8 @@ screens [
   }
   {
     index: 2
-    origin [-16, 0.64, (deviceZ + 0.122)]
-    right [1, 0, 0]
+    origin [12.5, (deviceFloor + 0.64), (deviceZ - 0.122)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.256
     halfHeight: 0.24
@@ -349,6 +356,11 @@ screens [
       engageChannel: "interact"
       kit: "devicePad"
       port: "controls"
+      display {
+        crop { top: 8, bottom: 8 }
+        pixelAspect: (8 / 7)
+        fill: "#000000"
+      }
     }
   }
 ]

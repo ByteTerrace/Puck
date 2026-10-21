@@ -23,7 +23,53 @@ public static class ControlLimits {
 /// <param name="Operation">The operation discriminator.</param>
 /// <param name="Command">One console line for exec; null for capture.</param>
 /// <param name="TimeoutMilliseconds">Deadline on the serving host's clock, from one through the transport ceiling.</param>
-public sealed record ControlRequest(long Id, string Operation, string? Command, int TimeoutMilliseconds);
+/// <param name="Capture">How a capture reads the frame, or <see langword="null"/> for one settled frame; always
+/// <see langword="null"/> for exec.</param>
+public sealed record ControlRequest(long Id, string Operation, string? Command, int TimeoutMilliseconds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ControlCapture? Capture = null);
+/// <summary>How a capture request reads the render chain's frames.</summary>
+/// <param name="Mode"><c>settled</c>: one still, holding presentation while temporal views converge over it.
+/// <c>presented</c>: the frames the display shows next, read as presented, holding and settling nothing.</param>
+/// <param name="Frames">The frames a presented capture reads, 1 through
+/// <see cref="Abstractions.Presentation.FrameCaptureRequest.MaxPresentedFrames"/>; one for a settled capture. A burst
+/// of more than one is written to files on the serving host and answered as a report, with no image.</param>
+/// <param name="Region">The region a presented capture measures each frame's difference over, as <c>x y width
+/// height</c> fractions of the frame, or <see langword="null"/> for the whole frame.</param>
+public sealed record ControlCapture(string Mode, int Frames = 1,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double[]? Region = null) {
+    /// <summary>The settled mode's name.</summary>
+    public const string Settled = "settled";
+    /// <summary>The presented mode's name.</summary>
+    public const string Presented = "presented";
+
+    /// <summary>Gets whether the capture is a presented burst of more than one frame, answered as a report with no
+    /// image.</summary>
+    [JsonIgnore]
+    public bool IsBurst => (Frames > 1);
+
+    /// <summary>Returns why the options are not a capture's, or <see langword="null"/> when they are.</summary>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public string? RefusalOf() {
+        if (Mode is not (Settled or Presented)) {
+            return "Capture mode must be settled or presented.";
+        }
+        if ((Frames < 1) || (Frames > Abstractions.Presentation.FrameCaptureRequest.MaxPresentedFrames)) {
+            return $"Capture frames must be 1..{Abstractions.Presentation.FrameCaptureRequest.MaxPresentedFrames}.";
+        }
+        if ((Mode == Settled) && ((Frames != 1) || (Region is not null))) {
+            return "A settled capture is one frame and takes no region; frames and region are presented options.";
+        }
+        if (Region is { } region) {
+            return ((region.Length != 4)
+                ? "Capture region must be four numbers: x, y, width, height."
+                : (Abstractions.Presentation.FrameCaptureRegion.RefusalOf(height: region[3], width: region[2], x: region[0], y: region[1]) is { } refusal)
+                    ? $"Capture region: {refusal}."
+                    : null);
+        }
+
+        return null;
+    }
+}
 /// <summary>A correlated console result or completed PNG. Completion is never an authoritative mutation receipt.</summary>
 /// <param name="Id">The host request sequence, or zero for a local admission refusal that sent no request.</param>
 /// <param name="Status">completed, submitted, refused, or unknown (effects may already have occurred).</param>
@@ -70,8 +116,8 @@ public sealed record ControlResponse(long Id, string Status, string Output, bool
         ? (Status is "refused" or "unknown")
         : (Status is "completed" or "submitted")) &&
         ((Png is null)
-        ? ((request.Operation != "capture") || IsError)
-        : ((request.Operation == "capture") && !IsError && (Status == "completed") && !ClearTranscript && !Truncated && (Png.Length is > 0 and <= ControlLimits.ImageBytes))));
+        ? ((request.Operation != "capture") || IsError || (request.Capture is { IsBurst: true }))
+        : ((request.Operation == "capture") && (request.Capture is not { IsBurst: true }) && !IsError && (Status == "completed") && !ClearTranscript && !Truncated && (Png.Length is > 0 and <= ControlLimits.ImageBytes))));
 }
 /// <summary>One authenticated connection's host operations. Calls are serial; disposal closes only this ingress.</summary>
 public interface IControlSession : IDisposable {

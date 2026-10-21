@@ -9,8 +9,9 @@ namespace Puck.World.Client;
 /// up, half extents and depth) and the seat camera's field of view. One instance per seat eases between the seat's
 /// ordinary camera and that framing on the seat rig's own reported dynamics, and back again when the seat leaves; a rig
 /// reporting no dynamics cuts. While framed, the camera's near plane stands just short of the glass, so the engaging
-/// avatar and anything else between the eye and the device draws nothing. Presentation only: nothing here feeds the
-/// simulation.
+/// avatar and anything else between the eye and the device draws nothing. Once the ease settles, <see cref="Framed"/>
+/// names the screen, and the seat's view shows its 2D emulator view (<see cref="WorldViewGraphHost.PlaceEngaged"/>)
+/// until the seat leaves. Presentation only: nothing here feeds the simulation.
 /// </summary>
 public sealed class WorldScreenFraming {
     // The weight within this of its goal settles onto it, so a finished ease is exactly the chase or the framing.
@@ -29,6 +30,10 @@ public sealed class WorldScreenFraming {
     /// <summary>Gets how far the seat's camera stands toward the framing: 0 is the seat's ordinary camera, 1 the
     /// framed screen.</summary>
     public float Weight => m_weight;
+    /// <summary>Gets the screen whose framing the ease has settled on as of the last <see cref="Apply"/>, the one the
+    /// seat's emulator view shows (<see cref="WorldViewGraphHost.PlaceEngaged"/>), or <see langword="null"/> while the
+    /// seat engages none, is easing in or out, or the screen's frame is degenerate.</summary>
+    public WorldScreen? Framed { get; private set; }
 
     /// <summary>Frames a screen's glass square-on: the eye stands on the face's normal, far enough that the glass
     /// fills the viewport's limiting axis exactly, looking at the glass's center.</summary>
@@ -96,6 +101,8 @@ public sealed class WorldScreenFraming {
     public float Apply(WorldScreen? screen, in SdfCameraDynamics dynamics, float fieldOfViewRadians, float aspectRatio, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         var goal = 0f;
 
+        Framed = null;
+
         if (
             (screen is not null) &&
             TryFrame(
@@ -128,6 +135,12 @@ public sealed class WorldScreenFraming {
             m_hasFrame = false;
 
             return 0f;
+        }
+        if (
+            (goal >= 1f) &&
+            (m_weight >= 1f)
+        ) {
+            Framed = screen;
         }
 
         eye = Vector3.Lerp(

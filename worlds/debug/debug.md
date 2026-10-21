@@ -103,7 +103,7 @@ case, `stage` when omitted:
 | Place | Where | Facing |
 |---|---|---|
 | `stage` | The spawn, (0, 0, 0) | -Z, toward the portal frame |
-| `devices` | (-13, 0, -1), in front of the device row | -Z, toward the screens |
+| `devices` | (15, 0.05, 25.5), in the gallery lobby before the device row | +Z, toward the screens |
 | `chess` | (-6, 0, -7.5), Black's side of the table | -Z, across the board |
 | `loop` | (-20, 0, -15), short of the floor glass | -Z; walk ahead to drop in |
 | `screen` | (8, 0, -3), in front of the wall screen | -Z, toward the screen |

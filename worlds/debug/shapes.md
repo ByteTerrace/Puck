@@ -13,9 +13,9 @@ in its `placements` block and `galleryState()` in its `state.world` block,
 concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
 its `commands`, and declares the font the labels emboss in.
 [`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
-lights, level boards, tour and keys. The gaming devices stand on their own row
-west of the spawn: [`devices.md`](devices.md), and the chess table ahead and
-left of it: [`chess.md`](chess.md).
+lights, level boards, tour and keys. The gaming devices stand in a row in the
+lobby: [`devices.md`](devices.md); the chess table stands outside, ahead and
+left of the spawn: [`chess.md`](chess.md).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look
@@ -50,6 +50,20 @@ lobby light also lights level 1's ceiling and walls through the slab
 windows', carried indoors by the traced indirect light, the shadow cascades
 under the roof and ambient occlusion.
 
+Each level's room lights switch on and off. `hallLights` holds each level's
+state (`Off` or `On`): level 0, the lobby where the gaming devices stand,
+starts `Off`, so its light is the windows' and the device screens', and levels
+1 to 3 start `On`. A level that is off shows the dark variant of the slab or
+roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
+pale, unlit diffuser in the strips' palette slot) through the placement's
+`respond` facet, and its point light (`hallLamps`: the lobby's for level 0, the
+stairwell's for level 1) reads weight 0; the lift car's lamp stays with the car.
+A swap shows the same geometry, so the mesh library answers it without a bake;
+the irradiance volume retraces under the new materials. Each level's switch is
+a plate on the west wall at z = 32.5, south of the stairs, 1.1 to 1.46 m over the
+floor and labelled `LIGHTS`: rocker up with a warm indicator when on, rocker
+down with a green locator glow when off, so it shows in the dark.
+
 ### Getting around
 
 | To | How |
@@ -59,6 +73,7 @@ under the roof and ambient occlusion.
 | Call the lift | Step on the `CALL` pad before the lift door, or `gallery.lift <level>` |
 | Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
 | Stand on a level's landing | `gallery.level <level> [body]` |
+| Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or X on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |

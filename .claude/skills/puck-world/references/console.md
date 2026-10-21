@@ -404,6 +404,45 @@ of capturing the departed image or a later arrival. A mutation barrier orders co
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 
+### Settled stills and presented bursts
+
+The ordinary capture is **settled**: it holds presentation from the frame it is
+armed in (the residency renders the held frame, `SdfWorldResidency.HoldsFrame`;
+the frame context loses its presentation time; the presenter pins interpolation
+to the completed tick), temporal views converge over the held renders, and the
+PNG is a clean still. A settled capture therefore cannot show a defect that
+lives between frames: flicker (a still scene whose pixels change frame to frame, such as
+jitter moiré on a screen), ghosting and trails behind moving content.
+
+`world.screenshot <path.png> presented [<frames>] [region <x> <y> <w> <h>]`
+reads what the display **presented** instead (`FrameCaptureMode.Presented`): it
+holds nothing, settles nothing and holds no host clock, and the render-graph
+runtime reads back, after each frame's renders, the image it hands the display
+for the root (`RenderGraphRuntime.Presented.cs`), with that frame's jitter,
+history and motion. 1..120 frames (default 1) land at `<path.png>`, or at
+`<path>-000.png` onward for a burst. When the last PNG is written, stderr
+carries the report (`PresentedFrameReport`): a line per frame with its
+presentation index (consecutive indices differ by one, so a gap is a frame the
+burst could not read), the presentation its image was rendered on (an earlier
+one is marked `standing`: the display repeated an image), its tick, and against
+the frame before it the changed pixels and the mean and largest absolute Rec.
+709 luma change, over the region (fractions of the frame, origin top-left) or
+the whole frame; then a summary line. Fence it with `world.wait captures
+<seconds>`. The PNGs are encoded on the thread pool, so the pump pays only the
+readback per frame; a burst is still not free, since each readback waits for
+the GPU.
+
+Pick by question: a settled capture for how a still looks; a presented burst
+(8 frames is plenty for flicker) for whether it changes between frames. A
+presented capture keeps the external-content guarantee the same way a settled
+one does: while any capture is armed, the capture gate fills every external
+source, so the display itself shows the fills during a burst, and a frame whose
+image still read unfilled external content is skipped, never read. Under
+`world.temporal on`, a view whose history held an external screen's pixels has
+that history discarded on the burst's first frame, and the burst skips the
+eight renders it takes to converge again, so the first PNG is the steady image;
+the window shows that one reconvergence.
+
 Host integrations arm captures through `TextCommandSession.InvokeAsync` when
 they must follow the session's queued edits and waits. Await the returned
 `FrameCaptureRequest.Completion` off the pump. Success means the writer closed

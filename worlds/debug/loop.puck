@@ -1,7 +1,7 @@
 // The loop shaft: a portal in the floor and its counterpart in the ceiling directly above, both in the debug world
 // itself, so a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through
 // the floor again, forever. The debug world imports this file whole. The shaft stands on the open ground south-west of
-// the spawn, clear of the device row (z -6) and the portal frame (3, 0, -8):
+// the spawn, clear of the portal frame (3, 0, -8):
 //
 //   (-20, 0, -20)   the floor glass, facing up
 //   (-20, 6, -20)   the ceiling glass, facing down

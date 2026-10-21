@@ -555,8 +555,9 @@ demands nothing of its writer, and device loss starts from none.
   surface transport, two words.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
-extent, which only the resolve reads: one where a display screen covers the pixel
-(an opening, a portal's window, is zero and keeps its history like any surface),
+extent, which only the resolve reads: one where a display screen's picture covers the
+pixel (its bezel band and an opening, a portal's window, are zero and keep their
+history like any surface, so the face's jittered edge resolves like any edge),
 and, since the material model cannot tell steady emission from animated, the
 share of the pixel's color it emits after material layers. Under a temporal view
 a screen reads its image along the pixel's unjittered ray, so the image holds
@@ -578,7 +579,9 @@ spatial path at this frame's sample grid and its history restarts. Surviving
 history is clamped component by component to the 3x3's YCoCg box, so correcting
 chroma leaves an already valid luminance alone, including when a chroma interval
 has zero width. It is weighted down by the reactivity and joined by this frame's
-samples. A reactive pixel shows the spatial path by its reactivity, on the
+samples. The reactivity the resolve reads is the pixel's own sample's, the tap
+nearest its center, so a steady pixel beside a screen keeps its history. A
+reactive pixel shows the spatial path by its reactivity, on the
 unjittered grid, whatever weight it gathered: this frame's samples alone gather a
 weight that swings about one sample's as the jitter moves, and blending by it
 would switch a whole screen between the two filters frame by frame. The transport history is clamped to the 3x3's
@@ -607,7 +610,10 @@ a new epoch while a spatial view's still output stands without a render.
 A plain capture (`converge: 0`) observes the next normal temporal sample and
 keeps clean color history. An explicit converging capture starts its
 sample sequence at zero; any capture also discards retained tainted history
-before recording filled inputs.
+before recording filled inputs. A presented capture, which holds no frame,
+discards it on its first frame and skips the period of renders the restarted
+history takes to converge, so its frames show the steady image the display
+settles back to.
 
 The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another

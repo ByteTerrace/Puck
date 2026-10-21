@@ -1927,10 +1927,19 @@ A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
 `interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
-While a seat is captured on a screen, its camera eases into the emulator view:
-the screen's glass fills the viewport's limiting axis, square-on, derived from
-the row's own frame, with nothing between the camera and the glass drawn
-([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen)).
+While a seat is captured on a screen, its camera eases in until the screen's
+glass fills the viewport's limiting axis, square-on, derived from the row's own
+frame, with nothing between the camera and the glass drawn; once it settles,
+the seat's view shows the emulator view, the screen's source alone at the crop,
+pixel aspect and fill its route's `display` authors
+([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen-then-shows-its-source)).
+The same button sits a seat at a tabletop whose board facet authors an `engage`
+block: the seat is captured on `placement:<id>`, its camera eases to a view of
+the whole board from its side, its controls switch through the `engagement`
+context family's `tabletop` state, and the world's rules play the game from
+its channels and `board(pointer|side|engaged, …)` (the debug world's chess
+table, [`chess.md`](../../worlds/debug/chess.md);
+[engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)).
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
@@ -2537,6 +2546,18 @@ scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
+
+That capture is a settled still: it holds presentation and lets temporal views
+converge over the held frame, so it cannot show flicker, ghosting or trails.
+`world.screenshot <path.png> presented [<frames>] [region <x> <y> <w> <h>]`
+reads the frames the display presents instead, as composed for it and holding
+nothing, 1..120 of them (`<path>-000.png` onward for a burst), and prints a
+report on stderr once the last PNG is written: per frame its presentation
+index, the presentation its image was rendered on, its tick, and the pixels and
+luma that changed from the frame before, over the region or the whole frame.
+The host's clock runs on during it; `world.wait captures <seconds>` fences it.
+The MCP form is `puck_capture_frame` with `mode: "presented"`
+([Puck.Mcp](../Puck.Mcp/README.md#tools-and-results)).
 
 `world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
 the gallery and anything else a document names by a token; `near` names the

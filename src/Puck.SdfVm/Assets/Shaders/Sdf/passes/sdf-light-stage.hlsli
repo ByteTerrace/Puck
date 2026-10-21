@@ -72,13 +72,17 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         float3 imageRay;
         float3 imagePoint = sdfScreenImagePoint(p, material, surfacePoint, imageRay);
 
-        sampledScreen = sampleScreenSurface(material, imagePoint, imageRay, (p.pixelFootprint * s.t), color);
+        float picture;
+
+        sampledScreen = sampleScreenSurface(material, imagePoint, imageRay, (p.pixelFootprint * s.t), color, picture);
         if (sampledScreen) {
             // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
-            // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge.
+            // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge. A
+            // display is reactive only over its picture: its bezel band is as steady as the device around it, and keeps
+            // its history, so the face's jittered edge resolves like any other edge.
             ScreenMappingData opening = worldScreenMapping((uint)(material - SDF_SCREEN_MATERIAL - 1));
 
-            reactivity = (((opening.imageU.w != 0.0) && (opening.state.w == 0.0)) ? 0.0 : reactivity);
+            reactivity = (((opening.imageU.w != 0.0) && (opening.state.w == 0.0)) ? 0.0 : (reactivity * picture));
         }
     }
 #endif

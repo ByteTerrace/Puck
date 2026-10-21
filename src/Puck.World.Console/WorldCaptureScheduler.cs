@@ -220,6 +220,7 @@ public sealed class WorldCaptureScheduler {
     );
     private bool UnscheduledAwaitsFrame => (
         (m_unscheduled is { } unscheduled) &&
+        (unscheduled.Request.Mode == FrameCaptureMode.Settled) &&
         (m_lastPublishedTick == unscheduled.Tick) &&
         !unscheduled.Request.Completion.IsCompleted
     );
@@ -228,10 +229,12 @@ public sealed class WorldCaptureScheduler {
     public IReadOnlyList<WorldCaptureManifestEntry> Entries => m_landed;
 
     /// <summary>Arms a capture requested outside the schedule (<c>world.screenshot</c>) on the render chain's target, for
-    /// the frame of the last published tick. The host holds for it as for a scheduled capture (<see cref="AwaitsFrame"/>,
-    /// <see cref="HoldsClock"/>, from the same budgets), and <see cref="Drain"/> refuses it by name when the run ends
-    /// before a frame serves it. It writes no manifest entry: its outcome is its request's own, a refusal an
-    /// <see cref="OperationCanceledException"/> naming why no frame served it.</summary>
+    /// the frame of the last published tick. The host holds for a settled one as for a scheduled capture
+    /// (<see cref="AwaitsFrame"/>, <see cref="HoldsClock"/>, from the same budgets); a presented one
+    /// (<see cref="FrameCaptureMode.Presented"/>) holds nothing, so the frames it reads are the ones the running world
+    /// presents. <see cref="Drain"/> refuses either by name when the run ends before its frames are served. It writes no
+    /// manifest entry: its outcome is its request's own, a refusal an <see cref="OperationCanceledException"/> naming
+    /// why no frame served it.</summary>
     /// <param name="request">The unserved request.</param>
     /// <param name="target">The render chain's capture target.</param>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="target"/> is

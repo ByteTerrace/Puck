@@ -629,6 +629,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
+        ResetEngaged();
         m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
@@ -1188,7 +1189,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var rendered = (Screens?.Views ?? WorldViewInstances.Empty);
 
         if (views.Root is null) {
-            var panes = WorldRootGraph.PanesOf(views: views);
+            var panes = PanesOf(
+                screens: Screens,
+                views: views
+            );
             var composedViews = WorldRootGraph.ViewsOf(views: views);
 
             if (

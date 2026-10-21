@@ -7,9 +7,14 @@
 // state decides the filter and both backends compute the same arithmetic. With tonemap set, the reconstructed source,
 // and only it, goes through the filmic curve: a world's root places its SDF views this way, so the scene is tonemapped
 // where it enters the frame and the letterbox color, the base and every pane reach the display as they are.
+// A crop other than the whole source shows only that part of it in the rect, and pixelated keeps each source pixel a
+// crisp cell at any scale (sharp bilinear: bilinear only across the destination pixel that straddles two cells, the
+// reconstruction a nearest-filtered screen's glass samples with); either resamples rather than copying. Inside surround
+// and outside the rect the destination is the fill colour, as an emulator view shows around its picture.
 // The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
-// sharpen, sharpness, tonemap, compareMode, wipe) and the images base, source and destination, each image input with a sampler it never reads. rect
-// is the destination rect as fractions of the destination's extent: left, top, width, height.
+// sharpen, sharpness, tonemap, compareMode, wipe, crop, surround, fill, pixelated) and the images base, source and
+// destination, each image input with a sampler it never reads. rect and surround are fractions of the destination's
+// extent and crop of the source's: left, top, width, height.
 #include "place.interface.hlsli"
 
 // What the display shows between placed views: a near-black with a faint blue cast, opaque.
@@ -40,6 +45,26 @@ float3 placeSharpen(uint2 pixel, uint2 sourceDims, float sharpness) {
     float3 weight = (amplitude * (-0.2 * saturate(sharpness)));
 
     return max(((((up + left) + (right + down)) * weight) + center) / (1.0 + (4.0 * weight)), 0.0);
+}
+
+// The source reconstructed at a rect pixel through the crop: the pixel's centre at its place in the crop, bilinear at
+// the sharpness, or, pixelated, sharp bilinear, whose blend between two source cells spans one destination pixel.
+float3 placeCropped(uint2 pixel, uint2 rectDims, uint2 sourceDims) {
+    float4 crop = passGroup.crop;
+    float2 cropTexels = max((crop.zw * float2(sourceDims)), float2(1.0e-4, 1.0e-4));
+    float2 texel = ((crop.xy * float2(sourceDims)) + (((float2(pixel) + 0.5) / float2(rectDims)) * cropTexels));
+
+    if (passGroup.pixelated != 0u) {
+        float2 cell = floor(texel);
+        float2 fromCenter = ((texel - cell) - 0.5);
+        float2 reach = saturate((((abs(fromCenter) - 0.5) * (float2(rectDims) / cropTexels)) + 0.5));
+
+        texel = ((cell + 0.5) + (sign(fromCenter) * reach));
+
+        return puckReconstructAt(source, (texel - 0.5), sourceDims, uint2(0, 0), 0.0).rgb;
+    }
+
+    return puckReconstructAt(source, (texel - 0.5), sourceDims, uint2(0, 0), passGroup.sharpness).rgb;
 }
 
 // A comparison source already contains its held seat crop. The base still contains the whole live display.
@@ -86,8 +111,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float4 written;
 
+    // The surround's pixel edges, rounded as the rect's are; an empty surround holds no pixel.
+    float4 surround = passGroup.surround;
+    uint2 surroundMin = (uint2)clamp(floor((surround.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
+    uint2 surroundMax = (uint2)clamp(floor(((surround.xy + surround.zw) * float2(destinationDims)) + 0.5), float2(surroundMin), float2(destinationDims));
+    bool cropped = (passGroup.pixelated != 0u) || any(passGroup.crop != float4(0.0, 0.0, 1.0, 1.0));
+
     if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
-        if (passGroup.letterbox != 0u) {
+        if (all(id.xy >= surroundMin) && all(id.xy < surroundMax)) {
+            written = passGroup.fill;
+        } else if (passGroup.letterbox != 0u) {
             written = LetterboxColor;
         } else {
             base.GetDimensions(baseDims.x, baseDims.y);
@@ -103,9 +136,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
         uint2 rectDims = (rectMax - rectMin);
-        float3 color = (((passGroup.sharpen != 0u) && all(sourceDims == rectDims))
-            ? placeSharpen((id.xy - rectMin), sourceDims, passGroup.sharpness)
-            : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb);
+        float3 color = (cropped
+            ? placeCropped((id.xy - rectMin), rectDims, sourceDims)
+            : (((passGroup.sharpen != 0u) && all(sourceDims == rectDims))
+                ? placeSharpen((id.xy - rectMin), sourceDims, passGroup.sharpness)
+                : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb));
 
         written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
     }

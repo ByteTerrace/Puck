@@ -1,0 +1,94 @@
+// The gallery hall's room lights (hall.puck), each scenario booted in the whole debug world:
+// `puck test worlds/debug/hall-tests.puck`. `hallLights` holds each level's state (Off 0, On 1) and `hallLamps` the
+// point-light weights that follow it; a level's switch stands on the west wall at z = 32.5, and a body posed at
+// x = 11.1 on that level stands in its reach box. Enum members are written as their numbers: the rows reach this file
+// only through the debug world's import of hall.puck.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "hall-tests"
+
+test "the lobby starts dark and the levels above lit" {
+  when {
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    hallLights[level1] == 1
+    hallLights[level2] == 1
+    hallLights[level3] == 1
+    hallLamps[lobby] == 0
+    hallLamps[stairs] == 0.7
+  }
+}
+
+test "the context button at the lobby switch turns its lights on" {
+  when {
+    seat1: body.pose 11.1 0.05 32.5 90 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 1
+    hallLamps[lobby] == 0.9
+    hallLights[level1] == 1
+  }
+}
+
+test "a second press turns them off again" {
+  when {
+    seat1: body.pose 11.1 0.05 32.5 90 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    hallLamps[lobby] == 0
+  }
+}
+
+test "the context button away from a switch changes nothing" {
+  when {
+    seat1: body.pose 15 0.05 22 90 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    hallLights[level1] == 1
+  }
+}
+
+test "the level 2 switch flips only level 2" {
+  when {
+    seat1: body.pose 11.1 9.05 32.5 90 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    hallLights[level1] == 1
+    hallLights[level2] == 0
+    hallLights[level3] == 1
+  }
+}
+
+test "writing a level's cell, as gallery.lights does, switches it" {
+  when {
+    seat1: world.state.cell.set hallLights level0 1
+    seat1: world.state.cell.set hallLights level1 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 1
+    hallLamps[lobby] == 0.9
+    hallLights[level1] == 0
+    hallLamps[stairs] == 0
+  }
+}

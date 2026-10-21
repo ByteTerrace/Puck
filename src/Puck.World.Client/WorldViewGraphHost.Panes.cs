@@ -181,11 +181,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             displayWidth: m_displayWidth,
             panes: m_panes
         );
+        PublishEngaged();
     }
-    /// <summary>Marks an instance as a passthrough source the local user opened: from the next
-    /// <see cref="PublishPanes"/>, the mapping of each pane showing it takes <see cref="SourceDestination.Passthrough"/>
-    /// with the <see cref="SourceOpener.LocalUser"/> opener. The host's local-user door is the only caller; nothing a
-    /// world document declares reaches it.</summary>
+    /// <summary>Marks an instance as a passthrough source the local user opened: the mapping of each published pane
+    /// showing it takes <see cref="SourceDestination.Passthrough"/> with the <see cref="SourceOpener.LocalUser"/> opener at
+    /// once, so the event that opened it can reach its window, and so does every pane <see cref="PublishPanes"/> publishes
+    /// for it after. The host's local-user door is the only caller; nothing a world document declares reaches it.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <exception cref="ArgumentException"><paramref name="instance"/> is <see langword="null"/>, empty or white
     /// space.</exception>
@@ -193,6 +194,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: instance);
 
         _ = m_passthrough.Add(item: instance);
+
+        for (var index = 0; (index < m_panes.Count); index++) {
+            if (string.Equals(
+                a: m_panes[index].Source.Name,
+                b: instance,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                m_panes[index] = (m_panes[index] with {
+                    Destination = SourceDestination.Passthrough,
+                    Opener = SourceOpener.LocalUser,
+                });
+            }
+        }
+
+        Picker.Publish(
+            displayHeight: m_displayHeight,
+            displayWidth: m_displayWidth,
+            panes: m_panes
+        );
     }
     /// <summary>Returns an instance's panes to the presentation destination from the next <see cref="PublishPanes"/>.</summary>
     /// <param name="instance">The instance's name.</param>
@@ -408,6 +428,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         var fit = FitOf(instance: instance);
         var mapping = MappingOf(
             cached: m_mappings.GetValueOrDefault(key: pass),
+            crop: (m_paneCrops.TryGetValue(
+                key: pass,
+                value: out var crop
+            )
+                ? crop
+                : null),
             fit: fit,
             instance: instance,
             latest: latest,
@@ -466,9 +492,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         return SourceFit.Stretch;
     }
     // The mapping of an instance's whole image over a region of the display once the instance has rendered at an extent:
-    // the cached one while its region, extent, fit, source and destination hold, so a steady frame allocates nothing. Its
-    // pixels are the source's own (IWorldViewScenes.TrySourceExtent) where they differ from the rendered extent.
-    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached, SourceFit fit = SourceFit.Stretch) {
+    // the cached one while its region, extent, crop, fit, source and destination hold, so a steady frame allocates
+    // nothing. Its pixels are the source's own (IWorldViewScenes.TrySourceExtent) where they differ from the rendered
+    // extent, and a crop that leaves those pixels shows the whole image.
+    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached, SourceFit fit = SourceFit.Stretch, SourcePixelRect? crop = null) {
         var index = set.IndexOf(name: instance);
 
         if (
@@ -495,6 +522,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         ))
             ? (sourceWidth, sourceHeight)
             : (row.Width, row.Height));
+        var shownCrop = (((crop is { } part) && (part.X >= 0) && (part.Y >= 0) && (part.Width > 0) && (part.Height > 0) && ((((long)part.X) + part.Width) <= width) && ((((long)part.Y) + part.Height) <= height))
+            ? part
+            : SourcePixelRect.Whole(
+                height: height,
+                width: width
+            ));
         var mapping = cached;
 
         if (
@@ -503,6 +536,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             (shown != region) ||
             (mapping.SourceWidth != width) ||
             (mapping.SourceHeight != height) ||
+            (mapping.Crop != shownCrop) ||
             (mapping.Fit != fit) ||
             (mapping.Source != source) ||
             (mapping.Destination != destination)
@@ -513,6 +547,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 source: source,
                 width: width
             ) with {
+                Crop = shownCrop,
                 Destination = destination,
                 Fit = fit,
                 Opener = ((destination == SourceDestination.Passthrough)

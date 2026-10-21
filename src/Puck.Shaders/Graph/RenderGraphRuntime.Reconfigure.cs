@@ -314,7 +314,7 @@ public sealed partial class RenderGraphRuntime {
         var oldSet = m_set;
         var oldSources = m_sources;
         var captured = m_set.Instances[m_captureInstance].Name;
-        var captureStillArmed = (m_capture.PendingPath is not null);
+        var captureStillArmed = ((m_capture.PendingPath ?? PresentedPath) is not null);
 
         m_captureInstance = ((captureStillArmed && m_captureFollowsRoot) ? rootIndex : set.IndexOf(name: captured));
 
@@ -322,6 +322,7 @@ public sealed partial class RenderGraphRuntime {
 
         if (m_captureInstance < 0) {
             m_capture.Refuse(error: new InvalidOperationException(message: $"The render graph no longer has an instance '{captured}'."));
+            RefusePresented(error: new InvalidOperationException(message: $"The render graph no longer has an instance '{captured}'."));
             m_captureInstance = rootIndex;
         }
 

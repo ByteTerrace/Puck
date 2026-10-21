@@ -27,5 +27,35 @@ public sealed partial class RenderGraphRuntimeLawTests {
         view.RetainedTainted = false;
         TestLiveness.Until(step: () => { frames.Next(); return request.Completion.IsCompleted; });
         Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Equal(expected: 0, actual: view.Discards);
+    }
+    // A presented capture holds no frame to converge over, so retained history carrying external pixels would taint every
+    // frame while it is armed. Its first frame discards that history once, and the capture skips the renders the
+    // history needs to converge again before it reads the steady image.
+    [Fact]
+    public void APresentedCaptureDiscardsTaintedHistoryOnceAndSkipsItsReconvergence() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var recorders = new Recorders();
+        var view = new ViewPackage { RetainedTainted = true };
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance(), Instance(name: "main", reads: new RenderGraphRead(Producer: PackageView))),
+            "main", null!, Graph(ScreensGraph(false, "view"), ("view", PackageView)));
+        var frames = new Frames(
+            footprints: [new(Consumer: "main", Height: 1, Producer: PackageView, Width: 1)],
+            roots: [new(Height: 1, Instance: "main", Width: 1)], runtime: runtime);
+
+        frames.Settle();
+        var request = PresentedRequest(frames: 2);
+        var armed = frames.Index;
+
+        runtime.RequestCapture(request: request);
+        frames.Next(count: (view.RefillFrames + 2));
+
+        var result = Landed(request: request);
+
+        Assert.Null(@object: result.Error);
+        Assert.Equal(expected: 1, actual: view.Discards);
+        Assert.Equal(expected: new[] { (armed + view.RefillFrames), (armed + view.RefillFrames + 1) }, actual: result.Presented.Select(selector: static frame => frame.Presentation).ToArray());
     }
 }
