@@ -236,9 +236,10 @@ are the authored ones. Strands closer than twice their radius fuse.
 
 ## Contact admission
 
-- **Refused by name:** non-detail Path prisms when the solid row requires
-  deterministic field contact; Revolve where contact is owed;
-  folds that cannot expand within the contact copy budget.
+- **Refused by name:** Revolve where contact is owed; folds that cannot expand
+  within the contact copy budget. A Path prism (extruded; a fill or a stroke)
+  is admitted: the fixed-point evaluator reads its edge table as the kernel
+  does.
 - **Accepted but omitted:** creation contact emission skips sweeps entirely
   (including single-strand sweeps) and detail shapes; it omits flare, shear,
   bumps, erode, panel, trims, cells, and creation noise. Base primitives remain
@@ -259,7 +260,7 @@ A uniform scale is always admitted, so this only bites an anisotropic shape.
 |---|---|
 | Sphere, Ellipsoid, Superellipsoid, Box, Plane | RoundCone |
 | Torus when `scale.x == scale.z` (an elliptic section revolved) | Torus when `scale.x != scale.z` |
-| Prism with any profile but Path (a Path prism scales its edges natively, but no fixed-point evaluator answers it at any scale) | none |
+| Prism with any profile (a Path prism scales its edges natively, and the fixed-point evaluator reads them at that scale) | none |
 | Capsule and Cone when `scale.x == scale.z`; Cylinder at any scale (elliptic when `scale.x != scale.z`) | Capsule and Cone when `scale.x != scale.z` |
 
 None of the right column is refused by name — each validates, renders, and fails

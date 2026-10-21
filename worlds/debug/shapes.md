@@ -379,8 +379,9 @@ boot stored (the owner's Direct3D 12 bakes) against the CPU field, so a GPU
 mesh lying on the CPU field is the two interpreters agreeing on the op. The
 fixed-point evaluator's render reading reads every op the renderer draws, each
 a twin of its `mapCore` case held to the kernel's own formula by
-`SdfRenderOpsLawTests`, so every exhibit but the Path profiles (which only the
-kernels read) is audited. Off-surface p99 of the GPU mesh against the CPU
+`SdfRenderOpsLawTests`, and its Path reading follows the program's own edge
+table as the kernel does (`PathFieldLawTests`), so every exhibit is audited.
+Off-surface p99 of the GPU mesh against the CPU
 field, in millimetres, and what the exhibit's score is made of:
 
 | Operation | Exhibit | GPU mesh off the CPU field (p99) | Verdict |

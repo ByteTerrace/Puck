@@ -105,6 +105,6 @@ public enum SdfShapeType : uint {
     // Data0 = (asfloat(tableOffset), edgeCount, enclosingRadius2D, halfDepth); Data1 = (smooth, stroke?1:0, 0, 0).
     // Filled paths use even/odd parity and distance to all boundaries; strokes union the convex hulls of endpoint
     // disks. Both are 1-Lipschitz. Curves are flattened once by SdfPathCompiler to an explicit author tolerance.
-    // Extrusion only; presentation-only until a deterministic query interpreter is supplied.
+    // Extrusion only. The fixed-point evaluator reads the same edges from the program's own table (SdfProgram.Paths).
     Path = 20,
 }

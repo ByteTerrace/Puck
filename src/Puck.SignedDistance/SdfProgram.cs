@@ -474,6 +474,11 @@ public sealed partial class SdfProgram {
     /// <see cref="Words"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
     /// mirror the field without decoding the packed word offset. Empty for a program with no Sweep shape.</summary>
     internal IReadOnlyList<SdfSweepCurve> SweepCurves => m_sweepCurves;
+    /// <summary>Gets every <see cref="SdfShapeType.Path"/> instruction's own edge table, keyed by that instruction's index
+    /// in <see cref="Instructions"/> — the host-side twin of the packed side table <see cref="Words"/> carries, so a CPU
+    /// consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can mirror the field without decoding the packed
+    /// word offset. Empty for a program with no Path shape.</summary>
+    internal IReadOnlyList<SdfCompiledPath> Paths => m_paths;
 
     /// <summary>Gets the number of materials in this program's palette — read back from the packed header lane
     /// (<c>m_words[1]</c>), which is the single source of truth. Exposed so a caller rebuilding a similar program (a

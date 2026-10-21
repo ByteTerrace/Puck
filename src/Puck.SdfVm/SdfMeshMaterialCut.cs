@@ -181,6 +181,18 @@ internal sealed class SdfMeshMaterialCut {
             Triangle(a: a, b: b, c: c, material: material);
             Triangle(a: a, b: c, c: d, material: material);
         }
+        float Area(uint a, uint b, uint c) => Vector3.Cross(vector1: (positions[(int)b] - positions[(int)a]), vector2: (positions[(int)c] - positions[(int)a])).LengthSquared();
+        // A piece's quad, split along the diagonal whose thinner triangle is the fuller: a boundary point at a corner's own
+        // vertex puts the next boundary point on the other diagonal, where the first split's second triangle would be a
+        // line held twice over the same segment.
+        void Piece(uint a, uint b, uint c, uint d, int material) {
+            if (MathF.Min(Area(a: a, b: b, c: c), Area(a: a, b: c, c: d)) >= MathF.Min(Area(a: a, b: b, c: d), Area(a: b, b: c, c: d))) {
+                Quad(a: a, b: b, c: c, d: d, material: material);
+            } else {
+                Triangle(a: a, b: b, c: d, material: material);
+                Triangle(a: b, b: c, c: d, material: material);
+            }
+        }
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
             _ = Add(normal: Normal(vertex: vertex), point: Position(vertex: vertex));
@@ -190,13 +202,15 @@ internal sealed class SdfMeshMaterialCut {
         // normal blended between the vertices of the triangle that names it. Where those two normals turn apart past
         // CreaseCosine the boundary runs along a crease (a raised plate's foot, a bezel's rim), and each piece takes its own
         // end's normal there: a normal blended across the crease shades the piece on the face as a spike of the face beyond
-        // it. Every vertex of one edge lies at its one point.
+        // it. Every vertex of one edge lies at its one point. An interval still touching an end after every round puts the
+        // boundary at that end's vertex: a piece a thirty-second of an edge wide is a sliver whose facing is rounding noise,
+        // and the triangle that would hold it has no area and is dropped on both sides of its edges.
         var boundary = new Dictionary<(int Edge, int Low, int High, int Side), uint>();
 
         // The boundary vertex of the edge between `a` and `b` for the piece on `a`'s side.
         uint On(int a, int b) {
             var edge = m_edgeOf[Key(a: m_site[a], b: m_site[b])];
-            var middle = (0.5f * (m_from[edge] + m_to[edge]));
+            var middle = ((m_from[edge] <= 0f) ? 0f : ((m_to[edge] >= 1f) ? 1f : (0.5f * (m_from[edge] + m_to[edge]))));
             var (aNormal, bNormal) = (Vector3.Normalize(value: Normal(vertex: a)), Vector3.Normalize(value: Normal(vertex: b)));
             var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < CreaseCosine);
             var key = (edge, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b), (creased ? a : -1));
@@ -232,14 +246,14 @@ internal sealed class SdfMeshMaterialCut {
                             point: (((positions[(int)On(a: v0, b: v1)] + positions[(int)On(a: v1, b: v2)]) + positions[(int)On(a: v2, b: v0)]) / 3f)
                         );
 
-                        Quad(a: (uint)v0, b: On(a: v0, b: v1), c: centre, d: On(a: v0, b: v2), material: m0);
-                        Quad(a: (uint)v1, b: On(a: v1, b: v2), c: centre, d: On(a: v1, b: v0), material: m1);
-                        Quad(a: (uint)v2, b: On(a: v2, b: v0), c: centre, d: On(a: v2, b: v1), material: m2);
+                        Piece(a: (uint)v0, b: On(a: v0, b: v1), c: centre, d: On(a: v0, b: v2), material: m0);
+                        Piece(a: (uint)v1, b: On(a: v1, b: v2), c: centre, d: On(a: v1, b: v0), material: m1);
+                        Piece(a: (uint)v2, b: On(a: v2, b: v0), c: centre, d: On(a: v2, b: v1), material: m2);
                     } else {
                         // Two materials: the corner on its own is cut off by the line between its edges' boundary points.
                         var (odd, s1, s2) = ((m1 == m2) ? (v0, v1, v2) : ((m0 == m2) ? (v1, v2, v0) : (v2, v0, v1)));
                         Triangle(a: (uint)odd, b: On(a: odd, b: s1), c: On(a: odd, b: s2), material: m_vertices[odd]);
-                        Quad(a: On(a: s1, b: odd), b: (uint)s1, c: (uint)s2, d: On(a: s2, b: odd), material: m_vertices[s1]);
+                        Piece(a: On(a: s1, b: odd), b: (uint)s1, c: (uint)s2, d: On(a: s2, b: odd), material: m_vertices[s1]);
                     }
                 }
 
@@ -290,9 +304,13 @@ internal sealed class SdfMeshMaterialCut {
         triangle[2] = corners[(2 + half)];
     }
     private static (int Low, int High) Key(int a, int b) => ((a < b) ? (a, b) : (b, a));
-    // The point a fraction `t` along a searched edge from its lower vertex, and the normal there.
+    // The point a fraction `t` along a searched edge from its lower vertex, and the normal there; an end is the vertex's
+    // own position exactly, so a boundary at an end coincides with it and the pieces there have no area.
     private (Vector3 Position, Vector3 Normal) Along(int edge, float t) {
         var (low, high) = m_edges[edge];
+
+        if (t <= 0f) { return (Position(vertex: low), Normal(vertex: low)); }
+        if (t >= 1f) { return (Position(vertex: high), Normal(vertex: high)); }
 
         return (Vector3.Lerp(value1: Position(vertex: low), value2: Position(vertex: high), amount: t), Vector3.Lerp(value1: Normal(vertex: low), value2: Normal(vertex: high), amount: t));
     }

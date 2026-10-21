@@ -106,7 +106,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.StartsWith(
             actualString: result.Output,
             comparisonType: StringComparison.Ordinal,
-            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=1 contact-refused=6 unlowered=0]"
+            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=0 contact-refused=5 unlowered=0]"
         );
 
         var output = result.Output;
@@ -122,8 +122,8 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.Contains(expectedSubstring: "lowered=Rotate·Ellipse distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "cylinder-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Superellipsoid(e=2) distance=bound gain=0.333 ", actualString: Line(output: output, shape: "ellipsoid"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=admitted", actualString: Line(output: output, shape: "ellipsoid"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "lowered=Path distance=uncertified (no certified gain) cpu=refuses", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "contact=refused (uses profile Path)", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
+        // A path reads its own edge table on the CPU, so the render reading and contact both take it.
+        Assert.Contains(expectedSubstring: "lowered=Path distance=uncertified (no certified gain) cpu=interprets contact=admitted", actualString: Line(output: output, shape: "path"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "contact=refused (lifts by revolve)", actualString: Line(output: output, shape: "revolve"), comparisonType: StringComparison.Ordinal);
         Assert.Matches(expectedRegexPattern: @"lowered=AxialProfile·PushField·Scale\(0\.4\)·Sphere·PopField distance=uncertified \(no certified gain\) step=0\.\d+ \(L=\d", actualString: Line(output: output, shape: "flared"));
         Assert.Contains(expectedSubstring: "cpu=interprets contact=admitted contact-omits=AxialProfile+PushField+PopField", actualString: Line(output: output, shape: "flared"), comparisonType: StringComparison.Ordinal);

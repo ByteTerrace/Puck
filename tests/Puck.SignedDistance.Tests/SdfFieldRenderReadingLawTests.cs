@@ -166,10 +166,10 @@ public sealed class SdfFieldRenderReadingLawTests {
         var excerpt = program.Excerpt(indices: [.. Enumerable.Range(start: 2, count: (program.Instructions.Count - 2))]);
         var swept = new SdfFieldEvaluator(program: program.Excerpt(indices: [.. Enumerable.Range(start: (sweep - 1), count: 2)]));
 
-        // The path and the sweep keep their tables, so each excerpt builds; the sweep alone reads its own curve, and the
-        // path, which no reading interprets, is refused by name.
+        // The path and the sweep keep their tables, so each excerpt builds and reads its own: the sweep its curve, the
+        // path its edges (the square's half-depth is nearer the origin than its sides).
         Assert.Equal(expected: 2, actual: excerpt.Instructions.Count(predicate: static instruction => (instruction.Op == SdfOp.ShapeBlend)));
         Assert.Equal(expected: -0.05f, actual: Read(field: swept, point: Vector3.Zero), tolerance: 1e-3f);
-        _ = Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: excerpt, reading: SdfFieldReading.Render));
+        Assert.Equal(expected: -0.05f, actual: Read(field: new SdfFieldEvaluator(program: excerpt, reading: SdfFieldReading.Render), point: Vector3.Zero), tolerance: 1e-3f);
     }
 }

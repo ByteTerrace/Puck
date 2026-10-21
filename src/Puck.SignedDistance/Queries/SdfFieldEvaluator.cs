@@ -23,9 +23,9 @@ namespace Puck.SignedDistance.Queries;
 // query and contact consumers require physical clearance. Scalable primitives must bake anisotropy into a native shape
 // spelling (CreationGeometry does this for boxes, spheres/ellipsoids, axially symmetric cylinders/cones, and planes).
 // Both readings reject two shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D), one
-// needing texture sampling (Glyph), Path, whose compiled segment table only the kernels read, and SampledRegion,
-// whose brick pool is an engine resource this evaluator cannot access — every other shape in <see cref="SdfShapeType"/>
-// is supported. The constructor throws <see cref="ArgumentException"/> naming the FIRST disqualifying instruction's op
+// needing texture sampling (Glyph), and SampledRegion, whose brick pool is an engine resource this evaluator cannot
+// access — every other shape in <see cref="SdfShapeType"/> is supported, a Path through the program's own edge table
+// (SdfFieldEvaluator.Path.cs). The constructor throws <see cref="ArgumentException"/> naming the FIRST disqualifying instruction's op
 // or shape, rather than silently constructing an evaluator that would answer wrong for part of the program.
 //
 // THE RENDER READING (SdfFieldReading.Render) lifts the warp refusals for a consumer that measures what the renderer
@@ -352,6 +352,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var instructions = program.Instructions;
         var convexPolygonProfiles = program.ConvexPolygonProfiles;
         var sweepCurves = program.SweepCurves;
+        var paths = program.Paths;
         var compiled = new CompiledInstruction[instructions.Count];
 
         for (var index = 0; (index < instructions.Count); index++) {
@@ -396,6 +397,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             // declaration is refused HERE, at compile time, rather than by IsSupportedShape (which is purely
             // type-keyed and cannot see the instruction's own Data0.y).
             var isSweep = ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep));
+            // Path's Data0.x is a packed table offset as well; its edges are the program's own table (SdfProgram.Paths).
+            var isPath = ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.Path));
 
             if (
                 isSweep &&
@@ -424,7 +427,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     )
                 : null),
                 Data0W: FixedQ4816.FromDouble(value: instruction.Data0.W),
-                Data0X: ((isConvexPolygon || isSweep)
+                Data0X: ((isConvexPolygon || isSweep || isPath)
                 ? FixedQ4816.Zero
                 : FixedQ4816.FromDouble(value: instruction.Data0.X)),
                 Data0Y: FixedQ4816.FromDouble(value: instruction.Data0.Y),
@@ -441,6 +444,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 ? CompileSweepCurve(
                         instructionIndex: index,
                         sweepCurves: sweepCurves
+                    )
+                : null),
+                PathEdges: (isPath
+                ? CompilePathEdges(
+                        instructionIndex: index,
+                        paths: paths
                     )
                 : null)
             );
@@ -624,6 +633,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             strands: Math.Clamp(value: ((int)((instruction.Data0Y + Half).Value >> FixedQ4816.FractionBitCount)), min: 1, max: SdfProgramBuilder.MaxSweepStrands),
             twist: instruction.Data0Z,
             strandOffset: instruction.Data0W
+        ),
+            SdfShapeType.Path => SdfPathSolid(
+            p: p,
+            edges: (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction.")),
+            stroke: (instruction.Data1Y > Half),
+            halfDepth: instruction.Data0W
         ),
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
         };
@@ -810,59 +825,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: inverseExponent
         )) - FixedQ4816.One) * minRadius);
     }
-    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli — the exact iq polygon SDF (running minimum
-    // distance to every edge segment, signed by one even/odd crossing-parity flip per edge). The kernel keeps the
-    // minimum SQUARED distance and roots it once; here each candidate is rooted as a length, because a squared
-    // millimetre distance is a few Q48.16 ulps and its root would step by whole ulps across a centimetre of field,
-    // flattening the gradient the mesh bake reads near every edge.
-    private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) {
-        var count = vertices.Length;
-        var d = (p - vertices[0]).Length;
-        var negate = false;
-        var previous = vertices[(count - 1)];
-
-        for (var i = 0; (i < count); i++) {
-            var vertex = vertices[i];
-            var e = (previous - vertex);
-            var w = (p - vertex);
-            var eDotE = FixedVector2.Dot(
-                left: e,
-                right: e
-            );
-            var t = FixedQ4816.Clamp(
-                value: (FixedVector2.Dot(
-                    left: w,
-                    right: e
-                ) / eDotE),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-            var b = (w - (e * t));
-
-            d = FixedQ4816.Min(
-                x: d,
-                y: b.Length
-            );
-
-            var c1 = (p.Y >= vertex.Y);
-            var c2 = (p.Y < previous.Y);
-            var c3 = (((e.X * w.Y) - (e.Y * w.X)) > FixedQ4816.Zero);
-
-            if (
-                (c1 && c2 && c3) ||
-                (!c1 && !c2 && !c3)
-            ) {
-                negate = !negate;
-            }
-
-            previous = vertex;
-        }
-
-        return (negate
-            ? -d
-            : d
-        );
-    }
+    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli: the edge-list core (SdfPolygon2D) walked from each
+    // vertex back to the one before it.
+    private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) =>
+        SdfPolygon2D(edges: new PolygonEdges(vertices: vertices), p: p);
     // KEEP IN SYNC with sdfConvexPolygonSolid in field/sdf-shapes.hlsli.
     private static FixedQ4816 SdfConvexPolygonSolid(FixedVector3 p, FixedVector2[] vertices, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         if (lift > Half) {
@@ -1660,7 +1626,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // Only for SdfShapeType.Sweep (strands == 1 only — see the constructor's Compile-time refusal for strands >
         // 1): the curve's own control points and radius endpoints, pre-converted once. Data0X carries no usable
         // value for this shape either (a packed table offset, not a float).
-        SweepCurveFixed? SweepCurve = null
+        SweepCurveFixed? SweepCurve = null,
+        // Only for SdfShapeType.Path: the shape's own edge table at its scale, pre-converted once; Data0X is a packed
+        // table offset for this shape too.
+        PathEdgeFixed[]? PathEdges = null
     );
     // The compiled, fixed-point form of one SdfSweepCurve.
     private readonly record struct SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);

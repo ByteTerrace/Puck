@@ -15,13 +15,14 @@ namespace Puck.World.Schema.Tests;
 /// </summary>
 public sealed class AuthoredShapeAdmissionLawTests {
     [Fact]
-    public void PathProfilesRenderButRefuseFieldContactAndUnsupportedFacets() {
+    public void PathProfilesRenderAndCollideButRefuseUnsupportedFacets() {
         var profile = new SdfPrismProfile(SdfPrismProfileKind.Path, CornerRadius: 0,
             Path: new([new(new(x: -0.5f, y: -0.5f), [new(new(x: 0.5f, y: -0.5f)), new(new(x: 0, y: 0.5f))])]));
         var shape = Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Profile = profile };
 
         AssertCanonicalizerAccepts(shape: shape);
-        AssertWorldRefusesNaming(shape, canonicalize: true, needle: "Path", requiresField: true);
+        // The fixed-point evaluator reads a path's edge table, so a solid row owing field contact takes it.
+        AssertWorldValidates(shape: shape, requiresField: true);
         AssertCanonicalizerRefusesNaming(shape with { Lift = SdfLift.Revolve }, "Path");
         AssertCanonicalizerRefusesNaming(shape with { Rounding = 0.01f }, "Path");
         AssertCanonicalizerRefusesNaming(shape with { Profile = profile with { Path = profile.Path! with { Tolerance = float.NaN } } }, "tolerance");

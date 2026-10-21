@@ -307,8 +307,8 @@ owns its flags.
   with each lattice answered through the group's CPU field, so a contour,
   refinement or field change shows in the audit without a boot. Where the
   fixed-point field and the kernel's agree, its mesh matches a stored Direct3D
-  12 bake of the group to the triangle; a field the evaluator refuses (a path, a
-  warp, a multi-strand sweep) needs a World boot.
+  12 bake of the group to the triangle; a field the evaluator refuses (a regular
+  polygon, a glyph, a sampled region) needs a World boot.
 - **The store is keyed by the bake identity of the build that booted.** From
   your own worktree's CLI, audit a World you ran from the same checkout, or name
   another build with `--build <its Puck.World bin dir>`; a rebuilt build's
@@ -323,9 +323,11 @@ owns its flags.
   crossings and open edges; a cutter that is only a lower bound (a stretched
   ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to
   the shape whose own field is loosest there.
-- **What it cannot read.** The render reading interprets the flare
-  (`AxialProfile`) and twist (`RotatePlane`) warps and a non-uniform scale, a
-  sync pair with their `mapCore` cases; a group holding another warp (shear,
-  bumps, a polar fold), a regular polygon, a path or a multi-strand sweep
-  reports `field refused`, and one whose evaluation faults `field failed`.
-  Mirrored groups (left and right) share one geometry and one stored mesh.
+- **What it cannot read.** The render reading interprets every warp, fold and
+  relief the renderer draws, a non-uniform scale, a sweep of any strand count
+  and a path's edge table, each a sync pair with its `mapCore` case
+  (`SdfFieldEvaluator.RenderOps.cs`, `SdfFieldEvaluator.Path.cs`); a group
+  holding a regular polygon or star (runtime trigonometry), a glyph or a
+  sampled region reports `field refused`, and one whose evaluation faults
+  `field failed`. Mirrored groups (left and right) share one geometry and one
+  stored mesh.
