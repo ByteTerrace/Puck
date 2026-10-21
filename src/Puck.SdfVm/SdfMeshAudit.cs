@@ -137,6 +137,10 @@ public static class SdfMeshAudit {
     // A triangle is a sliver when twice its area over its longest edge squared falls below this: a height under a
     // twentieth of that edge.
     private const float SliverRatio = 0.05f;
+    // A triangle is degenerate when that ratio falls below this, a height under a five-hundredth of its longest edge:
+    // its corners are collinear to rounding, so it draws nothing and its facing is noise, judged neither against the
+    // gradient nor against its neighbours across an edge.
+    private const float DegenerateRatio = 0.002f;
     // The samples of a cluster its shapes are named at.
     private const int ProbeCount = 16;
 
@@ -245,8 +249,10 @@ public static class SdfMeshAudit {
             var longest = MathF.Max(Vector3.DistanceSquared(value1: a, value2: b), MathF.Max(Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a)));
             var centroid = ((a + b + c) / 3f);
 
-            slivers += (((longest <= 0f) || ((cross.Length() / longest) < SliverRatio)) ? 1 : 0);
-            faceNormals[triangle] = ((cross.LengthSquared() > 0f) ? Vector3.Normalize(value: cross) : Vector3.Zero);
+            var ratio = ((longest <= 0f) ? 0f : (cross.Length() / longest));
+
+            slivers += ((ratio < SliverRatio) ? 1 : 0);
+            faceNormals[triangle] = ((ratio >= DegenerateRatio) ? Vector3.Normalize(value: cross) : Vector3.Zero);
             centroidErrors[triangle] = Off(field: field, flagged: flagged, cell: cell, point: centroid, threshold: threshold);
             var slope = Slope(field: field, point: centroid, step: options.GradientStep);
             var steepness = slope.Length();
@@ -268,7 +274,8 @@ public static class SdfMeshAudit {
         for (var triangle = 0; (triangle < triangles); triangle++) {
             var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
 
-            if (gradients[triangle] == Vector3.Zero) {
+            // A flat field or a degenerate triangle gives nothing to judge a facing against.
+            if ((gradients[triangle] == Vector3.Zero) || (faceNormals[triangle] == Vector3.Zero)) {
                 normalErrors[triangle] = float.NaN;
                 if (!normals.IsEmpty) { shadingErrors[triangle] = float.NaN; }
                 continue;
@@ -296,10 +303,6 @@ public static class SdfMeshAudit {
                     flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst) { Facing = straying, Gradient = gradients[triangle] });
                 }
             }
-            if (faceNormals[triangle] == Vector3.Zero) {
-                normalErrors[triangle] = float.NaN;
-                continue;
-            }
 
             var degrees = Angle(first: (winding * faceNormals[triangle]), second: gradients[triangle]);
 
@@ -326,7 +329,7 @@ public static class SdfMeshAudit {
             } else if (held.Count > 2) {
                 nonManifold++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
-            } else if (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot) {
+            } else if ((faceNormals[held.First] != Vector3.Zero) && (faceNormals[held.Second] != Vector3.Zero) && (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot)) {
                 folds++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
             }

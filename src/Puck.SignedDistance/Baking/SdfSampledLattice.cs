@@ -239,8 +239,8 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// size. Where the edge lies up to half a cell past the cell that sees both its faces, in a neighbour that sees one, the
 /// vertex of a straight edge reaches past its cell to it, and a curved convex edge moves onto the neighbour's vertex.
 /// <para>Where the samples cannot resolve the surface, the lattice refines (<see cref="Refine"/>): a cell crossed by a
-/// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, a cell whose
-/// outside corners report different materials, and a cell two separate sheets cross are sampled again at a finer spacing
+/// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, and a cell two
+/// separate sheets cross are sampled again at a finer spacing
 /// and contoured at it, with the cells around them contoured at the fine spacing from their coarse corners so the mesh
 /// stays closed where its resolution changes. Every other cell contours whole.</para>
 /// <para>The lattice is answered in stages: <see cref="Refine"/> names the fine samples to measure and
@@ -344,8 +344,8 @@ public sealed class SdfSampledLattice {
     /// sample between two of the other sign whose crossings lie less than a cell apart, or two samples of one sign whose
     /// values fall steeply toward each other from both sides and meet below the surface, where no line beside it crosses
     /// the solid or gap two samples thick, as beside a solid's edge or corner the line crosses near its tip or grazes,
-    /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose outside
-    /// corners report different owned materials, a crossed cell whose corner signs hold more than one surface patch, and
+    /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose corner signs hold more than one
+    /// surface patch, and
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
     /// <paramref name="regions"/>.
     /// </summary>
@@ -428,29 +428,24 @@ public sealed class SdfSampledLattice {
             }
         }
 
-        // Crossed cells: more than one surface patch, or outside corners that disagree on the owned material.
+        // Crossed cells holding more than one surface patch. A cell whose outside corners disagree on the material is not
+        // refined for that: the material cut (SdfMeshMaterialCut) searches each boundary on the mesh's own edges, and fine
+        // cells along a concave seam between two materials merge into collinear vertices whose quads fold.
         for (var z = 0; (z < cellsZ); z++) {
             for (var y = 0; (y < cellsY); y++) {
                 for (var x = 0; (x < cellsX); x++) {
                     var mask = 0;
-                    var material = int.MinValue;
-                    var mixed = false;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        var index = Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)));
-
-                        if (m_values[index] < 0f) {
+                        if (m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
                             mask |= (1 << offset);
-                        } else {
-                            mixed |= ((material != int.MinValue) && (material != m_materials[index]));
-                            material = m_materials[index];
                         }
                     }
 
                     if ((mask == 0) || (mask == 0xFF)) {
                         continue;
                     }
-                    if (mixed || (SdfDualContouring.PatchesOf(mask: mask) > 1)) {
+                    if (SdfDualContouring.PatchesOf(mask: mask) > 1) {
                         measured[CellIndex(x: x, y: y, z: z)] = true;
                         any = true;
                     }

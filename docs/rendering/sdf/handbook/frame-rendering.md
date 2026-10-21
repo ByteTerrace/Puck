@@ -726,9 +726,13 @@ samples cannot resolve the surface (`SdfSampledLattice.Refine`):
   (a cone's foot) or a cut tilted against the lattice would otherwise refine in
   patches along its length, and the merged cells around each patch cut the
   crease at the coarse spacing;
-- a crossed cell whose outside corners report different materials;
 - a crossed cell whose corner signs hold more than one surface patch, two sheets
   in one cell.
+
+A cell whose outside corners report different materials is not refined for
+that: the material cut searches each boundary along the mesh's own edges, and
+a seam between two materials refined along a concave crease merges its fine
+cells into collinear vertices whose quads fold.
 
 Each such cell is measured again as a points lattice at a fine spacing: the cell
 split into as many parts as bring it to 5 mm (`FineCell`), at most four along
