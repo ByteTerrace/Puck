@@ -146,8 +146,11 @@ float4 sampleScreenSource(uint screenIndex, float2 uv, float2 footprint, out flo
 // mapping through the CRT glass and the sampler its row names. outColor is valid only when this returns true; the
 // caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
-bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor) {
+// `picture` is the share of the face the picture covers rather than the bezel: zero over the glass's bezel band, so the
+// face's own edge, which the temporal jitter moves, is never part of a reactive screen.
+bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor, out float picture) {
     outColor = float3(0.0, 0.0, 0.0);
+    picture = 1.0;
 
     if (!sdfScreenSurfaceShades(material)) {
         return false;
@@ -238,6 +241,7 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), CrtGlintPower);
 
     outColor = ((((sampled * scanline) * vignette) * bezel) + (CrtGlint * glint));
+    picture = bezel;
 
     return true;
 }

@@ -286,6 +286,14 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
   (`[capture] … -> <path>`). Fence a frame with `world.wait` before reading it.
   Two windowed captures are never byte-identical; compare by changed-pixel
   count.
+- **A capture is a settled still unless asked otherwise.** The ordinary capture
+  (`world.screenshot`, `puck_capture_frame`) holds presentation and lets
+  temporal views converge, so it never shows flicker, ghosting or trails. For
+  those, read what the display presented: `puck_capture_frame` with
+  `mode: "presented"` and `frames: 8` (optionally a `region`), or
+  `world.screenshot <path.png> presented 8`, which report each frame's changed
+  pixels and luma change against the one before
+  ([console](references/console.md#settled-stills-and-presented-bursts)).
 - **A denial check needs a control.** Pair it with an actor who holds the grant
   and succeeds, and keep actor and target different (every seat is seeded wide).
 - **Pixels are not a replay proof.** `replay.verify` MATCH proves the hashed

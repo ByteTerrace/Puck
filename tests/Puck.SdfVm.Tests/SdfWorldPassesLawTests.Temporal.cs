@@ -66,6 +66,24 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: SdfTemporalHistory.Sample(index: (first + 1u)), actual: rig.Jitter());
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
     }
+    // A presented capture holds nothing, so tainted history is discarded on its own: once, restarting the sequence for
+    // one period, while clean history keeps its samples.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void DiscardingTaintedHistoryRestartsItForOnePeriodAndLeavesCleanHistoryAlone(bool tainted) {
+        using var rig = new TemporalRig(views: 1, feed: tainted, temporal: true);
+
+        rig.Produce();
+        var preceding = rig.HistoryFrames();
+
+        if (tainted) { rig.Filling = true; }
+        Assert.Equal(expected: (tainted ? ((int)SdfTemporalSamples.Period) : 0), actual: rig.Passes.DiscardTaintedHistory(instance: "world"));
+        Assert.Equal(expected: 0, actual: rig.Passes.DiscardTaintedHistory(instance: "world"));
+        rig.Produce();
+        Assert.Equal(expected: (tainted ? 0u : (preceding + 1u)), actual: rig.HistoryFrames());
+        Assert.False(condition: rig.Passes.TaintedOf(instance: "world"));
+    }
     // A capture holds the frame it serves, and every render of the held frame under the motion view reads the motion
     // that frame was presented with: its previous view stays valid and the tables keep both pose revisions, rather than
     // settling to still on the hold's first upload. The hold's end settles them as a still frame does.

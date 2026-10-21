@@ -121,6 +121,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// that reaches the published image fails there. Set, each read creates a staging buffer of the read's width times
     /// its height times its texel size, counted in <see cref="LiveBytes"/>, and replaces it when a read's size differs.</summary>
     public bool ReadbackSupported { get; set; }
+    /// <summary>Gets or sets whether the next surface read reports device loss instead of reading.</summary>
+    public bool LoseNextReadback { get; set; }
     /// <summary>Gets or sets a gate every shader module and pipeline creation waits on before it creates, or
     /// <see langword="null"/> for none: a held gate is a driver compiling on a cold cache. The thread that sets it is the
     /// one producing frames; a creation on that thread while the gate is held would wait forever, so it throws instead.</summary>
@@ -899,6 +901,12 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => m_staging?.Dispose();
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
+
+            if (gpu.LoseNextReadback) {
+                gpu.LoseNextReadback = false;
+
+                throw new DeviceLostException(message: "Injected loss during readback.");
+            }
 
             gpu.NoteUse(handle: sourceImageHandle, use: "readback");
             gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));

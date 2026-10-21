@@ -468,8 +468,15 @@ capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
-A capture freezes its dependency closure even when it requests no additional
-convergence samples. While it converges, each frozen residency hands its frame
+A presented capture (`FrameCaptureRequest.Presented`) is the exception to
+everything below: it freezes nothing, holds no residency frame and settles no
+temporal history, and the render-graph runtime reads back the image each frame
+presents for its instance, so its frames carry the jitter, history and motion
+the display showed. Use it for flicker, ghosting and trails; a settled capture
+cannot show them.
+
+A settled capture freezes its dependency closure even when it requests no
+additional convergence samples. While it converges, each frozen residency hands its frame
 source the held frame (`ISdfFrameSource.PresentHeldFrame`), so the World still
 places its views and keeps them scheduled. The runtime waits for the required source's
 completed view fence before forwarding the capture or counting samples.

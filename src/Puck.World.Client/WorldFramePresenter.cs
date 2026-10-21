@@ -1357,8 +1357,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the trace each framed seat's camera eye, presented body and interpolation fraction are recorded in,
     /// or <see langword="null"/> to record none (<c>world.view.motion</c>).</summary>
     public WorldSeatMotionTrace? MotionTrace { get; init; }
-    /// <summary>Gets or sets whether the render chain owes a capture. Such a frame presents the completed simulation
-    /// tick itself, including body poses, rather than interpolating from its predecessor.</summary>
+    /// <summary>Gets or sets whether the render chain owes a settled capture, the one that holds presentation. Such a
+    /// frame presents the completed simulation tick itself, including body poses, rather than interpolating from its
+    /// predecessor; a presented capture reads frames as the display shows them and does not pin them.</summary>
     public Func<bool>? CapturePending { get; set; }
 
     private bool PinsPresentation => (PinsStateFraction || (CapturePending?.Invoke() ?? false));

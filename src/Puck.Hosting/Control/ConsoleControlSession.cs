@@ -10,7 +10,7 @@ public sealed class ConsoleControlSession : IControlSession {
     private readonly Lock m_gate = new();
     private readonly CancellationTokenSource m_lifetime = new();
 
-    private readonly Func<string, FrameCaptureRequest> m_capture;
+    private readonly Action<FrameCaptureRequest> m_capture;
     private readonly TimeProvider m_clock;
     private readonly TextCommandSession m_session;
 
@@ -20,13 +20,14 @@ public sealed class ConsoleControlSession : IControlSession {
 
     /// <summary>Creates a dedicated Console session. The capture delegate runs only on the ordinary command pump.</summary>
     /// <param name="source">The running host's existing text source.</param>
-    /// <param name="capture">Arms the outermost render target or throws when unavailable.</param>
+    /// <param name="capture">Arms a capture request the session made, settled or presented, on the outermost render
+    /// target, or throws when unavailable.</param>
     /// <param name="slot">The host's immutable Console routing slot.</param>
     /// <param name="scope">Optional host scope entered by the ordinary command pump.</param>
     /// <param name="principal">The fixed acting principal; null uses the Console principal.</param>
     /// <param name="authorize">Optional command-metadata predicate forwarded to the dedicated text session.</param>
     /// <param name="clock">Drives each request's deadline; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
-    public ConsoleControlSession(TextCommandSource source, Func<string, FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null, Principal? principal = null, Func<CommandMetadata, bool>? authorize = null, TimeProvider? clock = null) {
+    public ConsoleControlSession(TextCommandSource source, Action<FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null, Principal? principal = null, Func<CommandMetadata, bool>? authorize = null, TimeProvider? clock = null) {
         m_capture = capture;
         m_clock = (clock ?? TimeProvider.System);
         m_session = source.CreateSession(
@@ -57,10 +58,12 @@ public sealed class ConsoleControlSession : IControlSession {
         val2: AnswerMargin.Ticks
     )));
 
-    private async Task<ControlResponse> CaptureAsync(long id, CancellationToken token) {
+    private async Task<ControlResponse> CaptureAsync(long id, ControlCapture? options, CancellationToken token) {
+        var presented = (options?.Mode == ControlCapture.Presented);
+        var burst = (options is { IsBurst: true });
         var directory = Path.Combine(
             path1: Path.GetTempPath(),
-            path2: $"puck-frame-{Guid.NewGuid():N}"
+            path2: (burst ? $"puck-burst-{Guid.NewGuid():N}" : $"puck-frame-{Guid.NewGuid():N}")
         );
 
         CreateArtifactDirectory(path: directory);
@@ -68,12 +71,19 @@ public sealed class ConsoleControlSession : IControlSession {
             path1: directory,
             path2: "frame.png"
         );
+        var request = (presented
+            ? FrameCaptureRequest.Presented(
+                frames: options!.Frames,
+                path: path,
+                region: ((options.Region is [var x, var y, var width, var height]) ? new FrameCaptureRegion(Height: height, Width: width, X: x, Y: y) : null)
+            )
+            : new FrameCaptureRequest(path: path));
         FrameCaptureRequest? capture = null;
 
         try {
             // The engine barrier orders this behind this session's prior simulation submissions and waits.
             capture = await m_session.InvokeAsync(
-                () => m_capture(path),
+                () => { m_capture(request); return request; },
                 token
             ).ConfigureAwait(continueOnCapturedContext: false);
             var result = await capture.Completion.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
@@ -85,6 +95,14 @@ public sealed class ConsoleControlSession : IControlSession {
                 $"Capture failed: {result.Error?.Message}",
                 true
             );
+            }
+            // A burst's frames stay on this host for the caller to read; its answer is their report.
+            if (burst) {
+                return new(
+                    id,
+                    "completed",
+                    PresentedFrameReport.Format(frames: result.Presented, region: result.Region)
+                );
             }
             await using var file = new FileStream(
                 access: FileAccess.Read,
@@ -112,11 +130,21 @@ public sealed class ConsoleControlSession : IControlSession {
             return new(
                 id,
                 "completed",
-                "Next composed frame; completion does not certify an earlier mutation or an exact simulation tick.",
+                (presented
+                    ? $"Next presented frame, read as the display showed it; completion does not certify an earlier mutation or an exact simulation tick.\n{PresentedFrameReport.Format(frames: result.Presented, region: result.Region)}"
+                    : "Next composed frame; completion does not certify an earlier mutation or an exact simulation tick."),
                 Png: png
             );
         } finally {
+            // A presented capture holds no clock budget to end it, so one this call stops waiting for is withdrawn.
+            if (presented) {
+                _ = capture?.TryFail(error: new OperationCanceledException(message: "The control call stopped waiting for the presented capture."));
+            }
+            // A landed burst's frames are its answer's subject, so they stay for the caller to read.
+            var kept = (burst && (capture is { Completion.IsCompletedSuccessfully: true }) && capture.Completion.Result.Succeeded);
+
             if (
+                !kept &&
                 (capture is not null) &&
                 !capture.Completion.IsCompleted
             ) {
@@ -124,15 +152,12 @@ public sealed class ConsoleControlSession : IControlSession {
                 capture: capture,
                 directory: directory
             );
-            } else { Clean(directory: directory); }
+            } else if (!kept) { Clean(directory: directory); }
         }
     }
     private static void Clean(string directory) {
         try {
-            File.Delete(path: Path.Combine(
-            path1: directory,
-            path2: "frame.png"
-        )); Directory.Delete(path: directory);
+            Directory.Delete(path: directory, recursive: true);
         } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private static async Task CleanAfterCaptureAsync(FrameCaptureRequest capture, string directory) {
@@ -203,6 +228,7 @@ public sealed class ConsoleControlSession : IControlSession {
             if (request.Operation == "capture") {
                 return await CaptureAsync(
                 id: request.Id,
+                options: request.Capture,
                 token: cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
             }
