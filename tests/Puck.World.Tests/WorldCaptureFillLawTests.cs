@@ -223,44 +223,58 @@ public sealed class WorldCaptureFillLawTests {
         );
         Assert.True(condition: FillConverted(fills: scene.Fills));
     }
-    [InlineData(false, 0)]
-    [InlineData(true, 0)]
-    [InlineData(false, 30)]
-    [InlineData(true, 30)]
+    /// <summary>An external source with no image of its own (a window minimized since it opened, a probe starting, a
+    /// target that is gone) shows its capture fill on a windowed host as an offscreen one does, so it never holds the
+    /// root's frame: the root waits only while the fill converts, and a feed that refused is no refusal of the frame.
+    /// The source's fault says it shows its fill, and once the feed has an image a windowed host shows that image again.
+    /// The windowed rows are the red legs: a source answering as its feed holds the root on the feed's wait and refuses
+    /// it with the feed's refusal.</summary>
+    [InlineData(false, 0, 0U)]
+    [InlineData(true, 0, 0U)]
+    [InlineData(false, 30, 0U)]
+    [InlineData(true, 30, 0U)]
+    [InlineData(false, 30, 1U)]
+    [InlineData(true, 30, 1U)]
     [Theory]
-    public void ASourceWithNoExtentAnswersItsFeedOrItsOffscreenFill(bool alwaysFills, int displayHertz) {
-        using var scene = new Scene(shown: Desktop(), alwaysFills: alwaysFills, feedExtent: 0U);
+    public void AnExternalSourceWithNoImageShowsItsFillAndNeverHoldsTheRoot(bool alwaysFills, int displayHertz, uint feedExtent) {
+        using var scene = new Scene(shown: Desktop(), alwaysFills: alwaysFills, feedExtent: feedExtent);
         var producer = Assert.IsType<WorldImageFeedProducer>(@object: scene.Runtime.Producer(instance: 0));
         var feed = Assert.IsType<FakeFeed>(@object: producer.Feed);
 
         scene.DisplayHertz = displayHertz;
-        feed.Answer = FrameRender.Waiting(reason: "probe starting on another thread");
+        feed.Answer = FrameRender.Waiting(reason: "window 'Desktop' awaiting a compositor frame");
         scene.HoldPipelines();
         scene.Compose();
         Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: scene.Runtime.Render.Completion);
+        Assert.DoesNotContain(expectedSubstring: "compositor frame", actualString: scene.Runtime.Render.Reason);
 
-        feed.Answer = FrameRender.Refused(reason: "probe never opened its kernel");
+        feed.Answer = FrameRender.Refused(reason: "window 'Desktop' is unavailable");
         scene.Compose();
-        Assert.Equal(expected: (alwaysFills ? FrameCompletion.NotYetRenderable : FrameCompletion.Refused), actual: scene.Runtime.Render.Completion);
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: scene.Runtime.Render.Completion);
         scene.ReleasePipelines();
 
-        if (alwaysFills) {
-            TestLiveness.Within(
-                building: () => scene.Fills.IsBuilding,
-                frames: SettleFrames,
-                reason: () => (scene.Runtime.Render.Reason ?? "the fill never rendered without a probe extent"),
-                step: () => {
-                    scene.Compose();
+        TestLiveness.Within(
+            building: () => scene.Fills.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (scene.Runtime.Render.Reason ?? "the fill never rendered in place of the feed"),
+            step: () => {
+                scene.Compose();
 
-                    return scene.Runtime.Render.IsRendered;
-                }
-            );
-            Assert.NotEqual(expected: ((nint)0), actual: scene.Read(producer: producer));
-        } else {
-            feed.Answer = FrameRender.Waiting(reason: "probe restarted");
-            scene.Compose();
-            Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: scene.Runtime.Render.Completion);
-        }
+                return scene.Runtime.Render.IsRendered;
+            }
+        );
+
+        var fill = scene.Fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill);
+
+        fill.Retire();
+        Assert.Equal(expected: fill.ImageViewHandle, actual: scene.Read(producer: producer));
+        Assert.Equal(expected: 0, actual: feed.Acquisitions);
+        Assert.Equal(expected: "window 'Desktop' is unavailable; it shows its capture fill", actual: producer.Fault);
+
+        feed.Answer = FrameRender.Rendered;
+        scene.Compose();
+        Assert.True(condition: scene.Runtime.Render.IsRendered, userMessage: scene.Runtime.Render.Reason);
+        Assert.Equal(expected: (alwaysFills ? fill.ImageViewHandle : FakeFeed.DesktopHandle), actual: scene.Read(producer: producer));
     }
 
     private static WorldScreenSource.Producer Desktop() => WorldImageProducerSettings.SourceOf(
@@ -429,7 +443,7 @@ public sealed class WorldCaptureFillLawTests {
             return true;
         }
     }
-    // An imported feed whose image is one fixed handle, counting its acquisitions.
+    // An imported feed whose image is one fixed handle, counting its acquisitions, and whose fault is its answer's reason.
     private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {
         public static readonly nint DesktopHandle = 0xDE5C;
 
@@ -438,7 +452,7 @@ public sealed class WorldCaptureFillLawTests {
         public FrameRender Answer { get; set; } = FrameRender.Rendered;
         public ImageSourceDescriptor Descriptor { get; } = descriptor;
 
-        public string? Fault => null;
+        public string? Fault => Answer.Reason;
         public Vector3 Light => Vector3.One;
 
         public GpuImageLease AcquireFrame() {

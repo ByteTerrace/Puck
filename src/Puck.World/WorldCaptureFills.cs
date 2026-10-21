@@ -6,7 +6,8 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The capture fills external content resolves to while a <see cref="WorldCaptureGate"/> fills: one static 1x1 image per
+/// The capture fills external content resolves to while a <see cref="WorldCaptureGate"/> fills, or while its feed has no
+/// image of its own (<see cref="WorldCaptureGate.FillsFeed"/>): one static 1x1 image per
 /// packed RGBA8 fill color, its one pixel converted through the <c>source-rgba</c> conversion on a converter of its own
 /// (<see cref="RenderGraphRuntime.CreateConverter"/>), and again only after a device loss drops it. A converter builds its
 /// graph off the frame thread and its first conversions wait for it, so a fill first converted on the frame a capture is

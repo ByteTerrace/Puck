@@ -299,10 +299,14 @@ thread, a seat that may take a camera). A feed that ended or could not open (a
 window or monitor that is gone, a probe whose ring cannot be provisioned)
 refuses, and so does a source whose image is a function of the simulation with
 none for this tick (a machine that is not running or has completed no frame),
-since only a later tick can change it. Offscreen, external content renders its
-capture fill, so an external source waits only for its fill to convert, and a
-refused fill conversion refuses the frame. A filled source publishes the fill
-without publishing its live feed. A capture's CPU tier answers from its
+since only a later tick can change it. Those are a feed's answers. An external
+source instance (`WorldImageFeedProducer`) shows its capture fill wherever its
+feed has no image, waiting or refused, and offscreen it shows the fill always
+(`WorldCaptureGate.FillsFeed`), so an external source waits only for its fill
+to convert and refuses only with a refused fill conversion: a minimized or
+closed window, a camera opening or a probe starting never holds or refuses the
+frame that shows it. A filled source publishes the fill without publishing its
+live feed offscreen or under an armed capture. A capture's CPU tier answers from its
 converted image rather than the pixels it captured, so a captured frame whose
 conversion refuses refuses too. Camera CPU tiers forward the same conversion
 answer. A captured CPU frame keeps converting when its source has no newer
@@ -520,8 +524,9 @@ and the frame's pass-pixel budget:
   does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
   source whose producer declares nothing or no extent does not render. An
   imported source still answers its availability when no extent or display
-  cadence can be scheduled: an unopened feed refuses, a first frame arriving
-  on another thread waits, and an offscreen capture fill renders once it has converted.
+  cadence can be scheduled: an unopened feed refuses, and an external source
+  with no image of its own, or any external source offscreen, answers as its
+  capture fill does, rendering once the fill has converted.
   These rows read `IRenderGraphSourceProducer.Answer`, which produces no work;
   only scheduled rows call `Produce`. Repeated answers reuse their named diagnostics.
   The runtime declares an upload's state and a source producer's

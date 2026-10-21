@@ -87,3 +87,9 @@ External pixels never reach a capture: while a `world.screenshot` or
 `puck_capture_frame` is armed, the pane and the screen show their capture fill,
 a flat `#202020`, in place of the window. To confirm the window is drawn, look
 at the World's own window, or read `world.view.panes` and `source.passthrough`.
+
+A window that delivers no frame shows the same fill outside a capture: one
+minimized since the World opened its capture (a minimized window sends the
+compositor nothing), or one that is closed, until it returns. The World stays
+ready and captures proceed meanwhile, and `screen.state 16` ends with
+`fault=window 'Claude' awaiting a compositor frame; it shows its capture fill`. A window minimized after its first frame keeps showing that frame.

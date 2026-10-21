@@ -4,14 +4,17 @@ using Puck.Hosting;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Keeps external content out of captures. While the gate fills, every source whose content class is
-/// <see cref="ImageContentClass.External"/> — a desktop capture, a camera, a probe of either — resolves to its declared
-/// capture fill instead of its pixels, so no captured frame, <c>puck parity</c> station or screenshot can hold them. An
-/// offscreen host, which serves captures and parity, fills always; a windowed host fills while a capture is armed on the
-/// render graph's runtime. An image it resolves outside a fill is tainted (<see cref="RenderGraphExternalOutput.Tainted"/>),
-/// and the runtime renders every tainted instance a capture reads again on the capture frame, so an image a slower
-/// instance rendered from the source earlier never reaches the capture. Deterministic and presentation content is never
-/// filled. The gate is presentation state: simulation never reads it.
+/// Decides when an external image resolves to its declared capture fill (<see cref="ImageSourceDescriptor.CaptureFill"/>)
+/// in place of its pixels. While the gate fills, every source whose content class is
+/// <see cref="ImageContentClass.External"/> — a desktop capture, a camera, a probe of either — resolves to its fill, so no
+/// captured frame, <c>puck parity</c> station or screenshot can hold its pixels. An offscreen host, which serves captures
+/// and parity, fills always; a windowed host fills while a capture is armed on the render graph's runtime. Whether or not
+/// the gate fills, an external feed with no image of its own (a first frame not yet delivered, a window minimized since
+/// its capture opened, a target that is gone) resolves to its fill too, so a live source that has nothing to show stands
+/// its fill in rather than holding every frame that shows it. An image it resolves outside a fill is tainted
+/// (<see cref="RenderGraphExternalOutput.Tainted"/>), and the runtime renders every tainted instance a capture reads again
+/// on the capture frame, so an image a slower instance rendered from the source earlier never reaches the capture.
+/// Deterministic and presentation content is never filled. The gate is presentation state: simulation never reads it.
 /// </summary>
 public sealed class WorldCaptureGate {
     private readonly bool m_alwaysFills;
@@ -36,7 +39,18 @@ public sealed class WorldCaptureGate {
     /// <param name="content">The content class.</param>
     /// <returns><see langword="true"/> for external content while <see cref="Filling"/>.</returns>
     public bool Fills(ImageContentClass content) => ((content == ImageContentClass.External) && Filling);
-    /// <summary>Resolves one feed's image for a submitted frame: its fill when the gate fills its class, otherwise its
+    /// <summary>Returns whether a feed resolves to its fill right now: external content while <see cref="Filling"/>, or an
+    /// external feed whose answer (<see cref="IWorldImportFeed.Answer"/>) is not rendered, waiting or refused. Reading it
+    /// produces no work.</summary>
+    /// <param name="feed">The feed.</param>
+    /// <returns><see langword="true"/> when the feed's image resolves to its capture fill.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="feed"/> is <see langword="null"/>.</exception>
+    public bool FillsFeed(IWorldImportFeed feed) {
+        ArgumentNullException.ThrowIfNull(argument: feed);
+
+        return (feed.Descriptor.FillsCaptures && (Filling || !feed.Answer.IsRendered));
+    }
+    /// <summary>Resolves one feed's image for a submitted frame: its fill when <see cref="FillsFeed"/> holds, otherwise its
     /// own acquired frame. A filled feed is never acquired, so nothing it holds needs retiring.</summary>
     /// <param name="feed">The feed.</param>
     /// <param name="fill">Returns the image of a packed RGBA8 fill color.</param>
@@ -49,15 +63,13 @@ public sealed class WorldCaptureGate {
         ArgumentNullException.ThrowIfNull(argument: feed);
         ArgumentNullException.ThrowIfNull(argument: fill);
 
-        var content = feed.Descriptor.Content;
-
-        if (Fills(content: content)) {
+        if (FillsFeed(feed: feed)) {
             tainted = false;
 
             return fill(arg: feed.Descriptor.CaptureFill);
         }
 
-        tainted = (content == ImageContentClass.External);
+        tainted = (feed.Descriptor.Content == ImageContentClass.External);
 
         return feed.AcquireFrame();
     }

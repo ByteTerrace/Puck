@@ -240,7 +240,8 @@ separate constraint on dense populations; reusable appearances do not remove it.
   instances a world's screens read), the shipped `WorldTestPatternProducer` and
   `WorldQrProducer`, `WorldImageLight` (a frame's room glow), and
   `WorldCaptureGate`, which resolves every external image to its capture fill
-  while a capture is armed. The [World guide](../Puck.World/README.md#image-producers)
+  while a capture is armed, and an external feed with no image of its own to
+  its fill always. The [World guide](../Puck.World/README.md#image-producers)
   explains how a producer registers.
 
 ## Bound state

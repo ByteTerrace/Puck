@@ -657,11 +657,11 @@ public sealed class ImageProducerLawTests {
 
     [Fact]
     public void ReadingASourcesAnswerNeverPublishesItsFeed() {
-        var feed = new AnsweringFeed { Answer = FrameRender.Refused(reason: "the capture cannot convert") };
+        var feed = new AnsweringFeed();
         var filling = false;
         using var source = new WorldImageFeedProducer(
             fill: static _ => default,
-            fillRender: static _ => FrameRender.Rendered,
+            fillRender: static _ => FrameRender.Waiting(reason: "fill converting"),
             gate: new WorldCaptureGate(alwaysFills: false, captureArmed: () => filling),
             opening: new WorldImageSourceOpening(
                 Context: new RenderGraphExternalProducerContext(Device: null!, HostsOnDirectX: false, Instance: "capture", Package: "source.capture"),
@@ -674,10 +674,17 @@ public sealed class ImageProducerLawTests {
             Assert.Equal(expected: feed.Answer, actual: source.Answer);
         }
 
-        filling = true;
+        feed.Answer = FrameRender.Refused(reason: "the capture cannot convert");
 
         for (var frame = 0; (frame < 32); frame++) {
-            Assert.True(condition: source.Answer.IsRendered);
+            Assert.Equal(expected: FrameRender.Waiting(reason: "fill converting"), actual: source.Answer);
+        }
+
+        filling = true;
+        feed.Answer = FrameRender.Rendered;
+
+        for (var frame = 0; (frame < 32); frame++) {
+            Assert.Equal(expected: FrameRender.Waiting(reason: "fill converting"), actual: source.Answer);
         }
 
         Assert.Equal(expected: 0, actual: feed.Publications);
@@ -712,12 +719,11 @@ public sealed class ImageProducerLawTests {
         Assert.True(condition: rendered);
         Assert.Equal(actual: allocated, expected: 0L);
     }
-    /// <summary>An imported source answers its frame three ways. Outside a fill it answers as its feed does: an image is
-    /// rendered, a feed still making its first frame waits, and a feed that ended (its window gone) refuses by its own
-    /// reason, so an offscreen host steps on rather than holding the tick for an image that cannot come. While the gate
-    /// fills, the source shows its capture fill whatever the feed answers, so an ended feed renders once the fill has
-    /// converted and waits only for the conversion. A source that opened no feed refuses. The red leg is the ended feed
-    /// outside a fill, which a bool answer could only call a wait.</summary>
+    /// <summary>An imported external source answers its frame as its feed does while the feed has an image, and as its
+    /// capture fill does otherwise: a feed still making its first frame, or one that ended (its window gone), shows the
+    /// fill, so the source waits only for the fill's conversion and refuses only with it, never holding the frames that
+    /// show it on an image that may never come. While the gate fills, the source shows its fill whatever the feed answers.
+    /// A source that opened no feed refuses.</summary>
     [Fact]
     public void AnImportedSourceAnswersAsItsFeedOrItsFill() {
         var feed = new AnsweringFeed();
@@ -754,11 +760,20 @@ public sealed class ImageProducerLawTests {
         Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
 
         feed.Answer = FrameRender.Waiting(reason: "window 'law' awaiting a compositor frame");
-        Assert.Equal(actual: Produce(), expected: feed.Answer);
+        Assert.Equal(actual: Produce(), expected: fillRender);
+        Assert.Equal(actual: source.Fault, expected: "window 'law' awaiting a compositor frame; it shows its capture fill");
 
         feed.Answer = FrameRender.Refused(reason: "window 'law' is unavailable");
-        Assert.Equal(actual: Produce(), expected: FrameRender.Refused(reason: "window 'law' is unavailable"));
+        Assert.Equal(actual: Produce(), expected: fillRender);
+        fillHandle = 0xF111;
+        fillRender = FrameRender.Rendered;
+        Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
+        Assert.True(condition: source.TryAcquireOutput(output: out var stoodIn));
+        Assert.Equal(actual: (stoodIn.Lease.ImageViewHandle, stoodIn.Tainted), expected: (((nint)0xF111), false));
+        Assert.Equal(expected: 4, actual: feed.Publications);
 
+        fillHandle = 0;
+        fillRender = FrameRender.Waiting(reason: "fill converting");
         filling = true;
         Assert.Equal(
             actual: Produce(),

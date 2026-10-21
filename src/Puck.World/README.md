@@ -1597,10 +1597,17 @@ slot shows the source as a pane and a `captures` row can capture it before
 composition. A capture's and a camera's lease carries the complete image it
 acquired (`GpuImageLease.Image`: the shared ring's slot, or the converted
 image on the CPU and HDR routes), so a pane or graph input bound to one draws
-it; a reader draws a stand-in only while the source has no image yet, or for
-a feed that hands out an image view alone. While a capture is armed, an
-external source resolves to its capture fill, so a capture of the display shows
-the fill in its pane, never the window.
+it; a reader draws a stand-in only while the source's capture fill has not
+converted, or for a feed that hands out an image view alone. While a capture is
+armed, an external source resolves to its capture fill, so a capture of the
+display shows the fill in its pane, never the window. An external source whose
+feed has no image of its own shows its fill too, armed or not: a window
+minimized since its capture opened (it delivers no compositor frame), a camera
+still opening, a probe before its first frame, or a window that is gone. The
+source then answers as its fill does, so it never holds the frame, readiness
+(`world.wait ready`) or a capture of the display, and `screen.state` names the
+feed's fault followed by `it shows its capture fill`. A window minimized after
+its first frame keeps showing that frame.
 
 The live render graph runs every source a screen shows, its row's or the one a
 presentation verb bound over the row (`screen.source <index> <kind>`, a
@@ -1626,7 +1633,7 @@ the drawn image, none exists:
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
-| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss, a source with no image showing its fill); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
 | `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it; in a presented world, a view of the residency that world renders through, named under its level (`WorldViewNames.NestedCamera`) | `WorldViewPaneMappingLawTests.Views`, `WorldNestedScreensLawTests`, `WorldPresentedSourcesLawTests` (a presented world's cameras read each other at their previous frame), the `view-screens` and `portal-sources` canaries |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
 | `text` | no image: the decal tier draws its lines (`WorldScreenDecals` over `WorldScreenTextDecal`, through `TextSourceAt`, or a presented world's own rows and font catalog in its session emitter) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`), `WorldPresentedSourcesLawTests` (a destination's text through its own fonts); the `uploaded-sources` and `portal-sources` canaries check its glyphs' ink |
@@ -1673,7 +1680,8 @@ compares a read-back against.
 
 **External content never reaches a capture.** Every external image, whether a
 camera, a desktop capture or a probe's output, resolves through
-`WorldCaptureGate`. While the gate fills, the image resolves to its declared
+`WorldCaptureGate`. While the gate fills, or while the feed has no image of its
+own (`WorldCaptureGate.FillsFeed`), the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
 default), and the producer's frame is never acquired. A fill is a 1×1 image
 converted through `source-rgba` (`WorldCaptureFills`). Its converter builds

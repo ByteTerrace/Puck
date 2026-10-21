@@ -172,14 +172,21 @@ stands on purpose). `MarkUnproduced` (`RenderGraphRuntime.Completion.cs`) is the
 one place a graph instance's refusal becomes `Refused` (a package's
 `RefusalOf`, a refused build, a missing graph); every other unproduced instance
 is waiting. A producer or an upload answers the same three ways
-(`MarkProduction`). The offscreen host paces by `HostPacing.OneTickPerFrame` and
+(`MarkProduction`), and a waiting or refused producer holds or refuses every
+instance that reads it within the frame, up to the root. An external source
+(`WorldImageFeedProducer`: a desktop capture, a camera, a probe) whose feed has
+no image of its own therefore answers as its capture fill does
+(`WorldCaptureGate.FillsFeed`), showing the fill instead, so a minimized or
+closed window never holds the World's frame, readiness or captures; the fill
+waits only while it converts. The offscreen host paces by `HostPacing.OneTickPerFrame` and
 `FixedStepPump.TryStep`, steps the next tick only once the root reports the
 frame rendered, and holds the tick (composing it again, stepping none) while it
 is not yet renderable; a refused frame releases the tick. Both rendered hosts
 also hold their clock at an armed, unserved capture.
 
 **Laws.** `RenderGraphRuntimeLawTests.Completion`, `OffscreenTickPacingLawTests`,
-`WorldCaptureHoldLawTests` and `SdfPipelineBuildLivenessLawTests` (the pump never
+`WorldCaptureHoldLawTests`,
+`WorldCaptureFillLawTests.AnExternalSourceWithNoImageShowsItsFillAndNeverHoldsTheRoot` and `SdfPipelineBuildLivenessLawTests` (the pump never
 blocks on pipeline creation).
 
 **Where the code is weaker.** The classification is only as good as each
@@ -190,7 +197,9 @@ can end it.
 
 **Violations to hunt.** A permanent condition reported as waiting: a source
 with no frames, a disabled view, a portal past its nesting limit, a world with
-no camera, a capture feed that ended. A "rendered" result carrying an older
+no camera, a capture feed that ended. A live external source, which may never
+deliver a frame, answering anything but its fill's answer while it has no
+image. A "rendered" result carrying an older
 tick's image. Commands landing on a different tick when a host holds or
 retries a frame.
 
