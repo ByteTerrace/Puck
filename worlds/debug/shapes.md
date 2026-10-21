@@ -42,9 +42,11 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | South, north and east walls | A 2.4 m window band on every level; the roof's skylights light level 3 |
 
 Lighting: an emissive strip runs along the ceiling over each viewing aisle and
-two over each landing (`hall-lights`); three small point lights warm the lobby,
-the stairwell and the lift car (the last rides the car's body). A point light
-neither occludes nor is occluded, so the rooms' light is the strips' and the
+two over each landing (`hallStrips`, part of the slab or roof above them); three
+small point lights warm the lobby, the stairwell and the lift car (the last
+rides the car's body). A point light neither occludes nor is occluded, so the
+lobby light also lights level 1's ceiling and walls through the slab
+(`docs/plans/open-items.md`); the rooms' light is otherwise the strips' and the
 windows', carried indoors by the traced indirect light, the shadow cascades
 under the roof and ambient occlusion.
 

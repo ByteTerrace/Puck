@@ -117,6 +117,15 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   slab between two samples never crosses and is dropped while it still
   collides. Give each storey's floor its own prototype and placement
   (`worlds/debug/hall.puck`), so each is a flat group.
+- **A group of thin strips alone loses strips.** The coarse narrowing
+  (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's finest
+  spacing of the surface, so a 6 cm strip lying between sample rows of a 1.8 m
+  coarse cube is cut out of the box and never bakes, while its neighbour a row
+  lands near survives (`hall.puck`'s light strips, alone in a creation, baked one
+  of four). Keeping samples within half a cell's diagonal keeps every strip but
+  fattens the converged box until the final lattice's samples step over the
+  plates (every hall light group then baked nothing), so the narrowing stands
+  and thin trim joins the large solid it hangs from (`hallStrips` in each slab).
   The bake caps declared-detail refinement at eight cells per coarse axis.
   A dynamic instance declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose

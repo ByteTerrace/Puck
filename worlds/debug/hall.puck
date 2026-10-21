@@ -67,13 +67,22 @@ let tread = 0.4
 let riser = 0.25
 let landingSouth = 37.7
 
-// Each level's ceiling (the strips hang 6 cm under it; level 3's is the roof) and the z of each viewing aisle's strip.
-let hallLightLevels = [
-  { k: 0, top: ((storey * 1) - 0.27), aisles [13.6, 19.6, 25.6, 31.6] }
-  { k: 1, top: ((storey * 2) - 0.27), aisles [14.6, 22.6, 30.6] }
-  { k: 2, top: ((storey * 3) - 0.27), aisles [14.6, 22.6, 30.6] }
-  { k: 3, top: 17.75, aisles [15, 37] }
-]
+// The z of each viewing aisle's ceiling strip on levels 0, 1 and 2 (level 3's hang under the roof's south and north
+// spans, beside its skylights).
+let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6, 30.6]]
+
+// The ceiling light strips under a ceiling at `top`: one over each viewing aisle and two over the landing, 6 cm deep and
+// sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own: a group of thin strips
+// alone narrows its bake box to the strips its coarse samples land near and drops the rest (mesh-bake.md), while the
+// slab holds the box open over all of them.
+template hallStrips(top, aisles) {
+  for z in aisles {
+    hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+  }
+  for z in [18, 26] {
+    hallBox(label: $"landing-light-{z}", x0: 11.5, x1: 19, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
+  }
+}
 
 // The lift. Its car is a population body (`lift-car`, kit `lift`) whose look draws the cab, carrying an attached solid
 // platform (`lift-platform`) the Moth stands on. The car moves only by the rules below: `liftAt` is its height in
@@ -139,8 +148,8 @@ prototypes {
 
   // The floors, each level its own prototype so each bakes as its own flat group: a group spanning every level is
   // sampled by its height, and a lattice that coarse steps clean over a 0.3 m slab (mesh-bake.md). Level 0's finish
-  // over the ground, levels 1 to 3 as 0.3 m slabs holed for the stairs and the shaft, and the roof with three skylights
-  // over level 3's hall.
+  // over the ground, levels 1 to 3 as 0.3 m slabs holed for the stairs and the shaft carrying the light strips of the
+  // level below, and the roof with three skylights over level 3's hall and its strips.
   prototype "hall-floor-0" {
     document {
       name: "hall-floor-0"
@@ -160,6 +169,7 @@ prototypes {
         hallBox(label: $"slab-{k}-south", x0: 10.3, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: 12.3, z1: stairStart, slot: hallFloor)
         hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
         hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
+        hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
       }
     }
   }
@@ -175,6 +185,7 @@ prototypes {
       hallBox(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
       hallBox(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
       hallBox(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+      hallStrips(top: 17.75, aisles: [15, 37])
     }
   }
 
@@ -217,24 +228,6 @@ prototypes {
     }
   }
 
-  // The ceiling light strips, one prototype per level so each bakes as a flat group: one strip over each viewing aisle
-  // and two over each landing, 6 cm deep under the ceiling. Level 3 has its skylights, and strips under the roof's south
-  // and north spans.
-  for level in hallLightLevels {
-    prototype $"hall-lights-{level.k}" {
-      document {
-        name: $"hall-lights-{level.k}"
-        schema: "puck.creation.v1"
-        palette: hallPalette
-        for z in level.aisles {
-          hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (level.top - 0.06), y1: level.top, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
-        }
-        for z in [18, 26] {
-          hallBox(label: $"landing-{z}", x0: 11.5, x1: 19, y0: (level.top - 0.06), y1: level.top, z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
-        }
-      }
-    }
-  }
   // The car's platform: what the Moth stands on, attached solid to the car's body.
   prototype "lift-platform" {
     document {
@@ -347,12 +340,6 @@ placements {
     prototype: "hall-shaft"
     position [0, 0, 0]
     solid
-  }
-  for level in hallLightLevels {
-    placement $"hall-lights-{level.k}" {
-      prototype: $"hall-lights-{level.k}"
-      position [0, 0, 0]
-    }
   }
 
   // The car: one body, posed every tick by `lift-ride`, starting on level 0.

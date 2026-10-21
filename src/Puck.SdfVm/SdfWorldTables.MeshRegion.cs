@@ -171,20 +171,21 @@ public sealed partial class SdfWorldTables {
         );
         _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (placement.VertexWord * sizeof(uint)));
     }
-    // Grows the region to twice the need without waiting for the device (GpuRegion.Grow): the next upload clears the new
-    // buffer and copies the words the old one held into it on the GPU, so every placed mesh stands where it was written
-    // and nothing it held is staged again, and the old buffer is disposed once that upload completes (Retire). The
-    // region keeps its reserved copy sets, so growing takes no descriptor range.
+    // Grows the region to twice the need, or to the most a region holds (GpuRegion counts its bytes in an int) when twice
+    // is past that, without waiting for the device (GpuRegion.Grow): the next upload clears the new buffer and copies the
+    // words the old one held into it on the GPU, so every placed mesh stands where it was written and nothing it held is
+    // staged again, and the old buffer is disposed once that upload completes (Retire). The region keeps its reserved
+    // copy sets, so growing takes no descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
+        const ulong MostBytes = (((ulong)int.MaxValue / sizeof(uint)) * sizeof(uint));
+
         var current = ((ulong)m_meshRegion.ByteCount);
 
         if (bytes <= current) {
             return;
         }
 
-        var grown = (2UL * bytes);
-
-        grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
+        var grown = ((bytes <= MostBytes) ? Math.Min(val1: ((((2UL * bytes) + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)), val2: MostBytes) : throw new InvalidOperationException(message: $"The baked meshes need {bytes} bytes of mesh region, past the {MostBytes} one region holds."));
 
         Retire(replaced: m_meshRegion.Grow(byteCount: checked((int)grown)));
         m_seedMeshHistory = true;
