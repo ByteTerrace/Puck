@@ -16,8 +16,8 @@ namespace Puck.Cli.Worlds.Tests.Mesh;
 /// <summary>
 /// <c>puck mesh audit</c> over the Moth's world: a mesh stored under a named bake identity for one of its groups is
 /// found by the group's geometry, measured against the group's field, its defect located at the Moth's rest pose with the
-/// shape there named, drawn, and found again among the store's history; a stored mesh of a group whose field the
-/// evaluator refuses, and a damaged entry, are reported as such; and every usage the verb cannot serve is refused by name.
+/// shape there named, drawn, and found again among the store's history; a damaged entry and a missing mesh are reported
+/// as such; and every usage the verb cannot serve is refused by name.
 /// </summary>
 public sealed class MeshCommandTests {
     // The identity the laws store meshes under: any value, named to the verb in place of a build.
@@ -39,16 +39,16 @@ public sealed class MeshCommandTests {
         return (scene, SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms));
     }
     // The world with two boxes placed beside the Moth: a plain one, a static group whose shapes have no slot to be named
-    // by, and a sheared one, whose field the evaluator refuses, since no reading interprets a shear.
+    // by, and a hexagonal prism, whose regular polygon lowers to the convex polygon of its vertices.
     private static string Placed(string path) {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
 
-        static WorldPrototype Prototype(string name, ShapeShearDocument? shear) {
+        static WorldPrototype Prototype(string name, SdfPrismProfile? profile) {
             var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
                 Schema: CreationDocument.CurrentSchema,
                 Name: name,
                 Palette: null,
-                Shapes: [new ShapeDocument(Id: 0, Name: "slab", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.2f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Shear: shear)],
+                Shapes: [new ShapeDocument(Id: 0, Name: "slab", Type: ((profile is null) ? SdfSolidPrimitive.Box : SdfSolidPrimitive.Prism), Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.2f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Profile: profile, Lift: ((profile is null) ? null : SdfLift.Extrude))],
                 Frames: null
             ));
 
@@ -57,11 +57,11 @@ public sealed class MeshCommandTests {
 
         WorldDefinitionSerialization.Save(
             definition: definition with {
-                CreationsRaw = [.. definition.Creations, Prototype(name: "plain", shear: null), Prototype(name: "sheared", shear: new ShapeShearDocument(Linear: 0.3f))],
+                CreationsRaw = [.. definition.Creations, Prototype(name: "plain", profile: null), Prototype(name: "hexagonal", profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Polygon, Sides: 6))],
                 PlacementRowsRaw = [
                     .. definition.Placements,
                     new WorldPlacement(Id: "plain", PrototypeId: "plain", Position: new Vector3(x: -3f, y: 1f, z: 0f), YawDegrees: 0f, Scale: 1f),
-                    new WorldPlacement(Id: "sheared", PrototypeId: "sheared", Position: new Vector3(x: 3f, y: 1f, z: 0f), YawDegrees: 0f, Scale: 1f),
+                    new WorldPlacement(Id: "hexagonal", PrototypeId: "hexagonal", Position: new Vector3(x: 3f, y: 1f, z: 0f), YawDegrees: 0f, Scale: 1f),
                 ],
             },
             path: path
@@ -101,18 +101,18 @@ public sealed class MeshCommandTests {
         Assert.Single(collection: Directory.GetFiles(path: images, searchPattern: "*.png"));
     }
     [Fact]
-    public void ARefusedFieldADamagedEntryAndAMissingMeshAreReportedAsSuch() {
+    public void AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
         var world = Placed(path: TempWorldCopy(directory: directory));
         var (scene, groups) = Plan(world: world);
         var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
-        var refused = Group(groups: groups, scene: scene, shape: "sheared (sheared)");
+        var hexagonal = Group(groups: groups, scene: scene, shape: "hexagonal (hexagonal)");
         var plain = Group(groups: groups, scene: scene, shape: "plain (plain)");
         var hinge = Group(groups: groups, scene: scene, shape: "podHinge-right");
         var dummy = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
         var box = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: plain, program: scene.Program), reading: SdfFieldReading.Render);
 
-        Assert.True(condition: store.Write(geometry: refused.Sealed, identity: Identity, materials: refused.MaterialOrder, mesh: dummy));
+        Assert.True(condition: store.Write(geometry: hexagonal.Sealed, identity: Identity, materials: hexagonal.MaterialOrder, mesh: dummy));
         Assert.True(condition: store.Write(geometry: plain.Sealed, identity: Identity, materials: plain.MaterialOrder, mesh: SdfMeshContour.Bake(field: box, high: plain.High, low: plain.Low, samples: 25)));
 
         var sound = store.EntryPaths();
@@ -124,10 +124,12 @@ public sealed class MeshCommandTests {
         File.WriteAllBytes(bytes: File.ReadAllBytes(path: damaged)[..20], path: damaged);
 
         var identity = Identity.ToString(format: "x32", provider: null);
-        var (refusal, output) = Invoke("mesh", "audit", "--world", world, "--group", "sheared", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+        var (refusal, output) = Invoke("mesh", "audit", "--world", world, "--group", "hexagonal", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
+        // A regular polygon lowers to the convex polygon of its vertices, which the reading takes, so the stored dummy
+        // mesh is measured against it.
         Assert.Equal(expected: 0, actual: refusal);
-        Assert.Contains(expectedSubstring: "sheared (sheared): field refused: SdfFieldEvaluator cannot interpret", actualString: output);
+        Assert.Contains(expectedSubstring: "hexagonal (hexagonal): 1 triangles", actualString: output);
 
         var (audited, report) = Invoke("mesh", "audit", "--world", world, "--group", "plain", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
@@ -162,11 +164,10 @@ public sealed class MeshCommandTests {
         Assert.Matches(expectedRegexPattern: @"plain \(plain\): \d+ triangles, .* score 0\.0", actualString: report);
         Assert.Contains(expectedSubstring: "topology: 0 folds, 0 flipped", actualString: report);
 
-        var (refused, refusal) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "sheared");
+        var (prism, hexagon) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "hexagonal");
 
-        Assert.Equal(expected: 1, actual: refused);
-        Assert.Contains(expectedSubstring: "sheared (sheared): field refused", actualString: refusal);
-        Assert.Contains(expectedSubstring: "the CPU bake found no surface in the selected groups", actualString: refusal);
+        Assert.Equal(expected: 0, actual: prism);
+        Assert.Matches(expectedRegexPattern: @"hexagonal \(hexagonal\): \d+ triangles, ", actualString: hexagon);
     }
     [Fact]
     public void EveryUsageTheVerbCannotServeIsRefusedByName() {

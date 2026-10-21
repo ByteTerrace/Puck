@@ -73,7 +73,10 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.ConvexPolygon or
             // strands > 1 is refused separately for contact, at Compile time (see Compile's isSweep check) — this
             // type-keyed gate cannot see the instruction's own strand count. The render reading takes every strand.
-            SdfShapeType.Sweep => true,
+            SdfShapeType.Sweep or
+            // A fill is the exact distance to its edge list and a stroke the exact distance to its hulls of disks, both
+            // 1-Lipschitz (SdfFieldEvaluator.Path.cs).
+            SdfShapeType.Path => true,
             _ => false,
         };
     }

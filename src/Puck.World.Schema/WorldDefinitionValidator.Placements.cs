@@ -1710,7 +1710,7 @@ public static partial class WorldDefinitionValidator {
                                 continue;
                             }
 
-                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(requiresField: requiresField, shape: solidShape)) {
+                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(shape: solidShape)) {
                                 errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
                             }
 

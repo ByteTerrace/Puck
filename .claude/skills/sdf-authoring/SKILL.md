@@ -289,9 +289,10 @@ of the group and accept a union crease.
 
 ## Render-only versus deterministic
 
-A solid placement requiring deterministic field contact refuses non-detail
-`Path` prism profiles (no fixed-point evaluator answers a Path), `Revolve`, and
-domain folds that cannot expand. `flare`, `shear`, `bumps`, `erode`, panels,
+A solid placement requiring deterministic field contact refuses `Revolve` and
+domain folds that cannot expand; a `Path` prism profile (extruded, a fill or a
+stroke) is admitted, since the fixed-point evaluator reads its edge table as
+the kernel does. `flare`, `shear`, `bumps`, `erode`, panels,
 trims, cells, sweeps, and creation noise validate but are omitted from contact
 geometry (cells keep the base primitive). For an arched or otherwise convex
 outline that must collide, a clockwise `Convex` profile (at most 32 vertices)

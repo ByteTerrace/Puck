@@ -25,7 +25,7 @@ public sealed class SdfFieldBoundsLawTests {
     // The cases whose rule encloses a search, a hashed choice or a bounded move instead of mirroring a step, so a point
     // box is not a few raws wide: the sweeps and every render op but the shear.
     private static readonly HashSet<string> EnclosingCases = [
-        "shape Sweep", "shape Sweep bulged and twisted", "shape Sweep three strands",
+        "shape Sweep", "shape Sweep bulged and twisted", "shape Sweep three strands", "shape Path stroke",
         "op AxialProfile", "op RotatePlane", "op GaussianPush", "op DomainWarp", "op RepeatPolar", "op RepeatPolar mirrored",
         "op WallpaperFold Pmm", "op WallpaperFold P4M", "op WallpaperFold P3M1", "op WallpaperFold P6M", "op LogSphere",
         "op CellJitter White", "op CellJitter Blue", "op CellJitter Gaussian", "op CellJitter tumbled", "op LaneErode", "op LaneErode skipped",
@@ -240,6 +240,13 @@ public sealed class SdfFieldBoundsLawTests {
 
         Shape(name: "shape Sweep", emit: (b, m) => b.Sweep(a: Vector3.Zero, b: Vector3.UnitY, bulge: 0f, c: (2f * Vector3.UnitY), material: m, radiusEnd: 0.2f, radiusStart: 0.3f, strandOffset: 0f, strands: 1, twist: 0f));
         Shape(name: "shape Sweep bulged and twisted", emit: (b, m) => b.Sweep(a: new Vector3(x: -1f, y: 0f, z: 0.2f), b: new Vector3(x: 0.4f, y: 1.6f, z: -0.5f), bulge: 0.15f, c: new Vector3(x: 1.2f, y: 0.3f, z: 0.6f), material: m, radiusEnd: 0.12f, radiusStart: 0.25f, strandOffset: 0.2f, strands: 1, twist: 1.5f));
+
+        // A concave outline with a hole, filled and stroked, at an uneven scale.
+        var outline = new SdfPathContour(new Vector2(x: -0.8f, y: -0.8f), [new(new Vector2(x: 0.8f, y: -0.8f)), new(new Vector2(x: 0.8f, y: 0.8f)), new(new Vector2(x: 0f, y: 0.1f)), new(new Vector2(x: -0.8f, y: 0.8f))]);
+        var hole = new SdfPathContour(new Vector2(x: -0.3f, y: -0.5f), [new(new Vector2(x: 0.3f, y: -0.5f)), new(new Vector2(x: 0.3f, y: -0.2f)), new(new Vector2(x: -0.3f, y: -0.2f))]);
+
+        Shape(name: "shape Path fill", emit: (b, m) => b.Path(halfDepth: 0.4f, material: m, profile: new SdfPathProfile([outline, hole]), scale: new Vector2(x: 1f, y: 0.7f)));
+        Shape(name: "shape Path stroke", emit: (b, m) => b.Path(halfDepth: 0.3f, material: m, profile: new SdfPathProfile([outline], Stroke: new SdfPathStroke(RadiusStart: 0.15f, RadiusEnd: 0.05f)), scale: new Vector2(x: 1f, y: 0.7f)));
 
         foreach (var lift in Enum.GetValues<SdfLift>()) {
             Shape(name: $"shape RoundedRectangle {lift}", emit: (b, m) => b.RoundedRectangle(cornerRadius: 0.2f, halfHeight: 0.6f, halfWidth: 0.9f, lift: lift, liftAmount: 0.3f, material: m, capChamfer: 0.05f));

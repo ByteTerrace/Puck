@@ -138,20 +138,16 @@ public static partial class CreationShapeLaws {
     );
 
     /// <summary>The refusals a solid placement owes a shape before any contact compiler sees it, as the clause that follows
-    /// "whose shape N": a revolved lift on every solid row, and a profile no deterministic field interprets where field
-    /// contact is required. A detail shape owes none, since it reaches no contact compiler. Domain folds that cannot expand
-    /// are refused through <see cref="ShapeDomainOps.TryExpand"/>.</summary>
+    /// "whose shape N": a revolved lift on every solid row. A detail shape owes none, since it reaches no contact
+    /// compiler. Domain folds that cannot expand are refused through <see cref="ShapeDomainOps.TryExpand"/>, and a
+    /// lowering the fixed-point field cannot interpret by the evaluator itself.</summary>
     /// <param name="shape">The authored shape.</param>
-    /// <param name="requiresField">Whether the world requires deterministic field contact.</param>
     /// <returns>The refusal clauses, in the order the validator reports them.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
-    public static IEnumerable<string> SolidRefusals(ShapeDocument shape, bool requiresField) {
+    public static IEnumerable<string> SolidRefusals(ShapeDocument shape) {
         ArgumentNullException.ThrowIfNull(shape);
 
         if (shape.Detail == true) { yield break; }
-        if (requiresField && (shape.Profile?.Kind == SdfPrismProfileKind.Path)) {
-            yield return $"uses profile {shape.Profile!.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.";
-        }
         // Both contact compilers read a per-axis-scaled local box off SdfSolidGeometry.GetLocalBounds. A revolve reads
         // scale.z as a radial offset rather than an extent, so that box would not describe the solid a body stands on.
         if (shape.Lift is SdfLift.Revolve) {
@@ -290,7 +286,7 @@ public static partial class CreationShapeLaws {
         if (authored.Detail == true) { return ("omitted (detail)", []); }
         if (authored.Type == SdfSolidPrimitive.Sweep) { return ("omitted (a sweep is not a closed solid)", []); }
 
-        var refusals = SolidRefusals(requiresField: true, shape: authored).ToList();
+        var refusals = SolidRefusals(shape: authored).ToList();
 
         if (!ShapeDomainOps.TryExpand(domain: authored.Domain, frames: out _, refusal: out var fold, subject: authored.Position)) {
             refusals.Add(item: $"carries {fold}");

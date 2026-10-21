@@ -574,6 +574,7 @@ public sealed partial class SdfFieldEvaluator {
         SdfShapeType.ConvexPolygon,
         SdfShapeType.Superellipsoid,
         SdfShapeType.Sweep,
+        SdfShapeType.Path,
     ];
 
     private static FixedInterval Point(FixedQ4816 value) =>
@@ -904,6 +905,7 @@ public sealed partial class SdfFieldEvaluator {
             ) - Point(value: instruction.Data1W)),
             SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W), exponent: instruction.Data0W),
             SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), strandOffset: instruction.Data0W),
+            SdfShapeType.Path => PathBounds(instruction: in instruction, p: p),
             SdfShapeType.ConvexPolygon => (LiftedBounds(
                 p: p,
                 instruction: instruction,
@@ -1210,57 +1212,10 @@ public sealed partial class SdfFieldEvaluator {
                 ? magnitude
                 : FixedInterval.Union(first: -magnitude, second: magnitude)));
     }
-    // The exact polygon field over a box: the running minimum squared distance enclosed edge by edge, and the crossing
-    // parity followed while every edge's three tests keep one answer over the box; once one does not, the sign is
-    // either, and the bound is the hull of both.
-    private static FixedInterval ConvexPolygon2DBounds(IntervalVector2 p, FixedVector2[] vertices) {
-        var count = vertices.Length;
-        var firstX = (p.X - Point(value: vertices[0].X));
-        var firstY = (p.Y - Point(value: vertices[0].Y));
-        var d = (FixedInterval.Square(value: firstX) + FixedInterval.Square(value: firstY));
-        var negate = false;
-        var parityKnown = true;
-        var previous = vertices[(count - 1)];
-        var zero = FixedQ4816.Zero;
-
-        for (var i = 0; (i < count); i++) {
-            var vertex = vertices[i];
-            var e = (previous - vertex);
-            var wx = (p.X - Point(value: vertex.X));
-            var wy = (p.Y - Point(value: vertex.Y));
-            var eDotE = FixedVector2.Dot(left: e, right: e);
-            var t = FixedInterval.Clamp(
-                value: (((wx * Point(value: e.X)) + (wy * Point(value: e.Y))) / Point(value: eDotE)),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-            var bx = (wx - (Point(value: e.X) * t));
-            var by = (wy - (Point(value: e.Y) * t));
-
-            d = FixedInterval.Min(first: d, second: (FixedInterval.Square(value: bx) + FixedInterval.Square(value: by)));
-
-            var c1 = Decide(always: (p.Y.Lower >= vertex.Y), never: (p.Y.Upper < vertex.Y));
-            var c2 = Decide(always: (p.Y.Upper < previous.Y), never: (p.Y.Lower >= previous.Y));
-            var cross = ((Point(value: e.X) * wy) - (Point(value: e.Y) * wx));
-            var c3 = Decide(always: (cross.Lower > zero), never: (cross.Upper <= zero));
-
-            if ((c1 is null) || (c2 is null) || (c3 is null)) {
-                parityKnown = false;
-            } else if ((c1.Value && c2.Value && c3.Value) || (!c1.Value && !c2.Value && !c3.Value)) {
-                negate = !negate;
-            }
-
-            previous = vertex;
-        }
-
-        var distance = FixedInterval.Sqrt(value: d);
-
-        return (!parityKnown
-            ? FixedInterval.Union(first: -distance, second: distance)
-            : (negate
-                ? -distance
-                : distance));
-    }
+    // The exact polygon field over a box: the edge-list core (Polygon2DBounds) walked from each vertex back to the one
+    // before it.
+    private static FixedInterval ConvexPolygon2DBounds(IntervalVector2 p, FixedVector2[] vertices) =>
+        Polygon2DBounds(edges: new PolygonEdges(vertices: vertices), p: p);
     private static bool? Decide(bool always, bool never) =>
         (always
             ? true
