@@ -47,8 +47,8 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        if (!Host.Machines.HasMachine(index: screen.Index)) {
-            reason = $"screen {screen.Index} has no machine to control";
+        if (!ShowsEngageTarget(hasMachine: Host.Machines.HasMachine(index: screen.Index), screen: screen)) {
+            reason = $"screen {screen.Index} has no machine to control and shows no producer";
             return false;
         }
 
@@ -68,6 +68,20 @@ public sealed partial class WorldTick {
         return true;
     }
 
+    /// <summary>Returns whether an engageable screen has something a seat engages: a live booted machine, whose pad the
+    /// seat plays, or a producer source (a window capture, a camera, a test pattern), which the seat's emulator view
+    /// shows and no pad reaches. Read from the document and the machine host alone, so a replay decides it the
+    /// same.</summary>
+    /// <param name="screen">The screen row.</param>
+    /// <param name="hasMachine">Whether the screen carries a live booted machine
+    /// (<see cref="IWorldMachineHost.HasMachine"/>).</param>
+    /// <returns><see langword="true"/> when the screen carries a machine or shows a producer.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static bool ShowsEngageTarget(WorldScreen screen, bool hasMachine) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        return (hasMachine || (screen.Source is WorldScreenSource.Producer));
+    }
     // The squared distance on the ground plane from a body to a screen's origin, which the engage radius bounds.
     private static FixedQ4816 PlanarDistanceSquared(WorldBody body, WorldScreen screen) {
         var position = body.FixedPosition;
@@ -189,8 +203,9 @@ public sealed partial class WorldTick {
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>AGENTS.md</c>'s
     /// overworld intent) — for each active, un-routed local seat, the nearest screen (on the ground plane, the earlier in
     /// document order on a tie) that is
-    /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
-    /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
+    /// engageable and backed by a live booted machine or showing a producer (the real gate is
+    /// <see cref="CheckScreenEngagePolicy"/>'s <see cref="ShowsEngageTarget"/> check over
+    /// <see cref="IWorldMachineHost.HasMachine"/> — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
     /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
     /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the

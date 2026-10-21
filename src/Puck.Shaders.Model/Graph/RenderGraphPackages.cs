@@ -236,8 +236,10 @@ public sealed class RenderGraphPackageCatalog {
     /// sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
     /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
-    /// rather than the base (<see cref="PlaceLetterbox"/>) and whether the reconstructed source is tonemapped
-    /// (<see cref="PlaceTonemap"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
+    /// rather than the base (<see cref="PlaceLetterbox"/>), whether the reconstructed source is tonemapped
+    /// (<see cref="PlaceTonemap"/>), the part of the source shown (<see cref="PlaceCrop"/>), a frame filled with a colour
+    /// around the rect (<see cref="PlaceSurround"/>, <see cref="PlaceFill"/>) and whether source pixels stay crisp cells
+    /// (<see cref="PlacePixelated"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
     /// placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
     public const string Place = "place";
     /// <summary>The <see cref="Place"/> comparison mode: 0 places normally, 1 wipes, 2 splits and 3 shows absolute
@@ -263,6 +265,21 @@ public sealed class RenderGraphPackageCatalog {
     /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
     /// letterbox color and every pane are not; 0, the default, writes the source as it is.</summary>
     public const string PlaceTonemap = "tonemap";
+    /// <summary>The <see cref="Place"/> config field holding the part of the source the rect shows, as fractions of the
+    /// source's extent: left, top, width, height. The default, the whole source, keeps a rect of the source's own extent
+    /// an exact copy.</summary>
+    public const string PlaceCrop = "crop";
+    /// <summary>The <see cref="Place"/> config field holding the surround the fill colour covers, as fractions of the
+    /// output's extent: left, top, width, height. A pixel inside the surround and outside the rect writes
+    /// <see cref="PlaceFill"/>; the default, an empty surround, fills nothing.</summary>
+    public const string PlaceSurround = "surround";
+    /// <summary>The <see cref="Place"/> config field holding the colour the surround shows around the rect, linear
+    /// RGBA; opaque black by default.</summary>
+    public const string PlaceFill = "fill";
+    /// <summary>The <see cref="Place"/> config field that, at 1, keeps each source pixel a crisp cell at any scale: the
+    /// sharp-bilinear reconstruction, which blends only across the destination pixel that straddles two cells, as a
+    /// nearest-filtered screen's glass samples its source. 0, the default, reconstructs at the sharpness.</summary>
+    public const string PlacePixelated = "pixelated";
     /// <summary>The name of <see cref="Place"/>'s base image in its pass group, the first input.</summary>
     public const string PlaceBase = "base";
     /// <summary>The name of <see cref="Place"/>'s source image in its pass group, the second input.</summary>
@@ -398,9 +415,37 @@ public sealed class RenderGraphPackageCatalog {
             Min: 0,
             Type: ShaderValueType.Uint
         ),
+        [PlaceCrop] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 1, 1]").RootElement.Clone(),
+            Description: "The part of the source the rect shows as fractions of the source extent: left, top, width, height.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
+        ),
+        [PlaceFill] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 0, 1]").RootElement.Clone(),
+            Description: "The linear RGBA colour the surround shows outside the rect.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
+        ),
+        [PlaceSurround] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 0, 0]").RootElement.Clone(),
+            Description: "The surround the fill colour covers outside the rect, as fractions of the destination extent: left, top, width, height; empty fills nothing.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
+        ),
         [PlaceLetterbox] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
             Description: "1 fills the destination outside the rect with the letterbox color rather than the base.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Uint
+        ),
+        [PlacePixelated] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "1 keeps each source pixel a crisp cell at any scale (sharp bilinear); 0 reconstructs at the sharpness.",
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Uint

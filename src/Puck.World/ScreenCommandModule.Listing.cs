@@ -73,6 +73,11 @@ internal sealed partial class ScreenCommandModule {
                 ? $" order:{order}"
                 : ""
             );
+            // The emulator view an engaged seat sees, for an engageable screen.
+            var displayText = (screen.Route.Engageable
+                ? $" {DescribeDisplay(display: screen.Route.Display)}"
+                : ""
+            );
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -82,11 +87,22 @@ internal sealed partial class ScreenCommandModule {
                 ? "bound"
                 : "unbound")} {(screen.Route.Engageable
                 ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
+                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{displayText}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
             );
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+    // An engageable screen's emulator view as world.screens echoes it: the crop's edges in source pixels (top, right,
+    // bottom, left), the pixel aspect and the fill.
+    private static string DescribeDisplay(WorldScreenDisplay? display) {
+        var shown = (display ?? WorldScreenDisplay.Neutral);
+        var crop = (shown.Crop ?? new WorldScreenDisplayCrop());
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"display:crop={crop.Top},{crop.Right},{crop.Bottom},{crop.Left},pixelAspect={shown.PixelAspect:0.####},fill={(shown.Fill ?? WorldScreenDisplay.DefaultFill)}"
+        );
     }
     // The views' refresh cadence: no argument echoes the divisor and the camera views registered, an integer from 1
     // through 8 sets it.

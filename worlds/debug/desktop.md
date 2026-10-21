@@ -57,9 +57,28 @@ everywhere else the pointer is the game's.
 - `source.passthrough close claude` closes it, releasing every key and button
   the window holds.
 
-Only the World's own console opens a passthrough source. No binding, seat,
-peer, addon, schedule or world document can, so nothing in `desktop.puck` sends
-the window input. Hiding the pane keeps the source open, and the window then
+Only the World's own console, or your own click on the engaged wall screen
+below, opens a passthrough source. No binding, seat, peer, addon, schedule or
+world document can, so nothing in `desktop.puck` sends the window input.
+
+## Use the window by engaging the wall screen
+
+Screen 16 engages like a device: walk within 3 m of it and press the context
+button (E, or X on a pad). The camera eases onto the glass and the window then
+shows the captured window alone, at its own shape, centred on black. Nothing
+reaches the window yet: click it, and that click opens it as a passthrough
+source, reaches the window, and gives it the keyboard
+(`source.passthrough` lists it as `<instance> engaged window 'Claude …'`). Only
+a click the World's window receives counts; `body.engage 16` at the console,
+`player.signal` or anything scripted engages the screen and shows the window
+without opening it.
+
+While the window holds the keyboard, E types into it. To leave, press
+Control+Alt+Escape (or click the black fill beside the window) to return the
+keyboard to the game, then press E; a pad's X leaves at any time. Leaving
+closes the passthrough source, releasing every key and button the window holds,
+and the camera eases back to the Moth; `source.passthrough` then reads `none
+opened`. Hiding the pane keeps the source open, and the window then
 receives nothing; a click after the pane is shown again reaches it. A headless
 or offscreen boot has no window and no `source.passthrough` verb.
 

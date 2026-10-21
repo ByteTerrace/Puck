@@ -169,6 +169,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly WorldViewOutputRegions m_outputRegions = new();
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
+    // The emulator views the composed frame shows: each seat whose camera has settled on the screen it engaged, that
+    // screen's index and the seat's view (WorldViewGraphHost.PlaceEngaged).
+    private readonly List<(int Screen, NormalizedRect Region)> m_engagedViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
 
     // The text screens' decals: each provider re-reads the binder's live source every produced frame, so a slot rotating
@@ -1298,6 +1301,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             });
         }
 
+        foreach (var (screen, region) in m_engagedViews) {
+            _ = graphs.PlaceEngaged(
+                displayHeight: height,
+                displayWidth: width,
+                frame: region,
+                screen: screen
+            );
+        }
+
         graphs.PublishPanes(
             displayHeight: height,
             displayWidth: width
@@ -1384,6 +1396,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var quality = ViewQuality();
 
         m_views.Clear();
+        m_engagedViews.Clear();
         BeginRoutedViews();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
@@ -1531,6 +1544,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 target: out var target,
                 width: width
             );
+
+            // A seat whose camera has settled on the screen it engaged shows that screen's emulator view over its own.
+            if (m_screenFraming[slot].Framed is { } framed) {
+                m_engagedViews.Add(item: (framed.Index, region));
+            }
 
             // The world the seat is presented in this frame, resolved before its grid: a seat that has just crossed
             // queries the scene of the world it crossed into, which has drawn no view of it yet and so answers no

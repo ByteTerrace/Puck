@@ -23,7 +23,7 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Application storage — one table, one derivation
 - `Compose` = check Control → rebuild the set → sync the latch
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
-- The emulator view — the camera frames the engaged screen
+- The emulator view — the camera frames the engaged screen, then shows its source
 - `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 - `Dissolve` — three outcomes, no repair
 - The one fold
@@ -232,7 +232,7 @@ identical decision at the identical tick.
 **Scope today**: local seats only (`AdvanceSeats`, indices 0..3) —
 `AdvanceSimulated`'s peers/inhabitants are not probed.
 
-## The emulator view — the camera frames the engaged screen
+## The emulator view — the camera frames the engaged screen, then shows its source
 
 A seat captured on a screen frames it: `WorldSeatContextSync.Publish` publishes
 the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
@@ -244,12 +244,49 @@ viewport's limiting axis exactly at the seat rig's field of view, and sets the
 camera's `Near` one slab thickness (`2 × halfDepth`) short of the glass, so the
 engaging avatar and anything else between eye and glass draws nothing. The
 seat's camera eases to it and back on the seat rig's own reported `dynamics`
-(the Moth's `camera-boom`); a rig with none cuts. It is the engine default for
-every captured screen application, presentation only, and needs no authored
-field. The overlay fact `ScreenEngaged` (`WorldOverlayFacts`) reads the same
-anchor, so a panel, the cursor or the bar can show or step aside while
-engaged. `WorldScreenFramingLawTests` holds the fit, the near plane and the
-ease.
+(the Moth's `camera-boom`); a rig with none cuts. The overlay fact
+`ScreenEngaged` (`WorldOverlayFacts`) reads the same anchor, so a panel, the
+cursor or the bar can show or step aside while engaged.
+
+Once the ease settles (`WorldScreenFraming.Framed`), the seat's view cuts to the
+2D emulator view, the way a desktop emulator shows a console: the screen's
+source alone, cropped, at the display aspect, fitted whole and centred in the
+seat's view, with a fill colour around it and no device, bezel or sky. Leaving
+cuts back to the framed 3D camera, which then eases out. The route authors it
+(`screens[*].route.display`, `WorldScreenDisplay`): `crop { top right bottom
+left }` in source pixels, `pixelAspect` (one source pixel's width over its
+height, within 1/4..4) and `fill` (`#RRGGBB`); absent is no crop, square pixels
+and black, and only an engageable route may author one (all refused by name in
+`ValidateDisplay`). `world.screens` echoes `display:crop=t,r,b,l,pixelAspect=…,
+fill=…` per engageable screen. The pieces:
+
+- `WorldViewGraphHost.PanesOf(views, screens)` adds every engageable screen's
+  source instance to the synthesized root's panes, after the document's, so a
+  `place` pass reads it and draws last; an unplaced pass draws nothing.
+- `WorldFramePresenter` lists each framed seat's screen and view region, and
+  `WorldViewGraphHost.PlaceEngaged` places the pass over it through
+  `WorldEmulatorView.TryFit` (crop, pixel aspect, Contain fit) with the
+  `place` package's `crop`, `surround` and `fill` config, and `pixelated` (sharp
+  bilinear, the glass's nearest-source reconstruction) for a `Nearest` screen.
+- The pass publishes as a pane (`world.view.panes` lists it with its crop), so
+  the picker answers it; the cursor never outlines it (`ShowsEngaged`).
+- An engageable screen with no machine engages when it shows a producer
+  (`WorldTick.ShowsEngageTarget`): its pad reaches nothing, and the emulator
+  view shows its image.
+- A window capture's emulator view is a passthrough candidate: the local user's
+  physical press on it opens it (`WorldSourcePassthrough`, only the window pump
+  reaches that filter), the press reaches the window and takes the keyboard,
+  and the source closes once the view stops showing it. A console
+  `body.engage`, an addon's or a scripted press engages without opening it
+  ([decision](../../../../docs/decisions/rendering.md)).
+
+Known limits: one place pass per source instance, so two seats framing the same
+screen show it in the first seat's view only; the seat's 3D view still renders
+beneath the emulator view; per-console theming (bezel art, border images) is
+not yet authored and lands on `WorldScreenDisplay`. `WorldScreenFramingLawTests`
+holds the fit, the near plane, the ease and the display fit;
+`WorldViewPaneMappingLawTests.Engaged` the placement and the passthrough
+press.
 
 ## `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 

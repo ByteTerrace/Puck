@@ -10,8 +10,12 @@ namespace Puck.World.Client;
 /// <summary>
 /// The windowed host's passthrough door: the panes the local user opened as passthrough sources, the window each one's
 /// capture shows, and the <see cref="SourcePassthroughRouter"/> the window pump offers every raw event to
-/// (<see cref="IWindowInputFilter"/>). Only the <c>source.passthrough open</c> verb, which the host's own console alone
-/// may run, adds a source; nothing a world document declares reaches it.
+/// (<see cref="IWindowInputFilter"/>). Two acts of the local user add a source, and nothing a world document declares
+/// reaches either: the <c>source.passthrough open</c> verb, which the host's own console alone may run, and a physical
+/// pointer press on the emulator view of a window capture a local seat engaged in the world the host booted
+/// (<see cref="WorldViewGraphHost.ShowsEngaged"/>), which the window pump alone delivers, so no binding, script,
+/// <c>player.signal</c>, peer, addon or schedule makes it. Engaging the screen, by any principal, only shows the window;
+/// the press is what opens it, and the source closes once the emulator view no longer shows it.
 /// </summary>
 /// <remarks>
 /// <para>A source stays open, its grant held, until the local user closes it or it is really removed: before each event
@@ -32,8 +36,12 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     private readonly SortedDictionary<string, Opened> m_opened = new(comparer: StringComparer.Ordinal);
     private readonly WorldSeatViewports m_viewports;
 
-    // An opened source: the handle its pane's mapping names it by, and the window the local user opened it on.
-    private readonly record struct Opened(SourceHandle Source, ISourcePassthroughWindow Window);
+    // An opened source: the handle its pane's mapping names it by, the window the local user opened it on, and whether
+    // a press on an engaged screen's emulator view opened it, which closes it once that view stops showing it.
+    private readonly record struct Opened(SourceHandle Source, ISourcePassthroughWindow Window, bool Engaged = false);
+
+    // The pointer's last position, in display pixels, which a press opening an emulator view's window lands at.
+    private Vector2? m_pointer;
 
     /// <summary>Initializes a new instance of the <see cref="WorldSourcePassthrough"/> class.</summary>
     /// <param name="windows">Finds the window each source instance's capture shows.</param>
@@ -70,11 +78,13 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     );
 
     // The first opened source that is really gone: its capture no longer shows the window it was opened on (the instance
-    // stopped, or its capture reopened), or a published pane gives its name a different source. A pane that is only
-    // unpublished is not gone; the router keeps input from it while it is unshown.
+    // stopped, or its capture reopened), a published pane gives its name a different source, or an engaged screen's
+    // emulator view opened it and no longer shows it (the seat left). A console-opened pane that is only unpublished is
+    // not gone; the router keeps input from it while it is unshown.
     private string? Stale() {
         foreach (var (instance, opened) in m_opened) {
             if (
+                (opened.Engaged && !m_graphs.ShowsEngaged(instance: instance)) ||
                 !ReferenceEquals(
                     objA: m_windows.PassthroughWindowOf(
                         fault: out _,
@@ -164,6 +174,8 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     /// <summary>Describes the opened sources and where the keyboard is, the <c>source.passthrough</c> read-back.</summary>
     /// <returns>One line.</returns>
     public string Describe() {
+        CloseStale();
+
         var builder = new StringBuilder(value: "keyboard ");
 
         _ = builder.Append(value: ((Router.Focus.Focused is { } focused)
@@ -178,7 +190,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
         foreach (var (instance, opened) in m_opened) {
             var window = opened.Window;
 
-            _ = builder.Append(value: "; ").Append(value: instance).Append(value: " window '").Append(value: window.Title).Append(value: '\'');
+            _ = builder.Append(value: "; ").Append(value: instance).Append(value: (opened.Engaged ? " engaged" : string.Empty)).Append(value: " window '").Append(value: window.Title).Append(value: '\'');
             _ = (window.TryDescribe(window: out var described)
                 ? builder.Append(provider: CultureInfo.InvariantCulture, handler: $" frame {described.FrameWidth}x{described.FrameHeight} client {described.Client.Width}x{described.Client.Height} at {described.Client.X},{described.Client.Y} scale {described.DpiScale:0.###}")
                 : builder.Append(value: " gone"));
@@ -196,28 +208,72 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     }
     /// <inheritdoc/>
     public bool Intercept(in WindowInputEvent inputEvent) {
+        CloseStale();
+
+        switch (inputEvent.Kind) {
+            case WindowInputKind.PointerPosition:
+                // The pointer arrives in client pixels; the panes are published in display pixels, the stretch the drawn
+                // cursor's pane hover applies too.
+                var display = (((m_viewports.ClientWidth > 0) && (m_viewports.ClientHeight > 0))
+                    ? new Vector2(
+                        x: (inputEvent.Vector.X * (m_graphs.DisplayWidth / ((float)m_viewports.ClientWidth))),
+                        y: (inputEvent.Vector.Y * (m_graphs.DisplayHeight / ((float)m_viewports.ClientHeight)))
+                    )
+                    : inputEvent.Vector);
+
+                m_pointer = display;
+
+                return Router.Route(inputEvent: inputEvent with {
+                    Vector = display,
+                });
+            case WindowInputKind.PointerLeft:
+                m_pointer = null;
+
+                break;
+            case WindowInputKind.PointerButton when (inputEvent.Phase == CommandPhase.Started):
+                OpenEngagedUnderPointer();
+
+                break;
+        }
+
+        return Router.Route(inputEvent: in inputEvent);
+    }
+
+    private void CloseStale() {
         PublishPanes();
 
         while (Stale() is { } stale) {
             _ = Close(instance: stale);
         }
-
+    }
+    // The local user's own press on an engaged screen's emulator view of a window capture opens that window as a
+    // passthrough source before the press is routed, so the press itself reaches the window and gives it the keyboard.
+    // Only the window pump calls Intercept, so only a physical press gets here.
+    private void OpenEngagedUnderPointer() {
         if (
-            (inputEvent.Kind == WindowInputKind.PointerPosition) &&
-            (m_viewports.ClientWidth > 0) &&
-            (m_viewports.ClientHeight > 0)
+            (m_pointer is not { } point) ||
+            !m_graphs.Picker.TryPick(
+                pick: out var pick,
+                point: point
+            ) ||
+            (pick.Source.Name is not { } instance) ||
+            !m_graphs.ShowsEngaged(instance: instance) ||
+            m_opened.ContainsKey(key: instance) ||
+            (m_windows.PassthroughWindowOf(
+                fault: out _,
+                instance: instance
+            ) is not { } window)
         ) {
-            // The pointer arrives in client pixels; the panes are published in display pixels, the stretch the drawn
-            // cursor's pane hover applies too.
-            return Router.Route(inputEvent: inputEvent with {
-                Vector = new Vector2(
-                    x: (inputEvent.Vector.X * (m_graphs.DisplayWidth / ((float)m_viewports.ClientWidth))),
-                    y: (inputEvent.Vector.Y * (m_graphs.DisplayHeight / ((float)m_viewports.ClientHeight)))
-                ),
-            });
+            return;
         }
 
-        return Router.Route(inputEvent: in inputEvent);
+        m_opened[instance] = new Opened(
+            Engaged: true,
+            Source: pick.Source,
+            Window: window
+        );
+        m_graphs.OpenPassthrough(instance: instance);
+        PublishPanes();
     }
     /// <inheritdoc/>
     public bool TryGet(SourceHandle source, [NotNullWhen(returnValue: true)] out ISourcePassthroughWindow? window) {
