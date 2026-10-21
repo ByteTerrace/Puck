@@ -38,7 +38,17 @@ public readonly record struct WorldSliceRequest(SdfAxis Axis, float Offset, Vect
 /// </summary>
 /// <param name="server">The authoritative server whose document names the placements a slice may centre on.</param>
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
-public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRenderProbe renderProbe) : ICommandModule {
+/// <param name="source">The booted document, beside which <c>world.slice.save</c> writes into its <c>slices</c>
+/// folder.</param>
+public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRenderProbe renderProbe, WorldDefinitionSource source) : ICommandModule {
+    /// <summary>The folder under the booted document's package that <c>world.slice.save</c> writes into.</summary>
+    public const string FolderName = "slices";
+
+    /// <summary>The placement token <c>world.slice.save</c> reads as the placement of the spawn point nearest the
+    /// calling seat's body.</summary>
+    public const string NearToken = "near";
+
+    private const string SaveVerb = "world.slice.save";
     private const string Verb = "world.slice";
     private const string Form = "<x|y|z> <offset> <u> <v> <half> <path.png> | <placement> <x|y|z> <path.png> [offset <m>] — then [bands <m>] [res <n>]";
 
@@ -90,9 +100,13 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
             var position = (Vector3)placement.Position;
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
-            var reach = ((creation is null) ? 1f : CreationGeometry.Reach(document: creation.EngineDocument));
+            var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
 
             half = (WorldSliceRequest.PlacementMargin * reach * MathF.Abs(x: placement.Scale));
+            if (!float.IsFinite(f: half) || !(half > 0f)) {
+                refusal = $"{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>";
+                return false;
+            }
             path = args[2];
             next = 3;
             offset = Component(axis: axis, value: position);
@@ -169,7 +183,90 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return Arm(request: request);
             }
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: SaveVerb,
+            description: $"Slices the field through a placement into the booted package's own {FolderName} folder: {SaveVerb} <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>], as {Verb}'s placement form, writing <package>/{FolderName}/<placement>-<axis>.png. The caller names no path, so a binding row or an authored command (the debug world's gallery.slice) may call it; the placement id must be a file-safe token (letters, digits, '-', '_', '.').",
+            handler: (context, args) => {
+                if (args.Count < 2) {
+                    return CommandResult.Error(output: $"[{SaveVerb}: expected <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]]");
+                }
+
+                var placement = args[0].ToString();
+
+                if (string.Equals(a: placement, b: NearToken, comparisonType: StringComparison.Ordinal)) {
+                    var seat = ((context.Principal.Kind == PrincipalKind.Seat)
+                        ? context.Principal.Index
+                        : context.Slot
+                    );
+
+                    if (NearestSpawnedPlacement(body: seat) is not { } nearest) {
+                        return CommandResult.Error(output: $"[{SaveVerb}: 'near' names the placement of the spawn point nearest seat {(seat + 1)}'s body, and none stands there]");
+                    }
+
+                    placement = nearest;
+                }
+                var axis = args[1].ToString().ToLowerInvariant();
+
+                if (!IsFileToken(token: placement)) {
+                    return CommandResult.Error(output: $"[{SaveVerb}: placement '{placement}' is not a file-safe token]");
+                }
+
+                var tokens = new string[(args.Count + 1)];
+
+                tokens[0] = placement;
+                tokens[1] = axis;
+                tokens[2] = System.IO.Path.Combine(
+                    path1: WorldDocumentPaths.DirectoryOf(documentPath: source.SourcePath),
+                    path2: FolderName,
+                    path3: $"{placement}-{axis}.png"
+                );
+                for (var index = 2; (index < args.Count); index++) { tokens[(index + 1)] = args[index].ToString(); }
+                if (!TryParse(args: tokens, definition: server.Definition, refusal: out var refusal, request: out var request)) {
+                    return CommandResult.Error(output: $"[{refusal}]");
+                }
+                return Arm(request: request);
+            }
+        );
     }
+
+    // The placement sharing its id with the spawn point nearest the body (a gallery exhibit's spawn stands before it,
+    // named after it), or null when the body is inactive or no such spawn point names a placement.
+    private string? NearestSpawnedPlacement(int body) {
+        if (server.Body(index: body) is not { } subject) {
+            return null;
+        }
+
+        var definition = server.Definition;
+        var position = subject.FixedPosition.ToVector3();
+        string? nearest = null;
+        var best = float.PositiveInfinity;
+
+        foreach (var point in definition.SpawnPoints) {
+            var distance = Vector3.DistanceSquared(value1: point.Position, value2: position);
+
+            if (
+                (distance < best) &&
+                (WorldDefinitionRows.FindPlacement(id: point.Id, placements: definition.Placements) is not null)
+            ) {
+                best = distance;
+                nearest = point.Id;
+            }
+        }
+
+        return nearest;
+    }
+    // A creation's reach; an unbounded lattice clipped by a creation-wide intersection is bounded by its clip, which only
+    // the composed bound sees (a scope-free creation's shapes are not one field, so their blends bound nothing).
+    private static float PlacementReach(CreationDocument document) {
+        var reach = CreationGeometry.Reach(document: document);
+
+        return (float.IsFinite(f: reach) || !CreationStampEmitter.RequiresScope(document: document))
+            ? reach
+            : CreationStampEmitter.RenderReach(document: document, scale: 1f, fontFor: null, composeBlends: true);
+    }
+    private static bool IsFileToken(string token) =>
+        ((token.Length is > 0 and <= 96) && token.All(predicate: static c => (char.IsAsciiLetterOrDigit(c: c) || (c is '-' or '_' or '.'))) && (token is not ("." or "..")));
 
     private static bool TryAxis(string token, out SdfAxis axis) {
         axis = token.ToLowerInvariant() switch {

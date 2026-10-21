@@ -5136,6 +5136,10 @@ export type WorldEffectPoseCell = {
    * The displacement from the cell centre, in world units.
    */
   offset: DocumentVector3;
+  /**
+   * Whether the body moves there as continuous motion, which a client interpolates and which keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.
+   */
+  glide?: boolean;
 };
 
 /**

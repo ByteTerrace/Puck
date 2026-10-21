@@ -101,3 +101,5 @@ docs/.obsidian
 scratch
 # The captures that go with gallery.flag (worlds/debug/shapes.md): local, read back by agents, never committed.
 worlds/debug/flags/
+# The field slices that go with gallery.slice (world.slice.save): local, read back by agents, never committed.
+worlds/debug/slices/

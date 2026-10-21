@@ -815,7 +815,20 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        (m_baseContactField as WorldColliderSet)?.RefreshAttached(population: this);
+        if (m_baseContactField is WorldColliderSet colliders) {
+            colliders.RefreshAttached(population: this);
+
+            // Every body standing on a moving attached solid rides it before any body advances, seats included.
+            for (var index = 0; (index < Capacity); index++) {
+                if (
+                    m_entries[index].Active &&
+                    (m_entries[index].Body is { } rider)
+                ) {
+                    rider.RideAttachedSupport(field: colliders);
+                }
+            }
+        }
+
         SolveGravity();
         FreezeFlockImage();
         m_navigation.BeginStep();

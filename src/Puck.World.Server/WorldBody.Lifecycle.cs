@@ -276,6 +276,15 @@ public sealed partial class WorldBody {
             rollRadians: FixedQ4816.FromDouble(value: rollRadians)
         );
     }
+    /// <summary>Moves the body to <paramref name="position"/> as continuous motion: its attitude, velocity, contact state
+    /// and previous-pose anchor stay, so a client interpolates from where it was, where <see cref="Pose(FixedVector3,
+    /// FixedQ4816, FixedQ4816, FixedQ4816)"/> snaps. For a body a rule moves a short step every tick (the debug world's
+    /// lift car); a long move glided this way streaks across the gap for one tick.</summary>
+    /// <param name="position">The new world position.</param>
+    public void Glide(FixedVector3 position) {
+        WakeUp();
+        m_position = position;
+    }
     /// <summary>Teleports to a full pose already expressed in deterministic numerics.</summary>
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
         m_position = position;

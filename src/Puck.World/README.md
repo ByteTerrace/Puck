@@ -1014,6 +1014,12 @@ Facts a script needs:
   (`world=` is the share the unowned segments answered, `near-surface` the
   samples within three pixels of the surface), and `world.wait bakes <seconds>`
   holds a script until then. It needs a renderer (windowed or offscreen).
+  `world.slice` takes a caller's path, so it is Unbindable; `world.slice.save
+  <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]` is its
+  Bindable twin, the placement form writing
+  `<package>/slices/<placement>-<axis>.png` beside the booted document, where
+  `near` names the placement of the spawn point nearest the calling seat's body
+  (the debug world's `gallery.slice` calls it).
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at
@@ -2524,8 +2530,10 @@ request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
-`world.flag <exhibit> [note…]` is a player's "this looks wrong" mark, for the
-gallery and anything else a document names by a token. It writes
+`world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
+the gallery and anything else a document names by a token; `near` names the
+spawn point nearest the flagging seat's body, so one key flags whatever exhibit
+the player stands at. It writes
 `<package>/flags/<exhibit>.json` beside the booted document (the exhibit, the
 note, the tick, the flagging seat, its authoritative pose as `body.where` reads
 it, and its render camera) and arms a capture of the next composed frame to

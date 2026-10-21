@@ -16,8 +16,8 @@ spawnPoints [
   { id: "loop", position [-20, 0, -15], yawDegrees: 0 }
   // Five metres in front of the wall screen (desktop.puck).
   { id: "screen", position [8, 0, -3], yawDegrees: 0 }
-  // The shape gallery's near corner (shapes.puck), facing up its rows; the first row's labels face this way.
-  { id: "gallery", position [14, 0, 9], yawDegrees: 180 }
+  // Outside the gallery hall's entrance (hall.puck), facing in; the map board stands in the lobby ahead and left.
+  { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
 ]
 
 commands [
