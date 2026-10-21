@@ -243,7 +243,13 @@ worktree of it can call `puck_worlds` and the rest.
 Both have a 1,050,000-token context and 128,000 output tokens. The companion's
 `--effort` stops at `xhigh`; `max` needs `codex exec -c
 model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
-the effort). Prices are API list prices, a guide to relative cost. Astra asks more questions when input
+the effort). Prices are API list prices, a guide to relative cost; Codex draws
+on the plan's allowance. Effort is not capability across models: OpenAI's Codex
+guidance says Astra at `low` can outperform Sol at `high`, so a lane that needs
+Sol at `high` or above tries Astra at `low` or `medium` first. Raising effort
+never supplies a missing file, tool or permission; fix the brief first. Codex
+also offers GPT-5.6 Terra (everyday work, routine code changes) and GPT-5.6 Luna
+(fast, focused or repetitive edits), the scout tier of that family. Astra asks more questions when input
 could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
