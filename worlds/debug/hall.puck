@@ -40,6 +40,18 @@ let hallPalette = [
   { color: "#FFF1DC", roughness: 0.5, emissive: 4 }
   { color: "#F2EEE4", roughness: 0.6 }
 ]
+// The same palette with the light strips switched off: a pale unlit diffuser in the strips' slot, so a slab drawn in it
+// is the same geometry (the mesh library keys materials by their place, so it bakes nothing new) with nothing glowing.
+let hallPaletteDark = [
+  hallPalette[0]
+  hallPalette[1]
+  hallPalette[2]
+  { color: "#D9D4C9", roughness: 0.5, specular: 0.06 }
+  hallPalette[4]
+]
+// Each slab and the roof come lit and dark: a placement shows its dark variant while its level's `hallLights` cell is
+// Off (the placement's `respond` facet), and its lit one otherwise.
+let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
 // One box given its world bounds.
 template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
@@ -101,6 +113,18 @@ let liftZ = 38.05
 let liftPads = map(range(0, 4), k => { level: k, x0: 15.2, x1: 16.6, z0: 35.2, z1: 36, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
 let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15.15 + (0.7 * k)), z0: 38.9, z1: 39.55 })
 
+// The room lights. `hallLights` holds each level's state, Off or On: level 0 (the lobby, where the gaming devices'
+// screens light the room) starts Off and the levels above On. Off swaps the slab or roof above that level for its dark
+// variant, so its ceiling strips stop glowing, and darkens the point light that level owns (`hallLamps`); the lift
+// car's lamp rides the car whatever its level. A level's switch stands on the west wall at z = switchZ, 1.1 to 1.46 m
+// over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
+// E or X on a pad) flips it while seat 1's body stands in the switch's reach box before it.
+let switchZ = 32.5
+let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (switchZ - 0.6), z1: (switchZ + 0.6), y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
+let hallSwitchStates = [{ name: "on", lift: 0.06, indicator: "#FFC46B", glow: 3 }, { name: "off", lift: -0.06, indicator: "#5BE38A", glow: 2 }]
+// The point lights a level owns, by `hallLamps` key, with the weight each shines at while its level is On.
+let hallLampLevels = [{ key: "lobby", level: 0, weight: 0.9 }, { key: "stairs", level: 1, weight: 0.7 }]
+
 // The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
 // stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
 // and the stop's own rule stands body 0 at the exhibit's spawn point, facing it.
@@ -161,31 +185,56 @@ prototypes {
     }
   }
   for k in range(1, 3) {
-    prototype $"hall-floor-{k}" {
-      document {
-        name: $"hall-floor-{k}"
-        schema: "puck.creation.v1"
-        palette: hallPalette
-        hallBox(label: $"slab-{k}-south", x0: 10.3, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: 12.3, z1: stairStart, slot: hallFloor)
-        hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
-        hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
-        hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
+    for look in hallLooks {
+      prototype $"hall-floor-{k}{look.suffix}" {
+        document {
+          name: $"hall-floor-{k}{look.suffix}"
+          schema: "puck.creation.v1"
+          palette: look.palette
+          hallBox(label: $"slab-{k}-south", x0: 10.3, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: 12.3, z1: stairStart, slot: hallFloor)
+          hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
+          hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
+          hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
+        }
       }
     }
   }
   // The roof, open over level 3's hall in three 10 m by 16 m skylights.
-  prototype "hall-roof" {
-    document {
-      name: "hall-roof"
-      schema: "puck.creation.v1"
-      palette: hallPalette
-      hallBox(label: "roof-south", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 12.3, z1: 18, slot: hallFloor)
-      hallBox(label: "roof-north", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 34, z1: 39.7, slot: hallFloor)
-      hallBox(label: "roof-west", x0: 10.3, x1: 24, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-      hallBox(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-      hallBox(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-      hallBox(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-      hallStrips(top: 17.75, aisles: [15, 37])
+  for look in hallLooks {
+    prototype $"hall-roof{look.suffix}" {
+      document {
+        name: $"hall-roof{look.suffix}"
+        schema: "puck.creation.v1"
+        palette: look.palette
+        hallBox(label: "roof-south", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 12.3, z1: 18, slot: hallFloor)
+        hallBox(label: "roof-north", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 34, z1: 39.7, slot: hallFloor)
+        hallBox(label: "roof-west", x0: 10.3, x1: 24, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+        hallBox(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+        hallBox(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+        hallBox(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+        hallStrips(top: 17.75, aisles: [15, 37])
+      }
+    }
+  }
+
+  // A floor's light switch, on the west wall's inner face beside the stairs, its plate facing +X into the landing:
+  // `hallSwitch` takes world bounds over the floor, so one prototype serves every level's placement. Up with a warm
+  // indicator is on; down with a green locator glow (findable in the dark) is off.
+  for state in hallSwitchStates {
+    prototype $"hall-switch-{state.name}" {
+      document {
+        name: $"hall-switch-{state.name}"
+        schema: "puck.creation.v1"
+        palette [
+          { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
+          { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
+          { color: state.indicator, roughness: 0.4, emissive: state.glow }
+        ]
+        hallBox(label: "plate", x0: 10.3, x1: 10.34, y0: 1.1, y1: 1.46, z0: (switchZ - 0.13), z1: (switchZ + 0.13), slot: 0)
+        hallBox(label: "rocker", x0: 10.34, x1: 10.39, y0: (1.24 + state.lift), y1: (1.32 + state.lift), z0: (switchZ - 0.035), z1: (switchZ + 0.035), slot: 1)
+        hallBox(label: "indicator", x0: 10.34, x1: 10.355, y0: 1.39, y1: 1.42, z0: (switchZ - 0.02), z1: (switchZ + 0.02), slot: 2)
+        textRuns [{ text: "LIGHTS", position [-10.302, 1.53, (0 - switchZ)], rotation [0, -0.707107, 0, 0.707107], emHeight: 0.06, depth: 0.004, mode: "emboss", material: 1, align: "center" }]
+      }
     }
   }
 
@@ -319,17 +368,47 @@ placements {
     position [0, 0, 0]
     solid
   }
-  for k in range(0, 4) {
+  placement "hall-floor-0" {
+    prototype: "hall-floor-0"
+    position [0, 0, 0]
+    solid
+  }
+  // Slab k carries the strips of level k - 1 below it, and the roof those of level 3.
+  for k in range(1, 3) {
     placement $"hall-floor-{k}" {
       prototype: $"hall-floor-{k}"
       position [0, 0, 0]
       solid
+      respond [
+        {
+          "when": state(state: hallLights, key: $"level{k - 1}", comparison: Equal, value: 0)
+          prototypeId: $"hall-floor-{k}-dark"
+        }
+      ]
     }
   }
   placement "hall-roof" {
     prototype: "hall-roof"
     position [0, 0, 0]
     solid
+    respond [
+      {
+        "when": state(state: hallLights, key: `level3`, comparison: Equal, value: 0)
+        prototypeId: "hall-roof-dark"
+      }
+    ]
+  }
+  for k in range(0, 4) {
+    placement $"hall-switch-{k}" {
+      prototype: "hall-switch-on"
+      position [0, galleryFloor[k], 0]
+      respond [
+        {
+          "when": state(state: hallLights, key: $"level{k}", comparison: Equal, value: 0)
+          prototypeId: "hall-switch-off"
+        }
+      ]
+    }
   }
   placement "hall-stairs" {
     prototype: "hall-stairs"
@@ -379,24 +458,29 @@ placements {
   }
 }
 
-// A spawn on each level's landing, before the lift door and facing it.
 // The hall's lights. The Moth basis's key and fill stay (a lights list replaces its basis's whole), and three warm
 // points light the inside: one over the lobby, one in the stairwell, and one riding the lift car's body under its
 // ceiling. A point light never occludes and is never occluded, so each is kept small and local; the rooms' light is
 // the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the occlusion.
+// The lobby's and the stairwell's weights read `hallLamps`, so they follow levels 0's and 1's switches.
 render {
   lighting {
     lights [
       directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
       directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
-      point(name: "hall-lobby", position: [15, 3.4, 22], radius: 4, color: "#FFE9CC", weight: 0.9)
-      point(name: "hall-stairs", position: [12.2, 7.6, 37], radius: 3, color: "#FFE9CC", weight: 0.7)
+      point(name: "hall-lobby", position: [15, 3.4, 22], radius: 4, color: "#FFE9CC", weight: "state.hallLamps.lobby")
+      point(name: "hall-stairs", position: [12.2, 7.6, 37], radius: 3, color: "#FFE9CC", weight: "state.hallLamps.stairs")
       point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], radius: 1.6, color: "#FFF4E6", weight: 1.2)
     ]
   }
 }
 
-spawnPoints: map(galleryLevels, level => { id: $"gallery-level-{level.level}", position [liftX, galleryFloor[level.level], 34], yawDegrees: 180 })
+// A spawn on each level's landing, before the lift door and facing it, and one before each level's light switch,
+// facing it.
+spawnPoints: concat(
+  map(galleryLevels, level => { id: $"gallery-level-{level.level}", position [liftX, galleryFloor[level.level], 34], yawDegrees: 180 }),
+  map(galleryLevels, level => { id: $"hall-switch-{level.level}", position [11.1, galleryFloor[level.level], switchZ], yawDegrees: 90 })
+)
 
 // The car's kit: a 10 cm sphere that touches nothing in the shaft, held by nothing (no gravity), so it stands wherever
 // `lift-ride` last posed it.
@@ -447,7 +531,22 @@ state {
     box(name: "liftShaft", origin: [(liftX - 1.5), 0, (liftZ - 1.5)], cellSize: 3, width: 1, depth: 1, layers: ((3 * liftCells) + 1), layerHeight: 0.0625)
   ]
 
+  enum HallLight {
+    Off
+    On
+  }
+
   world {
+    table hallLights: HallLight {
+      level0 = Off
+      level1 = On
+      level2 = On
+      level3 = On
+    }
+    table hallLamps {
+      lobby = 0.0
+      stairs = 0.7
+    }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
     // The level a pad or gallery.lift last called, until lift-call turns it into a target; -1 while none is pending.
@@ -521,7 +620,42 @@ for pad in carPads {
   }
 }
 
+// A press of the context button inside a switch's reach box flips that level's lights; the reach box stands before the
+// plate, so standing there puts the plate ahead of the body. The edge fires once a press.
+for reach in switchReach {
+  rule $"hall-switch-{reach.level}" {
+    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > reach.x0 and bodyPosition(body, 0, x) < reach.x1 and bodyPosition(body, 0, z) > reach.z0 and bodyPosition(body, 0, z) < reach.z1 and bodyPosition(body, 0, y) > reach.y0 and bodyPosition(body, 0, y) < reach.y1
+    mode: Edge
+    hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
+  }
+}
+
+// A level's point lights follow its state.
+for lamp in hallLampLevels {
+  rule $"hall-lamp-{lamp.key}-on" {
+    when hallLights[$"level{lamp.level}"] == 1
+    mode: Edge
+    hallLamps[$"{lamp.key}"] = lamp.weight
+  }
+  rule $"hall-lamp-{lamp.key}-off" {
+    when hallLights[$"level{lamp.level}"] == 0
+    mode: Edge
+    hallLamps[$"{lamp.key}"] = 0
+  }
+}
+
 commands [
+  {
+    name: "gallery.lights"
+    help: "Switches a level's room lights in the gallery hall (0 to 3) on or off, as its wall switch does: off darkens the level's ceiling strips and its point light."
+    parameters [
+      { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
+      { name: "state", kind: Choice, values ["On", "Off"] }
+    ]
+    lines [
+      "world.state.cell.set hallLights level{level} {state}"
+    ]
+  }
   {
     name: "gallery.lift"
     help: "Calls the gallery hall's lift car to a level (0 to 3), as its pads do; ride it by standing in the car."

@@ -3,7 +3,9 @@
 The debug world shows one of each gaming device the World hosts, on a row of
 labelled plinths in the gallery hall's lobby ([`shapes.md`](shapes.md#the-hall)),
 on its level 0 floor at z = 28, 2.5 m apart and facing -Z, toward the entrance,
-so their screens light the lobby's floor and walls. Each plinth carries the
+so their screens light the lobby's floor and walls; the lobby's room lights
+start off so that light shows, and its wall switch or `gallery.lights 0 on`
+turns them on ([the hall's lighting](shapes.md#the-hall)). Each plinth carries the
 device's own name. `debug.go devices` stands you in front of the middle one.
 [`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
