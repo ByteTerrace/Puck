@@ -83,7 +83,7 @@ public static class MeshSceneCommand {
         var missing = 0;
 
         foreach (var group in groups) {
-            if (group.Dynamic) { continue; }
+            if (group.Dynamic || group.Glass) { continue; }
             if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out _)) {
                 missing++;
                 continue;
