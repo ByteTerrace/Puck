@@ -217,6 +217,22 @@ light (an occluder's dimming). The stage sums each kind of term over the walk
 and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
 kind, so a new kind is one branch of that function.
 
+## Glass
+
+A palette slot's `glass` (`SdfGlass`) turns its shapes into a transmitting
+surface the glass pass shades after the opaque image
+([glass after the opaque image](frame-rendering.md#glass-after-the-opaque-image)).
+Its vocabulary is the slot's own: `color` is the tint, the colour light takes
+on through `depth` of the glass, `roughness` the frost, and `ior` the index of
+refraction, which bends the read of the image behind and sets the Fresnel
+reflectance (`((ior − 1) / (ior + 1))²`, 0.04 for window glass). The glass
+pass lights the surface with the sky's environment map in the mirror direction
+and every directional and point light's GGX highlight through that reflectance,
+unshadowed; it reads none of the opaque epilogue's terms, no occlusion, no
+cascade, no irradiance volume, no paint and no weathering. A glass shape in an
+opaque group (a pooled creation's mixed `group`, which the document validator
+refuses) shades as an opaque surface with the tint as its albedo.
+
 ## Screen lights and the CRT treatment
 
 The reference scene's diegetic screens—the console cabinets' CRTs—are the most

@@ -131,6 +131,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             if ((context.Part == SdfWorldPackage.Parts.Sky) || (context.Part == SdfWorldPackage.Parts.Composite)) {
                 return new SdfSkyRecorder(context: context, groups: groups, owner: this, view: view);
             }
+            if (context.Part == SdfWorldPackage.Parts.GlassShade) {
+                return new SdfGlassRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             return new SdfWorldPassRecorder(
                 context: context,
                 groups: groups,
@@ -216,7 +219,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // and retained tainted history must be discarded before a filled source can serve any capture.
         if (convergence.IsActive) {
             entry.Temporal.Reset();
-            entry.HistoryTainted = false;
         }
         _ = DiscardTaintedState(instance: instance);
         entry.Residency?.BeginConvergence(request: convergence.Request);

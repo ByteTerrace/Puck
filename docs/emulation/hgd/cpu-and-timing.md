@@ -14,14 +14,20 @@ has equal internal φ1 and φ2 halves. The cartridge's M2 signal differs: on
 RP2A03G it rises 4½ master ticks into the cycle and falls at tick twelve,
 remaining high for 15/24 of the cycle, as described by
 [NESdev's CPU pinout](https://www.nesdev.org/wiki/CPU_pinout).
-The rising edge notifies the cartridge; the falling edge completes the CPU
-transaction (or the DMA unit's), clocks the APU, and then notifies the
-cartridge. Edge timestamps count integer half master ticks, so no rounding is
-needed. The PPU takes four master ticks per dot, so three dots pass in every CPU
-cycle. When one master tick ends both a PPU dot and a CPU cycle, the dot runs
-first and the CPU cycle sees its effects; the NMI line follows the PPU after
-every dot, and the IRQ line combines the cartridge's and the APU's requests at
-every CPU cycle. The clock retains its position within both dividers in
+The rising edge notifies the cartridge. The cycle's transaction (the CPU's or
+the DMA unit's) runs at the read point, eight master ticks in, the middle of
+M2's high phase: a read takes its data there, after the dot that ends on that
+tick, and a write waits on the bus until M2 falls. The falling edge lands that
+write, samples the CPU's IRQ and NMI inputs (on DMA cycles too), clocks the
+APU, and then notifies the cartridge. Edge timestamps count integer half master
+ticks, so no rounding is needed. The PPU takes four master ticks per dot, so
+three dots pass in every CPU cycle. The NMI line follows the PPU after every
+dot and after the cycle's write, so a $2000 write that enables NMI during
+vertical blank reaches that cycle's sample. The IRQ line combines the
+cartridge's and the APU's requests; the board's output trails its inputs, so a
+request raised on the tick M2 falls (by that tick's dot or the landing write)
+reaches the next cycle's sample. blargg's `ppu_vbl_nmi`, `cpu_interrupts_v2` and
+`mmc3_test_2` suites pin these points to the PPU dot. The clock retains its position within both dividers in
 snapshots. PAL and Dendy dividers belong to console-model capabilities when those
 models are implemented.
 
@@ -144,7 +150,9 @@ name.
   swapping the pattern-table halves. $A000 selects vertical or horizontal
   mirroring (a four-screen image ignores it) and $A001 enables PRG-RAM (bit 7)
   and denies writes to it (bit 6). The scanline counter clocks on a PPU A12
-  rise that follows three falling M2 edges with A12 low, so with background
+  rise that follows three falling M2 edges with A12 low, each counted only when
+  A12 was already low as M2 rose, so the eight low dots at the start of a line
+  with the background at $1000 never clock it; with background
   patterns at $0000 and sprites at $1000 it clocks once a line at the sprite
   fetches. A clock reloads a zero counter, or one a $C001 write asked to
   reload, from the $C000 latch and decrements it otherwise; reaching zero with
@@ -200,6 +208,13 @@ other. `nestest-boot` boots the same image through its reset vector and runs
 both menu pages from the controller, verifying the menu identity and absence
 of a prior result before each page runs, then requiring OK beside "Run all
 tests".
+
+`blargg-suites` runs blargg's MMC3 (`mmc3_test_2` 1-5; 6 checks the MMC3A,
+which a plain mapper 4 header does not select), CPU interrupt
+(`cpu_interrupts_v2`), VBL and NMI (`ppu_vbl_nmi`) and APU (`apu_test`) ROMs
+from the `nes-test-roms` archive and reads each verdict from $6000, where the
+suites publish it; every ROM is one case, and the stage fails while any fails
+or never finishes.
 
 `accuracy-coin` runs every test of
 [AccuracyCoin](https://github.com/100thCoin/AccuracyCoin), the suite that

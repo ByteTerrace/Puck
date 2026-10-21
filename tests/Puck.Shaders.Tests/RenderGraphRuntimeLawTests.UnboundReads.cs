@@ -140,6 +140,66 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Null(@object: runtime.PendingCapturePath);
     }
 
+    // A portal's innermost level, read only as a screen's source: once nothing shown reaches it, it renders no more and
+    // its latest output, from before the capture armed, still holds the camera's pixels. A capture frame cannot render
+    // it again, so the reader is handed nothing for it rather than the tainted image, and the capture completes.
+    [Fact]
+    public void ACaptureWithholdsAnUnrenderedTaintedScreenSourceAndCompletes() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+
+        recorders.Registry.RegisterProducer(factory: _ => camera, package: Feed);
+        recorders.Registry.Register(factory: new ReadingPackage(samples: true), package: Camera);
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(ExternalPackage: Feed, Name: "camera", Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                new RenderGraphInstance(Name: ReadSource, Output: ShaderPipelineResourceKind.Image, Passes: 1,
+                    Reads: [new RenderGraphRead(Producer: "camera")], Refresh: RenderGraphRefresh.EveryFrame),
+                Instance(name: "view", reads: new RenderGraphRead(Producer: ReadSource))
+            ),
+            "view",
+            null!,
+            Graph(ScreensGraph(false, "screen"), ("screen", "camera")),
+            Graph(pipeline: CameraGraph())
+        );
+        var inner = runtime.Instances.IndexOf(name: ReadSource);
+        var shown = new Frames(
+            footprints: [
+                new RenderGraphFootprint(Consumer: "view", Height: 1.0, Producer: ReadSource, Width: 1.0),
+                new RenderGraphFootprint(Consumer: ReadSource, Height: 1.0, Producer: "camera", Width: 1.0),
+            ],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "view", Width: 1.0)],
+            runtime: runtime
+        );
+
+        shown.Settle();
+        TestLiveness.Until(step: () => {
+            _ = shown.Next();
+
+            return ((runtime.Node(instance: inner).FrameCounter > 0UL) && runtime.IsSettled);
+        });
+
+        var unshown = new Frames(footprints: [], roots: [new RenderGraphRoot(Height: 1.0, Instance: "view", Width: 1.0)], runtime: runtime);
+
+        _ = unshown.Next();
+        Assert.NotEqual(expected: RenderGraphInstanceStatus.Rendered, actual: runtime.Latest!.Instances[inner].Status);
+
+        var request = CaptureRequest();
+
+        camera.Filling = () => (runtime.PendingCapturePath is not null);
+        runtime.RequestCapture(request: request);
+        TestLiveness.Until(step: () => {
+            _ = unshown.Next();
+
+            return request.Completion.IsCompleted;
+        });
+        Assert.Null(@object: Outcome(request: request).Error);
+        Assert.NotEqual(expected: RenderGraphInstanceStatus.Rendered, actual: runtime.Latest!.Instances[inner].Status);
+    }
+
     /// <summary>A camera package whose recorder samples its instance's unbound reads when it says so: it records the
     /// image view of the first read each frame and, when told to, takes its lease into the frame's lease list.</summary>
     private sealed class ReadingPackage(bool samples) : IRenderGraphPackageFactory {

@@ -21,6 +21,27 @@ public sealed record PaletteRadialStopDocument(float Radius, string Color);
 /// <summary>One to four radial paint stops with optional angular modulation.</summary>
 public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopDocument> Stops, float Softness = 0f,
     float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0);
+/// <summary>A palette slot's glass: the slot's shapes transmit what lies behind them, refracted and absorbed over the
+/// distance the view ray travels through the shape, and reflect the sky by Fresnel. The slot's <c>color</c> is the
+/// tint, the colour light takes on through <paramref name="Depth"/> of the glass, and its <c>roughness</c> the frost.
+/// A glass slot's shapes bake and draw apart from the creation's opaque shapes: they never blend with them, a cut or
+/// engraving never carves them, and a pooled creation keeps them out of any <c>group</c>.</summary>
+/// <param name="Depth">The thickness, in creation units, over which light takes on the tint; finite and positive. A
+/// part twice this thick reads twice as deep.</param>
+/// <param name="Ior">The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49
+/// acrylic (null = 1.5).</param>
+public sealed record PaletteGlassDocument(float Depth, float? Ior = null) {
+    /// <summary>The index of refraction an entry that names none takes: window glass.</summary>
+    public const float DefaultIor = 1.5f;
+
+    /// <summary>Resolves the engine glass at a placement scale.</summary>
+    /// <param name="scale">The placement scale the depth, a length, multiplies by; positive.</param>
+    /// <returns>The glass.</returns>
+    public SdfGlass ToGlass(float scale = 1f) => new(
+        Depth: (Depth * scale),
+        Ior: (Ior ?? DefaultIor)
+    );
+}
 /// <summary>A paint plane in the winning dynamic frame, or world space when no slot owns the hit.</summary>
 public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuaternion Rotation, float Depth, float Ior, PaletteRadialPaintDocument Paint) {
     /// <summary>Resolves the generic engine layer at a placement scale.</summary>

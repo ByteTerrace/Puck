@@ -355,7 +355,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     }
     // The member a pass reads a fragment version through.
     private static string ReadMemberOf(string version) => version switch {
-        SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor => SdfWorldPackage.LitImage,
+        SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor or SdfWorldPackage.Parts.GlassLit => SdfWorldPackage.LitImage,
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,

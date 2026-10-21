@@ -15,6 +15,9 @@ public sealed class HgdSystemBus : ISnapshotable {
     private readonly HgdDma m_dma;
 
     private byte m_openBus;
+    private bool m_writePending;
+    private ushort m_pendingAddress;
+    private byte m_pendingValue;
 
     /// <summary>Initializes a new instance of the <see cref="HgdSystemBus"/> class with deterministic work RAM.</summary>
     /// <param name="mapper">The machine's independently owned cartridge board.</param>
@@ -103,6 +106,27 @@ public sealed class HgdSystemBus : ISnapshotable {
             );
         }
     }
+    /// <summary>Holds a CPU-cycle write until M2 falls, when <see cref="CommitWrite"/> lands it; the cycle's transaction
+    /// runs earlier, at the read point.</summary>
+    /// <param name="address">The CPU address.</param>
+    /// <param name="value">The driven data byte.</param>
+    public void PostWrite(ushort address, byte value) {
+        m_writePending = true;
+        m_pendingAddress = address;
+        m_pendingValue = value;
+    }
+    /// <summary>Lands the write <see cref="PostWrite"/> holds, if any, with every side effect <see cref="Write"/> has.</summary>
+    public void CommitWrite() {
+        if (!m_writePending) {
+            return;
+        }
+
+        m_writePending = false;
+        Write(
+            address: m_pendingAddress,
+            value: m_pendingValue
+        );
+    }
     /// <summary>Peeks without changing the data bus or any component's state.</summary>
     /// <param name="address">The CPU address.</param>
     /// <returns>The byte a read would return now.</returns>
@@ -151,6 +175,9 @@ public sealed class HgdSystemBus : ISnapshotable {
     private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
         transfer.Block(values: m_workRam.AsSpan());
         transfer.Byte(value: ref m_openBus);
+        transfer.Boolean(value: ref m_writePending);
+        transfer.UInt16(value: ref m_pendingAddress);
+        transfer.Byte(value: ref m_pendingValue);
     }
 }
 /// <summary>The statically specialized CPU adapter for the NES address map.</summary>
@@ -170,8 +197,9 @@ public readonly struct HgdCpuBus : IHgdCpuBus {
     public byte Read(ushort address) =>
         m_bus.Read(address: address);
     /// <inheritdoc/>
+    /// <remarks>The write lands as M2 falls; see <see cref="HgdSystemBus.PostWrite"/>.</remarks>
     public void Write(ushort address, byte value) =>
-        m_bus.Write(
+        m_bus.PostWrite(
             address: address,
             value: value
         );

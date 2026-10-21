@@ -22,6 +22,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_meshRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_shadowRaster;
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_glassRaster;
     // Whether every pipeline the tables need has been seen ready: all of the leased set but the views kernel, which a
     // frame waits for itself (SdfWorldTables.FrameWaiting).
     private bool m_ready;
@@ -41,6 +42,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     public GpuPassPipeline? MeshRaster => m_meshRaster?.Current;
     // The device's ready shadow cascade pipeline, or null before it has built.
     public GpuPassPipeline? ShadowRaster => m_shadowRaster?.Current;
+    // The device's ready glass raster pipeline, or null before it has built.
+    public GpuPassPipeline? GlassRaster => m_glassRaster?.Current;
 
     // Returns the ready set once the region-copy and mesh pass pipelines are ready too; the first call starts taking the
     // leases and every call until all have built returns null. A lease or build that failed rethrows its exception here, on the
@@ -63,6 +66,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_regionCopy = leases.RegionCopy;
             m_meshRaster = leases.MeshRaster;
             m_shadowRaster = leases.ShadowRaster;
+            m_glassRaster = leases.GlassRaster;
         }
         if (m_lease is null) {
             if (!m_acquire.IsPending) {
@@ -88,11 +92,12 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_regionCopy = leases.RegionCopy;
             m_meshRaster = leases.MeshRaster;
             m_shadowRaster = leases.ShadowRaster;
+            m_glassRaster = leases.GlassRaster;
         }
 
         m_ready = m_lease.PollRequired();
 
-        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_shadowRaster!.Poll() is null))
+        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_shadowRaster!.Poll() is null) || (m_glassRaster!.Poll() is null))
             ? null
             : m_lease
         );
@@ -129,6 +134,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         waited |= m_regionCopy!.WaitFinished(cancellationToken: cancellationToken);
         waited |= m_meshRaster!.WaitFinished(cancellationToken: cancellationToken);
         waited |= m_shadowRaster!.WaitFinished(cancellationToken: cancellationToken);
+        waited |= m_glassRaster!.WaitFinished(cancellationToken: cancellationToken);
 
         return waited;
     }
@@ -146,6 +152,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         m_meshRaster = null;
         m_shadowRaster?.Release();
         m_shadowRaster = null;
+        m_glassRaster?.Release();
+        m_glassRaster = null;
         m_refusal = null;
         m_refusedInputs = null;
     }
@@ -175,6 +183,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             RegionCopy: RegionCopy,
             Set: Current,
             ShadowRaster: ShadowRaster,
+            GlassRaster: GlassRaster,
             SetKernels: Current?.Kernels
         );
         TInputs inputs = default!;
@@ -217,7 +226,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
                 arg2: new SdfWorldPassPipelines(
                     MeshRaster: MeshRaster!,
                     RegionCopy: RegionCopy!,
-                    ShadowRaster: ShadowRaster!
+                    ShadowRaster: ShadowRaster!,
+                    GlassRaster: GlassRaster!
                 ),
                 arg3: inputs
             );
@@ -245,6 +255,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
                 RegionCopy = RegionCopy,
                 Set = Current,
                 ShadowRaster = ShadowRaster,
+                GlassRaster = GlassRaster,
                 SetKernels = Current?.Kernels,
             });
             m_refusedInputs = (inputsRead
@@ -257,7 +268,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, SdfKernelSet? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, GpuPassPipeline? GlassRaster, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
@@ -278,18 +289,22 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? meshRaster = null;
+        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? shadowRaster = null;
 
         try {
             regionCopy = catalog.RegionCopy.Acquire(device: device);
             meshRaster = catalog.MeshRaster.Acquire(device: device);
+            shadowRaster = catalog.MeshRaster.AcquireShadow(device: device);
 
             return new Leases(
                 MeshRaster: meshRaster,
                 RegionCopy: regionCopy,
                 Set: set,
-                ShadowRaster: catalog.MeshRaster.AcquireShadow(device: device)
+                ShadowRaster: shadowRaster,
+                GlassRaster: catalog.MeshRaster.AcquireGlass(device: device)
             );
         } catch {
+            shadowRaster?.Release();
             meshRaster?.Release();
             regionCopy?.Release();
             set.Dispose();
@@ -298,15 +313,16 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // The leases one acquire takes.
-    private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> ShadowRaster) {
+    private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> ShadowRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> GlassRaster) {
         public void Release() {
             Set.Dispose();
             RegionCopy.Release();
             MeshRaster.Release();
             ShadowRaster.Release();
+            GlassRaster.Release();
         }
     }
 }
-// The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass and the
-// shadow cascades' depth-only pass.
-internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ShadowRaster);
+// The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass, the
+// shadow cascades' depth-only pass and the glass pass.
+internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ShadowRaster, GpuPassPipeline GlassRaster);

@@ -985,6 +985,24 @@ public static partial class CreationCanonicalizer {
     // The clamp checks (inset against
     // the smallest local half-extent, depth against the full extent along face) reuse the same
     // SdfSolidGeometry.HalfExtent a valid panel's own emission reads, so a document that passes here emits cleanly.
+    // A glass shape bakes and draws apart from the creation's opaque shapes: a group it shares with an opaque shape would
+    // bake them as one mesh, which is glass or opaque whole, and a panel is a second-material face of the one shape.
+    private static void ValidateGlassShape(CreationDocument document, ShapeDocument shape, IReadOnlyList<ShapeDocument> shapes, List<DocumentValidationError> errors, int index) {
+        if (!document.IsGlassShape(shape: shape)) {
+            return;
+        }
+        if (shape.Panel is not null) {
+            errors.Add(item: new(Message: "a glass shape cannot carry a panel: a panel is an opaque face of the shape it insets.", Path: $"shapes[{index}].panel"));
+        }
+        if ((shape.Group ?? 0) is var group and not 0) {
+            for (var other = 0; (other < shapes.Count); other++) {
+                if ((other != index) && ((shapes[other].Group ?? 0) == group) && !document.IsGlassShape(shape: shapes[other])) {
+                    errors.Add(item: new(Message: $"a glass shape cannot share group {group} with the opaque shape '{shapes[other].Name?.Value ?? other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}': a group bakes as one mesh, which is glass or opaque whole.", Path: $"shapes[{index}].group"));
+                    break;
+                }
+            }
+        }
+    }
     private static void ValidatePanel(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         if (shape.Panel is not { } panel) {
             return;
@@ -1499,6 +1517,14 @@ public static partial class CreationCanonicalizer {
             ValidateUnitRange(value: entry.Sheen, name: "sheen", errors: errors, path: $"palette[{i}].sheen");
             ValidateUnitRange(value: entry.Metal, name: "metal", errors: errors, path: $"palette[{i}].metal");
             ValidateUnitRange(value: entry.Coat, name: "coat", errors: errors, path: $"palette[{i}].coat");
+            if (entry.Glass is { } glass) {
+                if (!float.IsFinite(f: glass.Depth) || (glass.Depth <= 0f)) {
+                    errors.Add(item: new(Message: "glass depth must be finite and positive: the thickness over which light takes on the slot's color.", Path: $"palette[{i}].glass.depth"));
+                }
+                if ((glass.Ior is { } ior) && (!float.IsFinite(f: ior) || (ior < SdfGlass.MinIor) || (ior > SdfGlass.MaxIor))) {
+                    errors.Add(item: new(Message: $"glass ior must be finite and in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}].", Path: $"palette[{i}].glass.ior"));
+                }
+            }
             ValidatePaletteShading(
                 entry: entry,
                 errors: errors,
@@ -2412,6 +2438,7 @@ public static partial class CreationCanonicalizer {
                 shape: shape
             );
             ValidateWarpFacets(errors: errors, index: i, shape: shape);
+            ValidateGlassShape(document: document, errors: errors, index: i, shape: shape, shapes: document.Shapes!);
             if ((shape.Exponent is { } exponent) && ((shape.Type != SdfSolidPrimitive.Superellipsoid) || !float.IsFinite(f: exponent) || (exponent < SdfProgramBuilder.MinSuperellipsoidExponent) || (exponent > SdfProgramBuilder.MaxSuperellipsoidExponent))) {
                 errors.Add(item: new(Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}].", Path: $"shapes[{i}].exponent"));
             }

@@ -85,8 +85,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private bool m_glyphAtlasInitialized;
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
     // The last captured frame's mesh draw count, which MeshDrawCount reads from another thread: the count, never the list,
-    // which its producer may rewrite in place for the next frame.
+    // which its producer may rewrite in place for the next frame; and how many of those draws are glass.
     private int m_meshDrawCount;
+    private int m_glassDrawCount;
 
     // Each view's signature at its latest render, or null before one: the cadence compares this frame's against it.
     private ulong?[] m_renderedSignatures = [];
@@ -202,6 +203,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
+    /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass draws (<see cref="SdfMeshDraw.Glass"/>), which
+    /// the glass pass draws over the opaque image.</summary>
+    public int GlassDrawCount => Volatile.Read(location: ref m_glassDrawCount);
     /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
     /// first frame captured and packed, and its views kernel built. It is false again after a device loss until the
     /// rebuilt tables are, and while a captured frame waits for a views kernel that is still building or was refused,
@@ -744,10 +748,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_frozenFrame = frame;
         }
         m_programPending |= frame.ProgramChanged;
+
+        var glass = 0;
+
+        foreach (var draw in frame.MeshDraws) {
+            if (draw.Glass) { glass++; }
+        }
         Volatile.Write(
             location: ref m_meshDrawCount,
             value: frame.MeshDraws.Count
         );
+        Volatile.Write(location: ref m_glassDrawCount, value: glass);
     }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until
     // it completes this returns false and no view renders, so a cold driver cache delays the first frame rather than
@@ -764,6 +775,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
                 shadowRaster: passes.ShadowRaster,
+                glassRaster: passes.GlassRaster,
                 meshRaster: passes.MeshRaster,
                 options: inputs.Options,
                 pipelines: pipelines,

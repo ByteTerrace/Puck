@@ -83,6 +83,7 @@ public sealed class SdfKernelSet {
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.Sky => "sdf-sky-runs",
         SdfKernel.Composite => "sdf-composite",
+        SdfKernel.Glass => "sdf-glass",
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
@@ -103,6 +104,7 @@ public sealed class SdfKernelSet {
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
+            SdfKernel.Glass => SdfWorldInterfaces.GlassParameters.Layout,
             SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };

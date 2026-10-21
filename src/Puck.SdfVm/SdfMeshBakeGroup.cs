@@ -35,6 +35,11 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     /// <summary>Gets the instances a static group's run holds, from <c>-(Selector + 1)</c> on.</summary>
     public int Instances { get; internal set; } = 1;
+    /// <summary>Gets whether the group's shapes all carry glass materials (<see cref="SdfProgram.IsGlassRange"/>): its
+    /// mesh draws in the glass pass over the opaque image rather than in the mesh pass, casts no shadow and lights no
+    /// probe. A glass instance never bakes with an opaque one, so a static group is glass or opaque whole; a dynamic
+    /// group is glass only while every instance riding its slot is, and the world group never is.</summary>
+    public bool Glass { get; private set; }
     /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, and the finest
     /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice.</summary>
     public List<(Vector3 Center, float Radius, float Detail)> Members { get; } = [];
@@ -150,6 +155,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             var center = (instance.IsDynamic
                 ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation))))
                 : instance.Center);
+            var glass = program.IsGlassRange(end: instance.End, first: instance.First);
             T group;
 
             if (instance.IsDynamic) {
@@ -158,13 +164,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
                     group.Low = (center - new Vector3(value: radius));
                     group.High = (center + new Vector3(value: radius));
+                    group.Glass = glass;
                     bySlot.Add(key: instance.Slot, value: group);
                     groups.Add(item: group);
                 } else {
                     group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
                     group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
+                    group.Glass &= glass;
                 }
-            } else if (instance.BakesWithPrevious && (staticRun is { } run) && ((-(run.Selector + 1) + run.Instances) == index)) {
+            } else if (instance.BakesWithPrevious && (staticRun is { } run) && !glass && !run.Glass && ((-(run.Selector + 1) + run.Instances) == index)) {
                 group = run;
                 group.Instances++;
                 group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
@@ -173,6 +181,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group = create(arg1: -(index + 1), arg2: false);
                 group.Low = (instance.Center - new Vector3(value: radius));
                 group.High = (instance.Center + new Vector3(value: radius));
+                group.Glass = glass;
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {

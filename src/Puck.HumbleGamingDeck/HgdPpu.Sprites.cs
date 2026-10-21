@@ -162,7 +162,7 @@ public sealed partial class HgdPpu {
         }
     }
     // Dots 257-320 fetch the eight sprites of the next line, eight dots apiece: two nametable fetches the PPU discards,
-    // then the pattern bytes. A slot evaluation left empty holds $FF, whose fetch the board still sees.
+    // then the pattern bytes, whose addresses lead their reads by a dot as the background's do. A slot evaluation left empty holds $FF, whose fetch the board still sees.
     private void FetchSprites(int dot) {
         var slot = ((dot - 257) >> 3);
         var phase = (dot - 257) & 7;
@@ -191,9 +191,6 @@ public sealed partial class HgdPpu {
                 m_oamBus = m_secondaryOam[(entry + 3)];
                 m_nextSpriteX[slot] = m_oamBus;
                 _ = LatchFetch();
-
-                break;
-            case 4:
                 PutAddress(address: SpritePatternAddress(slot: slot));
 
                 break;
@@ -202,13 +199,10 @@ public sealed partial class HgdPpu {
                     slot: slot,
                     value: LatchFetch()
                 );
-
-                break;
-            case 6:
                 PutAddress(address: ((ushort)(SpritePatternAddress(slot: slot) + 8)));
 
                 break;
-            default:
+            case 7:
                 m_nextSpriteHigh[slot] = SpritePattern(
                     slot: slot,
                     value: LatchFetch()

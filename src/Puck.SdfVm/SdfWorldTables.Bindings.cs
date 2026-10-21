@@ -104,7 +104,8 @@ public sealed partial class SdfWorldTables {
     // already bind them.
     internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters, ref IGpuBuffer? bound) =>
         WriteMeshBuffer(bound: ref bound, buffer: counters, member: ShaderWorkCounters.Buffer, set: set);
-    private void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
+    // Writes a buffer at a member of the mesh interface in a mesh pass set, when the set does not already bind it.
+    internal void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
         if (ReferenceEquals(objA: bound, objB: buffer)) {
             return;
         }

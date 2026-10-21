@@ -19,6 +19,7 @@ public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-brick-bake", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
         "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake", "sdf-mesh-pyramid",
+        "sdf-glass",
     ];
 
     private static WorkCounterSet Work() =>

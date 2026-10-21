@@ -310,7 +310,7 @@ public sealed partial class SdfMeshPathBake {
                         ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
 
-                    m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic });
+                    m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic, Glass = group.Glass });
                 }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(

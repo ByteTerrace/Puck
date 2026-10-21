@@ -84,10 +84,11 @@ public sealed class SdfMeshIrradianceScene {
 
         return new SdfMeshIrradianceScene(v0: v0, e1: e1, e2: e2, normals: normals, materials: materials);
     }
-    /// <summary>Returns whether a draw belongs to the static scene: one not dynamic.</summary>
+    /// <summary>Returns whether a draw belongs to the static scene: one neither dynamic nor glass. Glass neither blocks
+    /// nor bounces the probes' rays: light reaches what lies behind it untinted.</summary>
     /// <param name="draw">The draw.</param>
-    /// <returns><see langword="true"/> for a static mesh draw.</returns>
-    public static bool IsStatic(in SdfMeshDraw draw) => !draw.IsDynamic;
+    /// <returns><see langword="true"/> for a static, opaque mesh draw.</returns>
+    public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
     private SdfMeshIrradianceScene(Vector3[] v0, Vector3[] e1, Vector3[] e2, Vector3[] normals, int[] materials) {
         var count = v0.Length;

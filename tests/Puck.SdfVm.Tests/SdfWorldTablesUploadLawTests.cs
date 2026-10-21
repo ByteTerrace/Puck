@@ -1025,6 +1025,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         private SdfWorldPipelines m_pipelines = null!;
         private GpuPassPipeline m_shadowRaster = null!;
+        private GpuPassPipeline m_glassRaster = null!;
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
@@ -1056,6 +1057,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
             m_shadowRaster.Dispose();
+            m_glassRaster.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
         public void Move(int slot) {
@@ -1082,6 +1084,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
             m_shadowRaster.Dispose();
+            m_glassRaster.Dispose();
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
@@ -1151,6 +1154,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
+            m_glassRaster = SdfTestPipelines.GlassRaster(
+                device: Gpu,
+                ledger: ledger
+            );
             // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
             m_pipelines = ((m_brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
@@ -1176,6 +1183,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 ),
                 pipelines: m_pipelines,
                 shadowRaster: m_shadowRaster,
+                glassRaster: m_glassRaster,
                 meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!
             );

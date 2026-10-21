@@ -93,10 +93,14 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   layout and its snapshot order in one `HgdBoardMemory`; a new board does the
   same. Board timing comes only from `IHgdMapper.ObserveM2` and
   `ObservePpuAddress`: MMC1's consecutive-cycle write rule counts M2 falls, and
-  MMC3's counter clocks on a PPU A12 rise after three M2 falls with A12 low. A
+  MMC3's counter clocks on a PPU A12 rise after three whole low M2 cycles. A
   board's laws live in `BoardLawTests`, and its fixture joins
   `PostMachine.Fixtures`, which the determinism, fork and mid-instruction replay
-  stages all run. A Deck program that clears the CPU's I flag inhibits the APU
+  stages all run. A Deck cycle's transaction runs at the read point mid-M2 and
+  its write lands as M2 falls, with the interrupt sample; the `blargg-suites`
+  and `accuracy-coin` stages are the judge of Deck timing (owner ruling in the
+  [Deck manual](../../../docs/emulation/hgd/README.md#how-accuracy-is-judged)),
+  never another emulator or a game's look. A Deck program that clears the CPU's I flag inhibits the APU
   frame IRQ (`$4017 = $40`) first, or the shared IRQ line never drops.
 - **GBA multiplayer SIOCNT has an unmodeled ready line.** `AgbSerialController.PackSioControl`
   does not derive the SD/SI bits from cable-partner presence, and

@@ -213,153 +213,166 @@ public sealed partial class WorldStampPool {
         var textApart = (hasText && TextApart(document: document!));
         var coupled = (hasText && !textApart);
 
-        if (coupled) {
-            _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin))
-                .PushField(compose: SdfBlendOp.Union);
-        }
-
         // Pass 1 — one tight dynamic instance per authored ungrouped shape, unless text couples the whole placement.
         // Slot addresses remain stable even
-        // though unused shapes emit nothing. The probe still emits every slot with the full modifier envelope.
-        for (var index = 0; (index < WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
-            var placed = ((index < shapes.Count)
-                ? shapes[index]
-                : null
-            );
-
-            if (!probeWorstCase && (placed is null)) {
-                continue;
+        // though unused shapes emit nothing. The probe still emits every slot with the full modifier envelope. A glass
+        // shape keeps its own instance whatever couples the rest, so it bakes and draws apart: under a coupled
+        // placement the glass shapes emit first (round 0), before the coupled instance opens for the opaque ones.
+        for (var round = 0; (round < 2); round++) {
+            if (round == 1) {
+                if (!coupled) { break; }
+                _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin))
+                    .PushField(compose: SdfBlendOp.Union);
             }
 
-            if (placed is { Group: not null and not 0 }) {
-                continue; // Pass 2 — the shape emits inside its group's instance.
+            for (var index = 0; (index < WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
+                var placed = ((index < shapes.Count)
+                    ? shapes[index]
+                    : null
+                );
+    
+                if (!probeWorstCase && (placed is null)) {
+                    continue;
+                }
+    
+                if (placed is { Group: not null and not 0 }) {
+                    continue; // Pass 2 — the shape emits inside its group's instance.
+                }
+                if ((hidden is not null) && hidden[index]) {
+                    continue;
+                }
+    
+                var glass = ((placed is not null) && (document is not null) && document.IsGlassShape(shape: placed));
+                var ownInstance = (!coupled || glass);
+    
+                // Uncoupled, every shape emits in round 0; coupled, the glass shapes do and the rest wait for round 1.
+                if ((round == 0) != (ownInstance)) {
+                    continue;
+                }
+    
+                var slot = ((rootSlot + 1) + index);
+                var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
+                var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
+                var panelMaterial = ((placed?.Panel is { } placedPanel)
+                    ? paletteIds[(placedPanel.Material % paletteIds.Length)]
+                    : 0);
+                var active = (probeWorstCase || (placed is not null));
+                // A domain-bearing shape rides its own per-shape slot too (see EmitShape's remarks), but that slot
+                // carries its parent's DELTA FRAME, not the shape's composed pose: its geometry sits at its rest pose
+                // inside that frame and its fold images lie wherever the domain ops carry it from the frame's origin.
+                // So its bound is centred on the slot (the frame origin, which travels with the parent) with the radius
+                // RenderReach charges the static stamper — rest offset plus fold displacement, in placement units, plus
+                // the primitive's own reach and field ops — never the tight per-shape sphere, which assumes the primitive
+                // sits AT the slot. The probe takes the creation-wide reach here (the radius costs no word either way).
+                var domain = (probeWorstCase
+                    ? ShapeDomainOps.ProbeWorstCase
+                    : placed?.Domain
+                );
+                var hasDomain = (domain is { Count: > 0 });
+                // Convert the radius to creation units before composing the inverse warp bounds.
+                float WarpedReach(float primitiveReach) => (ShapeWarpReach.Expand(
+                    ((primitiveReach / placementScale) + (placed?.Cells?.PrimitiveReachPadding(placed.Scale, placed.Flare) ?? 0f)),
+                    (probeWorstCase ? new(ShapeFlareDocument.MaxAmount, ShapeFlareDocument.MaxBulge, 1f, StartScale: ShapeFlareDocument.MaxStartScale) : placed?.Flare),
+                    (probeWorstCase ? new(ShapeDocument.MaxShear, ShapeDocument.MaxShear, ShapeDocument.MaxShear) : placed?.Shear),
+                    (probeWorstCase ? ShapeWarpReach.ProbePointReach : ((placed is null) ? 0f : ShapeWarpReach.PointReach(shape: placed)))) * placementScale);
+    
+                // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
+                // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
+                // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
+                // and per SAMPLE by the interpreter's influence skip: a naive 0.9 x max(scale) does not cover
+                // a unit sphere, let alone a box's corners — the halo hid the deficit at tile
+                // granularity, and the per-sample skip exposed it on every shape of the avatar.
+                // A Sweep carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry
+                // creation-unit dimensions — see SdfSolidPrimitive.Sweep's remarks); a panel is refused on it, so
+                // panelRaise never applies.
+                var tightPrimitiveReach = ((placed?.Type == SdfSolidPrimitive.Sweep)
+                    ? ((placed.Curve?.Reach() ?? 0f) * scale.X)
+                    : SdfSolidGeometry.Reach(
+                    type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
+                    scale: scale,
+                    lift: (placed?.Lift ?? SdfLift.Extrude),
+                    // Depth is a creation-unit value; the raise it adds to this world-unit bound scales with the placement.
+                    panelRaise: ((placed?.Panel is { Depth: < 0f } raisedPanel)
+                    ? (-raisedPanel.Depth * placementScale)
+                    : 0f)
+                ));
+                var dilateWorld = ((placed?.Dilate ?? 0f) * placementScale);
+                // A sine relief carries the surface outward by its amplitude, as a dilation does.
+                var onionWorld = (((placed?.Onion ?? 0f) + (probeWorstCase ? ShapeDisplaceDocument.MaxAmplitude : (placed?.Displace?.Reach ?? 0f))) * placementScale);
+                // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset) before
+                // it can ever win the Union race against this same shape's plain instance — reserved unconditionally
+                // under the probe, since a live slot's real Trims are not known until content loads.
+                var trimMargin = ((probeWorstCase || (placed?.Trims is { Count: > 0 }))
+                    ? (ShapeTrimDocument.MaxInset * placementScale)
+                    : 0f);
+                var boundRadius = ((hasDomain
+                    ? (probeWorstCase
+                        ? (reach + GroupBoundMargin)
+                        : (((((placed!.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) * placementScale)
+                            + WarpedReach(primitiveReach: tightPrimitiveReach))
+                            + dilateWorld) + onionWorld))
+                    : ((WarpedReach(primitiveReach: tightPrimitiveReach) + dilateWorld) + onionWorld)
+                ) + trimMargin);
+    
+                if (ownInstance) {
+                    _ = builder.BeginInstanceDynamic(
+                    slot: slot,
+                    boundOffset: Vector3.Zero,
+                    boundRadius: boundRadius,
+                    active: active
+                );
+                }
+                EmitShape(
+                    bend: (placed?.Bend ?? 0f),
+                    builder: builder,
+                    detail: (placed?.Detail ?? false),
+                    // Field ops act on the running WORLD-space accumulator directly, never re-multiplied by a chain's
+                    // own Scale op the way a primitive's baked-local rounding/chamfer is (below), so they take the
+                    // placement scale unconditionally, domain-carrying shape or not.
+                    dilate: ((placed?.Dilate ?? 0f) * placementScale),
+                    domain: domain,
+                    flare: placed?.Flare,
+                    shear: placed?.Shear,
+                    bumps: placed?.Bumps,
+                    erode: placed?.Erode,
+                    cells: placed?.Cells,
+                    warp: placed?.Warp,
+                    displace: placed?.Displace,
+                    elongate: placed?.Elongate,
+                    steps: placed?.Steps,
+                    morph: placed?.Morph,
+                    material: material,
+                    onion: ((placed?.Onion ?? 0f) * placementScale),
+                    panel: placed?.Panel,
+                    panelMaterial: panelMaterial,
+                    placementScale: placementScale,
+                    probeWorstCase: probeWorstCase,
+                    rootSlot: rootSlot,
+                    // A domain-bearing shape's chain carries the placement scale as a Scale op (EmitShape), so its
+                    // primitive is emitted at the shape's OWN scale; every other shape bakes the product.
+                    scale: (hasDomain
+                    ? (placed?.Scale ?? Vector3.One)
+                    : scale),
+                    shapePosition: (placed?.Position.Value ?? default),
+                    shapeRotation: (placed?.Rotation.Value ?? default),
+                    slot: slot,
+                    twist: (placed?.Twist ?? 0f),
+                    type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
+                    taper: (placed?.Taper ?? 0.5f), profile: placed?.Profile,
+                    lift: (placed?.Lift ?? SdfLift.Extrude),
+                    // Creation-unit radii follow the primitive's own units: baked into world units with `scale`, left
+                    // alone under a domain shape's Scale op — the same rule Inset/Depth take, and the static stamper's
+                    // chain, which scales both through its Scale(transform.Scale) op.
+                    rounding: ((placed?.Rounding ?? 0f) * (hasDomain ? 1f : placementScale)),
+                    chamfer: ((placed?.Chamfer ?? 0f) * (hasDomain ? 1f : placementScale)),
+                    trims: placed?.Trims,
+                    allShapes: shapes,
+                    paletteIds: paletteIds,
+                    exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: placed?.Curve?.Parameters()
+                );
+                if (ownInstance) { _ = builder.EndInstance(); }
             }
-            if ((hidden is not null) && hidden[index]) {
-                continue;
-            }
-
-            var slot = ((rootSlot + 1) + index);
-            var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
-            var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
-            var panelMaterial = ((placed?.Panel is { } placedPanel)
-                ? paletteIds[(placedPanel.Material % paletteIds.Length)]
-                : 0);
-            var active = (probeWorstCase || (placed is not null));
-            // A domain-bearing shape rides its own per-shape slot too (see EmitShape's remarks), but that slot
-            // carries its parent's DELTA FRAME, not the shape's composed pose: its geometry sits at its rest pose
-            // inside that frame and its fold images lie wherever the domain ops carry it from the frame's origin.
-            // So its bound is centred on the slot (the frame origin, which travels with the parent) with the radius
-            // RenderReach charges the static stamper — rest offset plus fold displacement, in placement units, plus
-            // the primitive's own reach and field ops — never the tight per-shape sphere, which assumes the primitive
-            // sits AT the slot. The probe takes the creation-wide reach here (the radius costs no word either way).
-            var domain = (probeWorstCase
-                ? ShapeDomainOps.ProbeWorstCase
-                : placed?.Domain
-            );
-            var hasDomain = (domain is { Count: > 0 });
-            // Convert the radius to creation units before composing the inverse warp bounds.
-            float WarpedReach(float primitiveReach) => (ShapeWarpReach.Expand(
-                ((primitiveReach / placementScale) + (placed?.Cells?.PrimitiveReachPadding(placed.Scale, placed.Flare) ?? 0f)),
-                (probeWorstCase ? new(ShapeFlareDocument.MaxAmount, ShapeFlareDocument.MaxBulge, 1f, StartScale: ShapeFlareDocument.MaxStartScale) : placed?.Flare),
-                (probeWorstCase ? new(ShapeDocument.MaxShear, ShapeDocument.MaxShear, ShapeDocument.MaxShear) : placed?.Shear),
-                (probeWorstCase ? ShapeWarpReach.ProbePointReach : ((placed is null) ? 0f : ShapeWarpReach.PointReach(shape: placed)))) * placementScale);
-
-            // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
-            // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
-            // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
-            // and per SAMPLE by the interpreter's influence skip: a naive 0.9 x max(scale) does not cover
-            // a unit sphere, let alone a box's corners — the halo hid the deficit at tile
-            // granularity, and the per-sample skip exposed it on every shape of the avatar.
-            // A Sweep carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry
-            // creation-unit dimensions — see SdfSolidPrimitive.Sweep's remarks); a panel is refused on it, so
-            // panelRaise never applies.
-            var tightPrimitiveReach = ((placed?.Type == SdfSolidPrimitive.Sweep)
-                ? ((placed.Curve?.Reach() ?? 0f) * scale.X)
-                : SdfSolidGeometry.Reach(
-                type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                scale: scale,
-                lift: (placed?.Lift ?? SdfLift.Extrude),
-                // Depth is a creation-unit value; the raise it adds to this world-unit bound scales with the placement.
-                panelRaise: ((placed?.Panel is { Depth: < 0f } raisedPanel)
-                ? (-raisedPanel.Depth * placementScale)
-                : 0f)
-            ));
-            var dilateWorld = ((placed?.Dilate ?? 0f) * placementScale);
-            // A sine relief carries the surface outward by its amplitude, as a dilation does.
-            var onionWorld = (((placed?.Onion ?? 0f) + (probeWorstCase ? ShapeDisplaceDocument.MaxAmplitude : (placed?.Displace?.Reach ?? 0f))) * placementScale);
-            // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset) before
-            // it can ever win the Union race against this same shape's plain instance — reserved unconditionally
-            // under the probe, since a live slot's real Trims are not known until content loads.
-            var trimMargin = ((probeWorstCase || (placed?.Trims is { Count: > 0 }))
-                ? (ShapeTrimDocument.MaxInset * placementScale)
-                : 0f);
-            var boundRadius = ((hasDomain
-                ? (probeWorstCase
-                    ? (reach + GroupBoundMargin)
-                    : (((((placed!.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) * placementScale)
-                        + WarpedReach(primitiveReach: tightPrimitiveReach))
-                        + dilateWorld) + onionWorld))
-                : ((WarpedReach(primitiveReach: tightPrimitiveReach) + dilateWorld) + onionWorld)
-            ) + trimMargin);
-
-            if (!coupled) {
-                _ = builder.BeginInstanceDynamic(
-                slot: slot,
-                boundOffset: Vector3.Zero,
-                boundRadius: boundRadius,
-                active: active
-            );
-            }
-            EmitShape(
-                bend: (placed?.Bend ?? 0f),
-                builder: builder,
-                detail: (placed?.Detail ?? false),
-                // Field ops act on the running WORLD-space accumulator directly, never re-multiplied by a chain's
-                // own Scale op the way a primitive's baked-local rounding/chamfer is (below), so they take the
-                // placement scale unconditionally, domain-carrying shape or not.
-                dilate: ((placed?.Dilate ?? 0f) * placementScale),
-                domain: domain,
-                flare: placed?.Flare,
-                shear: placed?.Shear,
-                bumps: placed?.Bumps,
-                erode: placed?.Erode,
-                cells: placed?.Cells,
-                warp: placed?.Warp,
-                displace: placed?.Displace,
-                elongate: placed?.Elongate,
-                steps: placed?.Steps,
-                morph: placed?.Morph,
-                material: material,
-                onion: ((placed?.Onion ?? 0f) * placementScale),
-                panel: placed?.Panel,
-                panelMaterial: panelMaterial,
-                placementScale: placementScale,
-                probeWorstCase: probeWorstCase,
-                rootSlot: rootSlot,
-                // A domain-bearing shape's chain carries the placement scale as a Scale op (EmitShape), so its
-                // primitive is emitted at the shape's OWN scale; every other shape bakes the product.
-                scale: (hasDomain
-                ? (placed?.Scale ?? Vector3.One)
-                : scale),
-                shapePosition: (placed?.Position.Value ?? default),
-                shapeRotation: (placed?.Rotation.Value ?? default),
-                slot: slot,
-                twist: (placed?.Twist ?? 0f),
-                type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                taper: (placed?.Taper ?? 0.5f), profile: placed?.Profile,
-                lift: (placed?.Lift ?? SdfLift.Extrude),
-                // Creation-unit radii follow the primitive's own units: baked into world units with `scale`, left
-                // alone under a domain shape's Scale op — the same rule Inset/Depth take, and the static stamper's
-                // chain, which scales both through its Scale(transform.Scale) op.
-                rounding: ((placed?.Rounding ?? 0f) * (hasDomain ? 1f : placementScale)),
-                chamfer: ((placed?.Chamfer ?? 0f) * (hasDomain ? 1f : placementScale)),
-                trims: placed?.Trims,
-                allShapes: shapes,
-                paletteIds: paletteIds,
-                exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                curve: placed?.Curve?.Parameters()
-            );
-            if (!coupled) { _ = builder.EndInstance(); }
         }
 
         // Pass 2 — one instance per blend group. A group sharing one rigid animation delta can use a member's

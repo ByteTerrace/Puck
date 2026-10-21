@@ -84,6 +84,25 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: (tainted ? 0u : (preceding + 1u)), actual: rig.HistoryFrames());
         Assert.Null(@object: rig.Passes.TaintOf(instance: "world"));
     }
+    // The glass fragment (SdfWorldPackage.WithGlass) adds passes between views and the resolve; a capture's discard
+    // must leave its renders as clean as the plain fragment's, and a capture of it must complete.
+    [Fact]
+    public void ACaptureOfTheGlassFragmentDiscardsTaintedHistoryAndCompletes() {
+        using var rig = new TemporalRig(views: 1, feed: true, glass: true, temporal: true);
+
+        rig.Produce();
+        Assert.Contains(expectedSubstring: SdfWorldPackage.Parts.GlassShade, actualString: string.Join(separator: ' ', values: rig.Passes.FragmentOf(instance: "world")!.Passes.Select(selector: static pass => pass.Name)), comparisonType: StringComparison.Ordinal);
+        Assert.NotNull(@object: rig.Passes.TaintOf(instance: "world"));
+        rig.Filling = true;
+
+        var request = new FrameCaptureRequest(path: "unused-glass-capture-law.png");
+
+        rig.Runtime.RequestCapture(request: request);
+        rig.Produce();
+        Assert.Null(@object: rig.Passes.TaintOf(instance: "world"));
+        Assert.Null(@object: rig.Runtime.UnservedCaptureReason);
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()) || request.Completion.IsCompleted);
+    }
     // A capture holds the frame it serves, and every render of the held frame under the motion view reads the motion
     // that frame was presented with: its previous view stays valid and the tables keep both pose revisions, rather than
     // settling to still on the hold's first upload. The hold's end settles them as a still frame does.
@@ -514,9 +533,11 @@ public sealed partial class SdfWorldPassesLawTests {
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false, bool glass = false) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
+
+            if (glass) { frame = frame with { Program = GlassProgram() }; }
 
             if (lights is not null) { frame = frame with { Lights = lights }; }
 

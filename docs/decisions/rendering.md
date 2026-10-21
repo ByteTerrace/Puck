@@ -715,7 +715,11 @@ screen glass is exactly its picture (the owner's ruling).** A screen row's half
 extents are the source's pixels times the device's pixel pitch, the pitch
 carrying the pixel aspect (a 4:3 tube for a 256 by 240 console gives 8:7), and
 the bezel lies outside the glass. Because the camera alone sets how large the
-glass appears, no object is ever resized for a window.
+glass appears, no object is ever resized for a window. A device on display may
+be shown larger than life so it reads from the walking distance: the debug
+world's handhelds stand at 1.5 times their real size (the owner's ruling),
+modelled in their real millimetres and scaled whole by their placements, the
+pitch scaling with them, so the glass is still exactly the picture.
 
 **A screen lit by external content keeps lighting the room live (the owner's
 ruling), and captures complete anyway.** A desktop or camera screen's glow

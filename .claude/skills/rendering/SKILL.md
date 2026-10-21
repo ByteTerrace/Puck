@@ -43,7 +43,11 @@ the cascades) → `mesh` (graphics) → `pyramid` (the occlusion's depth pyramid
 from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
-`resolve` (reduced or temporal views) → `sky` → `composite`. The surface and
+`resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
+program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
+`glass` (graphics, the glass draws alone) → `glass-shade` after `views`
+(`SdfWorldPackage.WithGlass`), and every later pass reads `glassLit` in the
+lit image's place. The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
@@ -60,6 +64,18 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   the occlusion live.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **Glass is a material, a group and a pass, never a blend.** A palette slot's
+  `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
+  their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances
+  apart from the opaque ones) and draw in the glass raster pass over the opaque
+  image (`passes/sdf-mesh-glass.frag.hlsl`, `passes/sdf-glass.comp.hlsl`). The
+  mesh pass, the cascades and the irradiance trace skip glass draws
+  (`SdfMeshDraw.Glass`). Thickness is the glass sums, signed ray distances the
+  raster accumulates with atomics (`frame/sdf-glass.hlsli`): never read a glass
+  shape's thickness from its mesh. One glass layer a pixel; glass through glass
+  is the opaque image. The handbook's
+  [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
+  states the limits.
 - **Camera history uses the camera's sample grid.** The first recorder can be
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's

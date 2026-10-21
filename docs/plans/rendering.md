@@ -2186,8 +2186,11 @@ foliage, and hair stay out until a scene shows the need. When one returns,
 field evaluation is priced as many operations with no zero-penetration
 guarantee assumed, import is a bounded subset that follows the procedural
 geometry proof, and static geometry comes before skinning. Reflections beyond
-one glossy bounce, volumes, and transparency remain distinct contracts after
-opaque visibility,
+one glossy bounce and volumes remain distinct contracts after opaque
+visibility; transparency is one, landed as the glass passes
+([glass after the opaque image](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image):
+one glass layer a pixel after the opaque image, with its open items under
+[open items](open-items.md)),
 and facial deformation and richer materials remain separate measured slices.
 Every representation preserves identity, transforms, authority, and editing
 relationships. Transient aliasing, output-selected specialization,
@@ -4704,11 +4707,13 @@ resolution, and stay there.
   reprojected depth disagrees beyond a relative tolerance, is rejected, and the
   pixel is resolved from the current frame alone. Surviving history is
   rectified against the current frame's neighbourhood before it blends.
-- **Content that motion cannot describe is reactive.** The views pass, the only
-  writer, writes each pixel's reactivity into a one-channel `reactivity` image
+- **Content that motion cannot describe is reactive.** The views pass writes
+  each pixel's reactivity into a one-channel `reactivity` image
   of its own at the render extent, never into the working color's alpha, which
   carries coverage: a screen's picture is fully reactive and nothing else is,
-  emission included (`passes/sdf-light-stage.hlsli`). `resolve`
+  emission included (`passes/sdf-light-stage.hlsli`); in a view with glass the
+  glass pass raises it where a glass pixel's refracted read comes from a pixel
+  away or more (`passes/sdf-glass.comp.hlsl`). `resolve`
   weights history down by it for color and coverage alike, and consumes it:
   nothing after `resolve` reads it, and a view with reconstruction off writes
   none. The composite alone integrates bounded volumes, after `resolve`, so a
@@ -5000,7 +5005,8 @@ counted rows recorded in the same change.
      clips it to the neighbourhood's YCoCg box, widened to a sub-pixel feature
      the pixel remembers for one period, and caps its weight at eight samples,
      thirty-two while it carries a feature; `reactivity`, written by `views`
-     alone (a screen's picture is fully reactive), lowers that weight.
+     (a screen's picture is fully reactive) and raised by the glass pass where
+     a glass pixel's refracted read comes from elsewhere, lowers that weight.
      An epoch's first frame, and any pixel whose history is rejected, is the
      spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
      one period after its last change. `place` sharpens a source at its rect's

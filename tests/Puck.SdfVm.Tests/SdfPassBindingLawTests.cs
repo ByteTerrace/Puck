@@ -18,12 +18,14 @@ public sealed class SdfPassBindingLawTests {
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.
+    // The glass shading pass lights its highlights from the lights table, reflects the environment map and reads the
+    // atmosphere's lanes of the sky block.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, ViewsKernels),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Glass, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, SdfKernel.Glass, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, SdfKernel.Glass, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>
