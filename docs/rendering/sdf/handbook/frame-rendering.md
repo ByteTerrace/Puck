@@ -555,9 +555,12 @@ demands nothing of its writer, and device loss starts from none.
   surface transport, two words.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
-extent, which only the resolve reads: one where a screen covers the pixel, and,
-since the material model cannot tell steady emission from animated, the share of
-the pixel's color it emits after material layers.
+extent, which only the resolve reads: one where a display screen covers the pixel
+(an opening, a portal's window, is zero and keeps its history like any surface),
+and, since the material model cannot tell steady emission from animated, the
+share of the pixel's color it emits after material layers. Under a temporal view
+a screen reads its image along the pixel's unjittered ray, so the image holds
+still while the jitter moves.
 Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
@@ -575,7 +578,10 @@ spatial path at this frame's sample grid and its history restarts. Surviving
 history is clamped component by component to the 3x3's YCoCg box, so correcting
 chroma leaves an already valid luminance alone, including when a chroma interval
 has zero width. It is weighted down by the reactivity and joined by this frame's
-samples. The transport history is clamped to the 3x3's
+samples. A reactive pixel shows the spatial path by its reactivity, on the
+unjittered grid, whatever weight it gathered: this frame's samples alone gather a
+weight that swings about one sample's as the jitter moves, and blending by it
+would switch a whole screen between the two filters frame by frame. The transport history is clamped to the 3x3's
 range, as coverage is, and joined with the same weights.
 Non-finite history colors or transports are rejected before clipping. History
 writes stay within the half-float range; a non-finite accumulation stores zero

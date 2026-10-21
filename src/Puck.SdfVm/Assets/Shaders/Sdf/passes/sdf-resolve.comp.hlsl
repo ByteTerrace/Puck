@@ -15,7 +15,8 @@
 //   that pixel's center) matches no 3x3 tap's identity within SdfHistoryDepthTolerance of its ray distance; the pixel then shows the spatial path at this
 //   frame's sample grid and its history restarts from this frame's samples;
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
-//   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through.
+//   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through, and a
+//   reactive pixel shows it by its reactivity.
 // The first frame of an epoch reads no history and writes the spatial path's color and transport word, computed at the
 // one site below that both paths run, so it is the spatial path's frame exactly. Where the output has the render grid's
 // extent and no jitter, each pixel is its render sample copied whole, and its transport word carries that sample's ray
@@ -157,15 +158,17 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
 }
 
 // The temporal path: this frame's 3x3 samples joined by the history the pixel's motion reaches, which it writes back.
-// `accepted` says the history survived, and `total` is the weight the mean `accumulated` (and its transport) gathered.
-void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out float total, out float4 accumulated, out float4 accumulatedTransport) {
+// `accepted` says the history survived, `total` is the weight the mean `accumulated` (and its transport) gathered, and
+// `reactive` is the 3x3's greatest reactivity.
+void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
     int2 nearest = int2(floor(center - jitter));
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
     float4 transportSum = float4(0.0, 0.0, 0.0, 0.0);
     float weightSum = 0.0;
-    float reactive = 0.0;
+
+    reactive = 0.0;
     float3 boxMin = float3(3.402823e+38, 3.402823e+38, 3.402823e+38);
     float3 boxMax = -boxMin;
     float coverageMin = 1.0;
@@ -345,27 +348,34 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 airDirection = sdfResolveAirDirection(id.xy, extent);
     bool accepted = false;
     float total = 0.0;
+    float reactive = 0.0;
     float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
     float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
 
     if (temporal) {
-        sdfResolveTemporal(id, extent, render, jitter, airOrigin, airDirection, accepted, total, accumulated, accumulatedTransport);
+        sdfResolveTemporal(id, extent, render, jitter, airOrigin, airDirection, accepted, total, reactive, accumulated, accumulatedTransport);
     }
 
-    // The spatial path shows where the history is rejected or holds less than one sample's weight; a pixel whose gathered
-    // weight covers it shows the mean alone and reconstructs nothing.
+    // The spatial path shows where the history is rejected or holds less than one sample's weight, and by its
+    // reactivity where the pixel is reactive; a pixel whose gathered weight covers it shows the mean alone and
+    // reconstructs nothing. A reactive pixel gathers this frame's samples alone, whose weight swings about one sample's
+    // as the jitter moves, so it takes the spatial path whatever it gathered (weighing the two by that weight would
+    // switch a whole reactive screen between the two filters frame by frame), and it takes it on the unjittered grid, as
+    // a view with no temporal path does: a screen reads its image along the unjittered ray, so that sample holds still.
+    float shown = (accepted ? (saturate(total) * (1.0 - reactive)) : 0.0);
+    bool still = (unjittered || (reactive > 0.0));
     float4 resolved = accumulated;
     uint2 transportWord = sdfPackTransport(accumulatedTransport);
 
-    if (!accepted || (total < 1.0)) {
+    if (shown < 1.0) {
         float4 spatial;
         float4 spatialTransport;
         uint2 spatialWord;
 
-        sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
-            (unjittered && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
-        resolved = (accepted ? lerp(spatial, accumulated, total) : spatial);
-        transportWord = (accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, total)) : spatialWord);
+        sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (still ? float2(0.0, 0.0) : jitter)),
+            (still && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+        resolved = lerp(spatial, accumulated, shown);
+        transportWord = ((shown > 0.0) ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, shown)) : spatialWord);
     }
 
     output[id.xy] = resolved;

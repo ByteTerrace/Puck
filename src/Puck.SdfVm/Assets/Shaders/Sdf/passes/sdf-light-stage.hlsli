@@ -2,8 +2,10 @@
 // nothing on a miss. It samples a bound screen, loads the material, lights the surface through the one light interface (sdf-light.hlsli), each
 // slotted light under its own shadow, adds the irradiance volume's indirect light, applies the editor grid, and reports
 // the pixel's coverage: one for a hit, zero on a miss. It also reports the pixel's reactivity for a temporal view's
-// resolve: one for a display screen, whose content changes on its own, zero for an opening, and for emission, which the material model cannot tell
-// animated from steady, the share of the color the material that actually shaded the pixel emits. The sky,
+// resolve: one for a display screen, whose content changes on its own and would trail behind a moving sprite through
+// any history (its image is read along the unjittered ray, so its samples agree from frame to frame), zero for
+// an opening, and for emission, which the material model cannot tell animated from steady, the share of the color the
+// material that actually shaded the pixel emits. The sky,
 // the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
 #define PASSES_SDF_LIGHT_STAGE_HLSLI
@@ -18,6 +20,32 @@
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
 static const float ScreenGlassBase = 0.85;
 static const float ScreenGlassSunTint = 0.15;
+
+// The point a screen's image is read at: where the pixel's unjittered ray meets the plane of the face the jittered ray hit,
+// so the image a temporal view's reactive screen shows holds still while the jitter moves (the resolve shows a reactive
+// pixel's own sample on the unjittered grid).
+float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out float3 rayDirection) {
+    rayDirection = p.rayDirection;
+    if (passGroup.temporal == 0u) {
+        return surfacePoint;
+    }
+
+    ViewportData view = p.view;
+
+    view.lens.yz = passGroup.frustumOffset;
+
+    float3 direction = cameraRayDirection(view, ((float2(p.pixel) + 0.5) / float2(worldViewDims(view))));
+    ScreenSurfaceData surface = worldScreenSurface((uint)(material - SDF_SCREEN_MATERIAL - 1));
+    float3 normal = cross(surface.right.xyz, surface.up.xyz);
+    float facing = dot(direction, normal);
+
+    if (abs(facing) < 1.0e-6) {
+        return surfacePoint;
+    }
+    rayDirection = direction;
+
+    return (p.rayOrigin + (direction * (dot((surfacePoint - p.rayOrigin), normal) / facing)));
+}
 
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit's surface point, whether the
 // view shades finally, and the material the pixel shades with.
@@ -41,7 +69,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         // A bound screen source wins over both the flat sentinel and the unbound glass: emissive and unlit (the diegetic
         // screen is its own light source, like a real display), but shaped by the CRT glass face before the shared
         // distance fog. The screen also lights the room: see the screen lights below.
-        sampledScreen = sampleScreenSurface(material, surfacePoint, p.rayDirection, (p.pixelFootprint * s.t), color);
+        float3 imageRay;
+        float3 imagePoint = sdfScreenImagePoint(p, material, surfacePoint, imageRay);
+
+        sampledScreen = sampleScreenSurface(material, imagePoint, imageRay, (p.pixelFootprint * s.t), color);
         if (sampledScreen) {
             // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
             // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge.
