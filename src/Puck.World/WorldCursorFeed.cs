@@ -435,8 +435,8 @@ internal sealed partial class WorldCursorFeed {
             Buttons: ButtonWords[buttonMask]
         );
         m_store.Publish(frame: new OverlayCursorFrame(
-            // An emulator view is the seat's own view, so it is never outlined as a pane beside it.
-            HoveredPane: (((pane?.Placement is SourcePlacement.Pane { Region: var hoveredRegion }) && !m_panes.ShowsEngaged(instance: pane.Source.Name))
+            // A framed screen's glass is the seat's own view, so it is never outlined as a pane beside it.
+            HoveredPane: (((pane?.Placement is SourcePlacement.Pane { Region: var hoveredRegion }) && !m_panes.ShowsFramed(instance: pane.Source.Name))
                 ? hoveredRegion
                 : null),
             Seats: m_seats.AsMemory(

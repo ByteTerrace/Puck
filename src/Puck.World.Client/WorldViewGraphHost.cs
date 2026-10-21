@@ -629,7 +629,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
-        ResetEngaged();
+        m_framing.Clear();
         m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
@@ -692,8 +692,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="sharpen">Whether the view resolves temporally, so its place pass sharpens it at its rect's own extent
     /// (<see cref="RenderGraphPlacement.Sharpen"/>).</param>
     /// <param name="outputRegion">The stable allocation envelope, independent of the current placement.</param>
+    /// <param name="letterboxColor">The linear RGBA color the first view's pass writes where nothing is shown
+    /// (<see cref="RenderGraphPlacement.LetterboxColor"/>), or <see langword="null"/> for the default.</param>
+    /// <param name="fidelity">The share of the view's output the pass writes as it is, past its sharpen and tonemap
+    /// (<see cref="RenderGraphPlacement.Fidelity"/>): the view's screen fidelity.</param>
+    /// <param name="crop">The part of the view's output the rect shows, as fractions of the output: left, top, width and
+    /// height (<see cref="RenderGraphPlacement.Crop"/>); zero shows the whole output.</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false, Vector4? letterboxColor = null, float fidelity = 0f, Vector4 crop = default) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -702,9 +708,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            Crop: crop,
+            Fidelity: fidelity,
             Uncovered: uncovered,
             Height: region.Height,
             Left: region.X,
+            LetterboxColor: letterboxColor,
             Sharpen: sharpen,
             Sharpness: sharpness,
             Shown: shown,
@@ -738,8 +747,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="envelopes">The extent the root reads each view at, by view, as fractions of the display
     /// (<see cref="WorldViewOutputRegions.Views"/>), or <see langword="null"/> for each view's own rect; a view past
     /// the list also reads at its own rect.</param>
+    /// <param name="letterboxColor">The linear RGBA color pixels no view or pane covers show, such as the matte around
+    /// an engaged screen's framed view, or <see langword="null"/> for the default letterbox color.</param>
+    /// <param name="mattes">The matte the root shows of each view, by view, in normalized display coordinates inside the
+    /// view's rect, or <see langword="null"/> for the whole view: a seat framing the screen it engaged shows only the
+    /// picture's part of its view, copied one for one (<see cref="RenderGraphPlacement.Crop"/>), and the rest of its
+    /// rect is the letterbox.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover, IReadOnlyList<NormalizedRect>? envelopes = null) {
+    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover, IReadOnlyList<NormalizedRect>? envelopes = null, Vector4? letterboxColor = null, Func<int, NormalizedRect?>? mattes = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
@@ -748,6 +763,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lone = false;
         if (views.Count == 0) {
             _ = PlaceView(
+                letterboxColor: letterboxColor,
                 outputRegion: whole,
                 region: whole,
                 sharpness: sharpness,
@@ -763,9 +779,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views.Count == 1) &&
             (views[0].Region == whole)
         );
-        // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap and a
-        // sharpen are applied by the view's place pass, so a tonemapped or sharpened lone view is shown like any other.
-        var standsFor = (lone && (m_synthesized is not { Tonemap: WorldTonemap.Filmic } and not { Sharpens: true }));
+        // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap, a
+        // sharpen and a matte are applied by the view's place pass, so a tonemapped, sharpened or matted lone view is
+        // shown like any other.
+        var standsFor = (
+            lone &&
+            (m_synthesized is not { Tonemap: WorldTonemap.Filmic } and not { Sharpens: true }) &&
+            (mattes?.Invoke(arg: 0) is null)
+        );
         var covered = (panesCover || standsFor);
 
         m_loneThroughItsPass = (lone && !standsFor);
@@ -773,7 +794,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (
-                (views[view].Region == whole) &&
+                ((mattes?.Invoke(arg: view) ?? views[view].Region) == whole) &&
                 Shows(
                     rendered: rendered,
                     standsFor: standsFor,
@@ -794,12 +815,19 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 );
             }
 
+            var matte = mattes?.Invoke(arg: view);
+
             _ = PlaceView(
+                crop: ((matte is { } shownPart)
+                    ? CropOf(part: shownPart, whole: snapshot.Region)
+                    : default),
+                fidelity: snapshot.ScreenFidelity,
+                letterboxColor: letterboxColor,
                 uncovered: !covered,
                 outputRegion: (((envelopes is not null) && (view < envelopes.Count))
                     ? envelopes[view]
                     : snapshot.Region),
-                region: snapshot.Region,
+                region: (matte ?? snapshot.Region),
                 sharpen: snapshot.Quality.Temporal,
                 sharpness: sharpness,
                 shown: Shows(
@@ -812,6 +840,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
+    // The part of a view's output a rect inside the view shows, as fractions of the output: left, top, width, height.
+    private static Vector4 CropOf(NormalizedRect part, NormalizedRect whole) => (((whole.Width > 0f) && (whole.Height > 0f))
+        ? new Vector4(
+            w: (part.Height / whole.Height),
+            x: ((part.X - whole.X) / whole.Width),
+            y: ((part.Y - whole.Y) / whole.Height),
+            z: (part.Width / whole.Width)
+        )
+        : default);
     // Whether a view of a composed frame is shown: once rendered, unless it stands for the world itself.
     private static bool Shows(bool standsFor, Func<int, bool>? rendered, int view) => (!standsFor && (rendered?.Invoke(arg: view) ?? false));
 
@@ -1189,10 +1226,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var rendered = (Screens?.Views ?? WorldViewInstances.Empty);
 
         if (views.Root is null) {
-            var panes = PanesOf(
-                screens: Screens,
-                views: views
-            );
+            var panes = WorldRootGraph.PanesOf(views: views);
             var composedViews = WorldRootGraph.ViewsOf(views: views);
 
             if (

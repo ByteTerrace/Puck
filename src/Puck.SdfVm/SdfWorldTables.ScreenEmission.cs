@@ -14,7 +14,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the latest screen reduction whose actual submission fence has completed.</summary>
     public GpuImagePublication CompletedScreenEmission { get { m_screenEmission.Poll(); return m_screenEmission.Completed; } }
 
-    internal bool ScreenEmissionOwes => m_screenEmission.Owes;
+    internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
     internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
 
@@ -42,6 +42,8 @@ public sealed partial class SdfWorldTables {
 
         public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
         public bool Owes { get; private set; } = true;
+        // Whether the next observation reduces again whatever its sources say (SdfWorldTables.ProjectTaintedSourcesAgain).
+        public bool Forced { get; set; }
 
         public GpuImagePublication Completed { get; private set; }
         public long Renders { get; private set; }
@@ -78,7 +80,7 @@ public sealed partial class SdfWorldTables {
 
                 changed |= different;
             }
-            Owes = ((Submitted is null) || changed);
+            Owes = ((Submitted is null) || changed || Forced);
             return unchecked((ulong)(Renders + (Owes ? 1 : 0)));
         }
         public long Publish(IGpuSubmissionFence fence) {
@@ -90,6 +92,7 @@ public sealed partial class SdfWorldTables {
                 m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset).CopyTo(destination: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset));
             }
             Owes = false;
+            Forced = false;
             Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
             return Renders;
         }

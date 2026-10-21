@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 /// A set that retains the own-body application (mirroring) does not swap: the seat is still driving a target AND
 /// walking its own avatar, so it still perceives from that avatar. A screen application (classic engage) does not
 /// swap the body; a captured one (no own-body application beside it) publishes the screen the seat engages
-/// (<see cref="EngagedScreen"/>), which the seat camera frames as its emulator view and the <c>ScreenEngaged</c>
+/// (<see cref="EngagedScreen"/>), whose picture the seat camera frames (<c>WorldScreenFraming</c>) and the <c>ScreenEngaged</c>
 /// overlay fact reads. <c>WorldSeatContextSync.Publish</c> is the sole writer — it already reads the application set per
 /// seat every tick over the loopback view for the engagement context family, so the anchor resolution rides that
 /// SAME read rather than opening a second one. Swapped in ONE place,

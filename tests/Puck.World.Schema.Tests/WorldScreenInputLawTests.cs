@@ -69,10 +69,10 @@ public sealed class WorldScreenInputLawTests {
             );
         }
     }
-    // An engageable screen's emulator view takes a crop in source pixels, a pixel aspect inside its bound and a
-    // #RRGGBB fill, and only an engageable screen authors one; each refusal names its member.
+    // An engageable screen's display takes a #RRGGBB matte fill, and only an engageable screen authors one; each refusal
+    // names its member.
     [Fact]
-    public void AScreensDisplayRefusesByNameWhatNoEmulatorViewShows() {
+    public void AScreensDisplayRefusesByNameWhatNoEngagedViewShows() {
         WorldScreen Engageable(WorldScreenDisplay display, bool engageable = true) => (Screen(input: null) with {
             Route = new WorldScreenRoute(
                 Display: display,
@@ -83,22 +83,13 @@ public sealed class WorldScreenInputLawTests {
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: new WorldDefinition(ScreensRaw: [Engageable(display: new WorldScreenDisplay(
-                    Crop: new WorldScreenDisplayCrop(Bottom: 8, Top: 8),
-                    Fill: "#102030",
-                    PixelAspect: (8f / 7f)
-                ))]),
+                definition: new WorldDefinition(ScreensRaw: [Engageable(display: new WorldScreenDisplay(Fill: "#102030"))]),
                 reason: out var accepted
             ),
             userMessage: accepted
         );
 
         foreach (var (display, engageable, refusal) in new (WorldScreenDisplay, bool, string)[] {
-            (new WorldScreenDisplay(Crop: new WorldScreenDisplayCrop(Left: -1)), true, "screens[0].route.display.crop.left -1 must be within 0..4096"),
-            (new WorldScreenDisplay(Crop: new WorldScreenDisplayCrop(Right: 5000)), true, "screens[0].route.display.crop.right 5000 must be within 0..4096"),
-            (new WorldScreenDisplay(PixelAspect: 0f), true, "screens[0].route.display.pixelAspect 0 must be a finite ratio"),
-            (new WorldScreenDisplay(PixelAspect: float.NaN), true, "screens[0].route.display.pixelAspect NaN must be a finite ratio"),
-            (new WorldScreenDisplay(PixelAspect: 5f), true, "screens[0].route.display.pixelAspect 5 must be a finite ratio"),
             (new WorldScreenDisplay(Fill: "black"), true, "screens[0].route.display.fill 'black' must be #RRGGBB"),
             (new WorldScreenDisplay(), false, "screens[0].route.display is authored but engageable is false"),
         }) {

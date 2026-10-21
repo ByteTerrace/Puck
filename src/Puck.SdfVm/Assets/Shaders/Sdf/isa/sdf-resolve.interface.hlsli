@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/b5b8cbfb31038310aa3928a01564bcd27b349ecd9f82550f1796b9ea8090814f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/9897964221bc0089bc76f343fdcbf015e74abaf40ace5404323495d52442bb73). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -192,9 +192,9 @@ struct SdfResolvePass {
     [[vk::offset(1612)]] uint _pad1612;
     [[vk::offset(1616)]] float4 previousView[6];
     [[vk::offset(1712)]] uint screenCount;
-    [[vk::offset(1716)]] uint shadowFadeCount;
-    [[vk::offset(1720)]] uint shadowSlotCount;
-    [[vk::offset(1724)]] uint _pad1724;
+    [[vk::offset(1716)]] float screenFidelity;
+    [[vk::offset(1720)]] uint shadowFadeCount;
+    [[vk::offset(1724)]] uint shadowSlotCount;
     [[vk::offset(1728)]] int4 shadowSlots;
     [[vk::offset(1744)]] float tanHalfFieldOfView;
     [[vk::offset(1748)]] uint temporal;

@@ -10828,36 +10828,9 @@ export type WorldScreen = {
 
 export type WorldScreenDisplay = {
   /**
-   * The source pixels left out at each edge, or null for none. A crop that leaves nothing of the source shows the whole source.
-   */
-  crop?: WorldScreenDisplayCrop | null;
-  /**
-   * The width over the height of one source pixel as the console's display shows it (8/7 for a console drawing 256 columns across a 4:3 picture); positive and finite, at most MaxPixelAspect either way. Default 1, square pixels.
-   */
-  pixelAspect?: number;
-  /**
-   * The colour around the picture, as #RRGGBB, or null for black.
+   * The matte colour around the framed picture, as #RRGGBB, or null for black.
    */
   fill?: string | null;
-};
-
-export type WorldScreenDisplayCrop = {
-  /**
-   * The rows left out at the top.
-   */
-  top?: number;
-  /**
-   * The columns left out at the right.
-   */
-  right?: number;
-  /**
-   * The rows left out at the bottom.
-   */
-  bottom?: number;
-  /**
-   * The columns left out at the left.
-   */
-  left?: number;
 };
 
 export type WorldScreenMagazine = {
@@ -10920,7 +10893,7 @@ export type WorldScreenRoute = {
    */
   port?: string | null;
   /**
-   * How a seat engaged on this screen sees its source once its camera has framed the glass: the emulator view, the source alone filling the seat's view at its own aspect ratio (WorldScreenDisplay). null (the default) is Neutral: no crop, square pixels, black fill. Omitted from the wire when null.
+   * How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.
    */
   display?: WorldScreenDisplay | null;
 };

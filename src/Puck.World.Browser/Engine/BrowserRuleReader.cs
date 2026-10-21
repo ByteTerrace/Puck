@@ -221,6 +221,14 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             value: -1L
         )
     );
+    // No seat sits at a board here: not engaged, and no pointed cell or side.
+    RuleFact IWorldFacts.Read(BoardSeatOperand operand) => Record(
+        operand: nameof(BoardSeatOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: ((operand.Facet == BoardSeatFacet.Engaged) ? 0L : -1L)
+        )
+    );
     // No body reference ever resolves, and a $pair: key over two unresolved bodies names no cell — the invalid
     // default key, which reads absent and addresses no write.
     int IWorldFacts.ResolveBody(in CompiledBodyRef bodyRef) => -1;
