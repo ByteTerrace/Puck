@@ -24,7 +24,8 @@ public interface IReleaseSource {
     /// against the hash the manifest named, so a source implementation is trusted for transport only.</summary>
     /// <param name="pin">The file's content pin.</param>
     /// <param name="destination">The stream to write the file's bytes to.</param>
+    /// <param name="length">The exact byte length from the verified manifest; no more may be written.</param>
     /// <param name="cancellationToken">Cancels the fetch.</param>
     /// <returns><see langword="true"/> when the file was found and written; otherwise <see langword="false"/>.</returns>
-    Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken);
+    Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, long length, CancellationToken cancellationToken);
 }

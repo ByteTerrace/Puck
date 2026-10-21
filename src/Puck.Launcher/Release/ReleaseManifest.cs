@@ -84,17 +84,55 @@ public static class ReleaseCanonicalizer {
         "payloads", "rollout", "revoked", "notes", "signature",
     };
 
-    private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile file, string path, HashSet<string>? seenPaths) {
-        if (
-            string.IsNullOrWhiteSpace(value: file.Path) ||
-            file.Path.StartsWith(value: '/') ||
-            file.Path.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: ".."
-        )
-        ) {
+    // The manifest is portable: validate Windows path syntax even on a Unix publishing host. In particular,
+    // Path.IsPathRooted alone would admit a Windows drive/UNC path on Unix, and ':' admits NTFS alternate streams.
+    private static bool IsPortablePath(string? value, bool allowDirectories) {
+        if (string.IsNullOrWhiteSpace(value: value)) {
+            return false;
+        }
+
+        foreach (var character in value) {
+            if ((character < ' ') || (character is '\\' or ':' or '<' or '>' or '"' or '|' or '?' or '*')) {
+                return false;
+            }
+        }
+
+        var segments = value.Split(separator: '/');
+
+        if (!allowDirectories && (segments.Length != 1)) {
+            return false;
+        }
+
+        foreach (var segment in segments) {
+            if ((segment.Length == 0) || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
+                return false;
+            }
+
+            var stem = segment.Split(separator: '.', count: 2)[0];
+
+            if (stem.Equals(value: "CON", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                stem.Equals(value: "PRN", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                stem.Equals(value: "AUX", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                stem.Equals(value: "NUL", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                ((stem.Length == 4) && (stem[3] is >= '1' and <= '9' or '\u00b9' or '\u00b2' or '\u00b3') &&
+                (stem.StartsWith(value: "COM", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                stem.StartsWith(value: "LPT", comparisonType: StringComparison.OrdinalIgnoreCase)))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile? file, string path, HashSet<string>? seenPaths) {
+        if (file is null) {
+            errors.Add(item: new(Message: "a file is required.", Path: path));
+            return;
+        }
+
+        if (!IsPortablePath(value: file.Path, allowDirectories: true)) {
             errors.Add(item: new(
-                Message: "a file path must be a non-empty relative path with no '..' segment.",
+                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, and no device names or alternate streams.",
                 Path: $"{path}.path"
             ));
         } else if (
@@ -124,8 +162,13 @@ public static class ReleaseCanonicalizer {
             ));
         }
     }
-    private static void ValidatePayload(List<DocumentValidationError> errors, int index, ReleasePayload payload, HashSet<string> seenRids) {
+    private static void ValidatePayload(List<DocumentValidationError> errors, int index, ReleasePayload? payload, HashSet<string> seenRids) {
         var path = $"payloads[{index}]";
+
+        if (payload is null) {
+            errors.Add(item: new(Message: "a payload is required.", Path: path));
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(value: payload.Rid)) {
             errors.Add(item: new(
@@ -151,7 +194,7 @@ public static class ReleaseCanonicalizer {
             return;
         }
 
-        var seenPaths = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seenPaths = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; (i < payload.Files.Count); i++) {
             ValidateFile(
@@ -259,9 +302,9 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (string.IsNullOrWhiteSpace(value: document.Version)) {
+        if (!IsPortablePath(value: document.Version, allowDirectories: false)) {
             errors.Add(item: new(
-                Message: "a version is required.",
+                Message: "a version must be a single portable directory name.",
                 Path: "version"
             ));
         }

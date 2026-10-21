@@ -251,4 +251,47 @@ public sealed class ReleaseManifestTests {
             filter: error => (error.Path == "extensions.app")
         );
     }
+
+    [Theory]
+    [InlineData("C:/outside.dll")]
+    [InlineData("C:\\outside.dll")]
+    [InlineData("\\\\server\\share\\outside.dll")]
+    [InlineData("/outside.dll")]
+    [InlineData("a/../outside.dll")]
+    [InlineData("a\\..\\outside.dll")]
+    [InlineData("a.dll:payload")]
+    [InlineData("a/./b.dll")]
+    [InlineData("a//b.dll")]
+    [InlineData("a /b.dll")]
+    [InlineData("NUL.dll")]
+    [InlineData("aux/data")]
+    [InlineData("a.dll\0")]
+    public void Validate_RefusesNonPortablePayloadPaths(string path) {
+        var document = ValidDocument();
+        document = document with { Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = path }] }] };
+
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => error.Path == "payloads[0].files[0].path");
+    }
+
+    [Theory]
+    [InlineData("2.0.0+../../outside")]
+    [InlineData("../outside")]
+    [InlineData("C:/outside")]
+    [InlineData("\\outside")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("2.0.0 ")]
+    public void Validate_RefusesVersionDirectoryEscape(string version) =>
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Version = version }), filter: error => error.Path == "version");
+
+    [Fact]
+    public void Validate_RefusesNullEntriesAndCaseAliasedFiles() {
+        var document = ValidDocument();
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [null!] }), filter: error => error.Path == "payloads[0]");
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [document.Payloads[0] with { Files = [null!] }] }), filter: error => error.Path == "payloads[0].files[0]");
+        var file = document.Payloads[0].Files[0];
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with {
+            Payloads = [document.Payloads[0] with { Files = [file, file with { Path = file.Path.ToUpperInvariant() }] }],
+        }), filter: error => error.Path == "payloads[0].files[1].path");
+    }
 }

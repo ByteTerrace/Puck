@@ -1,4 +1,5 @@
 using Puck.Launcher.Release;
+using Puck.Attestation;
 using Xunit;
 
 namespace Puck.Launcher.Tests.Release;
@@ -7,6 +8,56 @@ namespace Puck.Launcher.Tests.Release;
 /// <c>minimumSupported</c>, and version-monotonicity refusals, plus the discriminating replayed-older-manifest
 /// leg.</summary>
 public sealed class AttestationReleaseVerifierTests {
+    private sealed class RacingSequenceStore : IReleaseSequenceStore, IDisposable {
+        private readonly InMemoryReleaseSequenceStore m_inner = new();
+        private readonly Barrier m_previews = new(participantCount: 2);
+
+        public bool IsAcceptable(ReplayCommitRequirement requirement) {
+            var accepted = m_inner.IsAcceptable(requirement: requirement);
+            m_previews.SignalAndWait(cancellationToken: TestContext.Current.CancellationToken);
+            return accepted;
+        }
+
+        public bool TryAdvance(ReplayCommitRequirement requirement) => m_inner.TryAdvance(requirement: requirement);
+        public void Dispose() => m_previews.Dispose();
+    }
+
+    [Fact]
+    public async Task Verify_RefusesTheLoserWhenTwoVerificationsPreviewTheSameSequence() {
+        using var store = new RacingSequenceStore();
+        var (verifier, fixture) = BuildVerifier(sequenceStore: store);
+        var manifest = fixture.Sign(document: UnsignedDocument(), notBefore: ReleaseChainFixture.Epoch,
+            notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        var outcomes = await Task.WhenAll(tasks: Enumerable.Range(start: 0, count: 2).Select(selector: _ => Task.Run(function: () =>
+            verifier.Verify(manifest: manifest, now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch),
+                installedVersion: "1.0.0", advanceSequence: true))));
+
+        Assert.Single(collection: outcomes, predicate: outcome => outcome.Accepted);
+        Assert.Single(collection: outcomes, predicate: outcome => !outcome.Accepted);
+    }
+
+    [Fact]
+    public void Verify_RefusesNullWireMembersWithoutThrowing() {
+        var (verifier, fixture) = BuildVerifier();
+        var manifest = fixture.Sign(document: UnsignedDocument(), notBefore: ReleaseChainFixture.Epoch,
+            notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        var candidates = new[] {
+            manifest with { Signature = manifest.Signature! with { Claim = null! } },
+            manifest with { Signature = manifest.Signature! with { Chain = null! } },
+            manifest with { Signature = manifest.Signature! with { Chain = [null!, null!] } },
+            manifest with { Payloads = [null!] },
+            manifest with { Payloads = [manifest.Payloads[0] with { Files = [null!] }] },
+        };
+
+        foreach (var candidate in candidates) {
+            Assert.False(condition: verifier.Verify(manifest: candidate, now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch),
+                installedVersion: "1.0.0", advanceSequence: true).Accepted);
+        }
+
+        Assert.True(condition: verifier.Verify(manifest: manifest, now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch),
+            installedVersion: "1.0.0", advanceSequence: true).Accepted);
+    }
+
     private static (AttestationReleaseVerifier Verifier, ReleaseChainFixture Fixture) BuildVerifier(TimeSpan? replayHorizon = null, IReleaseSequenceStore? sequenceStore = null) {
         var fixture = new ReleaseChainFixture();
         var trustList = fixture.BuildTrustList(replayHorizon: (replayHorizon ?? TimeSpan.FromDays(days: 30)));

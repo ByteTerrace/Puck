@@ -19,6 +19,12 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
 
+        var errors = ReleaseCanonicalizer.Validate(document: manifest);
+
+        if (errors.Count != 0) {
+            return UpdateStageResult.Refuse(reason: $"manifest fails structural validation: {errors[0]}");
+        }
+
         var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(
             a: candidate.Rid,
             b: rid,
@@ -49,6 +55,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var found = await m_source.TryGetFileAsync(
                 cancellationToken: cancellationToken,
                 destination: buffer,
+                length: file.Size,
                 pin: pin
             ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -59,7 +66,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var bytes = buffer.ToArray();
             var actualHash = ContentPin.Compute(content: bytes);
 
-            if (actualHash != pin) {
+            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' fetched with hash {actualHash}, expected {file.Hash} — refused rather than staged");
             }
 
@@ -89,7 +96,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
 
             var actualHash = ContentPin.Compute(content: bytes);
 
-            if (actualHash != pin) {
+            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 

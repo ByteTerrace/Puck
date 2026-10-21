@@ -87,6 +87,14 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             );
         }
 
+        if (!string.Equals(a: manifest.Channel, b: m_options.Channel, comparisonType: StringComparison.Ordinal)) {
+            return new UpdateCheckResult(
+                Detail: $"manifest names channel '{manifest.Channel}', expected '{m_options.Channel}'",
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.Refused
+            );
+        }
+
         var verified = m_verifier.Verify(
             advanceSequence: advanceSequence,
             installedVersion: m_options.InstalledVersion,
