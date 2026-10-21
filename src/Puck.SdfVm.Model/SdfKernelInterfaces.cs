@@ -115,6 +115,13 @@ public sealed class SdfKernelInterfaces {
             package: RenderGraphPackageCatalog.SdfBricks,
             pushesIndex: true
         ).Stamped(stamp: stamp);
+        // The glass shading pass binds the residency's World set too, for the material table, the lights and the sky's
+        // environment map its reflections read.
+        GlassParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [.. SdfWorldPackage.GlassMembers, .. LightAndSkyTables],
+            package: "sdf-glass"
+        ).Stamped(stamp: stamp);
         Mesh = new(
             members: [
                 .. World.Members.Where(predicate: static member => (
@@ -124,6 +131,10 @@ public sealed class SdfKernelInterfaces {
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
                 Read(element: ShaderValueType.Float4, name: SdfWorldPackage.DynamicTransforms),
                 ShaderWorkCounters.BufferMember,
+                // The glass raster pass reads each pixel's opaque hit and accumulates its faces' distances; the mesh and
+                // shadow passes bind the tables' dummy at both.
+                Read(element: ShaderValueType.Uint, name: SdfWorldPackage.VisibilityRecords),
+                Written(element: ShaderValueType.Uint, name: SdfWorldPackage.GlassSumsWritten),
             ],
             name: "sdf-mesh",
             pushesIndex: true
@@ -135,6 +146,7 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
+            (IncludePath(shaderInterface: GlassParameters.Interface), GlassParameters.Interface),
             (IncludePath(shaderInterface: EnvironmentParameters.Interface), EnvironmentParameters.Interface),
         ];
     }
@@ -182,6 +194,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes
     /// (<see cref="SdfWorldPackage.SkyMembers"/>).</summary>
     public ShaderPipelineParameterLayout SkyParameters { get; }
+    /// <summary>Gets the interface the glass shading pass reads, with the same frame values as the traversal passes
+    /// (<see cref="SdfWorldPackage.GlassMembers"/>) and the lights and sky tables.</summary>
+    public ShaderPipelineParameterLayout GlassParameters { get; }
     /// <summary>Gets the interface the environment map's kernel and its reduction read: the standard frame group, and a
     /// pass group whose block holds the map's extent and the pass's work-counter rows, followed by the sky block and layer
     /// table of the upload's ring slot, acquired panorama images and their mappings, the map and coefficients, and work counters.</summary>

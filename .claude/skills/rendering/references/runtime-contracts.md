@@ -177,7 +177,14 @@ stand reported as tainted until then. Because it runs every frame, taint that
 comes back (a source a frame late, a reload, a lights change) is discarded
 again rather than holding the capture. A capture still waiting names the state
 in its reason (`IRenderGraphPackageFactory.TaintOf`, followed through the
-instances that passed it on), so `world.wait ready` says what holds it.
+instances that passed it on), so `world.wait ready` says what holds it. The SDF
+package tells a views render that itself read external content this frame
+(`the latest views render, which read …`, naming the lighting source or the
+read instance) from history carrying an earlier read (`the temporal history,
+which read …`): the first is a source the fills do not reach, which no discard
+can cure, the second what the discard restarts. The glass fragment
+(`SdfWorldPackage.WithGlass`) keeps the same taint and discard
+(`SdfWorldPassesLawTests.ACaptureOfTheGlassFragmentDiscardsTaintedHistoryAndCompletes`).
 
 `RenderGraphRuntime.OfferCaptureSource` offers an aliased output under its own
 lease. A node serving it without rendering copies it before readback

@@ -244,9 +244,10 @@ public sealed partial class HgdApu : ISnapshotable {
         }
         m_dmc.Irq = false;
     }
-    // A $4017 write resets the sequence three CPU cycles after an APU cycle or four after the intervening cycle;
-    // five-step mode clocks the quarter- and half-frame units at that reset. The countdown includes the write's own
-    // StepCpuCycle, which the machine runs after the CPU bus transaction.
+    // A $4017 write restarts the sequence's cycle count on the third CPU cycle after a write on an even cycle and the
+    // second after an odd one, counting the cycle after the write as the first; five-step mode clocks the quarter- and
+    // half-frame units at that restart. The countdown includes the write's own StepCpuCycle, which the machine runs
+    // after the write lands. blargg's apu_test 4-6 and cpu_interrupts_v2 pin the frame interrupt to the cycle.
     // https://www.nesdev.org/wiki/APU_Frame_Counter
     private void WriteFrameCounter(byte value) {
         m_fiveStep = ((value & 0x80) != 0);
@@ -254,7 +255,7 @@ public sealed partial class HgdApu : ISnapshotable {
         if (m_frameIrqInhibit) {
             m_frameIrq = false;
         }
-        m_frameResetDelay = (m_evenCycle ? 5 : 4);
+        m_frameResetDelay = (m_evenCycle ? 4 : 3);
     }
     private void StepFrameCounter() {
         if (m_frameResetDelay != 0) {

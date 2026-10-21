@@ -99,6 +99,16 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
   serial contour of about a million samples is the bake's long pole on the
   debug world, so unions take each frame's first lattices.
+- **A glass instance is a group of its own** (`SdfMeshBakeGroup.Glass`, from
+  `SdfProgram.IsGlassRange`): it never joins a static run and no instance joins
+  it, whatever either declares, and a dynamic group is glass only while every
+  instance on its slot is. The stampers emit a creation's glass shapes as one
+  static instance after its opaque ones (`WorldPlacementStamper`, with a field
+  scope of their own when one blends other than by union) and a pooled
+  creation's each on its own slot, before any text-coupled instance opens
+  (`WorldStampPool.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
+  glass pass alone and stays out of the mesh pass, the cascades and the
+  irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
 - **Static features declare their spacing.** `WorldPlacementStamper.ShapeDetail`
   feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
   geometry: an eighth of a sweep's smaller radius, a quarter of a shell's

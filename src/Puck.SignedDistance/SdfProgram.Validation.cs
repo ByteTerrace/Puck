@@ -315,6 +315,7 @@ public sealed partial class SdfProgram {
                 !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
                 !SdfMaterial.IsEmissiveLane(lane: material.EmissiveLane) ||
                 (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
+                !material.IsGlassValid ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,
@@ -322,7 +323,7 @@ public sealed partial class SdfProgram {
             )
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], an emissive lane absent or in [0, 3], and valid material layers; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], an emissive lane absent or in [0, 3], a glass with a positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and a tint in [0, 1], and valid material layers; got {material}.",
                     paramName: paramName
                 );
             }

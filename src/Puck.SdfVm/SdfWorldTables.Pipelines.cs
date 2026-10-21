@@ -12,6 +12,12 @@ public sealed partial class SdfWorldTables {
     // The shadow cascades' pipeline and the depth-only render pass it draws in.
     private readonly IGpuPipeline m_shadowPipeline;
     private readonly IGpuRenderPass m_shadowRenderPass;
+    // The glass pass's pipeline, drawing in the mesh render pass.
+    private readonly IGpuPipeline m_glassPipeline;
+
+    // The glass pass's graphics pipeline: the mesh pass's layout, vertex stage and render pass with the glass fragment
+    // stage.
+    internal IGpuPipeline GlassPipeline => m_glassPipeline;
 
     // The mesh pass's graphics pipeline.
     internal IGpuPipeline MeshPipeline => m_meshPipeline;
@@ -48,6 +54,7 @@ public sealed partial class SdfWorldTables {
                 Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
                 m_shadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowPipeline.GroupLayoutHandles) &&
+                m_glassPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_glassPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
                         resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&

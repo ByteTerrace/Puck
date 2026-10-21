@@ -1,3 +1,4 @@
+using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -12,14 +13,19 @@ public sealed partial class SdfWorldPasses {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Names the temporal history that read external content, or the lighting source the views read
-    /// (<see cref="SourceTaintOf"/>).</remarks>
+    /// <remarks>Names what holds the content: the latest views render, by what it read (a lighting source or a read
+    /// instance), or the temporal history that read it earlier and blends it into every later render, by what it read
+    /// then; otherwise the lighting source the views would read now.</remarks>
     public string? TaintOf(string instance) {
         var entry = Refresh(instance: instance);
 
         return ((entry.View is not { } view)
             ? null
-            : (entry.HistoryTainted ? "the temporal history, which read external content and blends it into every later render" : SourceTaintOf(view.Residency.Tables, view.Residency.Frame)));
+            : (entry.HistoryTainted
+                ? (entry.TaintedNow
+                    ? $"the latest views render, which read {entry.TaintCause}"
+                    : $"the temporal history, which read {entry.TaintCause} and blends it into every later render")
+                : SourceTaintOf(view.Residency.Tables, view.Residency.Frame)));
     }
 
     /// <inheritdoc/>
@@ -39,27 +45,44 @@ public sealed partial class SdfWorldPasses {
 
         entry.Temporal.Reset();
         entry.HistoryTainted = false;
+        entry.TaintedNow = false;
+        entry.TaintCause = null;
 
         return ((int)SdfTemporalSamples.Period);
     }
 
-    // Whether a frame's lighting sources are tainted: a demanded sky environment or the screen emission it lights by.
-    internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame) => (SourceTaintOf(tables: tables, frame: frame) is not null);
-    // Names the frame's tainted lighting source, or null when neither is.
-    private static string? SourceTaintOf(SdfWorldTables? tables, SdfFrame? frame) => (((tables is null) || (frame is null))
+    // Names a frame's tainted lighting source, a demanded sky environment or the screen emission it lights by, or null
+    // when neither is.
+    internal static string? SourceTaintOf(SdfWorldTables? tables, SdfFrame? frame) => (((tables is null) || (frame is null))
         ? null
         : ((tables.SkyEnvironmentDemand && (tables.SubmittedSkyEnvironment is { Tainted: true }))
             ? "the sky environment, projected from a panorama screen's external image"
             : ((!frame.DisableScreenLights && (tables.SubmittedScreenEmission is { Tainted: true }))
                 ? "the screen emission the screen lights read, reduced from a screen's external image"
                 : null)));
-    internal void SubmittedTaint(string instance, bool tainted, bool readsHistory) {
+    // Names the first read a render bound with external content the capture gate did not fill, or null when none.
+    internal static string? ReadTaintOf(RenderGraphExternalReads? reads) {
+        for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
+            if (reads![index].Tainted) {
+                return $"the unfilled external image of '{reads[index].Producer}'";
+            }
+        }
+
+        return null;
+    }
+    // Records a views render's taint: what it read, or null when it read nothing external, and whether it read history.
+    internal void SubmittedTaint(string instance, string? cause, bool readsHistory) {
         var entry = Refresh(instance: instance);
 
-        entry.HistoryTainted = (tainted || (readsHistory && entry.HistoryTainted));
+        entry.TaintedNow = (cause is not null);
+        entry.HistoryTainted = (entry.TaintedNow || (readsHistory && entry.HistoryTainted));
+        entry.TaintCause = (cause ?? (entry.HistoryTainted ? entry.TaintCause : null));
     }
 
     private sealed partial class Entry {
         public bool HistoryTainted;
+        // Whether the latest views render itself read external content, and what the history's taint came from.
+        public bool TaintedNow;
+        public string? TaintCause;
     }
 }

@@ -170,7 +170,7 @@
 
 // Program capacities, strides and floors.
 #define SDF_MAX_INSTANCES               65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY  21u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY  22u
 #define SDF_PAINT_VECTORS_PER_ENTRY     12u
 #define SDF_MAX_PAINTS_PER_MATERIAL     8u
 #define SDF_PAINT_WINNING_FRAME         0xFFFFFFFFu
@@ -280,6 +280,10 @@
 #define SDF_TEMPORAL_PERIOD            8u
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
+
+// The glass sums the glass raster pass accumulates and the glass shading pass reads.
+#define SDF_GLASS_SUM_WORDS 2u
+#define SDF_GLASS_SUM_SCALE 4096.0
 
 // The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
 #define SDF_SKY_ENVIRONMENT_SIZE         64

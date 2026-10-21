@@ -1,23 +1,25 @@
-// The device row: one of each gaming device the World hosts, at the size of the real thing, each on a labelled stand
-// whose screen shows the machine running, with the cartridges it can swap to in the folders its `contentFolders` name.
-// The debug world imports this file whole. The row stands in the gallery hall's lobby (hall.puck) on its level 0 floor,
-// at z = 28, every device 2.5 m from the next and facing -Z, toward the entrance, so a visitor walking in faces the
-// screens:
+// The device row: one of each gaming device the World hosts, each on a labelled stand whose screen shows the machine
+// running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug world imports this
+// file whole. The row stands in the gallery hall's lobby (hall.puck) on its level 0 floor, at z = 28, every device
+// 2.5 m from the next and facing -Z, toward the entrance, so a visitor walking in faces the screens:
 //
-//   x 17.5  the Humble Gaming Brick: a see-through atomic-orange Color brick (75 x 133 x 27.5 mm) leaning back 20
-//           degrees on a machined stand, on a 1.15 m plinth
+//   x 17.5  the Humble Gaming Brick: a Color brick in clear atomic-orange glass over its board and cells (75 x 133 x
+//           27.5 mm) leaning back 20 degrees on a machined stand, on a 1.15 m plinth
 //   x 15    the Advanced Gaming Brick: an aluminium clamshell (84.6 x 82 x 23.7 mm closed) open to its 150-degree stop
 //           on a 30-degree stand, on a 1.15 m plinth, its screen leaning back 30 degrees
-//   x 12.5  the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 14-inch television,
-//           on a low cart whose top is 0.55 m up
+//   x 12.5  the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 27-inch television,
+//           on a walnut AV cabinet whose top is 0.65 m up
 //
-// Each device is two or three placements at the same position: the stand (a plinth, or the deck's cart), solid, with the
-// device's name on its face; and the device itself, its own prototype so the bake meshes it at its own millimetre scale
-// rather than at its stand's (a static placement bakes as one group whose lattice is sized by the whole group). Every
-// creation row below is authored in the creation frame (x screen-right, y up, z toward the viewer: the world is that
-// turned 180 degrees about up). The handhelds lean back, so their rows were placed from a device frame (origin, tilt
-// about x) by a one-off calculation: to move a part, edit its local position in that frame and turn it by the tilt
-// again, rotation included. Each prototype's comment names its frame.
+// The handhelds are modelled in their real millimetres and shown at handheldScale (1.5) times that, so they read from
+// the walking distance (the owner's ruling); the deck and its television are at their real size. Each device is two or
+// three placements at the same position: the stand (a plinth, or the deck's cabinet), solid, with the device's name on
+// its face; and the device itself, its own prototype so the bake meshes it at its own millimetre scale rather than at
+// its stand's (a static placement bakes as one group whose lattice is sized by the whole group). A handheld's prototype
+// stands on the plinth's top, its y = 0 there, so its placement scales it about that point. Every creation row below is
+// authored in the creation frame (x screen-right, y up, z toward the viewer: the world is that turned 180 degrees about
+// up). The handhelds lean back, so their rows were placed from a device frame (origin, tilt about x) by a one-off
+// calculation: to move a part, edit its local position in that frame and turn it by the tilt again, rotation included.
+// Each prototype's comment names its frame.
 //
 // Walk up to a device and press the context button (E, or X on a pad) to engage it: the camera frames its screen and
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list, swap,
@@ -26,9 +28,10 @@
 let deviceZ = 28
 // The lobby floor's top (hall.puck's level 0).
 let deviceFloor = 0.05
-// The handhelds' plinths: 0.4 m square and 1.15 m tall, so a handheld's screen stands about 1.3 m up, under the Moth's
+// The handhelds' plinths: 0.4 m square and 1.15 m tall, so a handheld's screen stands about 1.35 m up, under the Moth's
 // 1.75 m eye and turned up toward it.
 let plinthTop = 1.15
+let handheldScale = 1.5
 
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
 let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
@@ -54,23 +57,26 @@ template plinth(label) {
   textRuns [{ text: label, position [0, (plinthTop - 0.1), 0.2], rotation [0, 0, 0, 1], emHeight: 0.024, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 0.37 }]
 }
 
-// The Humble Gaming Brick's slots. Its shell is clear atomic-orange plastic: the renderer draws opaque surfaces, so each
-// shell slot carries an `inset`, a painted plane inside the case that the surface refracts the view onto (ior 1.49,
-// acrylic) and shows in place of its own colour, with a clearcoat over it. The front's plane lies 7.5 mm under the face
-// on the board, a square ramp (modulation 4) centred on the processor: the dark chip, the board around it, its edge,
-// then clear orange where nothing stands behind the plastic. The back's lies over the battery bay, a wide ramp
-// (modulation 2) of the two cells. Both frames are world space (a static placement's inset is), turned with the brick's
-// 20-degree lean; each seed puts its modulation's phase where the ramp's corners or long axis lie along the case's.
-let brickShellFront = 0
-let brickShellBack = 1
-let brickLens = 2
-let brickButtons = 3
-let brickKeys = 4
-let brickRubber = 5
-let brickStand = 6
-let brickMarking = 7
-let brickLed = 8
-let brickCartridge = 9
+// The Humble Gaming Brick's slots. Its shell is glass (`glass`): clear atomic-orange acrylic (ior 1.49) whose tint is
+// reached through 4 cm, so the 11 mm of it over the board reads pale orange and the whole 34 mm body (at the
+// placement's scale; a static placement's glass depth is world units) a deeper one. It bakes and draws apart from the
+// opaque parts, which show through it: the board and its parts, the cells, the cartridge, and the keys sunk into the
+// face. Then the lens, the smoked buttons, the d-pad and slots, the rubber keys, the stand, the marking, the power
+// light, the cartridge, the green board, the chips, the board's small parts, the cells and the speaker's can.
+let brickShell = 0
+let brickLens = 1
+let brickButtons = 2
+let brickKeys = 3
+let brickRubber = 4
+let brickStand = 5
+let brickMarking = 6
+let brickLed = 7
+let brickCartridge = 8
+let brickBoard = 9
+let brickChip = 10
+let brickPart = 11
+let brickCell = 12
+let brickMetal = 13
 
 let advancedPalette = [
   { color: "#454A7A", metal: 0.9, roughness: 0.34, specular: 0.5, sheen: 0.3 }
@@ -93,14 +99,31 @@ let agbLed = 5
 let agbMarking = 6
 let agbStand = 7
 
-// The deck's cart: walnut veneer, its label, the casters and the spare cartridges on its shelf.
+// The deck's cabinet: walnut veneer, its label, the black kick and the spare cartridges in its bay.
 let standWood = 0
 let standLabel = 1
-let standCaster = 2
+let standKick = 2
 let standCartridge = 3
+// The cabinet's top, which the television and the console stand on.
+let deckTop = 0.65
 
-// The television: the charcoal cabinet, the silver mask ring and power key, the tube's dark glass round the picture,
-// the knobs and feet, the speaker and vent slots, the standby light and the chrome antenna.
+// The television: the black body, the silver bezel, the tube's dark face round the picture, the base and power key,
+// the grille and vents, the standby light and the chrome badge. Its frame: the set's centre at x tvX, the
+// bezel's face at z tvFront and the tube's face 5 mm behind it, the picture's centre pictureY up. The picture is 256 by
+// 240 at 1.875 mm a line and 8/7 of that a pixel across (deckPitchX), 548.6 by 450 mm, so the 224 lines a set shows
+// are a 548.6 by 420 mm, 4:3 picture: a 27-inch tube's. The tube's opening is 9 mm wider each side and 8 mm taller.
+let tvX = -0.22
+let tvFront = 0.205
+let tubeFront = 0.2
+let deckPitchY = 0.001875
+let deckPitchX = (deckPitchY * (8 / 7))
+let pictureY = (deckTop + 0.357)
+let pictureHalfWidth = ((256 * deckPitchX) / 2)
+let pictureHalfHeight = ((240 * deckPitchY) / 2)
+let tubeHalfWidth = (pictureHalfWidth + 0.009)
+let tubeHalfHeight = (pictureHalfHeight + 0.008)
+let tubeTop = (pictureY + tubeHalfHeight)
+let tubeBottom = (pictureY - tubeHalfHeight)
 let tvCabinet = 0
 let tvTrim = 1
 let tvTube = 2
@@ -140,18 +163,20 @@ prototypes {
   }
 
   // The brick in its frame: origin at the body's centre, x right, y up the face, z out of it, leaning back 20 degrees
-  // (turned -20 degrees about x), its bottom-back edge 1 mm into the stand's base plate on the plinth. In that frame the
-  // body is 75 by 133 mm, front and back shells 11.5 mm each, the battery bay 4.5 mm proud of the back; the screen's
-  // picture (screen 0) is centred at y 0.031 on a dark lens 57 by 49 mm, its face 1 mm proud of the lens; the d-pad stands at
-  // (-21.5, -25.5) mm, A and B at (26.2, -20.5) and (13.2, -28.3), select and start at (-8.5, -46.5) and (8.5, -46.5),
-  // the speaker's five slots at (22.5, -50.5), and the cartridge stands 10 mm out of the top.
+  // (turned -20 degrees about x), its bottom-back edge 1 mm into the stand's base plate, whose underside is the
+  // prototype's y = 0 (the plinth's top). In that frame the body is 75 by 133 by 23 mm of clear shell, the battery bay
+  // 4.5 mm proud of its back. Inside it lie the board 7.5 mm under the face (its processor at (-2, -13) mm, its memory,
+  // regulator and two rows of parts), the screen's module behind the lens, the speaker's can at (22.5, -50.5), the
+  // cartridge down its slot behind the board on its connector, and two AA cells across the bay. On the face: the
+  // screen's picture (screen 0) centred at y 31 on a dark lens 57 by 49 mm, its face 1 mm proud of the lens; the d-pad
+  // at (-21.5, -25.5), A and B at (26.2, -20.5) and (13.2, -28.3), select and start at (-8.5, -46.5) and
+  // (8.5, -46.5), the speaker's five slots at (22.5, -50.5); the cartridge stands 8.5 mm out of the top.
   prototype "device-humble-gaming-brick" {
     document {
       name: "HUMBLE GAMING BRICK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#F58220", specular: 0.05, roughness: 0.15, coat: 0.6, inset { origin [17.497, 1.257756, 28.006707], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#2E1606" }, { radius: 0.0065, color: "#7A3210" }, { radius: 0.03, color: "#A8480F" }, { radius: 0.037, color: "#F58220" }], softness: 0.3, modulationAmplitude: 0.12, modulationFrequency: 4, seed: 3154 } } }
-        { color: "#F58220", specular: 0.05, roughness: 0.15, coat: 0.6, inset { origin [17.5, 1.24024, 28.010973], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#24201E" }, { radius: 0.016, color: "#6E3412" }, { radius: 0.024, color: "#B9560F" }, { radius: 0.03, color: "#F58220" }], softness: 0.35, modulationAmplitude: 0.3, modulationFrequency: 2, seed: 932 } } }
+        { color: "#FF8A2B", roughness: 0.06, glass { depth: 0.04, ior: 1.49 } }
         { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
         { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
         { color: "#2A2624", roughness: 0.4, specular: 0.04 }
@@ -160,23 +185,17 @@ prototypes {
         { color: "#FBE6D2", roughness: 0.5 }
         { color: "#FF3A2A", emissive: 4, roughness: 0.3 }
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
+        { color: "#1E5A3A", roughness: 0.5, specular: 0.04 }
+        { color: "#151617", roughness: 0.35, specular: 0.05 }
+        { color: "#B8A27A", roughness: 0.5, specular: 0.04 }
+        { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
+        { color: "#9A9DA3", metal: 0.8, roughness: 0.35, specular: 0.4 }
       ]
-      shape Prism "shell-front" {
-        material: brickShellFront
-        position [0, 1.223389, -0.010535]
+      shape Prism "shell" {
+        material: brickShell
+        position [0, 0.071422, -0.015938]
         rotation [-0.173648, 0, 0, 0.984808]
-        scale [0.0375, 0.0665, 0.00575]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.24
-        }
-        rounding: 0.0022
-      }
-      shape Prism "shell-back" {
-        material: brickShellBack
-        position [0, 1.219456, -0.021341]
-        rotation [-0.173648, 0, 0, 0.984808]
-        scale [0.0375, 0.0665, 0.00575]
+        scale [0.0375, 0.0665, 0.0115]
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 0.24
@@ -184,8 +203,8 @@ prototypes {
         rounding: 0.0022
       }
       shape Prism "battery-bay" {
-        material: brickShellBack
-        position [0, 1.188017, -0.017081]
+        material: brickShell
+        position [0, 0.038017, -0.017082]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.029, 0.021, 0.0035]
         profile {
@@ -194,9 +213,92 @@ prototypes {
         }
         rounding: 0.0015
       }
+      shape Box "board" {
+        material: brickBoard
+        position [0, 0.064931, -0.010383]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.034, 0.054, 0.0006]
+        chamfer: 0.0004
+      }
+      shape Box "lcd-module" {
+        material: brickChip
+        position [0, 0.102222, -0.01757]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.026, 0.022, 0.0025]
+        chamfer: 0.0006
+      }
+      shape Box "processor" {
+        material: brickChip
+        position [-0.002, 0.060609, -0.007639]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.0075, 0.0075, 0.0006]
+        chamfer: 0.0004
+      }
+      shape Box "memory" {
+        material: brickChip
+        position [0.015, 0.068058, -0.010563]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.005, 0.003, 0.0004]
+        chamfer: 0.0003
+      }
+      shape Box "regulator" {
+        material: brickChip
+        position [-0.017, 0.069937, -0.011247]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.004, 0.004, 0.0004]
+        chamfer: 0.0003
+      }
+      shape Box "parts-row" {
+        material: brickPart
+        position [0, 0.074115, -0.012927]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.0008, 0.0005, 0.00025]
+        domain [repeat(spacing: [0.004, 1, 1], limit: [6, 0, 0], origin: [0, 0.074115, 0.012927])]
+      }
+      shape Box "parts-low" {
+        material: brickPart
+        position [-0.02, 0.033238, 0.001951]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.0008, 0.0005, 0.00025]
+        domain [repeat(spacing: [0.003, 1, 1], limit: [3, 0, 0], origin: [0.02, 0.033238, -0.001951])]
+      }
+      shape Cylinder "speaker-can" {
+        material: brickMetal
+        position [0.0225, 0.02602, 0.006972]
+        rotation [0.573576, 0, 0, 0.819152]
+        scale [0.01, 0.0025, 0.01]
+      }
+      shape Box "cartridge-connector" {
+        material: brickChip
+        position [0, 0.094443, -0.03017]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.03, 0.003, 0.0045]
+        chamfer: 0.0005
+      }
+      shape Cylinder "cell-upper" {
+        material: brickCell
+        position [0, 0.047244, -0.015119]
+        rotation [-0.122788, 0.122788, 0.696364, 0.696364]
+        scale [0.00725, 0.02525, 0.00725]
+        rounding: 0.001
+      }
+      shape Cylinder "cell-lower" {
+        material: brickCell
+        position [0, 0.032209, -0.009647]
+        rotation [-0.122788, 0.122788, 0.696364, 0.696364]
+        scale [0.00725, 0.02525, 0.00725]
+        rounding: 0.001
+      }
+      shape Box "cartridge" {
+        material: brickCartridge
+        position [0, 0.118405, -0.038891]
+        rotation [-0.173648, 0, 0, 0.984808]
+        scale [0.0285, 0.023, 0.0038]
+        chamfer: 0.001
+      }
       shape Prism "lens" {
         material: brickLens
-        position [0, 1.253145, -0.015033]
+        position [0, 0.103145, -0.015033]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0285, 0.0245, 0.0006]
         profile {
@@ -206,13 +308,13 @@ prototypes {
       }
       shape Sphere "power-led" {
         material: brickLed
-        position [-0.0254, 1.263619, -0.018419]
+        position [-0.0254, 0.113618, -0.01842]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0011, 0.0011, 0.0011]
       }
       shape Prism "dpad-well" {
         material: brickKeys
-        position [-0.0215, 1.201428, 0.003684]
+        position [-0.0215, 0.051428, 0.003684]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0128, 0.0128, 0.0004]
         profile {
@@ -222,21 +324,21 @@ prototypes {
       }
       shape Box "dpad-across" {
         material: brickKeys
-        position [-0.0215, 1.201702, 0.004436]
+        position [-0.0215, 0.051701, 0.004436]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0105, 0.0036, 0.0016]
         chamfer: 0.0007
       }
       shape Box "dpad-down" {
         material: brickKeys
-        position [-0.0215, 1.201702, 0.004436]
+        position [-0.0215, 0.051701, 0.004436]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0036, 0.0105, 0.0016]
         chamfer: 0.0007
       }
       shape Prism "button-a" {
         material: brickButtons
-        position [0.0262, 1.206332, 0.002538]
+        position [0.0262, 0.056331, 0.002538]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0048, 0.0048, 0.0014]
         profile {
@@ -247,7 +349,7 @@ prototypes {
       }
       shape Prism "button-b" {
         material: brickButtons
-        position [0.0132, 1.199002, 0.005206]
+        position [0.0132, 0.049002, 0.005205]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0048, 0.0048, 0.0014]
         profile {
@@ -258,7 +360,7 @@ prototypes {
       }
       shape Prism "select" {
         material: brickRubber
-        position [-0.0085, 1.181763, 0.011054]
+        position [-0.0085, 0.031763, 0.011054]
         rotation [-0.169532, 0.037584, 0.213151, 0.961464]
         scale [0.0052, 0.0017, 0.0009]
         profile {
@@ -269,7 +371,7 @@ prototypes {
       }
       shape Prism "start" {
         material: brickRubber
-        position [0.0085, 1.181763, 0.011054]
+        position [0.0085, 0.031763, 0.011054]
         rotation [-0.169532, 0.037584, 0.213151, 0.961464]
         scale [0.0052, 0.0017, 0.0009]
         profile {
@@ -280,49 +382,42 @@ prototypes {
       }
       shape Prism "speaker" {
         material: brickKeys
-        position [0.0225, 1.177936, 0.012235]
+        position [0.0225, 0.027935, 0.012234]
         rotation [-0.150384, 0.086824, 0.492404, 0.852869]
         scale [0.0045, 0.0007, 0.0004]
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 1
         }
-        domain [repeat(spacing: [0.0032, 1, 1], limit: [2, 0, 0], origin: [-0.0225, 1.177936, -0.012235])]
+        domain [repeat(spacing: [0.0032, 1, 1], limit: [2, 0, 0], origin: [-0.0225, 0.027935, -0.012234])]
       }
       shape Box "power-switch" {
         material: brickKeys
-        position [-0.022, 1.284878, -0.036905]
+        position [-0.022, 0.134878, -0.036906]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0045, 0.0016, 0.003]
       }
       shape Box "ir-window" {
         material: brickLens
-        position [0.014, 1.284657, -0.035761]
+        position [0.014, 0.134656, -0.035761]
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.007, 0.0012, 0.0032]
       }
-      shape Box "cartridge" {
-        material: brickCartridge
-        position [0, 1.28579, -0.045219]
-        rotation [-0.173648, 0, 0, 0.984808]
-        scale [0.0285, 0.0055, 0.0038]
-        chamfer: 0.001
-      }
       shape Box "stand-base" {
         material: brickStand
-        position [0, 1.1525, -0.009051]
+        position [0, 0.0025, -0.009051]
         scale [0.032, 0.0035, 0.032664]
         chamfer: 0.0012
       }
       shape Box "stand-lip" {
         material: brickStand
-        position [0, 1.159, 0.020413]
+        position [0, 0.009, 0.020413]
         scale [0.032, 0.0045, 0.0022]
         chamfer: 0.0008
       }
       shape Prism "stand-rest" {
         material: brickStand
-        position [0, 1.178983, -0.023986]
+        position [0, 0.028983, -0.023986]
         rotation [0, 0.707107, 0, 0.707107]
         scale [0.015729, 0.023983, 0.024]
         profile {
@@ -335,18 +430,20 @@ prototypes {
           ]
         }
       }
-      textRuns [{ text: "HUMBLE GAMING BRICK", position [0, 1.223853, -0.004584], rotation [-0.173648, 0, 0, 0.984808], emHeight: 0.0032, depth: 0.0003, mode: "emboss", material: brickMarking, align: "center" }]
+      textRuns [{ text: "HUMBLE GAMING BRICK", position [0, 0.073852, -0.004584], rotation [-0.173648, 0, 0, 0.984808], emHeight: 0.0032, depth: 0.0003, mode: "emboss", material: brickMarking, align: "center" }]
     }
   }
 
   // The clamshell in two frames meeting at its hinge axis: the lower half's (x right, y from the hinge toward its front
   // edge running negative, z out of the control face), turned -60 degrees about x so the half lies 30 degrees up from
-  // level on the stand; and the upper half's (y from the hinge up the screen, z out of the glass), turned -30 degrees,
-  // the 150-degree stop. The halves are 82 and 80 mm long, 13.3 and 10.4 mm thick, chamfered 1.2 mm round every rim;
-  // each half begins 1.6 mm from the axis. The dark glass covers the upper half's face to 2 mm of its edges, and the
-  // screen's picture (screen 1) lies centred on it, 42.6 mm from the axis, its face 1 mm proud. The lower half carries the d-pad at (-26.5, -41.6) mm in its frame, A and B at (30, -37.1) and
-  // (18.5, -45.1), select and start at (-33.5, -67.6) and (-21.5, -67.6), five speaker slots at (26, -69.6), the power
-  // light by the hinge, the shoulder keys at its back corners and the cartridge out of its front edge.
+  // level on the stand, whose underside is the prototype's y = 0 (the plinth's top); and the upper half's (y from
+  // the hinge up the screen, z out of the glass), turned -30 degrees, the 150-degree stop. The halves are 82 and 80 mm
+  // long, 13.3 and 10.4 mm thick, chamfered 1.2 mm round every rim; each half begins 1.6 mm from the axis. The dark
+  // glass covers the upper half's face to 2 mm of its edges, and the screen's picture (screen 1) lies centred on it,
+  // 42.6 mm from the axis, its face 1 mm proud. The lower half carries the d-pad at (-26.5, -41.6) mm in its frame, A
+  // and B at (30, -37.1) and (18.5, -45.1), select and start at (-33.5, -67.6) and (-21.5, -67.6), five speaker slots
+  // at (26, -69.6), the power light by the hinge, the shoulder keys at its back corners and the cartridge out of its
+  // front edge.
   prototype "device-advanced-gaming-brick" {
     document {
       name: "ADVANCED GAMING BRICK"
@@ -354,7 +451,7 @@ prototypes {
       palette: advancedPalette
       shape Prism "lower-shell" {
         material: agbShell
-        position [0, 1.189259, 0.015818]
+        position [0, 0.039259, 0.015818]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0423, 0.041, 0.00665]
         profile {
@@ -365,7 +462,7 @@ prototypes {
       }
       shape Prism "upper-shell" {
         material: agbShell
-        position [0, 1.247559, -0.040867]
+        position [0, 0.097559, -0.040867]
         rotation [-0.258819, 0, 0, 0.965926]
         scale [0.0423, 0.04, 0.0052]
         profile {
@@ -376,7 +473,7 @@ prototypes {
       }
       shape Prism "glass" {
         material: agbGlass
-        position [0, 1.250825, -0.03721]
+        position [0, 0.100825, -0.03721]
         rotation [-0.258819, 0, 0, 0.965926]
         scale [0.0402, 0.0372, 0.0006]
         profile {
@@ -386,28 +483,28 @@ prototypes {
       }
       shape Cylinder "hinge" {
         material: agbPolished
-        position [0, 1.211134, -0.020748]
+        position [0, 0.061134, -0.020748]
         rotation [0, 0, 0.707107, 0.707107]
         scale [0.0062, 0.03, 0.0062]
         rounding: 0.0015
       }
       shape Box "shoulder-left" {
         material: agbKeys
-        position [-0.034, 1.210229, -0.020803]
+        position [-0.034, 0.060229, -0.020803]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0075, 0.0025, 0.0045]
         chamfer: 0.001
       }
       shape Box "shoulder-right" {
         material: agbKeys
-        position [0.034, 1.210229, -0.020803]
+        position [0.034, 0.060229, -0.020803]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0075, 0.0025, 0.0045]
         chamfer: 0.001
       }
       shape Prism "dpad-ring" {
         material: agbPolished
-        position [-0.0265, 1.195605, 0.018327]
+        position [-0.0265, 0.045605, 0.018327]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0118, 0.0118, 0.0003]
         profile {
@@ -417,21 +514,21 @@ prototypes {
       }
       shape Box "dpad-across" {
         material: agbKeys
-        position [-0.0265, 1.196298, 0.018727]
+        position [-0.0265, 0.046298, 0.018727]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0095, 0.0032, 0.0014]
         chamfer: 0.0006
       }
       shape Box "dpad-down" {
         material: agbKeys
-        position [-0.0265, 1.196298, 0.018727]
+        position [-0.0265, 0.046298, 0.018727]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0032, 0.0095, 0.0014]
         chamfer: 0.0006
       }
       shape Prism "button-a" {
         material: agbKeys
-        position [0.03, 1.198461, 0.01478]
+        position [0.03, 0.048461, 0.01478]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0045, 0.0045, 0.0013]
         profile {
@@ -442,7 +539,7 @@ prototypes {
       }
       shape Prism "button-b" {
         material: agbKeys
-        position [0.0185, 1.194461, 0.021708]
+        position [0.0185, 0.044461, 0.021708]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0045, 0.0045, 0.0013]
         profile {
@@ -453,7 +550,7 @@ prototypes {
       }
       shape Prism "select" {
         material: agbKeys
-        position [-0.0335, 1.183038, 0.041094]
+        position [-0.0335, 0.033038, 0.041094]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0024, 0.0024, 0.0009]
         profile {
@@ -464,7 +561,7 @@ prototypes {
       }
       shape Prism "start" {
         material: agbKeys
-        position [-0.0215, 1.183038, 0.041094]
+        position [-0.0215, 0.033038, 0.041094]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0024, 0.0024, 0.0009]
         profile {
@@ -475,31 +572,31 @@ prototypes {
       }
       shape Prism "speaker" {
         material: agbGlass
-        position [0.026, 1.181605, 0.042576]
+        position [0.026, 0.031605, 0.042576]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0006, 0.0045, 0.0003]
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 1
         }
-        domain [repeat(spacing: [0.0025, 1, 1], limit: [2, 0, 0], origin: [-0.026, 1.181605, -0.042576])]
+        domain [repeat(spacing: [0.0025, 1, 1], limit: [2, 0, 0], origin: [-0.026, 0.031605, -0.042576])]
       }
       shape Sphere "power-led" {
         material: agbLed
-        position [0.036, 1.209691, -0.005872]
+        position [0.036, 0.059691, -0.005872]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0009, 0.0009, 0.0009]
       }
       shape Box "cartridge" {
         material: agbCartridge
-        position [0, 1.167399, 0.054581]
+        position [0, 0.017399, 0.054581]
         rotation [-0.5, 0, 0, 0.866025]
         scale [0.0285, 0.0045, 0.0034]
         chamfer: 0.0008
       }
       shape Prism "stand" {
         material: agbStand
-        position [0, 1.173717, 0.014908]
+        position [0, 0.023717, 0.014908]
         rotation [0, 0.707107, 0, 0.707107]
         scale [0.02728, 0.024717, 0.032]
         profile {
@@ -512,231 +609,181 @@ prototypes {
           ]
         }
       }
-      textRuns [{ text: "ADVANCED GAMING BRICK", position [0, 1.224711, -0.021441], rotation [-0.258819, 0, 0, 0.965926], emHeight: 0.0021, depth: 0.00015, mode: "emboss", material: agbMarking, align: "center" }]
+      textRuns [{ text: "ADVANCED GAMING BRICK", position [0, 0.074711, -0.021441], rotation [-0.258819, 0, 0, 0.965926], emHeight: 0.0021, depth: 0.00015, mode: "emboss", material: agbMarking, align: "center" }]
     }
   }
 
-  // The deck's cart: 0.9 by 0.45 m, its top 0.55 m up, two side panels, a shelf holding two spare cartridges, casters,
-  // and the deck's name on the top's front edge.
+  // The deck's stand: a walnut AV cabinet 1.2 m wide and 0.58 m deep, its top 0.65 m up, open bays under the set and
+  // the console with two spare cartridges in the right-hand one, a black kick, and the deck's name on the top's front
+  // edge. Every part is a box, so the analytic contact collides the cabinet as it looks.
   prototype "device-humble-gaming-deck-stand" {
     document {
       name: "HUMBLE GAMING DECK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#6E4B2F", roughness: 0.55, specular: 0.04 }
+        { color: "#5A3E2B", roughness: 0.55, specular: 0.04 }
         deviceLabel
-        { color: "#1C1C1E", roughness: 0.5 }
-        { color: "#8B8E94", roughness: 0.55 }
+        { color: "#1C1C1E", roughness: 0.6, specular: 0.04 }
+        { color: "#8B8E94", roughness: 0.55, specular: 0.04 }
       ]
       shape Box "top" {
         material: standWood
-        position [0, 0.538, 0]
-        scale [0.45, 0.012, 0.225]
+        position [0, (deckTop - 0.015), 0]
+        scale [0.6, 0.015, 0.29]
+        chamfer: 0.003
       }
       shape Box "side-left" {
         material: standWood
-        position [-0.432, 0.292, 0]
-        scale [0.018, 0.238, 0.215]
+        position [-0.585, 0.335, 0]
+        scale [0.015, 0.29, 0.285]
       }
       shape Box "side-right" {
         material: standWood
-        position [0.432, 0.292, 0]
-        scale [0.018, 0.238, 0.215]
+        position [0.585, 0.335, 0]
+        scale [0.015, 0.29, 0.285]
+      }
+      shape Box "divider" {
+        material: standWood
+        position [0.15, 0.335, 0]
+        scale [0.012, 0.29, 0.28]
       }
       shape Box "shelf" {
         material: standWood
-        position [0, 0.16, 0]
-        scale [0.416, 0.012, 0.205]
+        position [-0.215, 0.34, 0]
+        scale [0.36, 0.012, 0.275]
       }
       shape Box "bottom" {
         material: standWood
-        position [0, 0.07, 0]
-        scale [0.416, 0.016, 0.205]
+        position [0, 0.06, 0]
+        scale [0.575, 0.015, 0.28]
       }
-      shape Sphere "caster-left-back" {
-        material: standCaster
-        position [-0.41, 0.03, -0.19]
-        scale [0.026, 0.026, 0.026]
+      shape Box "back" {
+        material: standWood
+        position [0, 0.335, -0.279]
+        scale [0.575, 0.29, 0.006]
       }
-      shape Sphere "caster-left-front" {
-        material: standCaster
-        position [-0.41, 0.03, 0.19]
-        scale [0.026, 0.026, 0.026]
-      }
-      shape Sphere "caster-right-back" {
-        material: standCaster
-        position [0.41, 0.03, -0.19]
-        scale [0.026, 0.026, 0.026]
-      }
-      shape Sphere "caster-right-front" {
-        material: standCaster
-        position [0.41, 0.03, 0.19]
-        scale [0.026, 0.026, 0.026]
+      shape Box "kick" {
+        material: standKick
+        position [0, 0.024, -0.01]
+        scale [0.57, 0.024, 0.26]
       }
       shape Box "spare-cartridge" {
         material: standCartridge
-        position [-0.25, 0.1815, 0.02]
+        position [0.33, 0.0835, 0.02]
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
       }
       shape Box "spare-cartridge-top" {
         material: standCartridge
-        position [-0.245, 0.2005, 0.03]
+        position [0.335, 0.102, 0.03]
         rotation [0, 0.069756, 0, 0.997564]
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
       }
-      textRuns [{ text: "HUMBLE GAMING DECK", position [0, 0.532, 0.225], rotation [0, 0, 0, 1], emHeight: 0.017, depth: 0.003, mode: "emboss", material: standLabel, align: "center" }]
+      textRuns [{ text: "HUMBLE GAMING DECK", position [0, (deckTop - 0.015), 0.29], rotation [0, 0, 0, 1], emHeight: 0.018, depth: 0.003, mode: "emboss", material: standLabel, align: "center" }]
     }
   }
 
-  // A 14-inch portable television standing on the cart's left (x -0.15): a 370 by 330 mm cabinet 220 mm deep with the
-  // tube's housing behind it, rabbit ears on top. The picture (screen 2) is 256 by 210 mm, centred 25 mm left of the
-  // cabinet's centre and 191 mm above the cart, on the tube's dark glass inside a silver mask ring; the right-hand
-  // column holds the speaker, the channel and volume knobs, the power key and the standby light.
+  // A 27-inch flat-faced television on the cabinet's left (x tvX): a silver bezel 740 by 621 mm round the tube's
+  // opening, a black body 505 mm deep with the tube's tapered housing and neck behind it, and under the picture a
+  // full-width speaker grille, a badge, the power key and the standby light. The bezel's opening is carved through it
+  // with a 6 mm bevel round its rim (the one subtraction, so the creation emits in one scope), and the tube's flat dark
+  // face lies 5 mm back inside it. The picture (screen 2) stands 3 mm proud of that face, the rest of its slab sunk
+  // into it.
   prototype "device-humble-gaming-deck-television" {
     document {
       name: "HUMBLE GAMING DECK TELEVISION"
       schema: "puck.creation.v1"
       palette [
-        { color: "#2B2C30", roughness: 0.5, specular: 0.04 }
-        { color: "#A7AAB0", metal: 0.6, roughness: 0.35, specular: 0.4 }
-        { color: "#141618", specular: 0.05, roughness: 0.08, coat: 0.5 }
+        { color: "#1B1C1F", roughness: 0.4, specular: 0.05 }
+        { color: "#8E9198", metal: 0.6, roughness: 0.35, specular: 0.4 }
+        { color: "#141618", specular: 0.05, roughness: 0.06, coat: 0.6 }
         { color: "#1E1F22", roughness: 0.45, specular: 0.04 }
-        { color: "#1A1A1C", roughness: 0.7 }
+        { color: "#151517", roughness: 0.8, specular: 0.04 }
         { color: "#FF2A1A", emissive: 3 }
         { color: "#D0D3D8", metal: 1, roughness: 0.15, specular: 0.6 }
       ]
-      shape Box "foot-left-front" {
-        material: tvKnobs
-        position [-0.3, 0.553, 0.13]
-        scale [0.02, 0.004, 0.015]
+      shape Box "bezel" {
+        material: tvTrim
+        position [tvX, (((deckTop - 0.001) + (tubeTop + 0.03)) / 2), (tvFront - 0.06)]
+        scale [0.37, (((tubeTop + 0.03) - (deckTop - 0.001)) / 2), 0.06]
+        chamfer: 0.004
       }
-      shape Box "foot-left-back" {
-        material: tvKnobs
-        position [-0.3, 0.553, -0.14]
-        scale [0.02, 0.004, 0.015]
+      shape Box "opening" {
+        material: tvTrim
+        position [tvX, pictureY, (tvFront - 0.06)]
+        scale [tubeHalfWidth, tubeHalfHeight, 0.07]
+        blend: ChamferSubtraction
+        smooth: 0.006
       }
-      shape Box "foot-right-front" {
-        material: tvKnobs
-        position [0, 0.553, 0.13]
-        scale [0.02, 0.004, 0.015]
+      shape Prism "tube" {
+        material: tvTube
+        position [tvX, pictureY, (tubeFront - 0.008)]
+        scale [(tubeHalfWidth + 0.012), (tubeHalfHeight + 0.012), 0.008]
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.1
+        }
       }
-      shape Box "foot-right-back" {
-        material: tvKnobs
-        position [0, 0.553, -0.14]
-        scale [0.02, 0.004, 0.015]
-      }
-      shape Box "cabinet" {
+      shape Box "body" {
         material: tvCabinet
-        position [-0.15, 0.721, 0.05]
-        scale [0.185, 0.165, 0.11]
-        chamfer: 0.008
+        position [tvX, (deckTop + 0.311), 0]
+        scale [0.36, 0.3, 0.09]
+        chamfer: 0.02
       }
       shape Box "tube-housing" {
         material: tvCabinet
-        position [-0.15, 0.706, -0.135]
-        scale [0.15, 0.135, 0.08]
+        position [tvX, (deckTop + 0.33), -0.17]
+        scale [0.3, 0.25, 0.09]
+        chamfer: 0.06
+      }
+      shape Box "neck" {
+        material: tvCabinet
+        position [tvX, (deckTop + 0.35), -0.27]
+        scale [0.17, 0.15, 0.03]
         chamfer: 0.02
       }
       shape Box "vents" {
         material: tvGrille
-        position [-0.15, 0.841, -0.13]
-        scale [0.004, 0.0012, 0.045]
-        domain [repeat(spacing: [0.022, 1, 1], limit: [4, 0, 0], origin: [0.15, 0.841, 0.13])]
+        position [tvX, (deckTop + 0.5795), -0.17]
+        scale [0.005, 0.0012, 0.025]
+        domain [repeat(spacing: [0.025, 1, 1], limit: [6, 0, 0], origin: [(0 - tvX), (deckTop + 0.5795), 0.17])]
       }
-      shape Prism "mask-ring" {
-        material: tvTrim
-        position [-0.175, 0.741, 0.161]
-        scale [0.146, 0.123, 0.002]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.2
-        }
+      shape Box "base" {
+        material: tvKnobs
+        position [tvX, (deckTop + 0.007), -0.03]
+        scale [0.33, 0.008, 0.2]
       }
-      shape Prism "tube" {
-        material: tvTube
-        position [-0.175, 0.741, 0.162]
-        scale [0.138, 0.115, 0.003]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.2
-        }
-      }
-      shape Box "speaker" {
+      shape Box "grille" {
         material: tvGrille
-        position [0.003, 0.816, 0.1605]
-        scale [0.022, 0.0015, 0.001]
-        domain [repeat(spacing: [1, 0.008, 1], limit: [0, 3, 0], origin: [-0.003, 0.816, -0.1605])]
+        position [tvX, (deckTop + 0.062), (tvFront - 0.0005)]
+        scale [0.3, 0.032, 0.0025]
       }
-      shape Prism "knob-channel" {
-        material: tvKnobs
-        position [0.003, 0.736, 0.166]
-        scale [0.011, 0.011, 0.007]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 1
-        }
-        rounding: 0.002
-      }
-      shape Prism "knob-volume" {
-        material: tvKnobs
-        position [0.003, 0.691, 0.166]
-        scale [0.011, 0.011, 0.007]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 1
-        }
-        rounding: 0.002
+      shape Box "badge" {
+        material: tvChrome
+        position [tvX, (deckTop + 0.109), (tvFront + 0.0005)]
+        scale [0.03, 0.004, 0.0015]
+        chamfer: 0.0008
       }
       shape Box "power" {
-        material: tvTrim
-        position [0.003, 0.636, 0.163]
-        scale [0.012, 0.006, 0.004]
+        material: tvKnobs
+        position [(tvX + 0.335), (deckTop + 0.04), (tvFront + 0.0005)]
+        scale [0.012, 0.006, 0.0025]
         chamfer: 0.001
       }
       shape Sphere "standby-led" {
         material: tvLed
-        position [0.003, 0.614, 0.161]
-        scale [0.002, 0.002, 0.002]
-      }
-      shape Superellipsoid "antenna-base" {
-        material: tvKnobs
-        position [-0.15, 0.888, 0.01]
-        scale [0.035, 0.012, 0.025]
-        exponent: 3
-      }
-      shape Cylinder "antenna-left" {
-        material: tvChrome
-        position [-0.225115, 1.036184, -0.019372]
-        rotation [-0.101424, 0.025288, 0.240597, 0.96498]
-        scale [0.0025, 0.16, 0.0025]
-      }
-      shape Sphere "antenna-left-tip" {
-        material: tvChrome
-        position [-0.30117, 1.176096, -0.049111]
-        rotation [-0.101424, 0.025288, 0.240597, 0.96498]
-        scale [0.0042, 0.0042, 0.0042]
-      }
-      shape Cylinder "antenna-right" {
-        material: tvChrome
-        position [-0.074885, 1.036184, -0.019372]
-        rotation [-0.101424, -0.025288, -0.240597, 0.96498]
-        scale [0.0025, 0.16, 0.0025]
-      }
-      shape Sphere "antenna-right-tip" {
-        material: tvChrome
-        position [0.00117, 1.176096, -0.049111]
-        rotation [-0.101424, -0.025288, -0.240597, 0.96498]
-        scale [0.0042, 0.0042, 0.0042]
+        position [(tvX + 0.335), (deckTop + 0.062), (tvFront + 0.0005)]
+        scale [0.0022, 0.0022, 0.0022]
       }
     }
   }
 
-  // The console on the cart's right (x 0.24): a top loader, 160 by 168 mm on four feet, a graphite base under an
-  // aluminium deck, the graphite slot housing across its back with the cartridge standing in it (its label the colour
-  // bars of the cartridge it boots), power and reset keys on the deck's front flanks, a power light, and two controller
-  // ports in the base's face. Its pad lies on the cart in front, its cable plugged into port 1.
+  // The console on the cabinet's right (x 0.3), 70 mm from the television: a top loader, 160 by 168 mm on four feet, a
+  // graphite base under an aluminium deck, the graphite slot housing across its back with the cartridge standing in it
+  // (its label the colour bars of the cartridge it boots), power and reset keys on the deck's front flanks, a power
+  // light, and two controller ports in the base's face. Its pad lies on the cabinet in front, its cable plugged into
+  // port 1.
   prototype "device-humble-gaming-deck" {
     document {
       name: "HUMBLE GAMING DECK"
@@ -759,27 +806,27 @@ prototypes {
       ]
       shape Cylinder "foot-left-back" {
         material: deckInlay
-        position [0.18, 0.5515, -0.1]
+        position [0.24, 0.6515, -0.1]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-left-front" {
         material: deckInlay
-        position [0.18, 0.5515, 0.02]
+        position [0.24, 0.6515, 0.02]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-right-back" {
         material: deckInlay
-        position [0.3, 0.5515, -0.1]
+        position [0.36, 0.6515, -0.1]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-right-front" {
         material: deckInlay
-        position [0.3, 0.5515, 0.02]
+        position [0.36, 0.6515, 0.02]
         scale [0.006, 0.0025, 0.006]
       }
       shape Prism "base" {
         material: deckGraphite
-        position [0.24, 0.57, -0.04]
+        position [0.3, 0.67, -0.04]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.08, 0.084, 0.016]
         profile {
@@ -790,7 +837,7 @@ prototypes {
       }
       shape Prism "deck" {
         material: deckAluminium
-        position [0.24, 0.5925, -0.044]
+        position [0.3, 0.6925, -0.044]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.0755, 0.078, 0.008]
         profile {
@@ -801,7 +848,7 @@ prototypes {
       }
       shape Prism "slot-housing" {
         material: deckGraphite
-        position [0.24, 0.6065, -0.075]
+        position [0.3, 0.7065, -0.075]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.069, 0.032, 0.0075]
         profile {
@@ -812,75 +859,75 @@ prototypes {
       }
       shape Box "slot" {
         material: deckInlay
-        position [0.24, 0.6142, -0.075]
+        position [0.3, 0.7142, -0.075]
         scale [0.0625, 0.0006, 0.0115]
       }
       shape Box "cartridge" {
         material: deckCartridge
-        position [0.24, 0.65, -0.075]
+        position [0.3, 0.75, -0.075]
         scale [0.06, 0.04, 0.0095]
         chamfer: 0.002
       }
       shape Box "label-0" {
         material: deckBarWhite
-        position [0.20325, 0.665, -0.0653]
+        position [0.26325, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-1" {
         material: deckBarYellow
-        position [0.21375, 0.665, -0.0653]
+        position [0.27375, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-2" {
         material: deckBarCyan
-        position [0.22425, 0.665, -0.0653]
+        position [0.28425, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-3" {
         material: deckBarGreen
-        position [0.23475, 0.665, -0.0653]
+        position [0.29475, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-4" {
         material: deckBarMagenta
-        position [0.24525, 0.665, -0.0653]
+        position [0.30525, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-5" {
         material: deckBarRed
-        position [0.25575, 0.665, -0.0653]
+        position [0.31575, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-6" {
         material: deckBarBlue
-        position [0.26625, 0.665, -0.0653]
+        position [0.32625, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-7" {
         material: deckBarBlack
-        position [0.27675, 0.665, -0.0653]
+        position [0.33675, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "power" {
         material: deckInlay
-        position [0.195, 0.602, -0.005]
+        position [0.255, 0.702, -0.005]
         scale [0.013, 0.0035, 0.009]
         chamfer: 0.0015
       }
       shape Box "reset" {
         material: deckInlay
-        position [0.285, 0.602, -0.005]
+        position [0.345, 0.702, -0.005]
         scale [0.013, 0.0035, 0.009]
         chamfer: 0.0015
       }
       shape Box "power-led" {
         material: deckLed
-        position [0.29, 0.576, 0.044]
+        position [0.35, 0.676, 0.044]
         scale [0.006, 0.0008, 0.0008]
       }
       shape Prism "port-1" {
         material: deckInlay
-        position [0.212, 0.569, 0.0444]
+        position [0.272, 0.669, 0.0444]
         scale [0.0055, 0.0085, 0.0008]
         profile {
           kind: "RoundedRectangle"
@@ -889,7 +936,7 @@ prototypes {
       }
       shape Prism "port-2" {
         material: deckInlay
-        position [0.268, 0.569, 0.0444]
+        position [0.328, 0.669, 0.0444]
         scale [0.0055, 0.0085, 0.0008]
         profile {
           kind: "RoundedRectangle"
@@ -898,25 +945,25 @@ prototypes {
       }
       shape Box "plug" {
         material: deckInlay
-        position [0.212, 0.569, 0.052]
+        position [0.272, 0.669, 0.052]
         scale [0.007, 0.0095, 0.008]
         chamfer: 0.0015
       }
       shape Cylinder "pad-left" {
         material: deckAluminium
-        position [0.146, 0.559, 0.164]
+        position [0.206, 0.659, 0.164]
         scale [0.026, 0.0095, 0.026]
         rounding: 0.004
       }
       shape Cylinder "pad-right" {
         material: deckAluminium
-        position [0.214, 0.559, 0.164]
+        position [0.274, 0.659, 0.164]
         scale [0.026, 0.0095, 0.026]
         rounding: 0.004
       }
       shape Prism "pad-bridge" {
         material: deckAluminium
-        position [0.18, 0.559, 0.164]
+        position [0.24, 0.659, 0.164]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.034, 0.02, 0.0085]
         profile {
@@ -927,19 +974,19 @@ prototypes {
       }
       shape Box "pad-dpad-across" {
         material: deckInlay
-        position [0.146, 0.5697, 0.164]
+        position [0.206, 0.6697, 0.164]
         scale [0.0105, 0.0016, 0.0034]
         chamfer: 0.0006
       }
       shape Box "pad-dpad-down" {
         material: deckInlay
-        position [0.146, 0.5697, 0.164]
+        position [0.206, 0.6697, 0.164]
         scale [0.0034, 0.0016, 0.0105]
         chamfer: 0.0006
       }
       shape Prism "pad-b" {
         material: deckButtons
-        position [0.2055, 0.5695, 0.169]
+        position [0.2655, 0.6695, 0.169]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.0048, 0.0048, 0.0016]
         profile {
@@ -950,7 +997,7 @@ prototypes {
       }
       shape Prism "pad-a" {
         material: deckButtons
-        position [0.223, 0.5695, 0.161]
+        position [0.283, 0.6695, 0.161]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.0048, 0.0048, 0.0016]
         profile {
@@ -961,7 +1008,7 @@ prototypes {
       }
       shape Prism "pad-select" {
         material: deckInlay
-        position [0.172, 0.5678, 0.167]
+        position [0.232, 0.6678, 0.167]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.0055, 0.002, 0.0012]
         profile {
@@ -971,7 +1018,7 @@ prototypes {
       }
       shape Prism "pad-start" {
         material: deckInlay
-        position [0.188, 0.5678, 0.167]
+        position [0.248, 0.6678, 0.167]
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.0055, 0.002, 0.0012]
         profile {
@@ -981,7 +1028,7 @@ prototypes {
       }
       shape Sweep "cable" {
         material: deckInlay
-        position [0.18, 0.556, 0.143]
+        position [0.24, 0.656, 0.143]
         curve {
           a [0, 0, 0]
           b [0.05, -0.012019, -0.042]
@@ -1004,8 +1051,9 @@ placements {
 
   placement "device-humble-gaming-brick" {
     prototype: "device-humble-gaming-brick"
-    position [17.5, deviceFloor, deviceZ]
+    position [17.5, (deviceFloor + plinthTop), deviceZ]
     yawDegrees: 0
+    scale: handheldScale
   }
 
   placement "device-advanced-gaming-brick-plinth" {
@@ -1017,8 +1065,9 @@ placements {
 
   placement "device-advanced-gaming-brick" {
     prototype: "device-advanced-gaming-brick"
-    position [15, deviceFloor, deviceZ]
+    position [15, (deviceFloor + plinthTop), deviceZ]
     yawDegrees: 0
+    scale: handheldScale
   }
 
   placement "device-humble-gaming-deck-stand" {
@@ -1140,20 +1189,20 @@ hud {
 }
 
 // Each screen's glass is exactly its picture: the source's width and height in pixels at the device's pixel pitch, the
-// device's case lying outside it, never inside. The handhelds' pixels are square; the television's are 8:7, as wide as
-// tall times 8/7, so its 256 by 240 picture is 256 by 210 mm and the 224 lines a set shows make the 4:3 picture a
-// 14-inch tube gives. Each glass is a 2 mm slab (4 mm on the television) square to its device's face. A screen's
-// `origin` is the glass's front face, not its middle (the slab runs 2 halfDepth back from it), and it stands 1 mm proud
-// of the lens or glass round it (2 mm on the television, whose cart-scale bake is coarser), the rest of its depth sunk
-// into the face: a face behind the lens's is hidden by it and shows no picture.
+// device's case lying outside it, never inside. The handhelds' pixels are square, their pitch the real one at the
+// handhelds' shown scale; the television's are 8:7, as wide as tall times 8/7 (deckPitchX, beside the television's
+// frame). Each glass is a thin slab square to its device's face. A screen's `origin` is the glass's front face, not its
+// middle (the slab runs 2 halfDepth back from it), and it stands proud of the lens or tube round it (1 mm at the
+// handhelds' real size, 3 mm on the television, whose bake is coarser), the rest of its depth sunk into the face: a
+// face behind the lens's is hidden by it and shows no picture. Each handheld's origin is its real offset from the
+// plinth's top, scaled with the device.
 //
-//   screen 0, the brick: 160 by 144 at 0.275 mm, 44 by 39.6 mm, leaning back 20 degrees with the brick
-//   screen 1, the advanced brick: 240 by 160 at 0.255 mm, 61.2 by 40.8 mm, leaning back 30 degrees with its upper half
-//   screen 2, the deck: 256 by 240 at 1 by 0.875 mm, 256 by 210 mm, upright in the television
-let brickPitch = 0.000275
-let advancedPitch = 0.000255
-let deckPitchY = 0.000875
-let deckPitchX = (deckPitchY * (8 / 7))
+//   screen 0, the brick: 160 by 144 at 0.4125 mm (0.275 real), 66 by 59.4 mm, leaning back 20 degrees with the brick
+//   screen 1, the advanced brick: 240 by 160 at 0.3825 mm (0.255 real), 91.8 by 61.2 mm, leaning back 30 degrees with
+//   its upper half
+//   screen 2, the deck: 256 by 240 at 2.143 by 1.875 mm, 548.6 by 450 mm, upright in the television
+let brickPitch = (0.000275 * handheldScale)
+let advancedPitch = (0.000255 * handheldScale)
 // Each engages on the Moth's context button (`interact`), which the pad does not play, so the same press leaves. Once
 // the camera has framed the picture, the window shows it alone, as a desktop emulator does, on the matte its route's
 // `display` fills: black on every device.
@@ -1163,36 +1212,36 @@ let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact"
 screens [
   {
     index: 0
-    origin [17.5, (deviceFloor + 1.255102), (deviceZ + 0.014043)]
+    origin [17.5, ((deviceFloor + plinthTop) + (handheldScale * 0.105102)), (deviceZ + (handheldScale * 0.014043))]
     right [-1, 0, 0]
     up [0, 0.939693, 0.34202]
     halfWidth: ((160 * brickPitch) / 2)
     halfHeight: ((144 * brickPitch) / 2)
-    halfDepth: 0.001
+    halfDepth: (0.001 * handheldScale)
     round: 0
     source: machine(instance: `humble-gaming-brick`, output: "video")
     route: deviceRoute
   }
   {
     index: 1
-    origin [15, (deviceFloor + 1.251622), (deviceZ + 0.035821)]
+    origin [15, ((deviceFloor + plinthTop) + (handheldScale * 0.101622)), (deviceZ + (handheldScale * 0.035821))]
     right [-1, 0, 0]
     up [0, 0.866025, 0.5]
     halfWidth: ((240 * advancedPitch) / 2)
     halfHeight: ((160 * advancedPitch) / 2)
-    halfDepth: 0.001
+    halfDepth: (0.001 * handheldScale)
     round: 0
     source: machine(instance: `advanced-gaming-brick`, output: "video")
     route: deviceRoute
   }
   {
     index: 2
-    origin [12.675, (deviceFloor + 0.741), (deviceZ - 0.167)]
+    origin [(12.5 - tvX), (deviceFloor + pictureY), (deviceZ - (tubeFront + 0.003))]
     right [-1, 0, 0]
     up [0, 1, 0]
-    halfWidth: ((256 * deckPitchX) / 2)
-    halfHeight: ((240 * deckPitchY) / 2)
-    halfDepth: 0.002
+    halfWidth: pictureHalfWidth
+    halfHeight: pictureHalfHeight
+    halfDepth: 0.003
     round: 0
     source: machine(instance: `humble-gaming-deck`, output: "video")
     // The deck has two controller ports; an engaged seat plays the first.

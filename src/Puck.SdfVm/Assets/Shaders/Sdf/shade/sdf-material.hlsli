@@ -32,6 +32,8 @@ struct SdfMaterialData {
     uint paintFirst; // the vector of the material's first paint (SdfProgram.PackPaint)
     uint paintCount; // its paints, drawn in order
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
+    float3 absorption; // a glass's absorption per world unit (SdfGlass.Absorption); exp(-absorption * distance) transmits
+    float ior; // a glass's index of refraction; zero for an opaque material
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -89,8 +91,14 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.paintFirst = sdfWords[materialBase + 20u].x;
     data.paintCount = sdfWords[materialBase + 20u].y;
     data.emissiveLane = sdfWords[materialBase + 20u].z;
+    data.absorption = asfloat(sdfWords[materialBase + 21u]).rgb;
+    data.ior = asfloat(sdfWords[materialBase + 21u]).w;
 
     return data;
+}
+// Whether a material is glass: it carries an index of refraction (SdfMaterial.IsGlass).
+bool sdfMaterialIsGlass(SdfMaterialData material) {
+    return (material.ior > 0.0);
 }
 // A material's albedo and its paints' range (paintFirst and paintCount, as sdfMaterialLoad reads them), loaded alone so
 // the paints draw before the rest of the material is live: zero paints for a material the table does not hold.

@@ -175,6 +175,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <summary>Gets whether the draw belongs to a moving body or animated placement, which the irradiance volume's
     /// static scene leaves out (<see cref="SdfMeshIrradianceScene.IsStatic"/>).</summary>
     public bool IsDynamic { get; init; }
+    /// <summary>Gets whether the draw is glass (<see cref="SdfMeshBakeGroup.Glass"/>): the glass pass rasterizes it over
+    /// the opaque image, and the mesh pass, the shadow cascades and the irradiance volume's static scene leave it
+    /// out.</summary>
+    public bool Glass { get; init; }
     /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>

@@ -116,10 +116,11 @@ public sealed class SdfMeshIrradianceScene {
             trianglesBuilt: trianglesBuilt
         );
     }
-    /// <summary>Returns whether a draw belongs to the static scene: one not dynamic.</summary>
+    /// <summary>Returns whether a draw belongs to the static scene: one neither dynamic nor glass. Glass neither blocks
+    /// nor bounces the probes' rays: light reaches what lies behind it untinted.</summary>
     /// <param name="draw">The draw.</param>
-    /// <returns><see langword="true"/> for a static mesh draw.</returns>
-    public static bool IsStatic(in SdfMeshDraw draw) => !draw.IsDynamic;
+    /// <returns><see langword="true"/> for a static, opaque mesh draw.</returns>
+    public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
     private SdfMeshIrradianceScene(Dictionary<GeometryKey, Geometry> geometries, List<Instance> instances, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
         var entries = new List<Entry>();

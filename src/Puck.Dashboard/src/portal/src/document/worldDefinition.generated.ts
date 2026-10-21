@@ -8138,6 +8138,19 @@ export type WorldPrototype = {
        * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
        */
       emissiveLane?: number | null;
+      /**
+       * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
+       */
+      glass?: {
+        /**
+         * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
+         */
+        depth: number;
+        /**
+         * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
+         */
+        ior?: number | null;
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).

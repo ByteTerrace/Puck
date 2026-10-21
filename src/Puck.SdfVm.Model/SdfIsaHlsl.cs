@@ -294,6 +294,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfTemporalSamples.Period);
         declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfTemporalSamples.Period);
         declarations.Real(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfTemporalSamples.Period * SdfTemporalSamples.FeaturePeriods));
+        declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
+        declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);
