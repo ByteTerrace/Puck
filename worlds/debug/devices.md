@@ -31,7 +31,7 @@ on their plinths; the deck and its television are at their real size.
 |---|---|---|---|
 | Humble Gaming Brick: a Color brick whose shell is clear atomic-orange glass over its green board, chips, speaker, cartridge and two AA cells; leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm, shown 112.5 by 199.5 by 41 mm | a 0.4 m square plinth 1.15 m tall | 160 by 144 at 0.4125 mm square pixels (0.275 mm real): 66 by 59.4 mm |
 | Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed, shown 127 by 123 by 35.6 mm | a plinth like the brick's | 240 by 160 at 0.3825 mm square pixels (0.255 mm real): 91.8 by 61.2 mm |
-| Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 27-inch flat-faced television (silver bezel, black body, tapered tube housing, a speaker grille under the picture) | console 160 by 168 by 64 mm; television 740 by 621 mm, 505 mm deep | a walnut AV cabinet 1.2 by 0.58 m whose top is 0.65 m up | 256 by 240 at 2.143 by 1.875 mm (8:7) pixels: 548.6 by 450 mm, so the 224 lines a set shows are a 548.6 by 420 mm, 4:3 picture |
+| Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 27-inch flat-faced television (silver bezel, black body, tapered tube housing, a speaker grille under the picture) | console 160 by 168 by 64 mm; television 740 by 621 mm, 505 mm deep | a walnut AV cabinet 1.2 by 0.58 m whose 50 mm top is 0.65 m up | 256 by 240 at 2.143 by 1.875 mm (8:7) pixels: 548.6 by 450 mm, so the 224 lines a set shows are a 548.6 by 420 mm, 4:3 picture |
 
 The plinths put a handheld's screen about 1.35 m up, turned up toward the
 Moth's eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall). The
@@ -53,17 +53,32 @@ gives the console's 8:7 pixels. The bezel, lens or tube round the picture is
 the device's own geometry, outside the glass.
 
 The Humble Gaming Brick's shell is real glass: its palette slot declares
-`glass { depth: 0.04, ior: 1.49 }` over an atomic-orange tint, so it bakes into
-a group of its own and the glass passes shade it over the opaque image
+`glass { depth: 0.012, ior: 1.49 }` over an atomic-orange tint (`#FF4A0C`), so
+it bakes into a group of its own and the glass passes shade it over the opaque
+image
 ([glass after the opaque image](../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)):
-the board, chips, cells and cartridge inside it are ordinary opaque shapes seen
-through it, bent by its refraction and tinted by Beer–Lambert over the distance
-through it, about 11 mm (shown) over the board and 34 mm through the whole body,
-so the board reads through pale orange and the rest and plinth behind it through
-a deeper one. A static placement's glass depth is world units, unscaled by the
-placement. The limits are the glass passes': one glass layer a pixel, and the
-glass casts no shadow. The cost is the three glass passes over the views the
-brick shows in, and a glass draw of the shell's own mesh.
+the board, chips, speaker, cells and cartridge inside it are ordinary opaque
+shapes seen through it, bent by its refraction and tinted by Beer–Lambert over
+the distance through it. The depth is about the 11 mm of shell (shown) over the
+board, so the board reads through one full depth of the tint, a saturated
+orange, and the 34 mm through the whole body at its rim through three, a deep
+red-orange. Glass tints only the light it transmits and adds no colour of its
+own, so what lies behind it sets how bright the orange reads: the board is a
+pale green, which reads amber through the tint, where a dark board turned the
+shell brown and grey; the speaker behind its slots is a dark cone. A static
+placement's glass depth is world units, unscaled by the placement. The limits
+are the glass passes': one glass layer a pixel, and the glass casts no shadow.
+The cost is the three glass passes over the views the brick shows in, and a
+glass draw of the shell's own mesh.
+
+The stands' names are embossed text runs at a 40 mm em and a 2 mm relief. An
+embossed run bakes as a group of its own, refined toward its declared detail
+(the thinner of its relief and a tenth of its em, about a stroke's width) but no
+finer than an eighth of a 15 mm cell along the run, 1.875 mm; a stroke must span
+two of those cells to survive every placement, so lettering much under a 40 mm
+em loses strokes (an 18 mm "I" dropped out of the deck's name). The devices
+carry no wordmarks for that reason: lettering a few millimetres high is below
+what the bake keeps.
 
 A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
 resolves when the world boots from its package in the checkout
