@@ -172,7 +172,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
             args: args,
             context: context,
             done: () => engine.IsReady,
-            releasedLine: static when => $"[engine: not ready {when}, so world.wait released: ",
+            releasedLine: static when => $"[engine: not ready {when}, so world.wait released",
             what: "the engine is ready",
             readyLine: static tick => string.Create(provider: CultureInfo.InvariantCulture, handler: $"[engine: ready at tick {tick}]"),
             reason: () => (engine.NotReadyReason ?? "no reason given")
@@ -260,7 +260,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
 
                     report = CommandResult.Error(output: ((reason is null)
                         ? (released + "]")
-                        : ((released + reason()) + "]")));
+                        : (((released + ": ") + reason()) + "]")));
                 }
 
                 Console.Error.WriteLine(value: report.Output);

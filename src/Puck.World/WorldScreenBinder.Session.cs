@@ -119,8 +119,9 @@ public sealed partial class WorldScreenBinder {
     }
     // Releases one slot's view of a session: its envelope and window registrations. The session itself is the
     // authority's (WorldInstanceHost), which ends it when the screen is re-pointed or removed; the destination instance
-    // leaves the render graph once no slot holds the feed.
-    private void ReleaseSession(SessionFeed feed, int index, string reason) {
+    // leaves the render graph once no slot holds the feed. A nested view passes no reason: the authority narrates the
+    // sessions it opens and ends, and a portal crossing would otherwise narrate every view of every level it tears down.
+    private void ReleaseSession(SessionFeed feed, int index, string? reason) {
         if (feed.Nested is { } screens) {
             _ = m_nestedOwners.Remove(key: screens);
             screens.Close(sessions: NestedSessionsOf());
@@ -130,7 +131,9 @@ public sealed partial class WorldScreenBinder {
         feed.Dispose();
         m_feedsMoved = true;
 
-        Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{feed.Destination}' released ({reason})]");
+        if (reason is not null) {
+            Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{feed.Destination}' released ({reason})]");
+        }
     }
     // The registered session feed a view instance name names, at any depth, or null.
     private SessionFeed? SessionFeedOf(string name) {
