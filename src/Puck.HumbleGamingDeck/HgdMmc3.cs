@@ -11,8 +11,10 @@ namespace Puck.HumbleGamingDeck;
 /// its own nametable RAM and ignores $A000.
 /// </para>
 /// <para>
-/// The counter clocks on a rise of PPU A12 that follows at least three falling M2 edges with A12 low, so the sprite
-/// fetches of one line clock it once and the short low gaps between them are filtered out. A clock reloads the counter
+/// The counter clocks on a rise of PPU A12 that follows at least three falling M2 edges with A12 low, each counted only
+/// when A12 was already low as M2 rose, so A12 must stay low through three whole M2 high phases. The sprite fetches of
+/// one line clock it once, and the short low gaps between pattern fetches, the eight dots at the start of a line with the
+/// background at $1000 among them, are filtered out. A clock reloads the counter
 /// from the latch when it is zero or a $C001 write asked for a reload, and decrements it otherwise; reaching zero with
 /// IRQs enabled raises the IRQ, which stays raised until a $E000 write. Submapper 4 is the MMC3A revision, which raises
 /// it only when the counter reaches zero from a nonzero value or through a requested reload.
@@ -42,6 +44,7 @@ public sealed class HgdMmc3 : IHgdMapper {
     private bool m_irqPending;
     private bool m_ppuA12;
     private byte m_a12LowFalls;
+    private bool m_a12LowAtRise;
 
     /// <summary>Initializes a new instance of the <see cref="HgdMmc3"/> class at its power-on state, and installs a
     /// trainer at $7000 when present.</summary>
@@ -182,10 +185,13 @@ public sealed class HgdMmc3 : IHgdMapper {
         }
         m_ppuA12 = true;
         m_a12LowFalls = 0;
+        m_a12LowAtRise = false;
     }
     /// <inheritdoc/>
     public void ObserveM2(bool high, ulong masterHalfTick) {
-        if (!high && !m_ppuA12 && (m_a12LowFalls < FilterFalls)) {
+        if (high) {
+            m_a12LowAtRise = !m_ppuA12;
+        } else if (m_a12LowAtRise && !m_ppuA12 && (m_a12LowFalls < FilterFalls)) {
             ++m_a12LowFalls;
         }
     }
@@ -258,5 +264,6 @@ public sealed class HgdMmc3 : IHgdMapper {
         transfer.Boolean(value: ref m_irqPending);
         transfer.Boolean(value: ref m_ppuA12);
         transfer.Byte(value: ref m_a12LowFalls);
+        transfer.Boolean(value: ref m_a12LowAtRise);
     }
 }

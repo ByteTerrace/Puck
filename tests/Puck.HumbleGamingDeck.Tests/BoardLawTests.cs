@@ -213,7 +213,7 @@ public sealed class BoardLawTests {
     [Fact]
     public void BoardsRefuseOutOfRangeSnapshots() {
         IHgdMapper[] mappers = [Mmc1(prgBanks: 2, chrBanks: 2), Mmc3(prgBanks: 4, chrBanks: 8)];
-        int[] fromEnd = [7, 1];
+        int[] fromEnd = [7, 2];
 
         for (var index = 0; (index < mappers.Length); ++index) {
             var writer = new StateWriter();
