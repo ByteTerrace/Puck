@@ -47,6 +47,8 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
     private bool m_polledIrq;
     private bool m_polledNmi;
     private bool m_storeHalted;
+    private bool m_transferred;
+    private bool m_cycleInhibitsNmi;
     private ulong m_cycles;
 
     /// <summary>Initializes a new instance of the <see cref="HgdCpu{TBus}"/> class at the beginning of its seven-cycle reset sequence.</summary>
@@ -165,14 +167,24 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         m_polledIrq = false;
         m_polledNmi = false;
         m_storeHalted = false;
+        m_transferred = false;
+        m_cycleInhibitsNmi = false;
         m_ready = true;
         m_cycles = 0;
     }
-    /// <summary>Completes one CPU cycle. A read always reaches the bus even when RDY prevents sequencer advance.</summary>
+    /// <summary>Completes one CPU cycle on a flat bus: the cycle's transaction, then the interrupt sampling at its
+    /// end.</summary>
     public void StepCycle() {
+        Transfer();
+        CompleteCycle();
+    }
+    /// <summary>Performs the cycle's bus transaction and advances the sequencer, the part of a cycle that happens while
+    /// M2 is high. A read always reaches the bus even when RDY prevents sequencer advance.</summary>
+    public void Transfer() {
         var access = NextAccess();
-        var inhibitNmi = ((m_step >= 4) && ((m_sequence == Sequence.Reset) || (!IsJammed && (CurrentOperation == Operation.Brk))));
 
+        m_cycleInhibitsNmi = InhibitsNmi;
+        m_transferred = true;
         if (access.Write) {
             m_bus.Write(address: access.Address, value: access.Value);
             m_data = access.Value;
@@ -193,6 +205,13 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         } else {
             Advance(value: m_data);
         }
+    }
+    /// <summary>Samples the IRQ and NMI inputs at the end of a cycle's φ2, including a cycle the DMA unit took from the
+    /// halted CPU; the next poll point uses these samples.</summary>
+    public void CompleteCycle() {
+        var inhibitNmi = (m_transferred ? m_cycleInhibitsNmi : InhibitsNmi);
+
+        m_transferred = false;
         m_irqSample = m_irq;
         // Vector selection blocks new NMI recognition until the handler's opcode fetch.
         // https://www.nesdev.org/wiki/Visual6502wiki/6502_Interrupt_Hijacking
@@ -246,11 +265,16 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         transfer.Boolean(value: ref m_polledIrq);
         transfer.Boolean(value: ref m_polledNmi);
         transfer.Boolean(value: ref m_storeHalted);
+        transfer.Boolean(value: ref m_transferred);
+        transfer.Boolean(value: ref m_cycleInhibitsNmi);
         transfer.UInt64(value: ref m_cycles);
 
         m_sequence = ((Sequence)sequence);
         m_jamPhase = ((JamPhase)jamPhase);
     }
+    // BRK's and reset's vector cycles block NMI recognition.
+    private bool InhibitsNmi => ((m_step >= 4) && ((m_sequence == Sequence.Reset) || (!IsJammed && (CurrentOperation == Operation.Brk))));
+
     private void PollInterrupts() {
         m_polledIrq |= (m_irqSample && ((m_p & Interrupt) == 0));
         m_polledNmi |= m_nmiSample;
