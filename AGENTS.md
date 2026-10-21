@@ -53,6 +53,10 @@ agent works in that mode by default, without asking:
     `AccuracyCoinExpectations.json`, `--accept`, `--lane`) and the recorded
     snapshot layout hashes are deleted, with the verbs and analyzers that
     maintained them.
+  - Shipped derived products (baked meshes and the like) are caches, never the
+    truth: identity computed from inputs, never recorded; a miss is derived
+    again and counted, never refused; never committed; never compared by a
+    gate ([decision](docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
   - Direct3D 12 is the primary backend during development; Vulkan catches up
     when the owner calls for qualification.
   - Every project stays in the build.

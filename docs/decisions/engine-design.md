@@ -204,6 +204,32 @@ to the far side before it has reached the glass. A floor door also needs the
 ground under it to give way, or a falling body stops on it in the same step it
 passes through.
 
+## A derived product is a cache, never the truth
+
+A baked mesh, an irradiance volume, a compiled shader or any other product
+derived from a document and the engine's code may be built ahead of time and
+shipped with a package (`world prepare`, the deploy) or served by its identity,
+so a fresh machine draws its first frame without deriving everything itself.
+Every such product is only a shortcut to a result the engine can always derive
+again:
+
+- Its identity is computed from its inputs, the code that derives it included,
+  at the moment it is needed. Nothing records an expected identity to compare
+  against, so there is no step that accepts a new one: a change to the deriving
+  code invalidates what it changes, and the cost is a derivation.
+- A missing, stale or corrupt product is derived again and counted, never
+  refused. No test, CI step, review or gate compares against a shipped product,
+  and no change waits on one.
+- Products are never committed. The pipeline builds them from the same commit
+  as the code that reads them, into git-ignored caches or the deploy.
+- Deleting every cache is always safe and yields the same picture, only
+  slower. Counters show hits, misses and derivation time, as evidence for a
+  performance decision, never as a gate.
+
+Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
+never again becomes a slave to a recorded artifact, as it did with the deleted
+ledgers and the bake derivation fingerprint.
+
 ## Verification must match the claim
 
 Validate physical limits and report useful failures rather than silently
