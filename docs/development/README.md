@@ -8,8 +8,8 @@ deploying Puck.
   and account for hardware and toolchain constraints.
 - [Writing documentation](documentation.md) describes the shared prose, naming,
   navigation, README ownership, and example conventions.
-- [Security review](security-review.md) maps trust boundaries, local regression
-  checks, and the remaining independent research work.
+- [Security review](security-review.md) gives an external researcher the context,
+  first priorities, known gaps, and runnable checks, with a detailed reference.
 - [Branding](../../branding/README.md) identifies the maintained logo, visual
   assets, and distribution process.
 - [CI and releases](ci.md) explains the GitHub Actions workflows, artifact

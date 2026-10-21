@@ -1,161 +1,118 @@
 # Security review
 
-This is the starting point for an independent review of Puck's authentication,
-authority, release, and guest-execution boundaries. The local Windows preflight
-consists of source review and targeted executable regressions. Deployment exposure,
-cloud policy, sustained fuzzing, and native-runtime exploit resistance need
-separate evidence. Passing these tests is not a security certification.
+Puck is a pre-release C# engine for document-defined worlds. We would value an
+independent review of how it decides **who may act, what they may see, and which
+code it may run**. The most useful starting points are world-to-world identity,
+hidden game state, and interrupted software updates.
 
-## Trust boundaries
+Local review has repaired several concrete defects and added executable
+regressions. A known disclosure weakness remains open. This brief supports a
+targeted research engagement; deployment security and production readiness still
+need evidence. The [technical reference](security-review-reference.md) has the
+full source map, repaired findings, and remaining assumptions.
 
-| Actor | Authority to assume | Boundary to try to cross |
+## A little context
+
+A **world** is a running simulation hosted by a server. Players have a
+**principal** (the identity attached to an action) and **grants** (permissions to
+act on particular parts of that world). Some state is private to particular
+players, such as a hand of cards.
+
+**Federation** lets independently hosted worlds transfer players and forward
+actions. An **attestation** is a signed statement that the receiver checks
+against its trusted keys and policy. For example, a destination must prove which
+world it is before the source trusts it with a transfer. A valid signature
+identifies the speaker; it cannot prove that the speaker simulated the game
+honestly. **Replay protection** prevents an old valid statement from authorizing
+a fresh effect.
+
+Puck also installs signed releases and runs addons compiled to WebAssembly
+(WASM). Those introduce separate boundaries around downloaded files, guest
+permissions, and CPU/memory consumption.
+
+## Where your time would help most
+
+If time is short, start with world identity and transfer. The other tracks offer
+useful starting points for application-security and update-system expertise.
+
+| Start here | Question to answer | First code and tests |
 |---|---|---|
-| Unauthenticated network peer | Can create its own key and complete the generic QUIC peer handshake. | World admission, an expected federation namespace, or unbounded pre-admission work. |
-| Admitted player | Only its stamped principal, current grants, and disclosed state. | Another player's effects, hidden state, console-only operations, or grants surviving retirement. |
-| Federated authority | Can sign claims as its trusted namespace; claims can still be dishonest. | Another source's transfer, stale ownership, duplicate arrivals, or unauthorized forwarded commands. |
-| Account controlling its own blob storage | Can replace its public key files and copy public attestations. | Renewal of another account's binding or excessive issuer work. |
-| Release source or CDN | Can suppress, reorder, substitute, truncate, or enlarge responses. | Installation without the expected signed app/channel, payload hash/length, replay policy, and confined paths. |
-| Addon author | Controls guest bytecode and every output cell. | Host effects beyond granted channels, host memory, or excessive compilation/runtime resources. |
-| Another process under the same OS user | Already shares the local-control trust boundary. | Treat separately from a remote peer or a different OS user. |
+| World identity and transfer | Can a hostile peer impersonate a world, reuse a proof on another connection, or leave two live owners after an interrupted transfer? | [Remote authority](../../src/Puck.World.Server/WorldRemoteAuthority.cs), [peer host](../../src/Puck.World.Server/WorldPeerHost.cs), and [authentication tests](../../tests/Puck.World.Presentation.Tests/FederationTransferLawTests.Authentication.cs). |
+| Hidden state and player permissions | Can a player learn a hidden value through a public result, or cause an effect after their permission is withdrawn? | [Transform checks](../../src/Puck.State.Rules/Compiler/RuleCompiler.Transforms.cs), [mutation admission](../../src/Puck.World.Server/WorldDocument.StateTransformAdmission.cs), and [disclosure tests](../../tests/Puck.World.Server.Tests/TransformDisclosureLawTests.cs). |
+| Update recovery | Can interruption, rollback, or concurrent processes install bytes outside the accepted release, activate an unauthorized older version, or revive a rejected release? | [Update service](../../src/Puck.Launcher/Release/UpdateService.cs), [startup stub](../../src/Puck.Launcher.Stub/Program.cs), and [transaction tests](../../tests/Puck.Launcher.Tests/Release/UpdateInstallTransactionTests.cs). |
 
-The peer certificate proves possession of a key; authority names require
-application authentication. An attestation establishes a signed statement under
-a receiver's trust policy. It does not establish that a remote simulation ran
-honestly. For sequenced claims, verification returns a replay requirement that
-the receiving effect must commit durably.
+For cryptographic review, start with the [attestation verifier](../../src/Puck.Attestation/AttestationVerifier.cs)
+and [sealing construction](../../src/Puck.Attestation/SealedAttestation.cs).
+For cloud identity review, start with the [key endpoint](../../src/Puck.Azure.Functions/HttpTriggers/AttestKeys.cs)
+and [binding service](../../src/Puck.Azure.Functions/Services/DefaultBindingService.cs).
+Actual deployed identity, storage, and key-management settings require a separate
+operational review; the local fixtures do not establish those settings.
 
-## Entry points and regression map
+## Known gaps to carry into the review
 
-| Area | Start reading | Properties and executable witnesses |
-|---|---|---|
-| Attestation | [Verifier](../../src/Puck.Attestation/AttestationVerifier.cs), [profile](../../src/Puck.Attestation/AttestationProfile.cs), [CBOR codec](../../src/Puck.Attestation/CborAttestationCodec.cs), [sealing](../../src/Puck.Attestation/SealedAttestation.cs) | Both public verification entry points enforce the selected profile. `ConformanceProfileTests.VerifierEntryPoint_EnforcesTheSelectedProfilesPayloadCeiling` accepts the exact limit and refuses one extra byte. `ArrivedBytesTests` sweeps signature/input mutations; `ChainTests`, `ClockAndSequenceTests`, and `SealedAttestationTests` cover trust, replay transactions, and authenticated decryption. |
-| Peer transport and wire | [Peer handshake](../../src/Puck.Networking/Peers/PeerHandshake.cs), [peer link](../../src/Puck.Networking/Peers/PeerLink.cs), [wire codec](../../src/Puck.Networking/WireCodec.cs) | `ChannelBindingTests`, `IdentityKeyTests`, `RefusalTests`, timeout/lifecycle tests, and `FrameLawTests` exercise wrong certificates/keys, malformed claims, framing limits, and bounded stalled operations. |
-| World authority and federation | [World peer host](../../src/Puck.World.Server/WorldPeerHost.cs), [remote authority](../../src/Puck.World.Server/WorldRemoteAuthority.cs), [escrow](../../src/Puck.World.Server/WorldTransferEscrow.cs) | Review proof-to-principal mapping, both directions of federation authentication, grants at the actual effect, mobility generations/epochs, source-scoped transfer keys, and recovery after an uncertain commit. |
-| Key issuance and MCP | [Key endpoint](../../src/Puck.Azure.Functions/HttpTriggers/AttestKeys.cs), [binding service](../../src/Puck.Azure.Functions/Services/DefaultBindingService.cs), [MCP](../../src/Puck.Mcp/README.md), [local capability](../../src/Puck.Networking/LocalEndpointCapability.cs) | Trace the authenticated account through storage ownership and the exact renewed subject/key. MCP attachment, row retirement, role, token, and downstream claims-challenge checks belong to the effect's authorization path. |
-| Releases | [Verifier](../../src/Puck.Launcher/Release/AttestationReleaseVerifier.cs), [update service](../../src/Puck.Launcher/Release/UpdateService.cs), [stager](../../src/Puck.Launcher/Release/ContentAddressedUpdateStager.cs), [applier](../../src/Puck.Launcher/Release/FileUpdateApplier.cs), [stub](../../src/Puck.Launcher.Stub/Program.cs) | Follow the signed manifest through app/channel checks, replay admission, download bounds, exact payload identity, portable paths, current-pointer replacement, and rollback. |
-| Guest execution | [Scripting](../../src/Puck.Scripting/README.md), [addons](../../src/Puck.World.Addons/README.md) | Inspect import rejection, requested/granted channel intersection, host-stamped principals, live grants, cell parsing, pointer bounds, fuel, aggregate memory, and compilation work before admission. |
+**Recorded disclosure weakness.** A transform reads or changes game state.
+Some reads are chosen at runtime and omitted from its declared inputs.
+Separately, the validation does not account for a cell becoming private at
+runtime. Either omission can let hidden state influence public output. For
+example, a public move chosen using a hidden cell can reveal information about
+that cell. The current source still has these omissions. This pass has not
+produced a complete exploit fixture or
+established which player grants make each path reachable. The [open item](../plans/open-items.md#standalone)
+and the source links above give the precise paths; passing disclosure tests do
+not close it.
 
-## Independent review priorities
+**Missing authorization evidence.** We still need an executable case showing
+that a non-privileged player allowed to edit input bindings cannot bind a command
+reserved for privileged use. The real command registry must be installed for
+that case to mean anything. This is a test gap, not a demonstrated bypass; it is
+tracked beside the disclosure item.
 
-1. **Federation failure schedules.** Interrupt at each reserve, detach, commit,
-   acknowledgement, checkpoint, and publication boundary. Reorder and duplicate
-   requests across reconnection and process restart. An authenticated hostile
-   authority must not obtain two live owners or operate with a retired epoch.
-   Exercise both directly pinned keys and root/issuer/subject chains, and the
-   explicitly pinned Entra transport path.
-2. **Authorization and disclosure composition.** Follow actions to their final
-   receiving world rather than stopping at signature verification. Include live
-   grant changes, entity-slot reuse, forwarded commands, and observation after
-   transfer. The existing [open items](../plans/open-items.md#standalone) identify
-   dynamic transform disclosure and the authored-binding escalation witness as
-   security-open; this preflight does not establish closure of those items.
-3. **Release crash consistency.** Compare replay-store advancement, staging,
-   rollout eligibility, and the install pointer as one recovery problem.
-   The recoverable install intent and writer leases have local fault-injection
-   and separate-instance contention cases. Extend these to real process kills,
-   stub rollback races, and storage/power faults: `AtomicFile` flushes file
-   contents before rename, which alone does not establish durable directory
-   ordering on every supported filesystem. Verify install-root ownership and
-   adversarial symlink/reparse behavior under each supported OS.
-4. **Deployed identity policy.** Inspect actual JWT audience/issuer/tenant
-   settings, app roles, consent and delegated scopes, storage ACLs, key custody,
-   endpoint exposure, and revocation procedures. Local generated-key and HTTP
-   fixtures do not prove the deployed configuration.
-5. **Hostile resource use.** Measure aggregate unauthenticated connections,
-   authenticated invalid-signature traffic, key enumeration, document depth and
-   expansion, WASM compilation, multiple guest memories, and guest lifetime.
-   Per-message or per-memory caps do not establish an aggregate process budget.
-   World pre-admission has a 64-slot limit and a deadline; authenticated
-   federation connections have no equivalent active-connection ceiling.
-6. **Cryptographic composition and portability.** Review exact signed bytes,
-   purpose/role separation, curve import behavior across platforms, key rotation,
-   replay-horizon changes, and the custom sealing construction. Puck uses
-   ECDSA P-256/SHA-256 and ephemeral/static ECDH with HKDF and AES-GCM; it does
-   not implement the HPKE wire protocol. Its static recipient key can decrypt
-   recorded payloads after compromise, a limitation shared with the public-key
-   recipient model discussed in [RFC 9180 section 9.7.4](https://www.rfc-editor.org/rfc/rfc9180.html#section-9.7.4).
+**Unmeasured limits.** Review aggregate connection and WASM compilation/memory
+budgets. Individual messages and guest memories have limits, but those do not
+establish a bound for the whole process. The reference also identifies local
+filesystem assumptions, pending-update recovery policy, and cryptographic
+portability questions.
 
-## Local findings and regression cases
+## What has already been checked
 
-These are source-confirmed defects corrected by the preflight. The conditions
-matter: malformed input, a trusted but hostile authority, and an attacker with
-someone else's private key are different threat models.
+The local work covers source review and selected Windows test suites with
+generated keys, temporary install state, and loopback peers. Repairs cover
+verification limits, reciprocal federation identity, transfer arithmetic,
+caller-bound key renewal, bounded response reads, complete signed release file
+sets, channel checks, and replay-safe update recovery. The [findings table](security-review-reference.md#local-findings-and-regression-cases)
+links each repair to its regression case and states the attacker's prerequisites.
 
-| Defect | Previous behavior and reachability | Current check and regression |
-|---|---|---|
-| Profile limits differed between entry points | A caller using `AttestationVerifier.VerifyChain` directly could accept a payload above the selected profile's ceiling. | Both public entry points use the same profile validation. `ConformanceProfileTests.VerifierEntryPoint_EnforcesTheSelectedProfilesPayloadCeiling` covers the exact boundary and one extra byte. |
-| Federation destination identity lacked proof | A peer completing the generic transport handshake could acknowledge an expected authority name without proving that authority. The source proof also lacked connection binding. | Reciprocal application proofs bind both nonces, ordered transport-key fingerprints, direction, and the destination name; an explicit transport pin is the alternative for bearer-token clients. `FederationTransferLawTests` covers unsigned/unknown/wrong-subject destinations and altered transcript components over loopback QUIC. |
-| Transfer arithmetic could partially mutate admission | A trusted source could send extreme lease values that overflowed, or an exhausted mobility epoch that threw after admitting a traveler. | Wide deadline arithmetic refuses values outside the destination range; reserve refuses an epoch that cannot advance. Hostile wire-decoded cases live in `AdmissionArrivalLawTests`. |
-| Binding renewal did not bind the caller | A user could copy another account's issuer-signed public binding into their own storage and renew its validity. Impersonation additionally requires the matching private key and an accepted trust chain. | Renewal matches the authenticated subject, algorithm, fingerprint, and exact public key. `SubjectBindingRenewalTests` includes legitimate expired-key renewal controls. |
-| Key-material downloads were unbounded | A user controlling their own key blobs could force whole-blob buffering before parsing. | PEM and binding reads are bounded independently of storage range support. `StoredKeyMaterialTests` proves reads stop after one excess byte. |
-| Release paths and null shapes were insufficiently validated | Signed malformed paths could escape intended directories on Windows; version metadata could carry traversal. Unsigned null-shaped responses could throw during verification. | Portable relative paths, single-component versions, case aliases, devices, and null members are checked before filesystem use. `ReleaseManifestTests` and `AttestationReleaseVerifierTests` cover these inputs. |
-| Release channel substitution | A source could serve a correctly signed release for another channel of the same app. | The configured channel must match the signed manifest. `UpdateServiceTests` uses a real generated signing chain. |
-| Release replay retention and comparison | Changing signer discarded the previous signer's persisted mark; racing verification could both accept or lower a mark. | Each signer retains its mark; file-backed compare-and-advance excludes other writers. `ReleaseSequenceStoreTests` and `AttestationReleaseVerifierTests` cover reopen, corruption, and contention. |
-| Release bytes exceeded their contract | HTTP eagerly buffered responses and ignored signed payload lengths; staging trusted cache length implicitly. | Manifest intake has a byte cap; payloads stream under their signed exact length and staging checks size plus SHA-256. `HttpReleaseSourceTests` covers missing length headers, truncation, and excess bytes. |
-| Successive applies could downgrade | The running process's installed version could lag the already updated on-disk pointer. | Apply compares against the current pointer before replacing it. `FileUpdateApplierTests` covers equal and older versions after an apply. |
-| A failed update consumed its sequence | Rollout exclusion, staging failure, or an interrupted install could prevent retrying the same signed release. | Rollout and staging precede a persisted install intent and exact-manifest replay reservation. Recovery revalidates current trust, checks content, and refuses newer marks/pointers. `UpdateInstallTransactionTests` injects failures around reservation and pointer activation. |
+The accompanying commits record exact commands and results. These checks are
+selected suites, not a full security audit or whole-repository test run. They do
+not establish deployed policy, Linux behavior, native-runtime exploit resistance,
+sustained fuzzing, or power-loss durability. Update interruption cases inject
+exceptions; they do not simulate every operating-system or storage failure.
 
-Install recovery treats a protected local intent as already-authorized work.
-It checks the current trust policy at the original verification instant; expiry
-alone does not cancel that work. The complete signed manifest is pinned with
-SHA-256, a network response cannot replace a pending intent, and a newer replay
-mark prevents the older intent from resuming. Fresh network checks always use
-the current verification instant. The stub shares the updater's writer lease
-and cancels a matching rejected-version intent before rolling back, while
-preserving unrelated newer pending work. These are explicit policy choices for the
-researcher to review beside the fault-injection cases.
+## Try a first local run
 
-## Guest and control-plane limits
+Use Windows PowerShell at the root of the supplied security branch. Install the
+SDK pinned in [global.json](../../global.json); restore needs the package feeds in
+[nuget.config](../../nuget.config). Run a test assembly only after its build
+succeeds. These selections need no cloud account or GPU:
 
-The reviewed WASM path rejects imports, freezes declared channels, validates
-whole output batches, stamps the addon principal in the host, and checks live
-grants before effects. No host-authority escape was established in those paths.
-`AddonGuestLawTests` and `AddonPrepareGateLawTests` exercise guest confinement
-and mount admission; they do not audit Wasmtime's native implementation.
-
-The remaining resource and identity questions have specific entry points:
-
-- `WasmModuleLoader.Load` reads and compiles the whole module before mount
-  admission. Its cache limits entries, not source bytes, compiler work, or code
-  bytes. Execution fuel does not bound compilation.
-- `AddonInstance.Instantiate` limits each memory to 16 MiB. Multiple memories,
-  tables, and compiled code need an aggregate budget. Existing tests deliberately
-  accept an additional hidden memory within its individual ceiling.
-- The module cache uses `AssetContentHash`, the first 64 bits of SHA-256, as its
-  sole identity. A collision would alias modules; no collision or poisoning
-  exploit was generated. The inspected mounting route comes from an authored
-  document and local assets under operator control. No ordinary remote-player
-  upload-to-mount route was established. Treat the truncated hash as a
-  determinism identifier when reviewing hostile-code approval.
-
-MCP review covers token policy, attachment ownership and retirement, downstream
-authorization, and the local descriptor/HMAC path. No additional authorization
-bypass was confirmed. Equal or absent token `iat` during claims-challenge
-recovery remains a policy question: same-second tokens can be legitimate, and
-downstream services still authorize their effects. Key enumeration per account,
-issuance rate limits, and the deployed issuing-key custody require operational
-evidence. Hostile document/package parsing outside the named paths was not
-exhaustively reviewed.
-
-## Running local checks
-
-Build the selected test project in Release with `-nodeReuse:false`, then run
-that build's executable test assembly. For example:
-
-```text
+```powershell
 dotnet build tests/Puck.Attestation.Tests -c Release -nodeReuse:false
 dotnet tests/Puck.Attestation.Tests/bin/Release/net11.0/Puck.Attestation.Tests.dll --progress off
+
+dotnet build tests/Puck.Launcher.Tests -c Release -nodeReuse:false
+dotnet tests/Puck.Launcher.Tests/bin/Release/net11.0/Puck.Launcher.Tests.dll --filter-namespace Puck.Launcher.Tests.Release --progress off
 ```
 
-The corresponding projects are `Puck.Networking.Tests`, `Puck.Azure.Tests`,
-`Puck.Mcp.Tests`, `Puck.Launcher.Tests`, `Puck.World.Server.Tests`,
-`Puck.World.Presentation.Tests`, and `Puck.World.Azure.Tests`. Select release,
-federation, admission, and addon classes when running a larger suite; a full
-presentation or launcher run includes unrelated runtime work. See
-[verification](../../.claude/skills/verification/SKILL.md) for CPU/GPU selection
-and the build-before-run rule. Use isolated temporary state and loopback peers.
+Expect the selected cases to pass. A build failure means there is no current
+test result to interpret. The [wider selections](security-review-reference.md#running-local-checks)
+cover federation, admission, key renewal, local control, and addons. Use those
+when they match the boundary you are investigating.
 
-The preflight's source searches use ordinary text search after the repository
-search/semantic tools failed in the session. Text matches are navigation aids,
-not proof that all semantic callers have been found. Exact commands and results
-belong in the accompanying commits; untested areas remain explicit above.
+## A useful finding
+
+Please include the entry point, what the attacker controls, any permissions or
+keys they need, a small reproducer, and the expected versus observed outcome.
+For an interrupted operation, identify the last durable write and the first
+incorrect action after restart. A source-level concern with explicit assumptions
+is also useful; label what still needs reproduction. This makes it possible to
+repair the issue and retain a regression that proves the boundary.
