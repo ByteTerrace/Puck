@@ -125,6 +125,9 @@ Rule operands accept these bounded channels:
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:fingerprint:<row>` | The 64-bit fingerprint of the whole board's values through the identity alone: the canonical fold's identity term, so a mirror image reads a different value. Go's ko check pushes it into a history ring to tell an exact position apart |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
+| `$board:engaged:<row>:<seat>` | 1 while the 1-based local seat sits at the tabletop whose board facet anchors the row's topology (its control applications name that placement), 0 otherwise; `board(engaged, <row>, <seat>)` |
+| `$board:pointer:<row>:<seat>` | The cell the seat's pointer ray (`PlayerIntent.SourceRay`) meets on the tabletop's playing surface, in fixed point, or -1 for no ray or a miss; `board(pointer, <row>, <seat>)` |
+| `$board:side:<row>:<seat>` | The side of the board the seat's body stands on: 0 its -Z edge, 1 +X, 2 +Z, 3 -X (`WorldTabletopFrame.SideOf`), or -1 for no live body; `board(side, <row>, <seat>)` |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
 | `$board:boundary:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in boundaryMin..boundaryMax (`1:1:0:0:<n>` counts the empty cells around a component of 1s on an empty-is-0 board), on the same terms |
@@ -415,7 +418,25 @@ other value. The transition is an edge, not a level: a `verdict` left sitting
 at its refusing value returns the mover exactly once, and the engine remembers
 the last `verdict` it saw per board binding to detect it, so the remembered
 value folds into the state hash and the checkpoint. `return` requires both
-`move` and `verdict` to be authored (validated). The shipped
+`move` and `verdict` to be authored (validated).
+
+**Sitting down at a tabletop.** A board facet's optional `engage` block
+(`WorldTabletopEngage`: `channel`, `radius`, `pitch`, `margin`, `surface`)
+makes the table engageable like a device. The seat's context button (`channel`,
+a declared channel, the debug world's `interact`) within `radius` of the
+board's centre composes a capturing `control placement:<id>` application, so the
+avatar stands still, and the same button leaves (the context-button probe,
+nearest target first, screens and tabletops together; several seats may sit at
+one table). Seated, the seat's camera eases to the board view
+(`WorldTabletopFraming`): the whole board from the side the seat stands on, at
+`pitch` degrees above the horizontal with `margin` metres around it, and the
+seat's binding context family `engagement` reads `tabletop`, so a world's
+context row can give it the table's controls. The game stays rules: they read
+the seat's channels and the three `$board:` seat operands above
+(`engaged`, `pointer`, `side`), the pointer meeting the plane `surface` metres
+above the topology origin, all in fixed point from the document, the seat's
+application set, its body and its ray (`WorldTabletopFrame`). The debug world's
+chess table is the worked game ([`chess.md`](../../worlds/debug/chess.md)). The shipped
 `body.carry` facet (`WorldCarry`) is a
 separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built

@@ -145,6 +145,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly bool[] m_missingSeatAnchorNarrated = new bool[PlayerRoster.MaxSlots];
     // Each seat's emulator view: the ease toward the screen it is captured on, and back.
     private readonly WorldScreenFraming[] m_screenFraming = NewScreenFraming();
+    private readonly WorldTabletopFraming[] m_tabletopFraming = NewTabletopFraming();
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     // views.cameraRig's compiled-rig cache, one slot per seat. Slot-indexed rather than owned by WorldSeatViewState
@@ -759,6 +760,20 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 : null),
             target: ref target
         );
+        // A seat sitting at a tabletop of the world it is presented in looks down on the board (the board view).
+        var tabletopNear = m_tabletopFraming[slot].Apply(
+            aspectRatio: (placed.X / placed.Y),
+            definition: definition,
+            deltaSeconds: deltaSeconds,
+            dynamics: chase.Dynamics,
+            eye: ref eye,
+            fieldOfViewRadians: fieldOfView,
+            placementId: (presentedHere
+                ? m_anchor.EngagedTabletop(slot: slot)
+                : null),
+            seatPosition: bodyPosition,
+            target: ref target
+        );
 
         return CameraSnapshot.LookAt(
             fieldOfViewRadians: fieldOfView,
@@ -767,7 +782,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             viewportHeight: placed.Y,
             viewportWidth: placed.X
         ) with {
-            Near = near,
+            Near = MathF.Max(
+                x: near,
+                y: tabletopNear
+            ),
         };
     }
     // The screen row the seat is captured on, or null when it engages none or the row is gone.
@@ -791,6 +809,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         for (var slot = 0; (slot < framing.Length); slot++) {
             framing[slot] = new WorldScreenFraming();
+        }
+
+        return framing;
+    }
+    private static WorldTabletopFraming[] NewTabletopFraming() {
+        var framing = new WorldTabletopFraming[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < framing.Length); slot++) {
+            framing[slot] = new WorldTabletopFraming();
         }
 
         return framing;

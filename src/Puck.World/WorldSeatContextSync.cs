@@ -16,7 +16,7 @@ namespace Puck.World;
 /// State-backed control contexts are published separately by <see cref="WorldSeatBindings.SyncSeat"/> from the
 /// seat's routed definition. <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged value.
 /// </summary>
-internal static class WorldSeatContextSync {
+public static class WorldSeatContextSync {
     // The roster family's single value — the joined/claimed/pending booleans the roster already publishes, made one
     // state (claimed before pending/active: an exclusive claim overrides the participant's own lifecycle for gestures).
     private static string RosterStateOf(PlayerRoster roster, int slot) {
@@ -50,6 +50,7 @@ internal static class WorldSeatContextSync {
             var holdsOwn = false;
             var possessed = -1;
             var screen = -1;
+            string? tabletop = null;
             var composed = false;
 
             foreach (var application in applications) {
@@ -71,8 +72,18 @@ internal static class WorldSeatContextSync {
                     (screen < 0)
                 ) {
                     screen = application.Target.Value;
+                } else if (
+                    (application.Target.Kind == GrantSubjectKind.Placement) &&
+                    (tabletop is null)
+                ) {
+                    tabletop = application.Target.Id;
                 }
             }
+
+            // A seat sits at a tabletop only while captured there; a mirrored set still walks its avatar.
+            var seated = (holdsOwn
+                ? null
+                : tabletop);
 
             seatBindings.SetContextState(
                 slot: slot,
@@ -85,9 +96,11 @@ internal static class WorldSeatContextSync {
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Engagement,
                 slot: slot,
-                state: (composed
+                state: ((seated is not null)
+                ? WorldContextFamilies.EngagementTabletop
+                : (composed
                 ? WorldContextFamilies.EngagementEngaged
-                : WorldContextFamilies.EngagementNone)
+                : WorldContextFamilies.EngagementNone))
             );
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Layout,
@@ -111,6 +124,10 @@ internal static class WorldSeatContextSync {
                 screenIndex: (holdsOwn
                 ? -1
                 : screen),
+                slot: slot
+            );
+            anchor.PublishEngagedTabletop(
+                placementId: seated,
                 slot: slot
             );
         }

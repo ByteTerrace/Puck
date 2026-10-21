@@ -1933,6 +1933,13 @@ frame, with nothing between the camera and the glass drawn; once it settles,
 the seat's view shows the emulator view, the screen's source alone at the crop,
 pixel aspect and fill its route's `display` authors
 ([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen-then-shows-its-source)).
+The same button sits a seat at a tabletop whose board facet authors an `engage`
+block: the seat is captured on `placement:<id>`, its camera eases to a view of
+the whole board from its side, its controls switch through the `engagement`
+context family's `tabletop` state, and the world's rules play the game from
+its channels and `board(pointer|side|engaged, …)` (the debug world's chess
+table, [`chess.md`](../../worlds/debug/chess.md);
+[engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)).
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated

@@ -54,8 +54,8 @@ public enum WorldScheduleExpectation {
 }
 /// <summary>
 /// The closed verb vocabulary a <see cref="WorldScheduleRow.Command"/> may open with: the steps that reach the
-/// simulation through an ordinary actor's door — state mutations, guarded transforms, body intents and poses, and
-/// joining or leaving a seat — and the reads a seat may make of what its disclosure shows it.
+/// simulation through an ordinary actor's door — state mutations, guarded transforms, body intents and poses, a seat's
+/// pointer ray, and joining or leaving a seat — and the reads a seat may make of what its disclosure shows it.
 /// </summary>
 /// <remarks>
 /// <para>The set is enumerated here rather than derived from <c>CommandRegistry.RoutesToSimulation</c>: that
@@ -96,6 +96,9 @@ public static class WorldScheduleCommands {
             "player.row.set",
             "player.state.cell.set",
             "player.state.cell.toggle",
+            "source.pointer.clear",
+            "source.pointer.direction",
+            "source.pointer.origin",
             "world.row.add",
             "world.row.remove",
             "world.row.set",

@@ -147,7 +147,10 @@ Puck.World extends the rule compiler the way any host does (see
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
   `$bodyPosition:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
-  `$clock:`, and `$board:cellOf:`. `bodyState(each, fuel)` reads one of a
+  `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
+  `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
+  [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
+  `bodyState(each, fuel)` reads one of a
   body's action-state slots (declared in `state.body` or `state.identity`, the
   slots a kit's `compareState` and a hold's `spend` use) as the body's step
   left it this tick: a counter's value, or a timer's remaining seconds. A slot
