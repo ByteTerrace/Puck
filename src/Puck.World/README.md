@@ -2278,7 +2278,10 @@ totals stay in the sum. It also registers `sdf.mesh-settle`, the settle rebakes
 of skinned blend groups (`SdfMeshSettle`) over every residency sharing the
 presentation's mesh library: groups queued, done and reused from the library,
 frames a drifted group waited while it moved or for the caps, and rebakes
-refused for meshing no surface. The
+refused for meshing no surface. It registers `sdf.mesh-gi` too, the world
+residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
+the geometries they built and took from the scene they replaced, the triangles
+they built, and the probe sweeps traced. The
 `allocation` section names the GC mode and the fewest managed bytes one read of
 every count allocated (`world.counters.read`, measured with
 `AllocationWindow.Measure`); only zero or not zero is meaningful. A render host

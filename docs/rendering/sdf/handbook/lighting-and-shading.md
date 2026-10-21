@@ -163,15 +163,25 @@ in the frame.
   Across the volume's last cell the light fades to the open sky.
 - **What an edit costs.** Probes are cached by cell, so a static world traces
   each cell once per lighting, and a camera returning to a place reads its
-  cached probes at once. A change of the static draws rebuilds the scene and
-  retraces every probe; a change of a directional light, the gains, the
+  cached probes at once. The scene is two-level: each distinct geometry (a
+  mesh's positions and indices) holds its own hierarchy in the mesh's frame,
+  and a top hierarchy indexes each draw's subtrees of at most 1,024 triangles,
+  carrying the draw's transform and material base. A change of the static
+  draws builds the scene from the one it replaces, so only geometry new to it
+  builds (a moved, recoloured or renumbered draw builds none, and geometry a
+  change set aside, such as a light switch's other slab, is kept for the next
+  scene up to 8 million triangles), and retraces every probe; `world.counters
+  sdf.mesh-gi` counts the builds and the geometry each built and reused. A
+  change of a directional light, the gains, the
   sources, the bounces or what the materials reflect and emit (a bound
   color's move, a placement showing another creation over the same meshes, as
   the gallery hall's light switches do) retraces them over the same scene. Old probes keep
-  drawing until new ones land. On the debug world the scene is 7 draws and
-  about 25,000 triangles, built in about 0.02 s, and the High volume's three
-  sweeps (36,864 probes, 14.2 million rays) take about 5 s on four threads of
-  the i5-8400.
+  drawing until new ones land. `puck mesh scene --world <file>` times the
+  scene over a world's stored static meshes on the CPU: a full build, one
+  sweep of a High window, and the update for one draw's new geometry, a move
+  and a return. On the debug world's 250 stored static groups (16.9 million
+  triangles) a full build takes about 1.2 s on the Ryzen 7 7800X3D and a
+  one-draw change about 0.05 s.
 - **Limits.** Moving bodies receive the volume's light and cast none into it.
   Point lights and screens contribute no bounced light. The sky's bounced share
   is captured when a generation of probes traces, so drifting clouds change

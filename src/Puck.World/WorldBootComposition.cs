@@ -1246,6 +1246,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshIrradiance);
         AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
@@ -1611,6 +1612,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshIrradiance);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.
