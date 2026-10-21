@@ -18,7 +18,7 @@ namespace Puck.World.Azure.Tests;
 /// extent refuses by the same name. The positive control runs first, so a refusal below means the tamper was caught
 /// rather than that the pair never validated.
 /// </summary>
-public sealed class CounterpartAttestationLawTests {
+public sealed partial class CounterpartAttestationLawTests {
     private static (WorldDefinition Source, WorldDefinition Left, WorldDefinition Right, WorldDefinition Corner) OwnerCorner(Guid owner, string world) {
         var boundary = static (float yaw) => new WorldAdjacencyBoundary(
             Center: Vector3.Zero,

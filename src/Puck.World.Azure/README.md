@@ -90,6 +90,12 @@ a separate durable travel-recovery operation.
 The extension also owns `WorldApiCounterpartResolver`, which implements the
 engine's neighbour-resolution seam using Azure credentials; no publisher
 implements the counterpart-publication seam (`ICounterpartPublisher`) yet. The engine interfaces carry no Azure credential types.
+The resolver reads response headers before consuming a body and refuses error
+statuses without buffering their bodies. Successful bodies are bounded to one
+claim and two bindings at the existing attestation byte ceilings, plus CBOR
+framing, regardless of `Content-Length`. The same 15-second operation deadline
+covers token acquisition, headers and every streamed body read. No shipped host
+currently constructs this resolver.
 
 ## Host composition
 

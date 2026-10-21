@@ -33,6 +33,10 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
     /// stays acceptable after a narrower one is issued. Kept short and deliberately not described as freshness.</summary>
     public static readonly TimeSpan MaximumClaimAge = TimeSpan.FromHours(value: 1);
 
+    /// <summary>The HTTP envelope ceiling: one claim and at most two bindings, each within the attestation byte
+    /// limit, plus the maximum nine-byte CBOR header for each byte string and both definite-length arrays.</summary>
+    public const int MaximumEnvelopeBytes = ((1 + AttestationChainEnvelope.MaxChainEntries) * (AttestationResourceLimits.AttestationBytes + 9)) + 18;
+
     private static readonly IAttestationCodec Codec = new CborAttestationCodec();
 
     private const string OwnerKeyPrefix = "owner/";
@@ -142,6 +146,7 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
 
             response = m_httpClient.Send(
                 cancellationToken: timeout.Token,
+                completionOption: HttpCompletionOption.ResponseHeadersRead,
                 request: request
             );
         } catch (OperationCanceledException) {
@@ -162,7 +167,25 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
             byte[] wrapper;
 
             try {
-                wrapper = response.Content.ReadAsByteArrayAsync(cancellationToken: timeout.Token).GetAwaiter().GetResult();
+                if (response.Content.Headers.ContentLength > MaximumEnvelopeBytes) {
+                    return WorldNeighbourResolution.Unavailable(reason: $"'{document}' counterpart claim response exceeds the {MaximumEnvelopeBytes}-byte limit");
+                }
+                using var body = response.Content.ReadAsStreamAsync(cancellationToken: timeout.Token).GetAwaiter().GetResult();
+                // Do not trust Content-Length, including when it is missing. One extra byte distinguishes an
+                // exact-limit response from a prefix of an oversized body before envelope decoding allocates.
+                var buffer = new byte[MaximumEnvelopeBytes + 1];
+                var total = 0;
+                while (total < buffer.Length) {
+                    var read = body.ReadAsync(buffer: buffer.AsMemory(start: total), cancellationToken: timeout.Token).GetAwaiter().GetResult();
+                    if (read == 0) { break; }
+                    total += read;
+                }
+                if (total > MaximumEnvelopeBytes) {
+                    return WorldNeighbourResolution.Unavailable(reason: $"'{document}' counterpart claim response exceeds the {MaximumEnvelopeBytes}-byte limit");
+                }
+                wrapper = buffer.AsSpan(start: 0, length: total).ToArray();
+            } catch (OperationCanceledException) {
+                return WorldNeighbourResolution.Unavailable(reason: $"timed out after {CounterpartApiPolicy.OperationTimeout.TotalSeconds:0}s reading the counterpart claim response body for '{document}'");
             } catch (Exception exception) {
                 return WorldNeighbourResolution.Unavailable(reason: $"could not read the counterpart claim response body for '{document}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
