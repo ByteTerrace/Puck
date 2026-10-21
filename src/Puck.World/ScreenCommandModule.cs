@@ -3,6 +3,7 @@ using System.Text;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Abstractions.Machines;
 using Puck.Assets.Qr;
 using Puck.World.Server;
 using Puck.World.Machines;
@@ -662,6 +663,16 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             ? $"({FixedQ4816.FromRawBits(value: pointer.X)}, {FixedQ4816.FromRawBits(value: pointer.Y)})"
             : "off"
         );
+        var padText = ((m_engagement.PadOn(screenIndex: index) is { } pad)
+            ? FormattableString.Invariant(formattable: $"{((pad.Buttons == MachineButtons.None)
+                ? "none"
+                : pad.Buttons.ToString().Replace(
+                    oldValue: ", ",
+                    newValue: "+",
+                    comparisonType: StringComparison.Ordinal
+                ))}/stick({pad.LeftStick.X:0.###}, {pad.LeftStick.Y:0.###})")
+            : "off"
+        );
         var builder = new StringBuilder();
 
         _ = builder.Append(
@@ -674,7 +685,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
                 provider: CultureInfo.InvariantCulture,
                 handler: $"assigned {(state.Engine ?? "?")} {((state.Handle != 0)
                 ? "bound"
-                : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText} gun={gunText}"
+                : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText} gun={gunText} pad={padText}"
             );
             if (state.Content is null) {
                 _ = builder.Append(value: $" {WorldMachineCommandModule.NoCartridge}");
@@ -684,7 +695,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
                 provider: CultureInfo.InvariantCulture,
                 handler: $"empty {((state.Handle != 0)
                 ? "bound"
-                : "unbound")} engaged={engagedText} gun={gunText}"
+                : "unbound")} engaged={engagedText} gun={gunText} pad={padText}"
             );
         }
 

@@ -1,4 +1,4 @@
-// The gallery hall's room lights (hall.puck), each scenario booted in the whole debug world:
+// The gallery hall's room lights and blinds (hall.puck), each scenario booted in the whole debug world:
 // `puck test worlds/debug/hall-tests.puck`. `hallLights` holds each level's state (Off 0, On 1) and `hallLamps` the
 // point-light weights that follow it; a level's switch stands on the west wall at z = 32.5, and a body posed at
 // x = 11.1 on that level stands in its reach box. Enum members are written as their numbers: the rows reach this file
@@ -90,5 +90,61 @@ test "writing a level's cell, as gallery.lights does, switches it" {
     hallLamps[lobby] == 0.9
     hallLights[level1] == 0
     hallLamps[stairs] == 0
+  }
+}
+
+// The blinds follow the lights: a level's are down while its lights are off and up while they are on. A body posed at
+// (30, 0.05, 14) in the lobby level's hall sees body 8, the first chess piece out on the lawn to the south-west, through
+// the south window at x = 26 to 29, so its line of sight reads whether that window's blind is down.
+test "the lobby's blinds are down and stop the sight line through a window" {
+  when {
+    seat1: body.pose 30 0.05 14 0 0 0 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    los(body, 0, body, 8) == 0
+  }
+}
+
+test "the lobby switch raises its blinds" {
+  when {
+    seat1: body.pose 11.1 0.05 32.5 90 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+    seat1: body.pose 30 0.05 14 0 0 0 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 1
+    los(body, 0, body, 8) == 1
+  }
+}
+
+test "another level's lights leave the lobby's blinds as they stand" {
+  when {
+    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: world.state.cell.set hallLights level0 1
+    seat1: world.state.cell.set hallLights level1 0
+    ticks 30
+  }
+  expect {
+    hallLights[level1] == 0
+    los(body, 0, body, 8) == 1
+  }
+}
+
+test "switching the lobby off again lowers its blinds" {
+  when {
+    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: world.state.cell.set hallLights level0 1
+    ticks 30
+    seat1: world.state.cell.set hallLights level0 0
+    ticks 30
+  }
+  expect {
+    hallLights[level0] == 0
+    los(body, 0, body, 8) == 0
   }
 }

@@ -205,6 +205,8 @@ public static class WorldTargetSelection {
     private static bool EffectReferencesLineOfSight(ActionEffect effect) => effect switch {
         ActionEffect.SetState set => NamesLineOfSight(name: set.FromState?.Spelling),
         ActionEffect.AddState add => NamesLineOfSight(name: add.FromState?.Spelling),
+        ActionEffect.If branch => (PredicateReferencesLineOfSight(predicate: branch.Condition) ||
+            branch.Then.Any(predicate: EffectReferencesLineOfSight) || (branch.Else?.Any(predicate: EffectReferencesLineOfSight) == true)),
         _ => false,
     };
     private static bool NamesLineOfSight(string? name) => ((name is not null) && name.StartsWith(
@@ -214,6 +216,8 @@ public static class WorldTargetSelection {
     private static bool PredicateReferencesLineOfSight(ActionPredicate? predicate) => predicate switch {
         ActionPredicate.CompareState compare => (NamesLineOfSight(name: compare.State.Spelling) || NamesLineOfSight(name: compare.ComparandState?.Spelling)),
         ActionPredicate.All all => all.Predicates.Any(predicate: PredicateReferencesLineOfSight),
+        ActionPredicate.Any any => any.Predicates.Any(predicate: PredicateReferencesLineOfSight),
+        ActionPredicate.Not not => PredicateReferencesLineOfSight(predicate: not.Predicate),
         _ => false,
     };
     // Scanned over the AUTHORED rule rows (mirroring the two checks above), never the compiled form — this decides

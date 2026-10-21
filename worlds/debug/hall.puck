@@ -121,7 +121,38 @@ let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15
 // E or X on a pad) flips it while seat 1's body stands in the switch's reach box before it.
 let switchZ = 32.5
 let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (switchZ - 0.6), z1: (switchZ + 0.6), y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
-let hallSwitchStates = [{ name: "on", lift: 0.06, indicator: "#FFC46B", glow: 3 }, { name: "off", lift: -0.06, indicator: "#5BE38A", glow: 2 }]
+// On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
+let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 3 }, { name: "off", indicator: "#5BE38A", glow: 2 }]
+
+// The blinds, tied to each level's lights: Off lowers them, On raises them. A level's windows open in the south, north and
+// east faces from 0.9 m to 3.3 m over its slab top (the south face's ten 3 m windows from x = 21, and above the lobby the
+// one over the entrance; the north face's ten; the east face's five), and level 3 has three skylights in the roof. A
+// lowered blind is a slatted panel standing in the wall's thickness, 5 cm back from the room face: one board per face and
+// level, running inside the piers between the windows and 3 cm into every sill and head, so each opening shows a panel
+// that covers it whole and lets no daylight through, its slats' seams painted on. One long board, rather than one per window, bakes at the coarse
+// lattice its length sets, so a level's blinds cost few triangles. A raised blind has rolled into the charcoal cassette
+// at the head of its opening (part of `hall-shell`, always drawn), so its placement shows `hall-blinds-up`, a creation
+// with nothing to draw: raising blinds bakes nothing, and lowering them bakes their boards the first time they show (the
+// mesh store keeps them after; the lobby's bake with the boot, since it starts dark). The boards are solid, so a line of
+// sight through a window reads its blind (`hall-tests.puck`).
+let windowStarts = map(range(0, 10), i => 21 + (5 * i))
+let eastStarts = [14.5, 19.5, 24.5, 29.5, 34.5]
+let skylightStarts = [24, 36, 48]
+// Each opening, for its cassette: its level, its face, and its extent along the face (x, or z on the east face).
+let hallOpenings = reduce(range(0, 4), [], (rows, k) => concat(concat(concat(rows, map(concat(((k == 0) ? [] : [14]), windowStarts), x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) })), map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) })), map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })))
+// Each blind board: its level, its name, and its world bounds.
+let hallBlinds = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
+  { level: k, name: "south", x0: ((k == 0) ? 20.97 : 13.97), x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 12.03, z1: 12.25 }
+  { level: k, name: "north", x0: 20.97, x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 39.75, z1: 39.97 }
+  { level: k, name: "east", x0: 69.75, x1: 69.97, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 14.47, z1: 37.53 }
+]
+), map(((k == 3) ? skylightStarts : []), x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 })
+)
+)
+let blindPalette = [{ color: "#D8CFBD", roughness: 0.9, specular: 0.03 }]
+// The seams painted across a window's board, the most a palette slot's paints hold.
+let blindSeams = 8
+
 // The point lights a level owns, by `hallLamps` key, with the weight each shines at while its level is On.
 let hallLampLevels = [{ key: "lobby", level: 0, weight: 0.9 }, { key: "stairs", level: 1, weight: 0.7 }]
 
@@ -167,6 +198,15 @@ prototypes {
       }
       // West face, solid.
       hallBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
+      // The cassette a window's blind rolls into, under the band over its head, part of the wall so it bakes with it.
+      for (opening, n) in hallOpenings {
+        for depth in ((opening.face == "south") ? [[12.05, 12.28]] : ((opening.face == "north") ? [[39.72, 39.95]] : [])) {
+          hallBox(label: $"cassette-{n}", x0: opening.a0, x1: opening.a1, y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: depth[0], z1: depth[1], slot: hallTrim)
+        }
+        for depth in ((opening.face == "east") ? [[69.72, 69.95]] : []) {
+          hallBox(label: $"cassette-{n}", x0: depth[0], x1: depth[1], y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: opening.a0, z1: opening.a1, slot: hallTrim)
+        }
+      }
     }
   }
 
@@ -218,8 +258,8 @@ prototypes {
   }
 
   // A floor's light switch, on the west wall's inner face beside the stairs, its plate facing +X into the landing:
-  // `hallSwitch` takes world bounds over the floor, so one prototype serves every level's placement. Up with a warm
-  // indicator is on; down with a green locator glow (findable in the dark) is off.
+  // Its boxes take world bounds over the floor, so one prototype serves every level's placement. A warm indicator is
+  // on; a green locator glow (findable in the dark) is off.
   for state in hallSwitchStates {
     prototype $"hall-switch-{state.name}" {
       document {
@@ -231,10 +271,39 @@ prototypes {
           { color: state.indicator, roughness: 0.4, emissive: state.glow }
         ]
         hallBox(label: "plate", x0: 10.3, x1: 10.34, y0: 1.1, y1: 1.46, z0: (switchZ - 0.13), z1: (switchZ + 0.13), slot: 0)
-        hallBox(label: "rocker", x0: 10.34, x1: 10.39, y0: (1.24 + state.lift), y1: (1.32 + state.lift), z0: (switchZ - 0.035), z1: (switchZ + 0.035), slot: 1)
+        hallBox(label: "rocker", x0: 10.34, x1: 10.39, y0: 1.24, y1: 1.32, z0: (switchZ - 0.035), z1: (switchZ + 0.035), slot: 1)
         hallBox(label: "indicator", x0: 10.34, x1: 10.355, y0: 1.39, y1: 1.42, z0: (switchZ - 0.02), z1: (switchZ + 0.02), slot: 2)
         textRuns [{ text: "LIGHTS", position [-10.302, 1.53, (0 - switchZ)], rotation [0, -0.707107, 0, 0.707107], emHeight: 0.06, depth: 0.004, mode: "emboss", material: 1, align: "center" }]
       }
+    }
+  }
+
+  // Each lowered blind board, a creation of its own, so each bakes as one flat group.
+  for blind in hallBlinds {
+    prototype $"hall-blind-{blind.level}-{blind.name}" {
+      document {
+        name: $"hall-blind-{blind.level}-{blind.name}"
+        schema: "puck.creation.v1"
+        // A window board's seams, painted: `blindSeams` dark lines across it, so each opening reads as a blind of
+        // horizontal slats; a paint draws at the hit alone, so the seams cost the bake nothing. A skylight's board has none.
+        palette [
+          {
+            color: blindPalette[0].color
+            roughness: blindPalette[0].roughness
+            specular: blindPalette[0].specular
+            paints: map(((blind.y0 > 17) ? [] : range(1, blindSeams)), i => { type: "Plane", position [0, ((blind.y0 + 0.03) + ((2.4 / (blindSeams + 1)) * i)), 0], stroke: 0.007, color: "#9A907E" })
+          }
+        ]
+        hallBox(label: "board", x0: blind.x0, x1: blind.x1, y0: blind.y0, y1: blind.y1, z0: blind.z0, z1: blind.z1, slot: 0)
+      }
+    }
+  }
+  // A raised blind: rolled into its cassette, nothing to draw.
+  prototype "hall-blinds-up" {
+    document {
+      name: "hall-blinds-up"
+      schema: "puck.creation.v1"
+      palette: blindPalette
     }
   }
 
@@ -406,6 +475,20 @@ placements {
         {
           "when": state(state: hallLights, key: $"level{k}", comparison: Equal, value: 0)
           prototypeId: "hall-switch-off"
+        }
+      ]
+    }
+  }
+  // A level's blinds are down while its lights are off and up while they are on.
+  for blind in hallBlinds {
+    placement $"hall-blind-{blind.level}-{blind.name}" {
+      prototype: $"hall-blind-{blind.level}-{blind.name}"
+      position [0, 0, 0]
+      solid
+      respond [
+        {
+          "when": state(state: hallLights, key: $"level{blind.level}", comparison: Equal, value: 1)
+          prototypeId: "hall-blinds-up"
         }
       ]
     }

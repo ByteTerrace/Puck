@@ -282,7 +282,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// heading; camera-framed channel rows retain their authored movement-facing behavior;
     /// <c>player.steer</c> or <c>player.look.steer</c> composes after this and wins. Under a kit on the sim's own
     /// <see cref="MotionMoveFrame.Heading"/> arm nothing rotates (the validator keeps such a world's pair
-    /// World-framed) — the stick folds in raw beside the rows.</summary>
+    /// World-framed) — the stick folds in raw beside the rows. Nothing rotates either for a seat its authority holds
+    /// captured on a device (<see cref="WorldAuthorityEndpoint.DrivesDevice"/>): the rows and the stick sum raw, so a
+    /// screen's pad and a board's rules read right as right whichever way the camera faces.</summary>
     /// <param name="slot">The 0-based local seat whose camera and body frame the movement.</param>
     /// <param name="bodyIndex">The 0-based entity index this submission will drive.</param>
     /// <param name="endpoint">The authority that owns the body and supplies its current orientation.</param>
@@ -328,6 +330,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             seat.CameraFrameYaw = null;
 
             return intent;
+        }
+        if (endpoint.DrivesDevice(index: bodyIndex)) {
+            // A device's controls are the seat's own: the pair reaches the screen's pad or the board's rules as
+            // pressed, never rotated into the world, and no facing is written for the idle avatar.
+            seat.CameraFrameYaw = null;
+
+            return (stickMoves
+                ? WriteMove(
+                    forward: (rowForward + stickForward),
+                    intent: intent,
+                    roles: roles,
+                    strafe: (rowStrafe + stickStrafe)
+                )
+                : intent);
         }
 
         if (

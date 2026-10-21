@@ -40,7 +40,7 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
 | x 20 to 70 | The halls: each level's rows run along +X from x = 23, a sign at each row's west end |
-| South, north and east walls | A 2.4 m window band on every level; the roof's skylights light level 3 |
+| South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
 
 The lobby on level 0, from the entrance north. The walk from the door to the
 lift and the stairs runs at x 14 to 18 and stays clear; the games corner stands
@@ -71,11 +71,37 @@ roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
 pale, unlit diffuser in the strips' palette slot) through the placement's
 `respond` facet, and its point light (`hallLamps`: the lobby's for level 0, the
 stairwell's for level 1) reads weight 0; the lift car's lamp stays with the car.
-A swap shows the same geometry, so the mesh library answers it without a bake;
-the irradiance volume retraces under the new materials. Each level's switch is
-a plate on the west wall at z = 32.5, south of the stairs, 1.1 to 1.46 m over the
-floor and labelled `LIGHTS`: rocker up with a warm indicator when on, rocker
-down with a green locator glow when off, so it shows in the dark.
+A swap shows the same geometry, so the mesh library answers it without a bake,
+and a responding row registers both variants' palettes, so it moves no other
+group's material ids; the irradiance volume retraces under the new materials and
+blinds. Each level's switch is a plate on the west wall at z = 32.5, south of
+the stairs, 1.1 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator
+when on, a green locator glow when off, so it shows in the dark. The two are one
+geometry, so a flip bakes nothing.
+
+Each level's blinds follow its lights: off lowers them over every window of that
+level (the south face's ten, and its window over the entrance above the lobby;
+the north face's ten; the east face's five; level 3's three skylights too), on
+raises them. The entrance stays an open doorway. A lowered blind is a pale
+board standing in the wall's thickness 5 cm back from the room face, one per
+face and level (`hall-blind-<k>-south`, `-north`, `-east`, and
+`hall-blind-3-skylight-<x>` in the roof), running inside the piers between the
+windows and 3 cm into every sill and head, so each opening shows a panel that
+covers it whole and no sunlight or traced indirect light comes through. Eight
+painted seams across each window's board read as nine horizontal slats; a paint
+draws at the hit alone, so the seams cost the bake nothing. A raised blind has
+rolled into the charcoal cassette at its opening's head, part of `hall-shell`
+and always drawn. The boards are solid, so a line of sight through a window
+reads them (`hall-tests.puck`), and swap through `respond` to `hall-blinds-up`,
+a creation with nothing to draw. Raising a level's blinds bakes nothing;
+lowering them bakes that level's boards the first time they show under a bake
+identity, and the mesh store keeps them after (level 0's bake with the boot,
+since the lobby starts dark). The CPU bake (`puck mesh audit --cpu --group
+hall-blind`) meshes a south or north board in about 190,000 triangles, an east
+one in 49,000 and a skylight's in 95,000, so the lowered lobby adds about
+420,000, near one floor slab's 530,000. With the lobby's lights off its light is
+the device screens' and the entrance's; the lit levels above still light the
+stairwell, which is open between floors.
 
 ### Getting around
 
@@ -86,7 +112,7 @@ down with a green locator glow when off, so it shows in the dark.
 | Call the lift | Step on the `CALL` pad before the lift door, or `gallery.lift <level>` |
 | Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
 | Stand on a level's landing | `gallery.level <level> [body]` |
-| Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or X on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
+| Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or X on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
@@ -368,10 +394,9 @@ Each recipe frames a row's first three exhibits; move the x of both points by
   box and sphere stretches as the sphere slides away from the pose it baked in.
   Pause or scrub `galleryClock` and the group bakes again at the held pose
   half a second later (`world.wait 30`, `world.wait bakes 60`, then capture).
-  The pause is a `world.row.set`, a document edit whose new program bakes every
-  group at the pose of its frame anyway; a scrub after it (`world.state.cell.set
-  galleryClock $value 1.3`) changes state alone, so only the settle rebake moves
-  the seam (`sdf.mesh-settle.queued` and `done` count it). Compare against
+  The pause is a `world.row.set`, a document edit whose new program keeps every
+  moving group's skinned mesh, as a scrub after it (`world.state.cell.set
+  galleryClock $value 1.3`) does, so only the settle rebake moves the seam (`sdf.mesh-settle.queued` and `done` count it). Compare against
   `motion-state-blend` at x = 36 with `galleryInputs probe` at the same offset.
   `world.counters sdf.mesh-settle` read twice while the clock runs shows
   `moving` climbing and `queued` still.
