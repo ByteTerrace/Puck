@@ -53,16 +53,17 @@ gives the console's 8:7 pixels. The bezel, lens or tube round the picture is
 the device's own geometry, outside the glass.
 
 The Humble Gaming Brick's shell is real glass: its palette slot declares
-`glass { depth: 0.012, ior: 1.49 }` over an atomic-orange tint (`#FF4A0C`), so
+`glass { depth: 0.014, ior: 1.49 }` over an atomic-orange tint (`#FF4F10`), so
 it bakes into a group of its own and the glass passes shade it over the opaque
 image
 ([glass after the opaque image](../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)):
 the board, chips, speaker, cells and cartridge inside it are ordinary opaque
 shapes seen through it, bent by its refraction and tinted by Beer–Lambert over
-the distance through it. The depth is about the 11 mm of shell (shown) over the
-board, so the board reads through one full depth of the tint, a saturated
-orange, and the 34 mm through the whole body at its rim through three, a deep
-red-orange. Glass tints only the light it transmits and adds no colour of its
+the distance through it. The shell is a solid prism, so a view ray crosses it
+from its face to the first opaque part behind. The depth is about the 13 mm of
+shell (shown) over the board, so the board reads through one full depth of the
+tint, a saturated orange, and the 34 mm through the whole body at its rim
+through two and a half, a deep red-orange. Glass tints only the light it transmits and adds no colour of its
 own, so what lies behind it sets how bright the orange reads: the board is a
 pale green, which reads amber through the tint, where a dark board turned the
 shell brown and grey; the speaker behind its slots is a dark cone. A static
