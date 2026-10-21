@@ -208,7 +208,10 @@ change, a world edit or a fix with a repro, goes to `implementer`, even when it
 is large. `specialist` is for an unknown cause or a design call across projects.
 `principal` is for the problems the table names and nothing else. When a lane on
 a cheaper role stalls, escalate that lane; never start on the expensive role
-because a brief is long.
+because a brief is long. Codex is part of the same lineup: Sol is a peer of
+`implementer` and takes the same briefs, and Astra is comparable to `principal`
+and takes only what `principal` would. Spread implementer briefs across
+`implementer` and Sol, so both families' slots stay busy.
 
 Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
 agentic coding on a hard lane, `max` only when correctness outweighs cost.
