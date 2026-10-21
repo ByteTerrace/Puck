@@ -383,7 +383,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             ? DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS
             : DXGI_FORMAT.DXGI_FORMAT_UNKNOWN
         );
-        var elements = ((uint)(bufferSize / (raw
+        var elements = checked((uint)(bufferSize / (raw
             ? sizeof(uint)
             : elementStride
         )));
