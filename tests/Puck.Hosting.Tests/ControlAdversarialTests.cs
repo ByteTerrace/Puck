@@ -158,7 +158,7 @@ public sealed class ControlAdversarialTests {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
         using var session = new ConsoleControlSession(
             source,
-            path => capture = new(path: path)
+            request => capture = request
         );
         var operation = session.ExecuteAsync(
             new(

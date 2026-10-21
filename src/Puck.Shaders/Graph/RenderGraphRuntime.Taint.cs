@@ -74,7 +74,7 @@ public sealed partial class RenderGraphRuntime {
     // The instance the pending capture reads: the one armed on the runtime, or the instance whose node or producer holds
     // one; -1 when no capture is pending.
     private int CapturedInstance() {
-        if (m_capture.PendingPath is not null) {
+        if ((m_capture.PendingPath ?? PresentedPath) is not null) {
             return m_captureInstance;
         }
 

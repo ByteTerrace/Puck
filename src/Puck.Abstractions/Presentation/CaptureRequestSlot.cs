@@ -29,10 +29,14 @@ public sealed class CaptureRequestSlot {
     /// <param name="request">The unserved request.</param>
     /// <param name="pendingPath">The owning node's whole-chain <see cref="ICaptureRequestTarget.PendingCapturePath"/>,
     /// which must be <see langword="null"/> for the arm to be accepted.</param>
-    /// <exception cref="InvalidOperationException">A capture is already pending, or the request is terminal.</exception>
+    /// <exception cref="InvalidOperationException">A capture is already pending, the request is terminal, or the request
+    /// is presented (<see cref="FrameCaptureMode.Presented"/>), which only the render-graph runtime serves.</exception>
     public void Arm(FrameCaptureRequest request, string? pendingPath) {
         ArgumentNullException.ThrowIfNull(argument: request);
 
+        if (request.Mode != FrameCaptureMode.Settled) {
+            throw new InvalidOperationException(message: "A presented capture is served by the render-graph runtime; arm it on the runtime or its root.");
+        }
         if (
             (pendingPath is not null) ||
             request.Completion.IsCompleted

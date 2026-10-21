@@ -144,6 +144,22 @@ nothing captures its input version in that version's layout.
 `RenderGraphRuntimeLawTests.Alias`
 (`ARootCaptureOfAFrameThatDrewNothingReadsTheInputVersionInItsLayout`).
 
+A presented capture (`FrameCaptureMode.Presented`,
+`RenderGraphRuntime.Presented.cs`) is the one capture no node serves: the
+runtime keeps it, forwards it nowhere, begins no convergence and holds no
+residency frame, and after each frame's renders and batch flush reads back the
+captured instance's latest output resolved through what it stands for, the
+image `ProduceFrame` hands the display, through that instance's node
+(`ShaderPipelineRenderNode.TryReadPresented`). The readback waits for the GPU,
+so the image cannot change under it. A frame on which `ReasonOf` names a reason
+or the output is tainted is skipped, never read, and the burst's presentation
+indices show the gap. It counts as pending (`PendingCapturePath`) until its
+last PNG is written, so the capture gate fills, capture frames re-render
+tainted instances and `world.wait captures` fences the files, but not as
+holding (`HoldsPresentation`), so the presenter does not pin interpolation and
+the capture scheduler holds no clock for it. A `CaptureRequestSlot` refuses to
+arm one.
+
 `RenderGraphRuntime.OfferCaptureSource` offers an aliased output under its own
 lease. A node serving it without rendering copies it before readback
 (`ShaderPipelineRenderNode.CapturePin.cs`); a node that renders releases the

@@ -2538,6 +2538,18 @@ request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
+That capture is a settled still: it holds presentation and lets temporal views
+converge over the held frame, so it cannot show flicker, ghosting or trails.
+`world.screenshot <path.png> presented [<frames>] [region <x> <y> <w> <h>]`
+reads the frames the display presents instead, as composed for it and holding
+nothing, 1..120 of them (`<path>-000.png` onward for a burst), and prints a
+report on stderr once the last PNG is written: per frame its presentation
+index, the presentation its image was rendered on, its tick, and the pixels and
+luma that changed from the frame before, over the region or the whole frame.
+The host's clock runs on during it; `world.wait captures <seconds>` fences it.
+The MCP form is `puck_capture_frame` with `mode: "presented"`
+([Puck.Mcp](../Puck.Mcp/README.md#tools-and-results)).
+
 `world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
 the gallery and anything else a document names by a token; `near` names the
 spawn point nearest the flagging seat's body, so one key flags whatever exhibit

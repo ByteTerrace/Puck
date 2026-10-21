@@ -274,7 +274,7 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
         ArgumentNullException.ThrowIfNull(request);
         string? error = null;
 
-        if (request.TimeoutMilliseconds is < 1 or > ControlLimits.TimeoutMilliseconds) { error = "Deadline must be 1..120000 milliseconds."; } else if (request.Operation == "capture") { if (request.Command is not null) { error = "Capture accepts no command or path."; } } else if (request.Operation != "exec") { error = "Unknown control operation."; } else if (
+        if (request.TimeoutMilliseconds is < 1 or > ControlLimits.TimeoutMilliseconds) { error = "Deadline must be 1..120000 milliseconds."; } else if (request.Operation == "capture") { error = ((request.Command is not null) ? "Capture accepts no command or path." : request.Capture?.RefusalOf()); } else if (request.Operation != "exec") { error = "Unknown control operation."; } else if (request.Capture is not null) { error = "Exec takes no capture options."; } else if (
             string.IsNullOrWhiteSpace(value: request.Command) ||
             (request.Command.AsSpan().TrimStart()[0] == '#') ||
             (request.Command.IndexOfAny(anyOf: ['\r', '\n', '\0']) >= 0)

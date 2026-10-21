@@ -248,6 +248,10 @@ public sealed partial class RenderGraphRuntime {
             (m_stale[m_captureInstance] is { } refusal)) {
             m_capture.Refuse(error: new InvalidOperationException(message: refusal));
         }
+        if ((PresentedPath is not null) && m_staleRefused[m_captureInstance] &&
+            (m_stale[m_captureInstance] is { } presentedRefusal)) {
+            RefusePresented(error: new InvalidOperationException(message: presentedRefusal));
+        }
         if (m_stale[m_root] is { } reason) {
             Render = (m_staleRefused[m_root]
                 ? FrameRender.Refused(reason: reason)

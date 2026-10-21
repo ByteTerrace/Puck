@@ -220,7 +220,9 @@ public static class WorldRenderRoot {
         }
 
         binder.Runtime = runtime;
-        frameSource.CapturePending = () => (runtime.PendingCapturePath is not null);
+        // Only a settled capture pins the presented state to the completed tick; a presented one reads what the
+        // display shows, interpolation included.
+        frameSource.CapturePending = () => runtime.HoldsPresentation;
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.
         frameSource.ViewRendered = view => runtime.TryLatestImage(

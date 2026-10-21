@@ -64,12 +64,20 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's
   `world.debug-view motion` stays stationary with shadows both on and off.
-- **A capture holds its residency's frame.** Under `world.debug-view motion`
-  the held frame keeps the motion it was presented with
-  (`SdfWorldTables.HoldsFrame`, the `held` argument of
+- **A settled capture holds its residency's frame.** Under
+  `world.debug-view motion` the held frame keeps the motion it was presented
+  with (`SdfWorldTables.HoldsFrame`, the `held` argument of
   `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
   so a temporal view converges over the held renders. Settling motion history
   on a held upload makes every capture of the motion view read still.
+- **A settled capture cannot show what changes between frames.** Flicker
+  (jitter moiré on a screen, a still scene whose pixels change), ghosting and
+  trails show only in a presented capture (`FrameCaptureMode.Presented`:
+  `puck_capture_frame` with `mode: "presented"`, `frames: 8`, or
+  `world.screenshot <path.png> presented 8`), which holds and settles nothing
+  and reports each frame's changed pixels and luma change against the one
+  before. A still scene with `world.temporal on` that changes in a presented
+  burst is flickering; a clean settled still proves nothing about it.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.
