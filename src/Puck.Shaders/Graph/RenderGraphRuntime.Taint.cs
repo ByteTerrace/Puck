@@ -26,19 +26,27 @@ public sealed partial class RenderGraphRuntime {
     // loop of previous-frame reads (a camera view reading itself, two views reading each other) from frame to frame and
     // hold every capture it reaches. The one rule for both kinds of reader: a graph instance binds a stand-in in its place,
     // unnoted, and an external producer's read stays unbound.
-    private bool Withholds(bool previousFrame, bool tainted) => (
+    // The same holds for a read of an instance the frame does not render (one nothing shown reaches, such as a portal's
+    // innermost level read only as a screen's source): its latest output stands from before the capture armed, the
+    // capture frame cannot render it again, and binding it would hold every capture it reaches for as long as it stays
+    // unshown, so on a capture frame its tainted output is withheld too.
+    private bool Withholds(bool previousFrame, bool tainted, bool rendersThisFrame = true) => (
         m_capturing &&
-        previousFrame &&
+        (previousFrame || !rendersThisFrame) &&
         tainted
     );
+    // Whether the frame's schedule renders an instance.
+    private static bool RendersIn(RenderGraphSchedule schedule, int producer) =>
+        (schedule.Instances[producer] is { Status: RenderGraphInstanceStatus.Rendered });
     // Records that an instance's render bound a producer's tainted output.
     private void NoteTaint(int index, string producer, bool tainted) {
         if (tainted) {
             m_taintedReads[index] = producer;
         }
     }
+    // A read's own taint, noted first, names the cause more nearly than the package state it went into, so it stays.
     private void NotePackageTaint(int index) {
-        if (PackageTaintOf(index: index) is { } retained) {
+        if ((m_taintedReads[index] is null) && (PackageTaintOf(index: index) is { } retained)) {
             NoteTaint(index: index, producer: retained, tainted: true);
         }
     }

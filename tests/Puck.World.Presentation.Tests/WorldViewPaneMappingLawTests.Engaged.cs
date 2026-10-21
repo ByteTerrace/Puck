@@ -125,14 +125,10 @@ public sealed partial class WorldViewPaneMappingLawTests {
     public void APressOnAFramedWindowOpensItUntilTheSeatLeaves() {
         var (screens, instance) = EngageableScreen();
         var window = new PassthroughWindow();
-        var passthrough = new WorldSourcePassthrough(
-            graphs: m_host,
-            viewports: new WorldSeatViewports(),
-            windows: new InstanceWindows(
-                name: instance,
-                window: window
-            )
-        );
+        var passthrough = Door(windows: new InstanceWindows(
+            name: instance,
+            window: window
+        ));
 
         m_host.Screens = screens;
         m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
@@ -162,5 +158,183 @@ public sealed partial class WorldViewPaneMappingLawTests {
         FramedFrame(framed: false);
         Assert.Contains(expectedSubstring: "none opened", actualString: passthrough.Describe());
         Assert.Null(@object: passthrough.Router.Focus.Focused);
+    }
+    // THE LAW: a local pad drives the window its seat frames, through the door a physical mouse takes. Its stick moves
+    // the pointer across the framed picture (the system cursor follows, TakeWarp), clamped to the picture, at the route's
+    // feel; its press on the picture opens the window and reaches it; its stick scrolls and its arrows type only on the
+    // opened window; a seat that frames nothing drives nothing. Control+Alt+Escape leaves in one step: it returns the
+    // keyboard, closes the window, releases what the pad held and leaves the seat's engagement, whoever had the keyboard.
+    [Fact]
+    public void APadDrivesTheFramedWindowAndTheChordLeavesInOneStep() {
+        var (screens, instance) = EngageableScreen();
+        var window = new PassthroughWindow();
+        var anchor = new WorldPerceptionAnchor();
+        var seats = new Seats(feel: new WorldScreenPadPointer(
+            ScrollSpeed: 12f,
+            Speed: 0.5f
+        ));
+        var time = new ManualTime();
+        var passthrough = Door(
+            anchor: anchor,
+            seats: seats,
+            time: time,
+            windows: new InstanceWindows(
+                name: instance,
+                window: window
+            )
+        );
+
+        m_host.Screens = screens;
+        m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
+        FramedFrame(framed: true);
+        FramedFrame(framed: true);
+
+        // No seat is captured on the screen: the pad drives nothing.
+        Assert.False(condition: passthrough.PadButton(button: 0, pressed: true, slot: 0));
+        Assert.False(condition: passthrough.PadPointer(slot: 0, value: Vector2.UnitX));
+        Assert.False(condition: passthrough.PadScroll(slot: 0, value: Vector2.UnitY));
+        Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: true, slot: 0));
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: Vector2.Zero));
+        Assert.Null(@object: passthrough.TakeWarp());
+        Assert.EndsWith(expectedEndString: "; pad idle", actualString: passthrough.Describe());
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => passthrough.PadButton(button: 5, pressed: true, slot: 0));
+
+        // Seat 1 is captured on it. The pointer resting on the framed picture shows the system arrow before the window
+        // is opened; on the fill it is the game's.
+        anchor.PublishEngagedScreen(screenIndex: 0, slot: 0);
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 32.5f, y: 32.5f)));
+        Assert.True(condition: passthrough.HoldsPointer);
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 4.5f, y: 4.5f)));
+        Assert.False(condition: passthrough.HoldsPointer);
+
+        // A full right tilt held half a second at half a picture height a second travels a quarter of the 32-pixel
+        // picture's height, from its centre since the pointer lies on the fill. A long tilt stops at the picture's edge.
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: Vector2.UnitX));
+        time.Advance(seconds: 0.5);
+        Assert.Equal(expected: (40, 32), actual: passthrough.TakeWarp());
+        time.Advance(seconds: 10.0);
+        Assert.Equal(expected: (47, 32), actual: passthrough.TakeWarp());
+        Assert.Contains(expectedSubstring: $"; pad p1 screen 0 '{instance}' stick (1, 0) scroll (0, 0) buttons none keys none feel speed 0.5 curve 1 boost 1 ramp 0s scroll 12/s", actualString: passthrough.Describe());
+        Assert.Empty(collection: window.Moves);
+
+        // Its arrows type on no window until the local user opens it.
+        Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: true, slot: 0));
+        Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: false, slot: 0));
+
+        // The pad's press on the picture opens the window and reaches it at the pointer, taking the keyboard; its
+        // release goes where the press went.
+        Assert.True(condition: passthrough.PadButton(button: 0, pressed: true, slot: 0));
+        Assert.Single(collection: window.Presses);
+        Assert.Contains(expectedSubstring: $"{instance} engaged window", actualString: passthrough.Describe());
+        Assert.Contains(expectedSubstring: "buttons left", actualString: passthrough.Describe());
+        Assert.Equal(expected: passthrough.Router.Focus.Focused?.Name, actual: instance);
+        Assert.True(condition: passthrough.PadButton(button: 0, pressed: false, slot: 0));
+        Assert.Single(collection: window.Releases);
+        Assert.False(condition: passthrough.PadButton(button: 0, pressed: false, slot: 0));
+
+        // Now the window hears the pointer move.
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: -Vector2.UnitX));
+        time.Advance(seconds: 0.5);
+        Assert.Equal(expected: (39, 32), actual: passthrough.TakeWarp());
+        Assert.NotEmpty(collection: window.Moves);
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: Vector2.Zero));
+
+        // The cursor's own echo of the pad's move keeps the pad's exact pointer; the mouse moving elsewhere moves it
+        // with it, and a pointer the mouse left on the fill is put back on the picture before the wheel turns there.
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 39f, y: 32f)));
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 4.5f, y: 4.5f)));
+        Assert.True(condition: passthrough.PadScroll(slot: 0, value: Vector2.UnitY));
+        time.Advance(seconds: 0.25);
+        Assert.Equal(expected: (32, 32), actual: passthrough.TakeWarp());
+        Assert.Equal(expected: new Vector2(x: 0f, y: 3f), actual: Assert.Single(collection: window.Wheels));
+        Assert.True(condition: passthrough.PadScroll(slot: 0, value: Vector2.Zero));
+
+        // An arrow types on the opened window, once per press.
+        Assert.True(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: true, slot: 0));
+        Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: true, slot: 0));
+        Assert.Contains(expectedSubstring: "keys ArrowUp", actualString: passthrough.Describe());
+        Assert.Equal(expected: [(KeyCode.ArrowUp, CommandPhase.Started)], actual: window.Keys);
+
+        // Control+Alt+Escape while the window holds the keyboard: the Escape reaches nobody, the keyboard returns, the
+        // window closes and hears the held arrow's release, and the seat leaves.
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.ControlLeft));
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.AltLeft));
+        Assert.True(condition: passthrough.Intercept(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape)));
+        Assert.True(condition: passthrough.Intercept(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape)));
+        Assert.Equal(expected: [0], actual: seats.Left);
+        Assert.Null(@object: passthrough.Router.Focus.Focused);
+        Assert.Contains(expectedSubstring: "none opened", actualString: passthrough.Describe());
+        Assert.EndsWith(expectedEndString: "; pad idle", actualString: passthrough.Describe());
+        Assert.Equal(expected: (KeyCode.ArrowUp, CommandPhase.Completed), actual: window.Keys[^1]);
+        Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: false, slot: 0));
+
+        // While the seat still frames the window, the chord is the host's although the game has the keyboard.
+        Assert.True(condition: passthrough.Intercept(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape)));
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape));
+        Assert.Equal(expected: [0, 0], actual: seats.Left);
+
+        // A seat that stops framing rests the pad, and the chord's Escape is the game's again.
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: Vector2.UnitX));
+        anchor.PublishEngagedScreen(screenIndex: -1, slot: 0);
+        Assert.Null(@object: passthrough.TakeWarp());
+        Assert.Equal(expected: -1, actual: passthrough.Pad.Slot);
+        Assert.False(condition: passthrough.Intercept(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape)));
+    }
+    // THE LAW: a route that authors no pointer feel moves and scrolls nothing from a stick, and says so.
+    [Fact]
+    public void ARouteWithNoPointerFeelMovesNothingFromAStick() {
+        var (screens, instance) = EngageableScreen();
+        var anchor = new WorldPerceptionAnchor();
+        var time = new ManualTime();
+        var passthrough = Door(
+            anchor: anchor,
+            time: time,
+            windows: new InstanceWindows(
+                name: instance,
+                window: new PassthroughWindow()
+            )
+        );
+
+        m_host.Screens = screens;
+        m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
+        FramedFrame(framed: true);
+        FramedFrame(framed: true);
+        anchor.PublishEngagedScreen(screenIndex: 0, slot: 0);
+
+        Assert.True(condition: passthrough.PadPointer(slot: 0, value: Vector2.UnitX));
+        Assert.True(condition: passthrough.PadScroll(slot: 0, value: Vector2.UnitY));
+        Assert.Null(@object: passthrough.TakeWarp());
+        time.Advance(seconds: 1.0);
+        Assert.Null(@object: passthrough.TakeWarp());
+        Assert.EndsWith(expectedEndString: "feel none (the route authors no padPointer)", actualString: passthrough.Describe());
+    }
+
+    // The passthrough door over this law's graph host, with no seat captured unless the law publishes one.
+    private WorldSourcePassthrough Door(InstanceWindows windows, WorldPerceptionAnchor? anchor = null, Seats? seats = null, ManualTime? time = null) => new(
+        anchor: (anchor ?? new WorldPerceptionAnchor()),
+        graphs: m_host,
+        seats: (seats ?? new Seats(feel: null)),
+        time: (time ?? new ManualTime()),
+        viewports: new WorldSeatViewports(),
+        windows: windows
+    );
+
+    // The seats' feel for screen 0, and the seats the chord made leave.
+    private sealed class Seats(WorldScreenPadPointer? feel) : IWorldPassthroughSeats {
+        public List<int> Left { get; } = [];
+
+        public WorldScreenPadPointer? PadPointerOf(int screen) => ((screen == 0)
+            ? feel
+            : null);
+        public void Leave(int slot) => Left.Add(item: slot);
+    }
+    // A clock the law advances by hand, in whole ticks of a second's ten millionth.
+    private sealed class ManualTime : TimeProvider {
+        private long m_ticks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public void Advance(double seconds) => m_ticks += ((long)(seconds * TimeSpan.TicksPerSecond));
+        public override long GetTimestamp() => m_ticks;
     }
 }

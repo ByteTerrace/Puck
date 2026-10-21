@@ -219,6 +219,32 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
     }
 
+    public bool WarpPointer(int x, int y) {
+        var screen = new Point {
+            X = x,
+            Y = y,
+        };
+
+        if (
+            m_locksPointer ||
+            (m_windowHandle == 0) ||
+            (User32.GetForegroundWindow() != m_windowHandle) ||
+            !User32.ClientToScreen(
+                point: ref screen,
+                windowHandle: m_windowHandle
+            )
+        ) {
+            return false;
+        }
+
+        // The new position is reported with the next pump of events; rebasing the window-message fallback on it keeps the
+        // move itself from reading as relative motion.
+        WarpPointer(screen: screen);
+        m_pointerPositionDirty = true;
+
+        return true;
+    }
+
     // Whether a lock holds the cursor: hides it, freezes its reported position and recentres it. A cursor an absolute
     // report moved last is not held, since the device puts it back where its own cursor is: it stays shown and reported
     // where it is, so it never hides through a drag and reappears somewhere else.

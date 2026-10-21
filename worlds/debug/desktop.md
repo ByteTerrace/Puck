@@ -94,32 +94,66 @@ everywhere else the pointer is the game's.
 - `source.passthrough close claude` closes it, releasing every key and button
   the window holds.
 
-Only the World's own console, or your own click on the engaged monitor below,
-opens a passthrough source. No binding, seat, peer, addon, schedule or
-world document can, so nothing in `desktop.puck` sends the window input.
+Only the World's own console, or your own click or pad press on the engaged
+monitor below, opens a passthrough source. No seat, peer, addon, schedule,
+script or world document can: `desktop.puck`'s pad page only says which pad
+control means which pointer act, and the engine acts on your own pad's press
+alone.
 
 ## Use the window by engaging the monitor
 
 Screen 16 engages like a device: walk within 3 m of the monitor and press the
 context button (E, or X on a pad). The camera eases onto the monitor's picture
 until it fills the window as large as fits, centred on black, with the room
-faded out around it. Nothing reaches the window yet: click the picture, and
-that click, mapped through the screen to the window's own pixel, opens it as a
-passthrough
-source, reaches the window, and gives it the keyboard
+faded out around it, and the system arrow shows while the pointer is on the
+picture. Nothing reaches the window yet: click the picture (or press A on a
+pad), and that press, mapped through the screen to the window's own pixel,
+opens it as a passthrough source, reaches the window, and gives it the keyboard
 (`source.passthrough` lists it as `<instance> engaged window 'Claude …'`). Only
-a click the World's window receives counts; `body.engage 16` at the console,
-`player.signal` or anything scripted engages the screen and shows the window
-without opening it.
+a press of the local user's own mouse or pad counts; `body.engage 16` at the
+console, `player.signal` or anything scripted engages the screen and shows the
+window without opening it.
 
-While the window holds the keyboard, E types into it. To leave, press
-Control+Alt+Escape (or click the black fill beside the window) to return the
-keyboard to the game, then press E; a pad's X leaves at any time. Leaving
-closes the passthrough source, releasing every key and button the window holds,
-and the camera eases back to the Moth; `source.passthrough` then reads `none
-opened`. Hiding the pane keeps the source open, and the window then
-receives nothing; a click after the pane is shown again reaches it. A headless
-or offscreen boot has no window and no `source.passthrough` verb.
+**Leave in one step:** Control+Alt+Escape, whoever has the keyboard, or X on a
+pad. Both close the passthrough source, releasing every key and button the
+window holds, and ease the camera back to the Moth; `source.passthrough` then
+reads `none opened`. E leaves too until the window takes the keyboard; after
+that E types into the window. Clicking the black fill beside the window returns
+the keyboard to the game without leaving. Hiding the pane keeps the source
+open, and the window then receives nothing; a click after the pane is shown
+again reaches it. A headless or offscreen boot has no window and no
+`source.passthrough` verb.
+
+### With a pad
+
+While the Moth is engaged on the monitor, the `desktop-pad` page in
+`desktop.puck` gives a pad the desktop, the way a controller's desktop mode
+does:
+
+| Control | Does |
+|---|---|
+| Left stick | Moves the pointer across the picture (the system cursor follows), faster the further it tilts and the longer it is held |
+| Right stick | Scrolls, up and down and side to side |
+| A | Left click; hold it to drag. The first press opens the window |
+| Y | Right click |
+| B | Middle click |
+| LB / RB | Back / Forward (the mouse's fourth and fifth buttons) |
+| D-pad | Arrow keys, once the window is open |
+| X | Leaves |
+| Start | Nothing yet: the engine has no on-screen keyboard |
+
+The pointer stays on the picture. Its feel is the screen route's `padPointer`
+in `desktop.puck`: `speed` (picture heights a second at full tilt), `curve`
+(how much finer a small tilt is), `boost` reached after `rampSeconds` of held
+tilt, and `scrollSpeed` (notches a second); `world.screens` echoes it. The
+verbs the page names (`source.passthrough.pointer`, `.scroll`,
+`.button.<left|right|middle|back|forward>`, `.arrow.<up|down|left|right>`) act
+only for a local pad's own control: typed, or driven by `player.signal`, they
+are refused by name. `source.passthrough` ends with the pad's state:
+
+```text
+[source.passthrough: keyboard claude; claude engaged window 'Claude' …; pad p1 screen 16 'claude' stick (0.4, 0) scroll (0, 0) buttons none keys none feel speed 0.5 curve 2 boost 3 ramp 0.6s scroll 12/s]
+```
 
 ## Edit while it runs
 

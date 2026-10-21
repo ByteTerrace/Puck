@@ -54,14 +54,15 @@ internal sealed class NestestStage : IPostStage<PostContext> {
                 if (cpu.IsJammed || ((cpu.Cycles - start) > 8)) {
                     return PostStageOutcome.Fail(detail: $"line {lines}: instruction did not reach its next boundary");
                 }
-            } while ((cpu.Cycles == start) || !cpu.AtInstructionBoundary);
+            } while ((cpu.Cycles == start) || !cpu.AtInstructionBoundary || (machine.Clock.CpuPhase != 0));
         }
 
         return ((lines == 0) ? PostStageOutcome.Infra(detail: "empty nestest reference log")
             : PostStageOutcome.Pass(detail: $"{lines} lines through the last log line from $C000; PC/A/X/Y/P/SP, PPU line and dot, and CYC match"));
     }
 
-    // The log's "PPU:lll,ddd" column is the PPU line and the dot it is about to run when the instruction starts.
+    // The log's "PPU:lll,ddd" column is the PPU line and the dot it is about to run when the instruction starts, as M2 falls
+    // at the end of the previous cycle; the CPU's transaction runs earlier in the cycle, so the stage waits for that fall.
     private static (int Line, int Dot) PpuPosition(string line) {
         var start = (line.IndexOf(comparisonType: StringComparison.Ordinal, value: "PPU:") + 4);
         var comma = line.IndexOf(startIndex: start, value: ',');

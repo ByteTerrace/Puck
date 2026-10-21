@@ -202,6 +202,14 @@ allows, in order of rising cost:
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
 | `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
 
+Route each brief to the cheapest role that fits it (the owner's ruling): a
+brief with a known cause or a specified result, such as content, a document
+change, a world edit or a fix with a repro, goes to `implementer`, even when it
+is large. `specialist` is for an unknown cause or a design call across projects.
+`principal` is for the problems the table names and nothing else. When a lane on
+a cheaper role stalls, escalate that lane; never start on the expensive role
+because a brief is long.
+
 Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
 agentic coding on a hard lane, `max` only when correctness outweighs cost.
 Opus 5.5 and Haiku 5.5 run at `medium` when nothing sets an effort, which is

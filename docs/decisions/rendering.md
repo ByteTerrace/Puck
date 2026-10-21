@@ -557,18 +557,29 @@ arriving through a portal must never be able to type into the player's
 desktop. Focus stays with the input system, which reads the mapping. The local
 user opens a source in one of two ways, and nothing else counts: the
 `source.passthrough open` verb typed at the host's own console, or a physical
-pointer press on the framed picture of a window capture's screen that a local
-seat engaged in the world the host booted (never a world reached through a
-portal or a session view), mapped through the screen's published mapping to the
-window's own pixel. Engaging such a screen, by any principal
+press on the framed picture of a window capture's screen that a local seat
+engaged in the world the host booted (never a world reached through a portal
+or a session view), mapped through the screen's published mapping to the
+window's own pixel. A physical press is a pointer press the window pump
+delivers to the input filter, or a local pad's press: a binding's dispatch of a
+known `gamepad.*` control that a local device reported
+(`WorldPassthroughPad.IsLocalPad`). Engaging such a screen, by any principal
 (a console `body.engage`, a peer, an addon, a replay), only shows the window;
 the press opens it. The engage's own provenance is not what decides: a seat's
 channels can be driven by a co-driving addon or a scripted signal, so the
-engine cannot prove an engage was the local user's, while a press the window
-pump delivers to the input filter can only be. The source closes when the
-seat no longer frames the screen, as when it leaves
-(`WorldSourcePassthrough`). A document still never authors a passthrough
-destination: `route.input: Passthrough` is refused by name.
+engine cannot prove an engage was the local user's, while a press only the
+local machine's own devices produce can only be. A pad counts beside the mouse
+because its signals enter the input router only from the local gamepad
+capture, stamped with the device that reported them; every scripted or remote
+door into the router (`player.signal`, a wheel sector, an authored command, a
+typed line) carries no device or no binding origin, and a probe's axis is no
+gamepad source, so each is refused by name. A world document's binding page
+chooses which pad control means which pointer act (move, scroll, a button, an
+arrow key), and a route's `padPointer` its feel; neither makes an act happen.
+The source closes when the seat no longer frames the screen, as when it leaves
+(`WorldSourcePassthrough`), and the reserved chord, Control+Alt+Escape, leaves
+in one step while a seat frames such a window. A document still never authors
+a passthrough destination: `route.input: Passthrough` is refused by name.
 
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model
@@ -704,7 +715,11 @@ screen glass is exactly its picture (the owner's ruling).** A screen row's half
 extents are the source's pixels times the device's pixel pitch, the pitch
 carrying the pixel aspect (a 4:3 tube for a 256 by 240 console gives 8:7), and
 the bezel lies outside the glass. Because the camera alone sets how large the
-glass appears, no object is ever resized for a window.
+glass appears, no object is ever resized for a window. A device on display may
+be shown larger than life so it reads from the walking distance: the debug
+world's handhelds stand at 1.5 times their real size (the owner's ruling),
+modelled in their real millimetres and scaled whole by their placements, the
+pitch scaling with them, so the glass is still exactly the picture.
 
 **A screen lit by external content keeps lighting the room live (the owner's
 ruling), and captures complete anyway.** A desktop or camera screen's glow

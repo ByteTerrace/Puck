@@ -46,3 +46,10 @@ reproduce execution; RTC and sensor values cross the recordable input surface.
 Repository Post stages and golden replays provide the project verification
 story. External test ROMs, co-simulators, and hardware measurements are useful
 evidence for ambiguous behavior and are documented with the relevant core.
+
+An emulator's accuracy is judged by the community's conformance test ROMs and by
+documented hardware behaviour (the owner's ruling), never by matching another
+emulator's output or by how a game looks. A timing change lands only where a
+conformance suite proves a defect; a game's own artifacts that hardware shows
+too, such as Super Mario Bros. 3's status-bar split glitch and right-edge
+attribute colours, stay.

@@ -71,22 +71,16 @@ public sealed partial class HgdPpu {
                         attribute >>= 2;
                     }
                     m_attributeLatch = ((byte)(attribute & 3));
+                    PutAddress(address: BackgroundPatternAddress);
 
                     break;
                 }
-            case 4:
-                PutAddress(address: BackgroundPatternAddress);
-
-                break;
             case 5:
                 m_patternLowLatch = LatchFetch();
-
-                break;
-            case 6:
                 PutAddress(address: ((ushort)(BackgroundPatternAddress + 8)));
 
                 break;
-            default:
+            case 7:
                 m_patternHighLatch = LatchFetch();
                 IncrementCoarseX();
 
@@ -97,7 +91,9 @@ public sealed partial class HgdPpu {
     private ushort BackgroundPatternAddress => ((ushort)(((m_control & 0x10) << 8) | (m_nametableLatch << 4) | ((m_v >> 12) & 7)));
 
     // A fetch drives its address on one dot and latches the data on the next; the board observes the address as it is
-    // driven, which is when a board clocking on PPU A12 sees it change.
+    // driven, which is when a board clocking on PPU A12 sees it change. A pattern fetch's address leads its read by a dot
+    // more, so A12 rises at dot 260 for sprite patterns and dot 324 for the next line's first background pattern.
+    // https://www.nesdev.org/wiki/MMC3#IRQ_Specifics
     private void PutAddress(ushort address) {
         m_fetchAddress = address;
         m_mapper.ObservePpuAddress(
@@ -110,11 +106,14 @@ public sealed partial class HgdPpu {
             address: m_fetchAddress,
             nametables: m_nametables
         );
+    // Shifting brings a 0 into the low pattern plane, a 1 into the high plane, and each attribute shifter's reload latch,
+    // which bit 0 holds; rendering re-enabled over shifters the fetches have not refilled draws those bits.
+    // https://github.com/100thCoin/AccuracyCoin (BG Serial In)
     private void ShiftBackground() {
         m_patternLowShifter <<= 1;
-        m_patternHighShifter <<= 1;
-        m_attributeLowShifter <<= 1;
-        m_attributeHighShifter <<= 1;
+        m_patternHighShifter = ((ushort)((m_patternHighShifter << 1) | 1));
+        m_attributeLowShifter = ((ushort)((m_attributeLowShifter << 1) | (m_attributeLowShifter & 1)));
+        m_attributeHighShifter = ((ushort)((m_attributeHighShifter << 1) | (m_attributeHighShifter & 1)));
     }
     private void ReloadBackground() {
         m_patternLowShifter = ((ushort)((m_patternLowShifter & 0xFF00) | m_patternLowLatch));
