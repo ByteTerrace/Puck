@@ -1,8 +1,10 @@
 // Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
 // board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
-// one-ply computer opponent. The debug world imports this file whole. The table stands on the open ground at
-// (-6, 0, -12), ahead and left of the spawn, White's back rank on its -Z side. chess.md beside this file says how to
-// move a piece, read the game and set the opponent.
+// one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's lobby
+// (hall.puck), in the games corner west of the entrance with the device row (devices.puck) and the desktop computer
+// (desktop.puck): its board's centre at (12.2, 0.85, 20) on the level 0 floor, White's back rank on its -Z side, toward
+// the entrance, and Black's on +Z, toward the desk and the devices. chess.md beside this file says how to move a piece,
+// read the game and set the opponent.
 
 // The Moth basis seats eight bodies; the 32 pieces and the board cursor take the rest.
 bodies {
@@ -13,9 +15,9 @@ bodies {
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
 grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" })
 
-// The table's placement, and the ticks the physics must rest before an arrangement is judged (one second at the
-// debug world's 30 Hz).
-let chessTable = [-6, -0.5, -12]
+// The table's placement, its creation's floor 0.5 m under its origin on the lobby's floor (y 0.05), and the ticks the
+// physics must rest before an arrangement is judged (one second at the debug world's 30 Hz).
+let chessTable = [12.2, -0.45, 20]
 let chessSettleTicks = 30
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
@@ -34,11 +36,20 @@ looks {
   )
 }
 
+// The board reads as a real one from each side. The `chessBoard` grid is world-axis-aligned, cell = 8 * row + column,
+// its rows running +Z and its columns +X; a rank is a row (rank 1 on the -Z side, White's), and a file runs the other
+// way, column = 7 - file, so the a-file lies on +X. Seated at White's -Z edge and looking +Z, the camera's right is -X
+// (forward crossed with up), so a1 is dark at White's left, h1 light at her right, and the queen on her colour (d1,
+// light) left of the king; from Black's +Z edge a8 is light at Black's right and h8 dark at his left. The kings start
+// in column 3 and the queens in column 4, so the castling rules below name kingside by a falling column. Piece n
+// stands on file n % 8 (piece 4 the white king on e1, piece 12 the e2 pawn), at column 7 - n % 8.
 let boardCoords = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
 let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
-let squareTypes = ["boardSquareDark", "boardSquareLight"]
+// Cell (row, column) is light when row + column is even: column 0 of rank 1 is h1.
+let squareTypes = ["boardSquareLight", "boardSquareDark"]
 let backRankCodes = [4, 2, 3, 5, 6, 3, 2, 4]
-let initialBoard = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
+let backRankByColumn = map(range(0, 8), column => backRankCodes[7 - column])
+let initialBoard = concat(backRankByColumn, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankByColumn, code => -code))
 let initialPieceCodes = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
 
 template piecePlacement(name, prototypeName, x, z) {
@@ -263,19 +274,19 @@ placements {
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{i}", $"piece_white_{backRankTypes[i]}", boardCoords[i], -0.7)
+    piecePlacement($"piece{i}", $"piece_white_{backRankTypes[i]}", boardCoords[7 - i], -0.7)
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{8 + i}", "piece_white_pawn", boardCoords[i], -0.5)
+    piecePlacement($"piece{8 + i}", "piece_white_pawn", boardCoords[7 - i], -0.5)
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{16 + i}", "piece_black_pawn", boardCoords[i], 0.5)
+    piecePlacement($"piece{16 + i}", "piece_black_pawn", boardCoords[7 - i], 0.5)
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{24 + i}", $"piece_black_{backRankTypes[i]}", boardCoords[i], 0.7)
+    piecePlacement($"piece{24 + i}", $"piece_black_{backRankTypes[i]}", boardCoords[7 - i], 0.7)
   }
 
   for r in range(0, 8) {
@@ -305,10 +316,17 @@ prototypes {
         scale [1, 0.05, 1]
       }
 
+      // The pedestal stands on the floor 0.5 m under the creation's origin.
       shape Cylinder "leg" {
         material: 0
-        position [0, 0.6, 0]
-        scale [0.08, 0.6, 0.08]
+        position [0, 0.855, 0]
+        scale [0.08, 0.355, 0.08]
+      }
+
+      shape Cylinder "foot" {
+        material: 0
+        position [0, 0.52, 0]
+        scale [0.45, 0.02, 0.45]
       }
     }
   }
@@ -452,30 +470,34 @@ rules "" when settleHold == chessSettleTicks {
     boardChanged = setBitCount(changed)
   }
 
+  // The square a castling king passes over, f1 (cell 2) or d1 (cell 4), or f8 (58) or d8 (60), attacked by a pawn,
+  // knight or king standing on the mask's cells or by a slider; kingside runs toward column 0.
   rule "tabletop-castle-transit-attacked" {
     when move[kind] == MoveKind.Castle
     castleTransitAttacked[wk] = 0
     castleTransitAttacked[wq] = 0
     castleTransitAttacked[bk] = 0
     castleTransitAttacked[bq] = 0
-    if turn == TurnColor.White and move[to] > move[from] {
-      castleTransitAttacked[wk] = ((board(mask, lastLegal, -1, -1) & 0x5000) != 0) | ((board(mask, lastLegal, -2, -2) & 0x508800) != 0) | ((board(mask, lastLegal, -6, -6) & 0x7050) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[5] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[5] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[5]
+    if turn == TurnColor.White and move[to] < move[from] {
+      castleTransitAttacked[wk] = ((board(mask, lastLegal, -1, -1) & 0xA00) != 0) | ((board(mask, lastLegal, -2, -2) & 0xA1100) != 0) | ((board(mask, lastLegal, -6, -6) & 0xE0A) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[2] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[2] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[2]
     } else if turn == TurnColor.White {
-      castleTransitAttacked[wq] = ((board(mask, lastLegal, -1, -1) & 0x1400) != 0) | ((board(mask, lastLegal, -2, -2) & 0x142200) != 0) | ((board(mask, lastLegal, -6, -6) & 0x1C14) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[3] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[3] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[3]
-    } else if move[to] > move[from] {
-      castleTransitAttacked[bk] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x5000)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x508800)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x7050)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[61] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[61] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[61]
+      castleTransitAttacked[wq] = ((board(mask, lastLegal, -1, -1) & 0x2800) != 0) | ((board(mask, lastLegal, -2, -2) & 0x284400) != 0) | ((board(mask, lastLegal, -6, -6) & 0x3828) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[4] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[4] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[4]
+    } else if move[to] < move[from] {
+      castleTransitAttacked[bk] = ((board(mask, lastLegal, 1, 1) & byteSwap(0xA00)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0xA1100)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0xE0A)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[58] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[58] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[58]
     } else {
-      castleTransitAttacked[bq] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x1400)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x142200)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x1C14)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[59] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[59] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[59]
+      castleTransitAttacked[bq] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x2800)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x284400)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x3828)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[60] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[60] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[60]
     }
   }
 
+  // The king starts in column 3; a rising column (direction 1) castles queenside with the column-7 rook, a falling one
+  // kingside with the column-0 rook. A right's bit names its rook's column: 1 column 0, 2 column 7, Black's two above.
   rule "tabletop-castle-legal" {
     local sign = 1 - 2 * turn
-    local home = 4 + 56 * turn
+    local home = 3 + 56 * turn
     local direction = move[to] > move[from] ? 1 : -1
-    local rook = home + (direction == 1 ? 3 : -4)
+    local rook = home + (direction == 1 ? 4 : -3)
     local right = (direction == 1 ? 2 : 1) << (2 * turn)
-    local attacked = turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : (direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
+    local attacked = turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wq] : castleTransitAttacked[wk]) : (direction == 1 ? castleTransitAttacked[bq] : castleTransitAttacked[bk])
     castleLegal = 0
     if move[kind] == MoveKind.Castle {
       castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == home) & (move[to] == home + 2 * direction) & ((castleRights & right) == 0) & (lastLegal[(rook)] == PieceKind.Rook * local(sign)) & ((direction == 1 ? match(chessRayEmpty, lastLegal, E, cell)[move[from]] : match(chessRayEmpty, lastLegal, W, cell)[move[from]]) == rook) & (previousInCheck[turn[$value]] == 0) & (attacked == 0)
@@ -555,8 +577,8 @@ rules "" when settleHold == chessSettleTicks {
   rule "tabletop-advance-turn" {
     when verdict == 1 and move[kind] != MoveKind.Illegal
     local lostRooks = ((board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81) | ((board(mask, lastLegal, -4, -4) & ~board(mask, board, -4, -4)) & (0x81 << 56))
-    local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 4)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 60))
-    local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 4) | (1 << 60)), 5) * 3)
+    local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 3)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 59))
+    local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 3) | (1 << 59)), 5) * 3)
     transaction {
       // A pawn move, capture or lost castling right makes every earlier position unreachable.
       historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
@@ -833,15 +855,16 @@ rule "chess-play-point" {
   play[pointer] = pointed
 }
 
-// A step moves the cursor one square in the seat's own frame: from the -Z side up the board is +rank and right is
-// -file (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+// A step moves the cursor one square in the seat's own frame: from the -Z side up the board is +row and right is
+// -column, toward the h-file (the camera's right is its forward crossed with up), and each other side turns both a
+// quarter.
 rule "chess-play-step" {
   when play[stepAhead] != 0 or play[stepRight] != 0
   mode: Level
   local seatSide = board(side, board, 1)
-  local file = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  local rank = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  play[cursor] = clamp(rank, 0, 7) * 8 + clamp(file, 0, 7)
+  local cursorColumn = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  local cursorRow = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  play[cursor] = clamp(cursorRow, 0, 7) * 8 + clamp(cursorColumn, 0, 7)
 }
 
 // A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.
@@ -1159,7 +1182,7 @@ state {
     // whether the held piece was lifted by the press still down, whether a put-down awaits its verdict, and the piece
     // being put back or the arrangement being restored this tick.
     table play {
-      cursor = 12
+      cursor = 11
       held = -1
       from = -1
       pointer = -1

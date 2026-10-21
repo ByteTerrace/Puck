@@ -4,10 +4,46 @@
 first visible top-level window whose title contains `Claude`, compared without
 regard to case. It shows the window in two places: the `views.graphs` row
 `claude`, which the `desktop` layout places as a pane over the bottom two
-fifths of the display below the play view, and screen 16, a 4 m wide wall screen at the window's own 2560 by 1392 shape and size, beside the
-portal frame, eight metres ahead of the spawn and eight to the right. Every
+fifths of the display below the play view, and screen 16, the monitor of a
+desktop computer in the games corner of the gallery hall's lobby (below). Every
 line below is typed at the World's console, or sent through the local operator
 attachment (`world.control`, the `puck` MCP server), which is the same console.
+
+## The desktop computer
+
+A desk stands against the lobby's west wall between the chess table
+([`chess.md`](chess.md)) and the device row ([`devices.md`](devices.md)), on
+the level 0 floor (y = 0.05), every piece at the size of the real thing and its
+own prototype in `desktop.puck`:
+
+| Piece | Where and how big |
+|---|---|
+| Desk | 1.5 m wide and 0.75 m deep, its light oak top 0.74 m up on charcoal panel legs: x 10.33 to 11.08, z 22.95 to 24.45 |
+| Monitor | a 27-inch 16:9 monitor on an aluminium stand on the desk's back half, its glass's face centred at (10.75, 1.13, 23.7), facing +X into the lobby |
+| Computer | a 210 by 480 by 480 mm graphite mid tower on the floor north of the desk, its mesh front and lit power button facing the lobby |
+| Keyboard and mouse | a 440 by 140 mm keyboard of five rows of 14 mm keys before the monitor, the mouse on its right |
+| Chair | an office chair on five casters, its seat 0.5 m up, before the desk at (11.55, 23.7) |
+
+Whoever sits at the desk faces the wall, -X. `debug.go desktop` stands the
+Moth behind the chair, facing the monitor and within its engage radius.
+
+The monitor's glass is exactly the picture, the owner's ruling for every
+device ([decision](../../docs/decisions/rendering.md#in-world-devices-and-screens)):
+the capture's 2560 by 1392 pixels at a 27-inch 2560 by 1440 panel's pixel
+pitch, 0.2331 mm, make a 596.7 by 324.5 mm glass (`halfWidth` 0.29837 and
+`halfHeight` 0.16224), the window's own shape. The panel's black
+bezel lies outside the glass, 7 mm at the sides and top and 18 mm at the chin.
+The glass is a 14 mm slab sunk 4 mm into the panel, its face 10 mm proud of
+the panel and 3 mm proud of the bezel, thick enough for the mesh bake to
+resolve it in front of the panel.
+
+To frame the corner from behind the chair, or the monitor alone:
+
+```text
+view.override camera look 12.6 1.6 23.7 10.75 1.1 23.7
+view.override camera look 11.6 1.25 23.7 10.75 1.13 23.7
+view.override camera auto
+```
 
 ## Show and hide the pane
 
@@ -28,7 +64,8 @@ left. To capture another window, change `claudeTitle`. The `claude` row's
 `fit: Contain` shows the window at its own aspect ratio, centred in the slot
 with dark bars beside it, whatever the slot's shape, the display's size or the
 capture's `profile` extent (which sets only how many pixels the capture keeps;
-the pane and the wall screen share `claudeCapture`, at the window's own size).
+the pane and the monitor share `claudeCapture`, at the window's own size, and
+the monitor's glass is cut to it).
 `world.view.panes` lists the pane's source at the window's own size (`source
 2560x1392` for a maximized window) with `fit Contain`. The display follows the
 World's window, so maximizing it re-lays the pane over the larger display.
@@ -57,14 +94,14 @@ everywhere else the pointer is the game's.
 - `source.passthrough close claude` closes it, releasing every key and button
   the window holds.
 
-Only the World's own console, or your own click on the engaged wall screen
-below, opens a passthrough source. No binding, seat, peer, addon, schedule or
+Only the World's own console, or your own click on the engaged monitor below,
+opens a passthrough source. No binding, seat, peer, addon, schedule or
 world document can, so nothing in `desktop.puck` sends the window input.
 
-## Use the window by engaging the wall screen
+## Use the window by engaging the monitor
 
-Screen 16 engages like a device: walk within 3 m of it and press the context
-button (E, or X on a pad). The camera eases onto the wall screen's picture
+Screen 16 engages like a device: walk within 3 m of the monitor and press the
+context button (E, or X on a pad). The camera eases onto the monitor's picture
 until it fills the window as large as fits, centred on black, with the room
 faded out around it. Nothing reaches the window yet: click the picture, and
 that click, mapped through the screen to the window's own pixel, opens it as a

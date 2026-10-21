@@ -104,9 +104,9 @@ case, `stage` when omitted:
 |---|---|---|
 | `stage` | The spawn, (0, 0, 0) | -Z, toward the portal frame |
 | `devices` | (15, 0.05, 25.5), in the gallery lobby before the device row | +Z, toward the screens |
-| `chess` | (-6, 0, -7.5), Black's side of the table | -Z, across the board |
+| `chess` | (12.2, 0.05, 18.4), at White's edge of the chess table in the gallery lobby, close enough to sit | +Z, across the board |
+| `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
 | `loop` | (-20, 0, -15), short of the floor glass | -Z; walk ahead to drop in |
-| `screen` | (8, 0, -3), in front of the wall screen | -Z, toward the screen |
 | `gallery` | (16, 0, 9), outside the gallery hall's entrance | +Z, through the door |
 | `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |

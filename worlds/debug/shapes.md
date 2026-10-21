@@ -13,9 +13,10 @@ in its `placements` block and `galleryState()` in its `state.world` block,
 concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
 its `commands`, and declares the font the labels emboss in.
 [`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
-lights, level boards, tour and keys. The gaming devices stand in a row in the
-lobby: [`devices.md`](devices.md); the chess table stands outside, ahead and
-left of the spawn: [`chess.md`](chess.md).
+lights, level boards, tour and keys. The lobby holds a games corner: the gaming
+devices stand in a row ([`devices.md`](devices.md)), and west of the entrance
+the chess table ([`chess.md`](chess.md)) and a desktop computer showing the
+Claude window ([`desktop.md`](desktop.md)).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look
@@ -35,11 +36,23 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | Where | What |
 |---|---|
 | South wall, x 14 to 18 | The entrance, 3.3 m high, facing the spawn; `gallery` stands outside it |
-| x 10 to 20, z 12 to 34 | The lobby on level 0, with the map board left of the door; each level above has its landing here |
+| x 10 to 20, z 12 to 34 | The lobby on level 0; each level above has its landing here. The lobby's contents are in the next table |
 | x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
 | x 20 to 70 | The halls: each level's rows run along +X from x = 23, a sign at each row's west end |
 | South, north and east walls | A 2.4 m window band on every level; the roof's skylights light level 3 |
+
+The lobby on level 0, from the entrance north. The walk from the door to the
+lift and the stairs runs at x 14 to 18 and stays clear; the games corner stands
+west of it.
+
+| Where | What |
+|---|---|
+| (12.4, 16) | The map board, left of the door, facing it |
+| (12.2, 20), x 11.2 to 13.2, z 19 to 21 | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side |
+| x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
+| z 28, x 12.5, 15 and 17.5 | The device row, facing -Z toward the door ([`devices.md`](devices.md)) |
+| West wall, z 32.5 | The level's light switch |
 
 Lighting: an emissive strip runs along the ceiling over each viewing aisle and
 two over each landing (`hallStrips`, part of the slab or roof above them); three

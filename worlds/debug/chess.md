@@ -1,12 +1,18 @@
 # Debug world chess table
 
-The debug world stands a chess table on the open ground ahead and left of the
-spawn, at (-6, 0, -12): clear of the portal frame at (3, 0, -8), the reference
-cubes and test room on +Z and the
-shape gallery from x = 14. Its top is 0.8 m up, White's back rank on the table's
--Z side and Black's on the +Z side, which faces the spawn.
+The debug world stands a chess table in the games corner of the gallery hall's
+lobby ([`shapes.md`](shapes.md#the-hall)), west of the entrance between the map
+board and the device row, beside the desktop computer
+([`desktop.md`](desktop.md)). The board's centre is at (12.2, 0.85, 20) on the
+level 0 floor; the table is 2 m square, its top 0.8 m over the floor. White's
+back rank is on the table's -Z side, toward the entrance, and Black's on the +Z
+side, toward the desk and the devices.
 [`chess.puck`](chess.puck) holds it and `debug.puck` imports it whole
 (`import "chess"`).
+
+The board reads as a real one from each side: from White's seat a1 is the dark
+corner at her left, h1 the light one at her right, and the queen stands on her
+colour, d1, left of the king; from Black's seat a8 is light at his right.
 
 The 32 pieces are rigid bodies on a tabletop board (the
 [tabletop primitive](../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
@@ -28,13 +34,15 @@ progress, then moves its piece itself and puts a piece it takes beside the board
 Walk up to the table and press the context button (E, or the pad's X) within
 2.5 m of the board's centre: the Moth sits down, stands still, and the camera
 eases to a view of the whole board from the side she stands on (White's side is
--Z, the far side from the spawn). The controls switch to the board page while
-she sits; the same button stands her up again and the camera eases back.
+-Z, the side nearer the entrance). `debug.go chess` stands her at White's edge,
+facing the board and close enough to sit. The controls switch to the board page
+while she sits; the same button stands her up again and the camera eases back.
 
 A blue outline marks the cursor's square. Lift a piece of the side to move
 from under it, and it hovers over the cursor wherever the cursor goes; put it
 down on another square and the move is played. Up the board is away from the
-side she sits on.
+side she sits on, and right is her own right: from White's side, toward the
+h-file.
 
 | Device | Move the cursor | Lift and put down | Put the piece back | Stand up |
 |---|---|---|---|---|
@@ -58,16 +66,20 @@ outline; it rests inside the tabletop while nobody sits at the table.
 ## Moving a piece from the console
 
 A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
-`39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23. Square
-(file, rank), counting from a1 = (0, 0), is centred at
-x = -6.7 + 0.2 × file, z = -12.7 + 0.2 × rank. Lift a piece onto a square by
-posing its body 1.3 m up over the square's centre; it drops onto the board:
+`39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23; piece `n`
+starts on file `n % 8` (piece 4 is the white king, piece 12 the e2 pawn).
+Square (file, rank), counting from a1 = (0, 0), is centred at
+x = 12.9 - 0.2 × file, z = 19.3 + 0.2 × rank: the files run toward -X, so a1
+lies on +X. Its cell in the board's rows (`pieceCell`, `board`, `move`) is
+8 × rank + 7 - file, so e2 is cell 11 and e4 cell 27: the grid counts its
+columns toward +X. Lift a piece onto a square by posing its body 1.35 m up,
+0.5 m over the table's top, over the square's centre; it drops onto the board:
 
 | Move | Console line |
 |---|---|
-| e2-e4 (the e2 pawn, body 27) | `body.pose -5.9 1.3 -12.1 0 0 0 27` |
-| Ng1-f3 (body 33) | `body.pose -5.7 1.3 -12.3 0 0 0 33` |
-| Take a piece off the board | pose its body onto the table beside the board, as `body.pose -5.1 1.3 -12.3 0 0 0 <body>` |
+| e2-e4 (the e2 pawn, body 27) | `body.pose 12.1 1.35 19.9 0 0 0 27` |
+| Ng1-f3 (body 33) | `body.pose 11.9 1.35 19.7 0 0 0 33` |
+| Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 11.3 1.35 19.7 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as
 the console.
@@ -83,7 +95,8 @@ the console.
 | Where each piece stands (`-1` off the board or fallen) | `world.state pieceCell` |
 | Check, castling rights, the move clock and repetitions | `world.state inCheck`, `world.state castleRights`, `world.state halfmoveClock`, `world.state repetitionCount` |
 | The opponent's search: running or done, and its answer | `world.search` |
-| Frame the table from White's side | `view.override camera look -6 2.0 -13.8 -6 0.8 -12`, then `view.override camera auto` |
+| Frame the table from White's side | `view.override camera look 12.2 2.05 18.2 12.2 0.85 20`, then `view.override camera auto` |
+| Frame the games corner from the entrance | `view.override camera look 15.5 2.4 15 11.8 0.9 23`, then `view.override camera auto` |
 
 ## The opponent
 
