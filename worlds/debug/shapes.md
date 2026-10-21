@@ -13,9 +13,9 @@ in its `placements` block and `galleryState()` in its `state.world` block,
 concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
 its `commands`, and declares the font the labels emboss in.
 [`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
-lights, level boards, tour and keys. The gaming devices stand on their own row
-west of the spawn: [`devices.md`](devices.md), and the chess table ahead and
-left of it: [`chess.md`](chess.md).
+lights, level boards, tour and keys. The gaming devices stand in a row in the
+lobby: [`devices.md`](devices.md); the chess table stands outside, ahead and
+left of the spawn: [`chess.md`](chess.md).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look

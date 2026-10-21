@@ -8,8 +8,9 @@
 // own authority, as though the caller had typed it.
 
 spawnPoints [
-  // Five metres in front of the device row's middle plinth (devices.puck), its screens facing this way.
-  { id: "devices", position [-13, 0, -1], yawDegrees: 0 }
+  // Two and a half metres in front of the device row's middle plinth in the gallery lobby (devices.puck), facing its
+  // screens.
+  { id: "devices", position [15, 0.05, 25.5], yawDegrees: 180 }
   // Four and a half metres from the chess table's centre (chess.puck), on Black's side.
   { id: "chess", position [-6, 0, -7.5], yawDegrees: 0 }
   // Five metres short of the loop shaft's floor glass (loop.puck); walk ahead to drop in.

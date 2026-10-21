@@ -1,17 +1,20 @@
 // The device row: one of each gaming device the World hosts, each a labelled body on a plinth whose screen
 // shows the machine running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug
-// world imports this file whole. The row stands on the open ground west of the spawn at z = -6, every device 3 m from
-// the next and facing +Z, toward the origin:
+// world imports this file whole. The row stands in the gallery hall's lobby (hall.puck) on its level 0 floor, at z = 28,
+// every device 2.5 m from the next and facing -Z, toward the entrance, so a visitor walking in faces the screens and
+// sees their light on the lobby's floor and walls:
 //
-//   x -10  the Humble Gaming Brick
-//   x -13  the Advanced Gaming Brick
-//   x -16  the Humble Gaming Deck, running its test cartridges on the set above it
+//   x 17.5  the Humble Gaming Brick
+//   x 15    the Advanced Gaming Brick
+//   x 12.5  the Humble Gaming Deck, running its test cartridges on the set above it
 //
 // Walk up to a device and press the context button (E, or X on a pad) to engage it: the camera frames its screen and
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list,
 // swap, engage, reset and eject each one.
 
-let deviceZ = -6
+let deviceZ = 28
+// The lobby floor's top (hall.puck's level 0).
+let deviceFloor = 0.05
 
 // Slot 0 the shell, 1 the plinth, 2 the label, 3 the screen bezel, 4 the face buttons, 5 the d-pad and small keys.
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
@@ -187,20 +190,20 @@ prototypes {
 placements {
   placement "device-humble-gaming-brick" {
     prototype: "device-humble-gaming-brick"
-    position [-10, 0, deviceZ]
-    yawDegrees: 180
+    position [17.5, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 
   placement "device-advanced-gaming-brick" {
     prototype: "device-advanced-gaming-brick"
-    position [-13, 0, deviceZ]
-    yawDegrees: 180
+    position [15, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 
   placement "device-humble-gaming-deck" {
     prototype: "device-humble-gaming-deck"
-    position [-16, 0, deviceZ]
-    yawDegrees: 180
+    position [12.5, deviceFloor, deviceZ]
+    yawDegrees: 0
   }
 }
 
@@ -310,8 +313,8 @@ let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact"
 screens [
   {
     index: 0
-    origin [-10, 0.88, (deviceZ + 0.067)]
-    right [1, 0, 0]
+    origin [17.5, (deviceFloor + 0.88), (deviceZ - 0.067)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.16
     halfHeight: 0.144
@@ -322,8 +325,8 @@ screens [
   }
   {
     index: 1
-    origin [-13, 0.6, (deviceZ + 0.077)]
-    right [1, 0, 0]
+    origin [15, (deviceFloor + 0.6), (deviceZ - 0.077)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.24
     halfHeight: 0.16
@@ -334,8 +337,8 @@ screens [
   }
   {
     index: 2
-    origin [-16, 0.64, (deviceZ + 0.122)]
-    right [1, 0, 0]
+    origin [12.5, (deviceFloor + 0.64), (deviceZ - 0.122)]
+    right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.256
     halfHeight: 0.24
