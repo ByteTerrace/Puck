@@ -974,7 +974,12 @@ a group whose bound passes the reach is keyed by the reach too. A dynamic group'
 it is offset along world axes by the body's pose when the program was emitted.
 The key is taken when a program arrives, from that frame's transforms, so a
 group whose shapes move against one another afterwards (a part follower) keeps
-the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and every
+the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and a dynamic
+group whose form held (`SdfMeshGeometryBuilder.Form`: its geometry without the other slots' poses), so a body
+standing in another pose when something else in the world changes keeps its skinned mesh and bakes again only
+through the settle rebake. A geometry whose bake found no surface is recorded as such and never baked again in the
+run. A responding static placement registers the palette of every creation it can show
+(`WorldPlacementStamper.EmitStatic`), so a response changes no other group's material ids. Every
 meshed group is stored by its geometry in an `SdfMeshLibrary` every residency of
 a presentation shares (`WorldScreenBinder.MeshLibrary`), so geometry that comes
 back (a body that left the world and returned, an instance at another index) or
