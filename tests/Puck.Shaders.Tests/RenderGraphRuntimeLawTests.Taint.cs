@@ -171,7 +171,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Assert.Equal(
                 actual: runtime.UnservedCaptureReason,
-                expected: "the instance 'main' has rendered only over external content from 'view' that the capture gate did not fill"
+                expected: "the instance 'main' has rendered only over external content from 'view', which took it from 'camera' that the capture gate did not fill"
             );
 
             // The first frame the camera's fill reaches the view serves the capture.

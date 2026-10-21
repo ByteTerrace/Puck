@@ -268,20 +268,23 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     string? RefusalOf(string instance) => null;
-    /// <summary>Returns whether the instance consumes retained package state containing unfilled external pixels.
-    /// This joins the current graph inputs' taint; replacing those inputs cannot relabel an older retained result.</summary>
+    /// <summary>Names the retained package state the instance consumes that contains unfilled external pixels, or
+    /// returns <see langword="null"/> when none does. This joins the current graph inputs' taint; replacing those inputs
+    /// cannot relabel an older retained result. The name reaches a waiting capture's reason, so it says which state holds
+    /// the content (a temporal history, a lighting source and the screen that fed it). It allocates only while tainted.</summary>
     /// <param name="instance">The instance whose next output is being prepared or whose recording just submitted.</param>
-    /// <returns>Whether retained source state or history contributes external content.</returns>
-    bool TaintedOf(string instance) => false;
-    /// <summary>Discards retained history that holds unfilled external pixels (<see cref="TaintedOf"/>), so the
-    /// instance's next render, over filled sources, is clean. The runtime calls it, on the frame thread before any
-    /// instance renders, for each instance a presented capture reads (<see cref="Abstractions.Presentation.FrameCaptureMode.Presented"/>),
-    /// which holds no frame to converge over and so cannot otherwise outlast history that blends its old content in. A
-    /// factory whose history is clean, or that keeps none, does nothing.</summary>
-    /// <param name="instance">The instance whose history is discarded.</param>
+    /// <returns>The tainted state's name, or <see langword="null"/>.</returns>
+    string? TaintOf(string instance) => null;
+    /// <summary>Discards retained state that holds unfilled external pixels (<see cref="TaintOf"/>) and that the capture
+    /// gate's fills cannot replace on their own, such as a history every render blends into the next, so the instance's
+    /// next render over filled sources is clean. The runtime calls it on the frame thread, before any instance renders, on
+    /// every frame a capture is pending and still to be served, for each instance the capture reads; a settled capture
+    /// then serves the first clean frame, and a presented one skips the renders this returns. State the next render
+    /// derives again from its now-filled sources is left to that render. A factory whose state is clean does nothing.</summary>
+    /// <param name="instance">The instance whose tainted state is discarded.</param>
     /// <returns>The renders the instance needs after the discard before its output is the steady image it would have
-    /// shown, which the capture skips; zero when nothing was discarded.</returns>
-    int DiscardTaintedHistory(string instance) => 0;
+    /// shown; zero when nothing was discarded.</returns>
+    int DiscardTaintedState(string instance) => 0;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }
