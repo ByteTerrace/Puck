@@ -34,7 +34,9 @@ let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
 let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
 let devicePlinthKick = { color: "#25292F", roughness: 0.7 }
 
-// A handheld's plinth: a box with a darker kick at its foot and the device's name on its face, which faces +Z.
+// A handheld's plinth: a box with a darker kick at its foot and the device's name on its face, which faces +Z. The name
+// stays on one line: at a 24 mm em the longest, ADVANCED GAMING BRICK, spans about 0.34 m of the 0.4 m face, inside
+// the 0.37 m the run may take before it wraps.
 template plinth(label) {
   name: label
   schema: "puck.creation.v1"
@@ -49,7 +51,7 @@ template plinth(label) {
     position [0, 0.04, 0]
     scale [0.205, 0.04, 0.205]
   }
-  textRuns [{ text: label, position [0, (plinthTop - 0.1), 0.2], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 0.34 }]
+  textRuns [{ text: label, position [0, (plinthTop - 0.1), 0.2], rotation [0, 0, 0, 1], emHeight: 0.024, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 0.37 }]
 }
 
 // The Humble Gaming Brick's slots. Its shell is clear atomic-orange plastic: the renderer draws opaque surfaces, so each
@@ -72,10 +74,10 @@ let brickCartridge = 9
 
 let advancedPalette = [
   { color: "#454A7A", metal: 0.9, roughness: 0.34, specular: 0.5, sheen: 0.3 }
-  { color: "#0A0B0D", specular: 0.6, roughness: 0.04, coat: 0.8 }
+  { color: "#0A0B0D", specular: 0.05, roughness: 0.04, coat: 0.8 }
   { color: "#C8CBD2", metal: 1, roughness: 0.12, specular: 0.6 }
-  { color: "#1A1B1F", roughness: 0.22, specular: 0.45, coat: 0.3 }
-  { color: "#5F636B", roughness: 0.5, specular: 0.2 }
+  { color: "#1A1B1F", roughness: 0.22, specular: 0.05, coat: 0.3 }
+  { color: "#5F636B", roughness: 0.5, specular: 0.04 }
   { color: "#7CFFB0", emissive: 3 }
   { color: "#9EA3AE", roughness: 0.4 }
   { color: "#D9DBDF", metal: 1, roughness: 0.3, specular: 0.5 }
@@ -140,7 +142,7 @@ prototypes {
   // The brick in its frame: origin at the body's centre, x right, y up the face, z out of it, leaning back 20 degrees
   // (turned -20 degrees about x), its bottom-back edge 1 mm into the stand's base plate on the plinth. In that frame the
   // body is 75 by 133 mm, front and back shells 11.5 mm each, the battery bay 4.5 mm proud of the back; the screen's
-  // picture (screen 0) is centred at y 0.031 on a dark lens 57 by 49 mm, 0.5 mm proud of the lens; the d-pad stands at
+  // picture (screen 0) is centred at y 0.031 on a dark lens 57 by 49 mm, its face 1 mm proud of the lens; the d-pad stands at
   // (-21.5, -25.5) mm, A and B at (26.2, -20.5) and (13.2, -28.3), select and start at (-8.5, -46.5) and (8.5, -46.5),
   // the speaker's five slots at (22.5, -50.5), and the cartridge stands 10 mm out of the top.
   prototype "device-humble-gaming-brick" {
@@ -148,16 +150,16 @@ prototypes {
       name: "HUMBLE GAMING BRICK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#F58220", specular: 0.5, roughness: 0.15, coat: 0.6, inset { origin [17.497, 1.257756, 28.006707], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#2E1606" }, { radius: 0.0065, color: "#7A3210" }, { radius: 0.03, color: "#A8480F" }, { radius: 0.037, color: "#F58220" }], softness: 0.3, modulationAmplitude: 0.12, modulationFrequency: 4, seed: 3154 } } }
-        { color: "#F58220", specular: 0.5, roughness: 0.15, coat: 0.6, inset { origin [17.5, 1.24024, 28.010973], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#24201E" }, { radius: 0.016, color: "#6E3412" }, { radius: 0.024, color: "#B9560F" }, { radius: 0.03, color: "#F58220" }], softness: 0.35, modulationAmplitude: 0.3, modulationFrequency: 2, seed: 932 } } }
-        { color: "#17181C", specular: 0.6, roughness: 0.08, coat: 0.6 }
-        { color: "#2E2522", roughness: 0.25, specular: 0.35, coat: 0.4 }
-        { color: "#2A2624", roughness: 0.4, specular: 0.25 }
+        { color: "#F58220", specular: 0.05, roughness: 0.15, coat: 0.6, inset { origin [17.497, 1.257756, 28.006707], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#2E1606" }, { radius: 0.0065, color: "#7A3210" }, { radius: 0.03, color: "#A8480F" }, { radius: 0.037, color: "#F58220" }], softness: 0.3, modulationAmplitude: 0.12, modulationFrequency: 4, seed: 3154 } } }
+        { color: "#F58220", specular: 0.05, roughness: 0.15, coat: 0.6, inset { origin [17.5, 1.24024, 28.010973], rotation [0, 0.984808, 0.173648, 0], depth: 0, ior: 1.49, paint { stops [{ radius: 0, color: "#24201E" }, { radius: 0.016, color: "#6E3412" }, { radius: 0.024, color: "#B9560F" }, { radius: 0.03, color: "#F58220" }], softness: 0.35, modulationAmplitude: 0.3, modulationFrequency: 2, seed: 932 } } }
+        { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
+        { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
+        { color: "#2A2624", roughness: 0.4, specular: 0.04 }
         { color: "#5E5E64", roughness: 0.75 }
         { color: "#BFC2C7", metal: 1, roughness: 0.28, specular: 0.5 }
         { color: "#FBE6D2", roughness: 0.5 }
         { color: "#FF3A2A", emissive: 4, roughness: 0.3 }
-        { color: "#4A4D54", roughness: 0.5, specular: 0.2 }
+        { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
       ]
       shape Prism "shell-front" {
         material: brickShellFront
@@ -342,8 +344,7 @@ prototypes {
   // level on the stand; and the upper half's (y from the hinge up the screen, z out of the glass), turned -30 degrees,
   // the 150-degree stop. The halves are 82 and 80 mm long, 13.3 and 10.4 mm thick, chamfered 1.2 mm round every rim;
   // each half begins 1.6 mm from the axis. The dark glass covers the upper half's face to 2 mm of its edges, and the
-  // screen's picture (screen 1) lies on it 43.6 mm from the axis to its centre (1 mm above the glass's centre), 0.3 mm
-  // proud. The lower half carries the d-pad at (-26.5, -41.6) mm in its frame, A and B at (30, -37.1) and
+  // screen's picture (screen 1) lies centred on it, 42.6 mm from the axis, its face 1 mm proud. The lower half carries the d-pad at (-26.5, -41.6) mm in its frame, A and B at (30, -37.1) and
   // (18.5, -45.1), select and start at (-33.5, -67.6) and (-21.5, -67.6), five speaker slots at (26, -69.6), the power
   // light by the hinge, the shoulder keys at its back corners and the cartridge out of its front edge.
   prototype "device-advanced-gaming-brick" {
@@ -522,7 +523,7 @@ prototypes {
       name: "HUMBLE GAMING DECK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#6E4B2F", roughness: 0.55, specular: 0.1 }
+        { color: "#6E4B2F", roughness: 0.55, specular: 0.04 }
         deviceLabel
         { color: "#1C1C1E", roughness: 0.5 }
         { color: "#8B8E94", roughness: 0.55 }
@@ -598,10 +599,10 @@ prototypes {
       name: "HUMBLE GAMING DECK TELEVISION"
       schema: "puck.creation.v1"
       palette [
-        { color: "#2B2C30", roughness: 0.5, specular: 0.2 }
+        { color: "#2B2C30", roughness: 0.5, specular: 0.04 }
         { color: "#A7AAB0", metal: 0.6, roughness: 0.35, specular: 0.4 }
-        { color: "#141618", specular: 0.5, roughness: 0.08, coat: 0.5 }
-        { color: "#1E1F22", roughness: 0.45, specular: 0.2 }
+        { color: "#141618", specular: 0.05, roughness: 0.08, coat: 0.5 }
+        { color: "#1E1F22", roughness: 0.45, specular: 0.04 }
         { color: "#1A1A1C", roughness: 0.7 }
         { color: "#FF2A1A", emissive: 3 }
         { color: "#D0D3D8", metal: 1, roughness: 0.15, specular: 0.6 }
@@ -743,10 +744,10 @@ prototypes {
       palette [
         { color: "#3A3C41", metal: 0.85, roughness: 0.35, specular: 0.4 }
         { color: "#C7C9CE", metal: 0.9, roughness: 0.3, specular: 0.5 }
-        { color: "#141517", roughness: 0.3, specular: 0.4 }
-        { color: "#8B8E94", roughness: 0.55, specular: 0.15 }
+        { color: "#141517", roughness: 0.3, specular: 0.05 }
+        { color: "#8B8E94", roughness: 0.55, specular: 0.04 }
         { color: "#EAF4FF", emissive: 3 }
-        { color: "#B8312F", roughness: 0.3, specular: 0.4, coat: 0.3 }
+        { color: "#B8312F", roughness: 0.3, specular: 0.05, coat: 0.3 }
         { color: "#F2F2F2", roughness: 0.5 }
         { color: "#F2E23A", roughness: 0.5 }
         { color: "#3AD8E8", roughness: 0.5 }
@@ -1141,8 +1142,10 @@ hud {
 // Each screen's glass is exactly its picture: the source's width and height in pixels at the device's pixel pitch, the
 // device's case lying outside it, never inside. The handhelds' pixels are square; the television's are 8:7, as wide as
 // tall times 8/7, so its 256 by 240 picture is 256 by 210 mm and the 224 lines a set shows make the 4:3 picture a
-// 14-inch tube gives. Each glass is a 2 mm slab (4 mm on the television) square to its device's face, standing a
-// fraction of a millimetre to 1 mm proud of it, the rest of its depth sunk into the face.
+// 14-inch tube gives. Each glass is a 2 mm slab (4 mm on the television) square to its device's face. A screen's
+// `origin` is the glass's front face, not its middle (the slab runs 2 halfDepth back from it), and it stands 1 mm proud
+// of the lens or glass round it (2 mm on the television, whose cart-scale bake is coarser), the rest of its depth sunk
+// into the face: a face behind the lens's is hidden by it and shows no picture.
 //
 //   screen 0, the brick: 160 by 144 at 0.275 mm, 44 by 39.6 mm, leaning back 20 degrees with the brick
 //   screen 1, the advanced brick: 240 by 160 at 0.255 mm, 61.2 by 40.8 mm, leaning back 30 degrees with its upper half
@@ -1161,7 +1164,7 @@ let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact"
 screens [
   {
     index: 0
-    origin [17.5, (deviceFloor + 1.254589), (deviceZ + 0.015452)]
+    origin [17.5, (deviceFloor + 1.255102), (deviceZ + 0.014043)]
     right [-1, 0, 0]
     up [0, 0.939693, 0.34202]
     halfWidth: ((160 * brickPitch) / 2)
@@ -1173,7 +1176,7 @@ screens [
   }
   {
     index: 1
-    origin [15, (deviceFloor + 1.251641), (deviceZ + 0.037797)]
+    origin [15, (deviceFloor + 1.251622), (deviceZ + 0.035821)]
     right [-1, 0, 0]
     up [0, 0.866025, 0.5]
     halfWidth: ((240 * advancedPitch) / 2)
@@ -1185,7 +1188,7 @@ screens [
   }
   {
     index: 2
-    origin [12.675, (deviceFloor + 0.741), (deviceZ - 0.164)]
+    origin [12.675, (deviceFloor + 0.741), (deviceZ - 0.167)]
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: ((256 * deckPitchX) / 2)

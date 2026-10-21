@@ -41,7 +41,11 @@ provider collides each stand as its box.
 Each screen row's glass is exactly the picture, never the case: `halfWidth`
 is the source's width times the horizontal pixel pitch over 2, `halfHeight` its
 height times the vertical pitch over 2, as a thin slab (`halfDepth` 1 mm on the
-handhelds, 2 mm on the television) square to the device's face, `round: 0`. The
+handhelds, 2 mm on the television) square to the device's face, `round: 0`.
+A screen's `origin` is the glass's front face (the slab runs back from it), and
+it stands 1 mm proud of the lens or glass round it (2 mm on the television): a
+face behind the lens's is hidden by it, and the device shows no picture until
+it is engaged. The
 handhelds' pitches are square; the television's horizontal pitch is its
 vertical pitch times 8/7, so the glass's own shape gives the console's 8:7
 pixels. The bezel, lens or tube glass round the picture is the device's own
