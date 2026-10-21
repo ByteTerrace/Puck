@@ -219,7 +219,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // and retained tainted history must be discarded before a filled source can serve any capture.
         if (convergence.IsActive) {
             entry.Temporal.Reset();
-            entry.HistoryTainted = false;
         }
         _ = DiscardTaintedState(instance: instance);
         entry.Residency?.BeginConvergence(request: convergence.Request);
