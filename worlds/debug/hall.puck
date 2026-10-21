@@ -193,7 +193,7 @@ prototypes {
     }
   }
 
-  // The ceiling light strips: one over each viewing aisle and two over each landing, 3 cm under the ceiling. Level 3
+  // The ceiling light strips: one over each viewing aisle and two over each landing, 6 cm deep under the ceiling. Level 3
   // has its skylights instead, and strips under the roof's south and north spans.
   prototype "hall-lights" {
     document {
@@ -201,19 +201,19 @@ prototypes {
       schema: "puck.creation.v1"
       palette: hallPalette
       for z in [13.6, 19.6, 25.6, 31.6] {
-        hallBox(label: $"strip-0-{z}", x0: 21, x1: 69, y0: 4.2, y1: 4.23, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+        hallBox(label: $"strip-0-{z}", x0: 21, x1: 69, y0: 4.17, y1: 4.23, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
       }
       for k in range(1, 2) {
         for z in [14.6, 22.6, 30.6] {
-          hallBox(label: $"strip-{k}-{z}", x0: 21, x1: 69, y0: ((storey * (k + 1)) - 0.3), y1: ((storey * (k + 1)) - 0.27), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+          hallBox(label: $"strip-{k}-{z}", x0: 21, x1: 69, y0: ((storey * (k + 1)) - 0.33), y1: ((storey * (k + 1)) - 0.27), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
         }
       }
       for z in [15, 37] {
-        hallBox(label: $"strip-3-{z}", x0: 21, x1: 69, y0: 17.72, y1: 17.75, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+        hallBox(label: $"strip-3-{z}", x0: 21, x1: 69, y0: 17.69, y1: 17.75, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
       }
       for k in range(0, 4) {
         for z in [18, 26] {
-          hallBox(label: $"landing-{k}-{z}", x0: 11.5, x1: 19, y0: ((k == 3) ? 17.72 : ((storey * (k + 1)) - 0.3)), y1: ((k == 3) ? 17.75 : ((storey * (k + 1)) - 0.27)), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
+          hallBox(label: $"landing-{k}-{z}", x0: 11.5, x1: 19, y0: ((k == 3) ? 17.69 : ((storey * (k + 1)) - 0.33)), y1: ((k == 3) ? 17.75 : ((storey * (k + 1)) - 0.27)), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
         }
       }
     }

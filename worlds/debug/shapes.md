@@ -58,7 +58,7 @@ under the roof and ambient occlusion.
 | Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
 | Stand on a level's landing | `gallery.level <level> [body]` |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
-| Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` or the right shoulder steps on, `-` steps back; after the last it wraps to the first |
+| Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
 | Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the one at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body |
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao and shadow; a view's name selects it |
@@ -67,17 +67,21 @@ under the roof and ambient occlusion.
 The lift car is a population body (`lift-car`, body 40) whose look draws the
 cab and which carries the attached solid platform the Moth stands on. Rules move
 it: `liftCall` names the level a pad or command called, `liftTarget` and
-`liftAt` count sixteenths of a metre, and `lift-ride` poses the car at cell
-`liftAt` of the `liftShaft` topology every tick, so it climbs 1.875 m/s and
-stops exactly at each floor. A body standing on the platform rides it up and
+`liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell
+`liftAt` of the `liftShaft` topology every tick (`poseCell(…, glide: true)`, a
+continuous move a client interpolates rather than a teleport), so it climbs
+1.875 m/s and stops exactly at each floor. A body standing on the platform rides it up and
 down, grounded the whole way (the analytic contact provider carries a body
 with the attached solid under it; `src/Puck.World.Server/README.md`). The shaft
 has no landing doors: walking into the shaft on a level where the car is not
 drops to the car's roof or the pit.
 
 The gallery's keys live in `hall.puck`'s `gallery-keys` overlay on the debug
-world's resting page; the bar shows the right shoulder with `=` beside it, and
-`-`, `G`, `V` and `B` are keyboard keys with no pad button of their own. Each
+world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and holding the
+right shoulder or `Q` opens the gallery wheel (aim with the right stick or the
+mouse, release to commit, as the left shoulder and Tab open the play wheel),
+whose ring carries next, previous, flag, view, slice and the entrance, so a pad
+reaches every gallery action. Each
 exhibit's and sign's in-world text is a text run on its placement: the debug
 world draws no HUD, so there is nothing to show or hide. `gallery.view` and
 `gallery.slice` call verbs only a rendered World registers, so a headless host
