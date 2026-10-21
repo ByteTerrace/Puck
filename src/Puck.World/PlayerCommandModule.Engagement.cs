@@ -171,8 +171,8 @@ internal sealed partial class PlayerCommandModule {
                 );
             }
 
-            if (!m_screens.HasMachine(index: screenIndex)) {
-                return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control — screen.insert a cart first]");
+            if (!Server.WorldTick.ShowsEngageTarget(hasMachine: m_screens.HasMachine(index: screenIndex), screen: screen)) {
+                return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control and shows no producer — screen.insert a cart first]");
             }
 
             if (screen.Route.EngageRadius > 0f) {

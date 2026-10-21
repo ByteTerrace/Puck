@@ -56,9 +56,13 @@ screens [
     round: 0
     source: producer(id: "capture", settings: claudeCapture)
     filter: Linear
+    // Engaged on the Moth's context button like a device: the window then fills the World's window at its own shape,
+    // and a click on it hands it the mouse and keyboard (desktop.md).
     route {
-      engageable: false
-      engageRadius: 0
+      engageable: true
+      engageRadius: 3
+      engageChannel: "interact"
+      display { fill: "#000000" }
     }
   }
 ]

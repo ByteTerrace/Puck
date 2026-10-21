@@ -112,6 +112,62 @@
               "string",
               "null"
             ]
+          },
+          "display": {
+            "description": "How a seat engaged on this screen sees its source once its camera has framed the glass: the emulator view, the source alone filling the seat\u0027s view at its own aspect ratio (WorldScreenDisplay). null (the default) is Neutral: no crop, square pixels, black fill. Omitted from the wire when null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "crop": {
+                "description": "The source pixels left out at each edge, or null for none. A crop that leaves nothing of the source shows the whole source.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "top": {
+                    "description": "The rows left out at the top.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "right": {
+                    "description": "The columns left out at the right.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "bottom": {
+                    "description": "The rows left out at the bottom.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "left": {
+                    "description": "The columns left out at the left.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldScreenDisplayCrop"
+              },
+              "pixelAspect": {
+                "description": "The width over the height of one source pixel as the console\u0027s display shows it (8/7 for a console drawing 256 columns across a 4:3 picture); positive and finite, at most MaxPixelAspect either way. Default 1, square pixels.",
+                "type": "number",
+                "default": 1
+              },
+              "fill": {
+                "description": "The colour around the picture, as #RRGGBB, or null for black.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "title": "WorldScreenDisplay"
           }
         },
         "additionalProperties": false,

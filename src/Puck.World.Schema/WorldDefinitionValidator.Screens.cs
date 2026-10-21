@@ -625,6 +625,44 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.port '{port}' is named but engageable is false: a passive display drives no input port.");
             }
         }
+        if (route.Display is { } display) {
+            ValidateDisplay(
+                display: display,
+                engageable: route.Engageable,
+                errors: errors,
+                path: $"{path}.display"
+            );
+        }
+    }
+    // The emulator view an engaged seat sees: only an engageable screen is ever seen that way, a crop counts source
+    // pixels, and a pixel aspect is a positive ratio inside the bound either way.
+    private static void ValidateDisplay(WorldScreenDisplay display, bool engageable, string path, List<string> errors) {
+        if (!engageable) {
+            errors.Add(item: $"{path} is authored but engageable is false: only a seat engaged on the screen sees its display.");
+        }
+        if (display.Crop is { } crop) {
+            foreach (var (edge, value) in ((ReadOnlySpan<(string, int)>)[("top", crop.Top), ("right", crop.Right), ("bottom", crop.Bottom), ("left", crop.Left)])) {
+                if (
+                    (value < 0) ||
+                    (value > MaxSurfaceDimension)
+                ) {
+                    errors.Add(item: $"{path}.crop.{edge} {value} must be within 0..{MaxSurfaceDimension} source pixels.");
+                }
+            }
+        }
+        if (
+            !float.IsFinite(f: display.PixelAspect) ||
+            (display.PixelAspect < (1f / WorldScreenDisplay.MaxPixelAspect)) ||
+            (display.PixelAspect > WorldScreenDisplay.MaxPixelAspect)
+        ) {
+            errors.Add(item: $"{path}.pixelAspect {display.PixelAspect.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} must be a finite ratio within 1/{WorldScreenDisplay.MaxPixelAspect.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}..{WorldScreenDisplay.MaxPixelAspect.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
+        }
+        if (
+            (display.Fill is { } fill) &&
+            !IsHexColor(value: fill)
+        ) {
+            errors.Add(item: $"{path}.fill '{fill}' must be #RRGGBB.");
+        }
     }
 
     // The one frame-source gate, shared by a screen row/magazine entry's own Producer/View/Probe arms

@@ -124,8 +124,20 @@ debug world's only on-screen UI. Engaging captures the seat, so the
 Moth stands still, and brings up the emulator view: the camera eases in until
 the device's screen fills the window's limiting axis, square-on, with
 everything between the camera and the screen (the Moth included) left out, and
-the binding bar and the cursor step aside. The same button leaves the device
-and the camera eases back to the Moth. The device's pad does not play the context button, so it never
+the binding bar and the cursor step aside. Once the camera settles, the window
+cuts to the console's picture alone, centred and as large as fits, on black,
+the way a desktop emulator shows it:
+
+| Device | Picture shown | Pixels |
+|---|---|---|
+| Humble Gaming Brick | the whole 160 by 144 screen | square |
+| Advanced Gaming Brick | the whole 240 by 160 screen | square |
+| Humble Gaming Deck | 256 by 224, its 8 overscan lines cropped top and bottom | 8:7, so the picture is about 4:3 |
+
+Each screen route's `display` authors this (`crop`, `pixelAspect`, `fill`), and
+`world.screens` echoes it. Pixels stay crisp cells at any window size. The same
+button leaves the device: the window cuts back to the framed device and the
+camera eases back to the Moth. The device's pad does not play the context button, so it never
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,

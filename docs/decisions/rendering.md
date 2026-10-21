@@ -554,7 +554,20 @@ data. Three destinations consume the mapping:
 
 Passthrough exists only for a source the local user opened. A world document
 arriving through a portal must never be able to type into the player's
-desktop. Focus stays with the input system, which reads the mapping.
+desktop. Focus stays with the input system, which reads the mapping. The local
+user opens a source in one of two ways, and nothing else counts: the
+`source.passthrough open` verb typed at the host's own console, or a physical
+pointer press on the emulator view of a window capture that a local seat
+engaged on a screen of the world the host booted (never a world reached
+through a portal or a session view). Engaging such a screen, by any principal
+(a console `body.engage`, a peer, an addon, a replay), only shows the window;
+the press opens it. The engage's own provenance is not what decides: a seat's
+channels can be driven by a co-driving addon or a scripted signal, so the
+engine cannot prove an engage was the local user's, while a press the window
+pump delivers to the input filter can only be. The source closes when the
+emulator view stops showing it, as when the seat leaves
+(`WorldSourcePassthrough`). A document still never authors a passthrough
+destination: `route.input: Passthrough` is refused by name.
 
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model
