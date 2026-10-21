@@ -125,23 +125,20 @@ pad (the Moth's `interact` channel, which every screen route here names as its
 `engageChannel`). A press engages the nearest free device within its route's
 3 m (on the ground plane, the earlier in document order on a tie); no prompt shows, since the controller bar is the
 debug world's only on-screen UI. Engaging captures the seat, so the
-Moth stands still, and brings up the emulator view: the camera eases in until
-the device's screen fills the window's limiting axis, square-on, with
-everything between the camera and the screen (the Moth included) left out, and
-the binding bar and the cursor step aside. Once the camera settles, the window
-cuts to the console's picture alone, centred and as large as fits, on black,
-the way a desktop emulator shows it:
+Moth stands still, and the camera eases in on the device's screen, square-on,
+with everything between the camera and the screen (the Moth included) left out,
+while the binding bar and the cursor step aside. It frames the screen's picture,
+the glass inside its bezel, at the largest whole number of window pixels per
+source row that fits the window, its width following the glass's own shape, and
+as it settles the CRT look, the room's fog and the tone map fade away. Settled,
+the window is indistinguishable from a desktop emulator: the console's whole
+picture, centred, source-exact pixels and colours, on black. Resizing,
+maximizing or going full screen refits it at once.
 
-| Device | Picture shown | Pixels |
-|---|---|---|
-| Humble Gaming Brick | the whole 160 by 144 screen | square |
-| Advanced Gaming Brick | the whole 240 by 160 screen | square |
-| Humble Gaming Deck | 256 by 224, its 8 overscan lines cropped top and bottom | 8:7, so the picture is about 4:3 |
-
-Each screen route's `display` authors this (`crop`, `pixelAspect`, `fill`), and
-`world.screens` echoes it. Pixels stay crisp cells at any window size. The same
-button leaves the device: the window cuts back to the framed device and the
-camera eases back to the Moth. The device's pad does not play the context button, so it never
+Each screen route's `display` authors the black around the picture (`fill`),
+and `world.screens` echoes it. The same button leaves the device: the camera
+eases back to the Moth, and the screen's bezel, CRT look and the room fade back
+in around it. The device's pad does not play the context button, so it never
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,

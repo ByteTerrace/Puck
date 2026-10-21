@@ -64,9 +64,11 @@ world document can, so nothing in `desktop.puck` sends the window input.
 ## Use the window by engaging the wall screen
 
 Screen 16 engages like a device: walk within 3 m of it and press the context
-button (E, or X on a pad). The camera eases onto the glass and the window then
-shows the captured window alone, at its own shape, centred on black. Nothing
-reaches the window yet: click it, and that click opens it as a passthrough
+button (E, or X on a pad). The camera eases onto the wall screen's picture
+until it fills the window as large as fits, centred on black, with the room
+faded out around it. Nothing reaches the window yet: click the picture, and
+that click, mapped through the screen to the window's own pixel, opens it as a
+passthrough
 source, reaches the window, and gives it the keyboard
 (`source.passthrough` lists it as `<instance> engaged window 'Claude …'`). Only
 a click the World's window receives counts; `body.engage 16` at the console,

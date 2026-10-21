@@ -557,17 +557,30 @@ arriving through a portal must never be able to type into the player's
 desktop. Focus stays with the input system, which reads the mapping. The local
 user opens a source in one of two ways, and nothing else counts: the
 `source.passthrough open` verb typed at the host's own console, or a physical
-pointer press on the emulator view of a window capture that a local seat
-engaged on a screen of the world the host booted (never a world reached
-through a portal or a session view). Engaging such a screen, by any principal
+pointer press on the framed picture of a window capture's screen that a local
+seat engaged in the world the host booted (never a world reached through a
+portal or a session view), mapped through the screen's published mapping to the
+window's own pixel. Engaging such a screen, by any principal
 (a console `body.engage`, a peer, an addon, a replay), only shows the window;
 the press opens it. The engage's own provenance is not what decides: a seat's
 channels can be driven by a co-driving addon or a scripted signal, so the
 engine cannot prove an engage was the local user's, while a press the window
 pump delivers to the input filter can only be. The source closes when the
-emulator view stops showing it, as when the seat leaves
+seat no longer frames the screen, as when it leaves
 (`WorldSourcePassthrough`). A document still never authors a passthrough
 destination: `route.input: Passthrough` is refused by name.
+
+**An engaged screen is framed in the world, never replaced by a separate
+image.** The owner's ruling: the engaged view is diegetic. The seat's own camera
+pans and zooms onto the in-world screen's picture, square-on, at a whole number
+of window pixels per source row, and once framed the window is
+indistinguishable from a desktop emulator; easing out reveals the screen and the
+room. One per-view value, the screen fidelity the ease drives, turns the CRT
+treatment, the atmosphere and the tone map off for the framed picture, and the
+root's own placement of the seat's view shows only the picture's part of it on
+the matte's fill, so no pass draws the source a second time. A 2D emulator view that cut to the source after the ease was
+rejected because it was a separate thing that could disagree with the screen
+(it cropped the picture the screen showed whole).
 
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model

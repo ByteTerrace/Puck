@@ -5150,18 +5150,7 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldScreenDisplay), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("crop", typeof(global::Puck.World.WorldScreenDisplayCrop), typeof(global::Puck.World.WorldScreenDisplay), "Crop", Read | Write, static value => ((global::Puck.World.WorldScreenDisplay)value).Crop),
-                M("pixelAspect", typeof(global::System.Single), typeof(global::Puck.World.WorldScreenDisplay), "PixelAspect", Read | Write, static value => ((global::Puck.World.WorldScreenDisplay)value).PixelAspect),
                 M("fill", typeof(global::System.String), typeof(global::Puck.World.WorldScreenDisplay), "Fill", Read | Write, static value => ((global::Puck.World.WorldScreenDisplay)value).Fill),
-            ],
-            []),
-        T(typeof(global::Puck.World.WorldScreenDisplayCrop), true, JsonTypeInfoKind.Object, null,
-            [],
-            [
-                M("top", typeof(global::System.Int32), typeof(global::Puck.World.WorldScreenDisplayCrop), "Top", Read | Write, static value => ((global::Puck.World.WorldScreenDisplayCrop)value).Top),
-                M("right", typeof(global::System.Int32), typeof(global::Puck.World.WorldScreenDisplayCrop), "Right", Read | Write, static value => ((global::Puck.World.WorldScreenDisplayCrop)value).Right),
-                M("bottom", typeof(global::System.Int32), typeof(global::Puck.World.WorldScreenDisplayCrop), "Bottom", Read | Write, static value => ((global::Puck.World.WorldScreenDisplayCrop)value).Bottom),
-                M("left", typeof(global::System.Int32), typeof(global::Puck.World.WorldScreenDisplayCrop), "Left", Read | Write, static value => ((global::Puck.World.WorldScreenDisplayCrop)value).Left),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenMagazine), true, JsonTypeInfoKind.Object, null,

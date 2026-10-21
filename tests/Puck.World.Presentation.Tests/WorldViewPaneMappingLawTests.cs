@@ -60,8 +60,6 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private WorldViewDefaults m_document = Views;
     private long m_frame;
     private RenderGraphHistory? m_history;
-    // The source instances' states each frame schedules with, which size them, or null for none.
-    private IReadOnlyList<RenderGraphSourceState>? m_sources;
 
     public WorldViewPaneMappingLawTests() {
         m_host = new WorldViewGraphHost(
@@ -150,8 +148,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 DisplayWidth: Display,
                 Footprints: m_host.Footprints,
                 Index: m_frame,
-                Roots: m_roots,
-                Sources: m_sources
+                Roots: m_roots
             ),
             history: m_history,
             schedule: schedule,

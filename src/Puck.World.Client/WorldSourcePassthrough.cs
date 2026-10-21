@@ -12,10 +12,10 @@ namespace Puck.World.Client;
 /// capture shows, and the <see cref="SourcePassthroughRouter"/> the window pump offers every raw event to
 /// (<see cref="IWindowInputFilter"/>). Two acts of the local user add a source, and nothing a world document declares
 /// reaches either: the <c>source.passthrough open</c> verb, which the host's own console alone may run, and a physical
-/// pointer press on the emulator view of a window capture a local seat engaged in the world the host booted
-/// (<see cref="WorldViewGraphHost.ShowsEngaged"/>), which the window pump alone delivers, so no binding, script,
+/// pointer press on the glass of a window capture's screen a local seat engaged and frames in the world the host booted
+/// (<see cref="WorldViewGraphHost.ShowsFramed"/>), which the window pump alone delivers, so no binding, script,
 /// <c>player.signal</c>, peer, addon or schedule makes it. Engaging the screen, by any principal, only shows the window;
-/// the press is what opens it, and the source closes once the emulator view no longer shows it.
+/// the press is what opens it, and the source closes once the seat no longer frames the screen.
 /// </summary>
 /// <remarks>
 /// <para>A source stays open, its grant held, until the local user closes it or it is really removed: before each event
@@ -37,10 +37,10 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     private readonly WorldSeatViewports m_viewports;
 
     // An opened source: the handle its pane's mapping names it by, the window the local user opened it on, and whether
-    // a press on an engaged screen's emulator view opened it, which closes it once that view stops showing it.
+    // a press on an engaged screen's framed glass opened it, which closes it once the seat stops framing the screen.
     private readonly record struct Opened(SourceHandle Source, ISourcePassthroughWindow Window, bool Engaged = false);
 
-    // The pointer's last position, in display pixels, which a press opening an emulator view's window lands at.
+    // The pointer's last position, in display pixels, which a press opening a framed screen's window lands at.
     private Vector2? m_pointer;
 
     /// <summary>Initializes a new instance of the <see cref="WorldSourcePassthrough"/> class.</summary>
@@ -78,13 +78,13 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     );
 
     // The first opened source that is really gone: its capture no longer shows the window it was opened on (the instance
-    // stopped, or its capture reopened), a published pane gives its name a different source, or an engaged screen's
-    // emulator view opened it and no longer shows it (the seat left). A console-opened pane that is only unpublished is
-    // not gone; the router keeps input from it while it is unshown.
+    // stopped, or its capture reopened), a published pane gives its name a different source, or a press on a framed
+    // screen opened it and the seat no longer frames it (the seat left). A console-opened pane that is only unpublished
+    // is not gone; the router keeps input from it while it is unshown.
     private string? Stale() {
         foreach (var (instance, opened) in m_opened) {
             if (
-                (opened.Engaged && !m_graphs.ShowsEngaged(instance: instance)) ||
+                (opened.Engaged && !m_graphs.ShowsFramed(instance: instance)) ||
                 !ReferenceEquals(
                     objA: m_windows.PassthroughWindowOf(
                         fault: out _,
@@ -246,7 +246,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
             _ = Close(instance: stale);
         }
     }
-    // The local user's own press on an engaged screen's emulator view of a window capture opens that window as a
+    // The local user's own press on the framed glass of an engaged window capture's screen opens that window as a
     // passthrough source before the press is routed, so the press itself reaches the window and gives it the keyboard.
     // Only the window pump calls Intercept, so only a physical press gets here.
     private void OpenEngagedUnderPointer() {
@@ -257,7 +257,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
                 point: point
             ) ||
             (pick.Source.Name is not { } instance) ||
-            !m_graphs.ShowsEngaged(instance: instance) ||
+            !m_graphs.ShowsFramed(instance: instance) ||
             m_opened.ContainsKey(key: instance) ||
             (m_windows.PassthroughWindowOf(
                 fault: out _,

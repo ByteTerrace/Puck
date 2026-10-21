@@ -359,10 +359,9 @@ public enum WorldPadElement : byte {
 /// screen drives; the machine's other ports hold neutral input unless another screen routes to them.
 /// <see langword="null"/> (the default) resolves only a machine with a sole input port, and a screen showing a machine
 /// with several is refused by name until its route names one. Omitted from the wire when null.</param>
-/// <param name="Display">How a seat engaged on this screen sees its source once its camera has framed the glass: the
-/// emulator view, the source alone filling the seat's view at its own aspect ratio (<see cref="WorldScreenDisplay"/>).
-/// <see langword="null"/> (the default) is <see cref="WorldScreenDisplay.Neutral"/>: no crop, square pixels, black fill.
-/// Omitted from the wire when null.</param>
+/// <param name="Display">How the window shows this screen to a seat engaged on it once its camera has framed the
+/// picture: what surrounds the matte (<see cref="WorldScreenDisplay"/>). <see langword="null"/> (the default) is
+/// <see cref="WorldScreenDisplay.Neutral"/>: a black matte. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
@@ -377,34 +376,20 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
         EngageRadius: 0f
     );
 }
-/// <summary>The source pixels an engaged screen's emulator view leaves out at each edge, the way a desktop emulator
-/// crops a console's overscan. Each is a count of source pixels, non-negative; the default leaves nothing out.</summary>
-/// <param name="Top">The rows left out at the top.</param>
-/// <param name="Right">The columns left out at the right.</param>
-/// <param name="Bottom">The rows left out at the bottom.</param>
-/// <param name="Left">The columns left out at the left.</param>
-public sealed record WorldScreenDisplayCrop(int Top = 0, int Right = 0, int Bottom = 0, int Left = 0);
-/// <summary>The emulator view of a screen a seat engages: once the seat's camera has framed the glass, the seat's view
-/// shows the screen's source alone, its crop scaled to the display aspect it authors, centred and fitted whole inside
-/// the view, with the fill colour around it, the way a desktop emulator shows a console's picture. Presentation only;
-/// nothing here reaches the simulation. Later per-console theming (bezel art, a border image) lands here as further
-/// members.</summary>
-/// <param name="Crop">The source pixels left out at each edge, or <see langword="null"/> for none. A crop that leaves
-/// nothing of the source shows the whole source.</param>
-/// <param name="PixelAspect">The width over the height of one source pixel as the console's display shows it (8/7 for
-/// a console drawing 256 columns across a 4:3 picture); positive and finite, at most
-/// <see cref="MaxPixelAspect"/> either way. Default 1, square pixels.</param>
-/// <param name="Fill">The colour around the picture, as <c>#RRGGBB</c>, or <see langword="null"/> for black.</param>
+/// <summary>How the window shows a screen a seat engages once its camera has framed the picture: the seat's own camera
+/// on the in-world screen, panned and zoomed until the picture fills the matte a desktop emulator would show it in, with
+/// the fill colour around it. The scale, the matte and the screen's fidelity follow from the screen row, its source and
+/// the window (<c>Puck.World.Client.WorldScreenFraming</c>), so this authors only what surrounds the picture; an
+/// emulator-style border or filler image around the matte lands here as further members. Presentation only; nothing
+/// here reaches the simulation.</summary>
+/// <param name="Fill">The matte colour around the framed picture, as <c>#RRGGBB</c>, or <see langword="null"/> for
+/// black.</param>
 public sealed record WorldScreenDisplay(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplayCrop? Crop = null,
-    float PixelAspect = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null) {
-    /// <summary>The widest pixel aspect, and the reciprocal of the narrowest, a display may author.</summary>
-    public const float MaxPixelAspect = 4f;
     /// <summary>The fill colour an unauthored <see cref="Fill"/> shows.</summary>
     public const string DefaultFill = "#000000";
 
-    /// <summary>Gets the display an engaged screen shows that authors none: no crop, square pixels, black fill.</summary>
+    /// <summary>Gets the display an engaged screen shows that authors none: a black matte.</summary>
     public static WorldScreenDisplay Neutral { get; } = new();
 }
 /// <summary>One diegetic screen in the world — a screen slab emitted by

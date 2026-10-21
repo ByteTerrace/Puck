@@ -6,19 +6,15 @@
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
 // state decides the filter and both backends compute the same arithmetic. With tonemap set, the reconstructed source,
 // and only it, goes through the filmic curve: a world's root places its SDF views this way, so the scene is tonemapped
-// where it enters the frame and the letterbox color, the base and every pane reach the display as they are.
-// A crop other than the whole source shows only that part of it in the rect, and pixelated keeps each source pixel a
-// crisp cell at any scale (sharp bilinear: bilinear only across the destination pixel that straddles two cells, the
-// reconstruction a nearest-filtered screen's glass samples with); either resamples rather than copying. Inside surround
-// and outside the rect the destination is the fill colour, as an emulator view shows around its picture.
-// The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
-// sharpen, sharpness, tonemap, compareMode, wipe, crop, surround, fill, pixelated) and the images base, source and
-// destination, each image input with a sampler it never reads. rect and surround are fractions of the destination's
-// extent and crop of the source's: left, top, width, height.
+// where it enters the frame and the letterbox color, the base and every pane reach the display as they are. A crop shows
+// only that part of the source in the rect, by the same rules, so a crop of the rect's own pixel extent is an exact copy
+// of those pixels. With fidelity above zero, that share of the rect is the source as it is, past the sharpen and the
+// tonemap.
+// The generated interface declares the frame group and the pass group: the extent, the config (letterbox,
+// letterboxColor, rect, crop, sharpen, sharpness, tonemap, fidelity, compareMode, wipe) and the images base, source and
+// destination, each image input with a sampler it never reads. rect is the destination rect as fractions of the
+// destination's extent and crop the shown part as fractions of the source's: left, top, width, height.
 #include "place.interface.hlsli"
-
-// What the display shows between placed views: a near-black with a faint blue cast, opaque.
-static const float4 LetterboxColor = float4(0.015, 0.016, 0.02, 1.0);
 
 // The Narkowicz ACES-fit filmic curve, and only the curve: the stylized shading is already display-referred, so no gamma
 // encode follows it, and the display encode writes its result as it is.
@@ -45,26 +41,6 @@ float3 placeSharpen(uint2 pixel, uint2 sourceDims, float sharpness) {
     float3 weight = (amplitude * (-0.2 * saturate(sharpness)));
 
     return max(((((up + left) + (right + down)) * weight) + center) / (1.0 + (4.0 * weight)), 0.0);
-}
-
-// The source reconstructed at a rect pixel through the crop: the pixel's centre at its place in the crop, bilinear at
-// the sharpness, or, pixelated, sharp bilinear, whose blend between two source cells spans one destination pixel.
-float3 placeCropped(uint2 pixel, uint2 rectDims, uint2 sourceDims) {
-    float4 crop = passGroup.crop;
-    float2 cropTexels = max((crop.zw * float2(sourceDims)), float2(1.0e-4, 1.0e-4));
-    float2 texel = ((crop.xy * float2(sourceDims)) + (((float2(pixel) + 0.5) / float2(rectDims)) * cropTexels));
-
-    if (passGroup.pixelated != 0u) {
-        float2 cell = floor(texel);
-        float2 fromCenter = ((texel - cell) - 0.5);
-        float2 reach = saturate((((abs(fromCenter) - 0.5) * (float2(rectDims) / cropTexels)) + 0.5));
-
-        texel = ((cell + 0.5) + (sign(fromCenter) * reach));
-
-        return puckReconstructAt(source, (texel - 0.5), sourceDims, uint2(0, 0), 0.0).rgb;
-    }
-
-    return puckReconstructAt(source, (texel - 0.5), sourceDims, uint2(0, 0), passGroup.sharpness).rgb;
 }
 
 // A comparison source already contains its held seat crop. The base still contains the whole live display.
@@ -111,17 +87,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float4 written;
 
-    // The surround's pixel edges, rounded as the rect's are; an empty surround holds no pixel.
-    float4 surround = passGroup.surround;
-    uint2 surroundMin = (uint2)clamp(floor((surround.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
-    uint2 surroundMax = (uint2)clamp(floor(((surround.xy + surround.zw) * float2(destinationDims)) + 0.5), float2(surroundMin), float2(destinationDims));
-    bool cropped = (passGroup.pixelated != 0u) || any(passGroup.crop != float4(0.0, 0.0, 1.0, 1.0));
-
     if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
-        if (all(id.xy >= surroundMin) && all(id.xy < surroundMax)) {
-            written = passGroup.fill;
-        } else if (passGroup.letterbox != 0u) {
-            written = LetterboxColor;
+        if (passGroup.letterbox != 0u) {
+            written = passGroup.letterboxColor;
         } else {
             base.GetDimensions(baseDims.x, baseDims.y);
             written = (passGroup.compareMode == 0u)
@@ -135,14 +103,26 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
+        // The crop's pixel edges, rounded as the rect's are: the whole source unless the host shows a part of it.
+        float4 crop = passGroup.crop;
+        uint2 cropMin = (uint2)clamp(floor((crop.xy * float2(sourceDims)) + 0.5), float2(0.0, 0.0), float2(sourceDims - 1));
+        uint2 cropMax = (uint2)clamp(floor(((crop.xy + crop.zw) * float2(sourceDims)) + 0.5), float2(cropMin + 1), float2(sourceDims));
+        uint2 cropDims = (cropMax - cropMin);
         uint2 rectDims = (rectMax - rectMin);
-        float3 color = (cropped
-            ? placeCropped((id.xy - rectMin), rectDims, sourceDims)
-            : (((passGroup.sharpen != 0u) && all(sourceDims == rectDims))
-                ? placeSharpen((id.xy - rectMin), sourceDims, passGroup.sharpness)
-                : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb));
+        uint2 pixel = (id.xy - rectMin);
+        float3 color = (((passGroup.sharpen != 0u) && all(cropDims == rectDims))
+            ? placeSharpen((pixel + cropMin), sourceDims, passGroup.sharpness)
+            : puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, passGroup.sharpness).rgb);
 
-        written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
+        color = ((passGroup.tonemap != 0u) ? filmicTonemap(color) : color);
+
+        // A view's fidelity writes that share of its source as it is, past the sharpen and the tonemap: a framed screen's
+        // view at one is an exact copy of its native-scale source's matte.
+        if (passGroup.fidelity > 0.0) {
+            color = lerp(color, puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, 0.0).rgb, saturate(passGroup.fidelity));
+        }
+
+        written = float4(color, 1.0);
     }
 
     destination[id.xy] = written;

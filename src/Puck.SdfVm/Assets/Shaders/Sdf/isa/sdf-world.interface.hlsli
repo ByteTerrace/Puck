@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/5990e99534d8a9c069a8ec95da6cbb33ec46a22f4a73500baabac3fef472a826). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/a913c8c99a38c9a4405c5851b6fa3b5c0016df2578a492794f3394ca2c6bcae8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -192,9 +192,9 @@ struct SdfWorldPass {
     [[vk::offset(1612)]] uint _pad1612;
     [[vk::offset(1616)]] float4 previousView[6];
     [[vk::offset(1712)]] uint screenCount;
-    [[vk::offset(1716)]] uint shadowFadeCount;
-    [[vk::offset(1720)]] uint shadowSlotCount;
-    [[vk::offset(1724)]] uint _pad1724;
+    [[vk::offset(1716)]] float screenFidelity;
+    [[vk::offset(1720)]] uint shadowFadeCount;
+    [[vk::offset(1724)]] uint shadowSlotCount;
     [[vk::offset(1728)]] int4 shadowSlots;
     [[vk::offset(1744)]] float tanHalfFieldOfView;
     [[vk::offset(1748)]] uint temporal;

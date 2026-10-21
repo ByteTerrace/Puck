@@ -13,7 +13,7 @@
 let mono = "jetbrains-mono-regular"
 
 // The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input. Both
-// step aside while the seat is engaged on a screen, so the emulator view shows the screen alone.
+// step aside while the seat is engaged on a screen, so the framed screen shows its picture alone.
 let shownWhilePlaying = {
   $type: "all"
   predicates [

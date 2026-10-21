@@ -308,11 +308,10 @@ hud {
 // Each screen is a 1 cm glass slab standing on its device's bezel, its face 1 cm proud of it. The brick's screen is
 // 160 by 144, the advanced brick's 240 by 160 and the deck's 256 by 240, at 2 mm a pixel.
 // Each engages on the Moth's context button (`interact`), which the pad does not play, so the same press leaves. Once
-// the camera has framed the glass, the window shows the console's picture alone (its route's `display`): the bricks'
-// whole screens at square pixels, and the deck's 256 by 224 lines a television shows (8 overscan lines cropped top and
-// bottom) at its 8:7 pixels, each centred on black.
-let handheldDisplay = { pixelAspect: 1, fill: "#000000" }
-let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact", kit: "devicePad", display: handheldDisplay }
+// the camera has framed the picture, the window shows it alone, as a desktop emulator does, on the matte its route's
+// `display` fills: black on every device.
+let deviceDisplay = { fill: "#000000" }
+let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact", kit: "devicePad", display: deviceDisplay }
 
 screens [
   {
@@ -356,11 +355,7 @@ screens [
       engageChannel: "interact"
       kit: "devicePad"
       port: "controls"
-      display {
-        crop { top: 8, bottom: 8 }
-        pixelAspect: (8 / 7)
-        fill: "#000000"
-      }
+      display: deviceDisplay
     }
   }
 ]

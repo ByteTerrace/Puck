@@ -69,8 +69,8 @@ public sealed partial class WorldTick {
     }
 
     /// <summary>Returns whether an engageable screen has something a seat engages: a live booted machine, whose pad the
-    /// seat plays, or a producer source (a window capture, a camera, a test pattern), which the seat's emulator view
-    /// shows and no pad reaches. Read from the document and the machine host alone, so a replay decides it the
+    /// seat plays, or a producer source (a window capture, a camera, a test pattern), which the seat's camera frames on
+    /// the screen and no pad reaches. Read from the document and the machine host alone, so a replay decides it the
     /// same.</summary>
     /// <param name="screen">The screen row.</param>
     /// <param name="hasMachine">Whether the screen carries a live booted machine

@@ -232,7 +232,10 @@ aperture-grille phosphor-stripe tint one triad a source column, optional bloom
 on the bright regions, and (both off by default) a vignette and a fresnel rim
 glint. The scanlines and the grille fade out as a source row or column shrinks
 toward two pixels, so they never alias against the pixel grid. The tuned look is a flat square tube: a hint
-of CRT, not a heavy filter.
+of CRT, not a heavy filter. A view's screen fidelity (`SdfViewSnapshot.ScreenFidelity`, 0 to 1) scales every
+term of that treatment away and turns the soft bezel into a hard picture edge, and clears the atmosphere and
+the tone map from the view, so a seat that has framed the screen it engaged sees its pixels exactly as the
+source holds them; every other view carries 0.
 
 As a **light**, every bound screen is a colored area light illuminating the
 room, one of the lights the views pass walks. Its position and orientation come from the screen-surface table; its

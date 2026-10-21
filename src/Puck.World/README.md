@@ -1927,12 +1927,14 @@ A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
 `interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
-While a seat is captured on a screen, its camera eases in until the screen's
-glass fills the viewport's limiting axis, square-on, derived from the row's own
-frame, with nothing between the camera and the glass drawn; once it settles,
-the seat's view shows the emulator view, the screen's source alone at the crop,
-pixel aspect and fill its route's `display` authors
-([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen-then-shows-its-source)).
+While a seat is captured on a screen, its own camera eases in on the screen's
+picture, square-on, derived from the row's own frame, with nothing between the
+camera and the glass drawn, until each source row is a whole number of window
+pixels; as it settles the CRT treatment, atmosphere and tone map fade out, the
+view renders at native scale and the root shows only its picture, and the window shows
+the picture as a desktop emulator does, on the matte its route's `display.fill`
+colours. Leaving fades the in-world look back in
+([engagement](../../.claude/skills/puck-world/references/engagement.md#the-framed-screen--the-camera-frames-the-engaged-screens-picture-as-an-emulator-shows-it)).
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
