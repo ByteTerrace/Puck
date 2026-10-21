@@ -925,18 +925,21 @@ buffer sources. Each participating package is notified once per request through
 `BeginConvergence`, including a request with no extra convergence samples;
 changing demand does not restart samples or finite source epochs. Once the runtime
 forwards the request to a graph node or external producer, its contributing closure
-stays held until that target completes the capture. `TaintedOf` joins the graph's
+stays held until that target completes the capture. `TaintOf` joins the graph's
 acquired-input taint, so an older retained result or
 history cannot become clean merely because a newer input is clean.
 Before rendering, retained package taint prevents forwarding a capture. After a
 successful submission, the new output carries that submitted package state and
 its acquired-input taint. A clean render that replaces tainted history counts
 as the first clean sample; the previous output's taint does not delay it again.
-A presented capture forwards nowhere and holds nothing, so on each frame it
-still takes frames for, the runtime asks the packages of every instance it
-reads to discard history holding unfilled external pixels
-(`DiscardTaintedHistory`) and skips the renders they report the history needs
-to converge again.
+On every frame a capture is pending and still to be served, before anything
+renders, the runtime asks the packages of every instance it reads to discard
+retained state holding unfilled external pixels (`DiscardTaintedState`): the
+SDF package resets tainted temporal history and has tainted lighting sources
+derived again from the gate's fills. A settled capture serves the first clean
+frame; a presented one, which forwards nowhere and holds nothing, also skips
+the renders the packages report the discarded state needs to converge again.
+`TaintOf` names the state, and a waiting capture's reason carries the name.
 
 ### The default root graph
 

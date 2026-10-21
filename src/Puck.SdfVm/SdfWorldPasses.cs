@@ -218,7 +218,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.Temporal.Reset();
             entry.HistoryTainted = false;
         }
-        _ = DiscardTaintedHistory(instance: instance);
+        _ = DiscardTaintedState(instance: instance);
         entry.Residency?.BeginConvergence(request: convergence.Request);
     }
 

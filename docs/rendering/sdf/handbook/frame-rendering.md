@@ -609,11 +609,14 @@ a new epoch while a spatial view's still output stands without a render.
 
 A plain capture (`converge: 0`) observes the next normal temporal sample and
 keeps clean color history. An explicit converging capture starts its
-sample sequence at zero; any capture also discards retained tainted history
-before recording filled inputs. A presented capture, which holds no frame,
-discards it on its first frame and skips the period of renders the restarted
-history takes to converge, so its frames show the steady image the display
-settles back to.
+sample sequence at zero. On every frame a capture waits, any capture also
+discards retained state that read unfilled external content before recording
+filled inputs: a tainted temporal history restarts, and a tainted sky
+environment or screen emission is projected again from the capture gate's
+fills, so taint that returns after a reload or a lights change never holds the
+capture. A presented capture, which holds no frame, also skips the period of
+renders a restarted history takes to converge, so its frames show the steady
+image the display settles back to.
 
 The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another

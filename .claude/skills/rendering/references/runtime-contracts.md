@@ -153,18 +153,31 @@ image `ProduceFrame` hands the display, through that instance's node
 (`ShaderPipelineRenderNode.TryReadPresented`). The readback waits for the GPU,
 so the image cannot change under it. A frame on which `ReasonOf` names a reason
 or the output is tainted is skipped, never read, and the burst's presentation
-indices show the gap. A temporal view's history that read external content
-stays tainted for as long as it keeps blending, and a presented capture has no
-held frame to converge over, so on each frame it is armed and still taking
-frames the runtime asks every package of every instance the capture reads to
-discard such history (`IRenderGraphPackageFactory.DiscardTaintedHistory`, §5)
-and skips the renders the package says the history needs to converge again
-(one `SdfTemporalSamples.Period`), so the burst reads the steady image. It counts as pending (`PendingCapturePath`) until its
+indices show the gap. It skips, besides, the renders retained state it had
+discarded needs to converge again (one `SdfTemporalSamples.Period`, below), so
+the burst reads the steady image. It counts as pending (`PendingCapturePath`) until its
 last PNG is written, so the capture gate fills, capture frames re-render
 tainted instances and `world.wait captures` fences the files, but not as
 holding (`HoldsPresentation`), so the presenter does not pin interpolation and
 the capture scheduler holds no clock for it. A `CaptureRequestSlot` refuses to
 arm one.
+
+**Every capture can complete over retained external content.** Retained package
+state can hold external pixels that no fill replaces by itself: a temporal
+history blends what it read into every later render, and a lighting source
+(the sky environment's projection, the screen emission's reduction) stands
+until something records it again. On every capture frame of a capture still
+to be served, settled or presented, before anything renders, the capture-frame
+walk asks every package of every instance the capture reads to discard such
+state (`IRenderGraphPackageFactory.DiscardTaintedState`,
+`RenderGraphRuntime.DiscardCaptureTaint`): `SdfWorldPasses` resets tainted
+history (§5) and has tainted lighting sources derived again from the fills on
+their next recording (`SdfWorldTables.ProjectTaintedSourcesAgain`), which
+stand reported as tainted until then. Because it runs every frame, taint that
+comes back (a source a frame late, a reload, a lights change) is discarded
+again rather than holding the capture. A capture still waiting names the state
+in its reason (`IRenderGraphPackageFactory.TaintOf`, followed through the
+instances that passed it on), so `world.wait ready` says what holds it.
 
 `RenderGraphRuntime.OfferCaptureSource` offers an aliased output under its own
 lease. A node serving it without rendering copies it before readback
@@ -260,8 +273,8 @@ commits the temporal sample metadata, and `SdfResolveRecorder` caches history
 descriptors by their bound handles as well as their slot and tables.
 `SdfWorldPasses` marks an instance's history tainted when a views render read
 an unfilled external source or tainted history (`SubmittedTaint`), and
-`DiscardTaintedHistory` resets only such history: a settled capture's
-`BeginConvergence` and a presented capture's frames call it, and clean history
+`DiscardTaintedState` resets only such history: a settled capture's
+`BeginConvergence` and every capture frame call it (§3), and clean history
 keeps its samples. The window shows the reset as one period of reconvergence
 (a single-sample image refining over eight frames) of a view that had an
 external screen in it, while that screen shows its capture fill.

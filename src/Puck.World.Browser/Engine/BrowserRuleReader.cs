@@ -221,7 +221,7 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             value: -1L
         )
     );
-    // No seat sits at a table here: none is engaged, and no pointer or body names a cell or a side.
+    // No seat sits at a board here: not engaged, and no pointed cell or side.
     RuleFact IWorldFacts.Read(BoardSeatOperand operand) => Record(
         operand: nameof(BoardSeatOperand),
         fact: RuleFact.Finite(
