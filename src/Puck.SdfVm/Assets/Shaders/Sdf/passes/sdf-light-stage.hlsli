@@ -2,11 +2,12 @@
 // nothing on a miss. It samples a bound screen, loads the material, lights the surface through the one light interface (sdf-light.hlsli), each
 // slotted light under its own shadow, adds the irradiance volume's indirect light, applies the editor grid, and reports
 // the pixel's coverage: one for a hit, zero on a miss. It also reports the pixel's reactivity for a temporal view's
-// resolve: one for a display screen, whose content changes on its own and would trail behind a moving sprite through
-// any history (its image is read along the unjittered ray, so its samples agree from frame to frame), zero for
-// an opening, and for emission, which the material model cannot tell animated from steady, the share of the color the
-// material that actually shaded the pixel emits. The sky,
-// the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
+// resolve: one for a display screen's picture, whose content changes on its own and would trail behind a moving sprite
+// through any history (its image is read along the unjittered ray, so its samples agree from frame to frame), zero for
+// an opening and for every other surface, emissive ones included: an emission that changes is a shading change the
+// resolve's clip shows at once, and a steady one, a power light smaller than a pixel, needs the history the resolve
+// gathers over the jitter. The sky, the distance fog and the volumes are the composite's, after this stage; the debug
+// views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
 #define PASSES_SDF_LIGHT_STAGE_HLSLI
 #include "../shade/sdf-environment.hlsli"
@@ -51,7 +52,6 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
 // view shades finally, and the material the pixel shades with.
 float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
-    float3 emission = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;
     reactivity = 0.0;
@@ -203,8 +203,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
             color = selfEmission + (color - selfEmission) * attenuation;
-            // Use the material that actually shaded this pixel, after its layers.
-            emission = selfEmission;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline).
             if (curvatureShading) {
@@ -219,8 +217,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
     }
 
-    static const float3 Luma = float3(0.2126, 0.7152, 0.0722);
-    reactivity = max(reactivity, saturate(dot(emission, Luma) / max(dot(color, Luma), 1.0e-4)));
     return color;
 }
 

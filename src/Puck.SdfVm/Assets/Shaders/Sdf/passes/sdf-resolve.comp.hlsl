@@ -12,11 +12,16 @@
 // - the pixel's motion is the nearest-depth sample's, reprojected through sdfReprojection's modules, or, where the 3x3
 //   saw no surface, the camera's rotation alone;
 // - the history at the moved position is rejected when the receiver the history surface there names (the tap nearest
-//   that pixel's center) matches no 3x3 tap's identity within SdfHistoryDepthTolerance of its ray distance; the pixel then shows the spatial path at this
-//   frame's sample grid and its history restarts from this frame's samples;
+//   that pixel's center that is not a sub-pixel feature) matches no 3x3 tap's identity within SdfHistoryDepthTolerance
+//   of its ray distance; the pixel then shows the spatial path at this frame's sample grid and its history restarts from
+//   this frame's samples;
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
 //   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through, and a
-//   reactive pixel shows it by its reactivity.
+//   reactive pixel shows it by its reactivity;
+// - a sub-pixel feature (sdfResolveFeature) the footprint showed within the last jitter period widens the box to its
+//   color while the surface stands still, so the mean the jitter gathers over the feature survives the frames that miss
+//   it, as a supersampled image holds it, and the history saturates at SDF_HISTORY_FEATURE_WEIGHT_CAP rather than one
+//   period, so the mean barely pulses with the jitter.
 // The first frame of an epoch reads no history and writes the spatial path's color and transport word, computed at the
 // one site below that both paths run, so it is the spatial path's frame exactly. Where the output has the render grid's
 // extent and no jitter, each pixel is its render sample copied whole, and its transport word carries that sample's ray
@@ -33,13 +38,24 @@
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
 // The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords): the identity
-// of the tap nearest the pixel's center, then its ray distance and the gathered weight as two half floats (the distance
-// low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
-// SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport). The weight saturates at
-// SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples (SdfTemporalSamples.Period).
+// of the receiver tap nearest the pixel's center, then its ray distance and the gathered weight as two half floats (the
+// distance low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
+// SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport), then the remembered feature:
+// its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
+// left above it, zero for none. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
+// (SdfTemporalSamples.Period), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
 // The falloff of the Gaussian a sample is weighted by, over its squared distance in output pixels from the output
 // pixel's center: 1 / (2 * 0.35^2), a reconstruction about as wide as one output pixel's box.
 static const float SdfResolveFilterFalloff = 4.08;
+// A render sample is a sub-pixel feature when, in at least three of the four directions through it (across, down and
+// the two diagonals), both of its neighbours lie this share of the brighter luma below it, or it below them: a dot in all
+// four, a line thinner than a sample in the three its own direction is not. The corner of an edge keeps a neighbour on its
+// own side in at least two directions, so an edge sweeping across a surface, a shadow's, never counts.
+static const float SdfResolveFeatureContrast = 0.5;
+// The most, in output pixels, a pixel's history may have moved and still carry its remembered feature into the box: a
+// feature moves with its surface through the reprojection, but one that moves over a surface, a glint under a turning
+// camera, must be clipped like any change.
+static const float SdfResolveFeatureTravel = 0.05;
 
 uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
     return (uint2)clamp(pixel, int2(0, 0), (int2(dims) - 1));
@@ -60,6 +76,31 @@ float3 sdfFromYCoCg(float3 color) {
 // difference into a luminance change: moving toward the box's center couples those otherwise independent corrections.
 float3 sdfClipToBox(float3 color, float3 boxMin, float3 boxMax) {
     return clamp(color, boxMin, boxMax);
+}
+// Whether the luma at the center of a 5x5 window is a sub-pixel feature (SdfResolveFeatureContrast) against its eight
+// neighbours, and its contrast against their mean. `window` is row-major, `at` the index of the sample tested, one of
+// the inner nine.
+bool sdfResolveFeature(float window[25], uint at, out float contrast) {
+    float center = window[at];
+    uint above = 0u;
+    uint below = 0u;
+    float neighbours = 0.0;
+    // The four directions through the sample as window offsets: across, down, and the two diagonals.
+    const uint steps[4] = { 1u, 5u, 6u, 4u };
+
+    [unroll] for (uint direction = 0u; direction < 4u; direction++) {
+        float a = window[at + steps[direction]];
+        float b = window[at - steps[direction]];
+        float high = max(a, b);
+        float low = min(a, b);
+
+        neighbours += (a + b);
+        above += (((center - high) > (SdfResolveFeatureContrast * center)) ? 1u : 0u);
+        below += (((low - center) > (SdfResolveFeatureContrast * low)) ? 1u : 0u);
+    }
+    contrast = abs(center - (neighbours * 0.125));
+
+    return ((above >= 3u) || (below >= 3u));
 }
 // The history at a continuous output position, the first texel's center at zero: Catmull-Rom over the sixteen nearest
 // texels, each clamped to the image, the color from the history color and the transport from the history surface with
@@ -181,23 +222,48 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint hitIdentity = 0u;
     uint hitRecord = 0u;
     uint2 hitPixel = uint2(0u, 0u);
+    // The 5x5 render samples about the nearest one, their luma for the feature test and the inner nine's colors.
+    float window[25];
+    float4 colors[9];
+
+    [unroll] for (int wy = 0; wy < 5; wy++) {
+        [unroll] for (int wx = 0; wx < 5; wx++) {
+            float4 color = currentColor.Load(int3(sdfResolveClamp((nearest + int2(wx - 2, wy - 2)), render), 0));
+
+            window[(wy * 5) + wx] = sdfToYCoCg(color.rgb).x;
+            if ((wx >= 1) && (wx <= 3) && (wy >= 1) && (wy <= 3)) {
+                colors[((wy - 1) * 3) + (wx - 1)] = color;
+            }
+        }
+    }
     // Each 3x3 tap's surface identity (0 on a miss) and ray distance, and the receiver the history keeps for this pixel:
-    // the tap nearest its center. Validating against every tap keeps an edge's history whichever side of it the jitter
-    // puts the nearest-depth tap on; the clip below still bounds what the history contributes.
+    // the tap nearest its center that is not a feature, so a feature the jitter leaves next frame does not reject a
+    // history the surface under it carries. Validating against every tap keeps an edge's history whichever side of it the
+    // jitter puts the nearest-depth tap on; the clip below still bounds what the history contributes. The feature the
+    // pixel shows this frame is the most contrasting of its unreactive feature taps.
     uint identities[9];
     float distances[9];
     float centerWeight = -1.0;
     uint centerIdentity = 0u;
     float centerT = 0.0;
+    float nearestWeight = -1.0;
+    uint nearestIdentity = 0u;
+    float nearestT = 0.0;
+    bool sighted = false;
+    float sightedContrast = 0.0;
+    float3 sightedYCoCg = float3(0.0, 0.0, 0.0);
 
     [unroll] for (int dy = -1; dy <= 1; dy++) {
         [unroll] for (int dx = -1; dx <= 1; dx++) {
             uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
-            float4 color = currentColor.Load(int3(pixel, 0));
+            uint tap = ((uint)((dy + 1) * 3) + (uint)(dx + 1));
+            float4 color = colors[tap];
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
             float4 transport = float4(0.0, 0.0, 0.0, 0.0);
+            float contrast;
+            bool feature = sdfResolveFeature(window, (uint)(((dy + 2) * 5) + (dx + 2)), contrast);
 
             float tapReactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
 
@@ -208,15 +274,24 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             if (surface) {
                 transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
             }
-            uint tap = ((uint)((dy + 1) * 3) + (uint)(dx + 1));
 
             identities[tap] = (surface ? visibility.identity : 0u);
             distances[tap] = (surface ? visibility.t : 0.0);
-            if (weight > centerWeight) {
-                centerWeight = weight;
+            if (weight > nearestWeight) {
+                nearestWeight = weight;
                 reactive = saturate(tapReactive);
+                nearestIdentity = identities[tap];
+                nearestT = distances[tap];
+            }
+            if (!feature && (weight > centerWeight)) {
+                centerWeight = weight;
                 centerIdentity = identities[tap];
                 centerT = distances[tap];
+            }
+            if (feature && (tapReactive <= 0.0) && (contrast > sightedContrast)) {
+                sighted = true;
+                sightedContrast = contrast;
+                sightedYCoCg = ycocg;
             }
             if (surface && (!hit || (visibility.t < hitT))) {
                 hit = true;
@@ -236,10 +311,19 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             transportMax = max(transportMax, transport);
         }
     }
+    if (centerWeight < 0.0) {
+        centerIdentity = nearestIdentity;
+        centerT = nearestT;
+    }
 
     accepted = false;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
+    // The feature the history remembers for this pixel, with the frames it has left, and how far, in output pixels, the
+    // history moved to reach the pixel.
+    float3 featureYCoCg = float3(0.0, 0.0, 0.0);
+    uint featureLife = 0u;
+    float travel = 1.0e9;
 
     if ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0)) {
         float4 currentRows[6];
@@ -275,17 +359,22 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float2 motion = ((previousPixel / passGroup.previousView[4].xy) - (currentPixel / float2(render)));
 
             historyPosition = (((float2(id.xy) + 0.5) + (motion * float2(extent))) - 0.5);
+            travel = length(motion * float2(extent));
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
                 uint word = (SDF_HISTORY_SURFACE_WORDS * ((texel.y * extent.x) + texel.x));
                 uint historyIdentity = historySurface[word];
                 uint distanceAndWeight = historySurface[word + 1u];
                 float historyT = f16tof32(distanceAndWeight & 0xFFFFu);
+                uint featureWordA = historySurface[word + 4u];
+                uint featureWordB = historySurface[word + 5u];
 
                 // A tap's distance in the preceding view: its own, shifted by the camera's move along the nearest hit.
                 float shift = (hit ? (previousT - hitT) : 0.0);
 
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);
+                featureYCoCg = float3(f16tof32(featureWordA & 0xFFFFu), f16tof32(featureWordA >> 16u), f16tof32(featureWordB & 0xFFFFu));
+                featureLife = (featureWordB >> 16u);
                 [unroll] for (uint tap = 0u; tap < 9u; tap++) {
                     accepted = (accepted || ((identities[tap] == 0u)
                         ? (historyIdentity == 0u)
@@ -295,12 +384,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         }
     }
 
-    // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood and
-    // weighed down by reactivity, then this frame's samples, the transport with the color's weights. While less than one
-    // sample's full weight is gathered, the spatial path shows through.
+    // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened
+    // to the feature the pixel remembers while its surface stands still, and weighed down by reactivity, then this
+    // frame's samples, the transport with the color's weights. While less than one sample's full weight is gathered,
+    // the spatial path shows through.
     float historyWeight = 0.0;
     float4 history = float4(0.0, 0.0, 0.0, 0.0);
     float4 historyTransport = float4(0.0, 0.0, 0.0, 0.0);
+    float weightCap = SDF_HISTORY_WEIGHT_CAP;
 
     if (accepted) {
         float4 previous;
@@ -310,9 +401,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
         accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
         if (accepted) {
-            historyWeight = (clamp(historyWeightGathered, 0.0, SDF_HISTORY_WEIGHT_CAP) * (1.0 - reactive));
+            bool remembered = (hit && (featureLife != 0u) && (travel <= SdfResolveFeatureTravel) && all(isfinite(featureYCoCg)));
+            float3 clipMin = (remembered ? min(boxMin, featureYCoCg) : boxMin);
+            float3 clipMax = (remembered ? max(boxMax, featureYCoCg) : boxMax);
+
+            weightCap = (remembered ? SDF_HISTORY_FEATURE_WEIGHT_CAP : SDF_HISTORY_WEIGHT_CAP);
+            historyWeight = (clamp(historyWeightGathered, 0.0, weightCap) * (1.0 - reactive));
             history = float4(
-                sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax)),
+                sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), clipMin, clipMax)),
                 clamp(previous.a, coverageMin, coverageMax)
             );
             historyTransport = clamp(previousTransport, transportMin, transportMax);
@@ -326,14 +422,23 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
+    // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
+    // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.
+    float3 writtenFeature = (sighted ? sightedYCoCg : featureYCoCg);
+    uint writtenLife = (sighted ? SDF_TEMPORAL_PERIOD : ((accepted && (featureLife != 0u)) ? (featureLife - 1u) : 0u));
 
+    if (!reusable || !all(isfinite(writtenFeature))) {
+        writtenLife = 0u;
+    }
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = centerIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, SDF_HISTORY_WEIGHT_CAP) : 0.0) << 16u));
+    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, weightCap) : 0.0) << 16u));
     uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
 
     historySurfaceRW[word + 2u] = historyTransportWords.x;
     historySurfaceRW[word + 3u] = historyTransportWords.y;
+    historySurfaceRW[word + 4u] = (f32tof16(writtenFeature.x) | (f32tof16(writtenFeature.y) << 16u));
+    historySurfaceRW[word + 5u] = (f32tof16(writtenFeature.z) | (writtenLife << 16u));
 }
 
 [numthreads(8, 8, 1)]

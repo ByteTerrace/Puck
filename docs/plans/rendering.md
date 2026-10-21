@@ -4707,8 +4707,8 @@ resolution, and stay there.
 - **Content that motion cannot describe is reactive.** The views pass, the only
   writer, writes each pixel's reactivity into a one-channel `reactivity` image
   of its own at the render extent, never into the working color's alpha, which
-  carries coverage: a screen is fully reactive and an emissive surface is
-  reactive by its emissive share (`passes/sdf-light-stage.hlsli`). `resolve`
+  carries coverage: a screen's picture is fully reactive and nothing else is,
+  emission included (`passes/sdf-light-stage.hlsli`). `resolve`
   weights history down by it for color and coverage alike, and consumes it:
   nothing after `resolve` reads it, and a view with reconstruction off writes
   none. The composite alone integrates bounded volumes, after `resolve`, so a
@@ -4997,9 +4997,10 @@ counted rows recorded in the same change.
      extent and writes this frame's. It weights the 3x3 render samples around
      each output pixel, reprojects history through `sdfReprojection`, rejects it
      where the identity differs or the ray distance differs by more than 5%,
-     clips it to the neighbourhood's YCoCg box and caps its weight at eight
-     samples; `reactivity`, written by `views` alone (a screen is fully
-     reactive, an emissive surface by its emissive share), lowers that weight.
+     clips it to the neighbourhood's YCoCg box, widened to a sub-pixel feature
+     the pixel remembers for one period, and caps its weight at eight samples,
+     thirty-two while it carries a feature; `reactivity`, written by `views`
+     alone (a screen's picture is fully reactive), lowers that weight.
      An epoch's first frame, and any pixel whose history is rejected, is the
      spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
      one period after its last change. `place` sharpens a source at its rect's
@@ -5937,7 +5938,7 @@ rows in `src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
   cloud never ghosts, and a visual-only change neither resets nor dirties any
   history: a converged view keeps standing while its sky moves, because only
   `sky` and `composite` run. Bounded media are the composite's, so P15's
-  reactivity image covers screens and animated emission only.
+  reactivity image covers screens only.
 
 **Build sequence.** Each step lands alone, in order, with its counted rows and
 its re-recorded parity stations or canaries in the same change. Every step adds
