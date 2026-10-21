@@ -30,7 +30,8 @@ let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", 
 let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
 let foldRow = ["shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped", "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m", "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"]
 let formRow = ["shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle", "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid", "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"]
-let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color", "shape-glass"]
+let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color"]
+let glassRow = ["shape-glass"]
 let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend", "motion-carve", "motion-mirror", "motion-polar"]
 let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
 let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
@@ -39,13 +40,14 @@ let foldZ = 33
 let surfaceZ = 25
 let motionZB = 30
 let warpZ = 33
+let glassZ = 37
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
   { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
   { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
   { level: 2, title: "LEVEL 2  FORM AND SURFACE", what: "forms, surfaces, warps II" }
-  { level: 3, title: "LEVEL 3  MOTION", what: "motion through the stamp pool" }
+  { level: 3, title: "LEVEL 3  MOTION AND GLASS", what: "motion through the stamp pool, glass" }
 ]
 
 // Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
@@ -58,10 +60,11 @@ let galleryRows = [
   { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
   { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
   { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
-  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text, glass" }
+  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
   { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
   { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
   { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
+  { title: "GLASS", level: 3, z: glassZ, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost" }
 ]
 
 // A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
