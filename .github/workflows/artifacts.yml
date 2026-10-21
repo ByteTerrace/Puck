@@ -80,53 +80,53 @@ jobs:
       - name: Capture compiled outputs and their source identity
         run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll artifacts capture
       - name: Upload compiled Windows assemblies
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           compression-level: 0
           if-no-files-found: error
           name: compiled-windows
           path: artifacts/compiled-windows.zip
       - name: Upload NuGet packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           compression-level: 0
           if-no-files-found: error
           name: nuget-packages
           path: artifacts/packages/*.*nupkg
       - name: Upload the compiled shader bytecode
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: shader-bytecode-windows
           path: artifacts/shader-bytecode
       - name: Upload the Functions payload and its source identity
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           include-hidden-files: true
           name: runtime-payloads
           path: artifacts/runtime
       - name: Upload HGB and AGB binaries
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: emulator-batteries
           path: artifacts/batteries
       - name: Upload World test assemblies
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: world-verification
           path: artifacts/world-tests
       - name: Upload the World desktop build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: world-windows-framework-dependent
           path: artifacts/world
       - if: always()
         name: Upload build diagnostics
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           compression-level: 0
           if-no-files-found: warn

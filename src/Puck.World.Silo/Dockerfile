@@ -31,7 +31,7 @@ RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,r
 
 # The official caddy image, through the Docker Official Images mirror on ECR Public rather than Docker Hub, whose
 # anonymous pulls rate-limit and time out on shared CI runners; the index digest pins the exact build.
-FROM public.ecr.aws/docker/library/caddy:2.11.6@sha256:3422ce6de165df66534f9b9ba50efaf457114ec961763cc52f5dbdaac2972d73 AS tls
+FROM public.ecr.aws/docker/library/caddy:2.11.7@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af AS tls
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
 RUN setcap -r /usr/bin/caddy
 
