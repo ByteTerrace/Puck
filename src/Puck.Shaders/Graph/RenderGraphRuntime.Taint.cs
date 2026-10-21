@@ -38,33 +38,46 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     private void NotePackageTaint(int index) {
-        if (HasPackageTaint(index: index)) {
-            NoteTaint(index: index, producer: $"{m_set.Instances[index].Name}'s retained package state", tainted: true);
+        if (PackageTaintOf(index: index) is { } retained) {
+            NoteTaint(index: index, producer: retained, tainted: true);
         }
     }
     // Before rendering, retained taint guards capture forwarding. Only the successfully submitted package state
     // joins the new output's taint: a clean render may replace the previous tainted history in this same frame.
-    private bool HasPackageTaint(int index) {
-        if (m_graphs[index] is not { } graph) { return false; }
+    private bool HasPackageTaint(int index) => (PackageTaintOf(index: index) is not null);
+    // The retained package state of an instance that holds unfilled external content, named by the package that holds it
+    // (IRenderGraphPackageFactory.TaintOf), or null when none does. It builds a string only while one does.
+    private string? PackageTaintOf(int index) {
+        if (m_graphs[index] is not { } graph) { return null; }
         var name = m_set.Instances[index].Name;
         var passes = graph.Pipeline.Plan.Passes;
 
         for (var position = 0; (position < passes.Count); position++) {
-            var pass = passes[position];
-
-            if ((pass.Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(instance: name)) {
-                return true;
+            if ((passes[position].Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory) &&
+                (factory.TaintOf(instance: name) is { } retained)) {
+                return $"{name}'s retained package state ({retained})";
             }
         }
-        return false;
+        return null;
     }
     // Why a capture of an instance waits on taint, or null when it does not. Outside a capture frame a tainted instance is
     // expected; the capture frame renders it again, so only a taint that frame could not clear keeps a capture waiting.
-    private string? TaintReasonOf(int index, string name) => ((m_capturing &&
-        ((m_taintedReads[index] ?? (HasPackageTaint(index: index) ? $"{name}'s retained package state" : null)) is { } tainting))
-        ? $"the instance '{name}' has rendered only over external content from '{tainting}' that the capture gate did not fill"
+    // The reason follows the tainted reads down to the state that holds the external content, so it names the cause.
+    private string? TaintReasonOf(int index, string name) => ((m_capturing && ((m_taintedReads[index] ?? PackageTaintOf(index: index)) is { } tainting))
+        ? $"the instance '{name}' has rendered only over external content from '{tainting}'{TaintSourceOf(producer: tainting)} that the capture gate did not fill"
         : null
     );
+    // Where a tainting producer's own taint came from, followed through the instances that passed it on.
+    private string TaintSourceOf(string producer) {
+        var text = "";
+
+        for (var (step, next) = (0, m_set.IndexOf(name: producer)); ((step < m_set.Instances.Count) && (next >= 0) && (m_taintedReads[next] is { } source)); step++) {
+            text += $", which took it from '{source}'";
+            next = m_set.IndexOf(name: source);
+        }
+
+        return text;
+    }
     // Whether an instance's latest output is tainted: an external producer's as its latest acquisition said, a graph
     // instance's as its latest render bound.
     private bool IsTainted(int index) => ((m_producers[index] is not null)
@@ -133,7 +146,7 @@ public sealed partial class RenderGraphRuntime {
             }
 
             m_visited[index] = true;
-            DiscardPresentedTaint(index: index);
+            DiscardCaptureTaint(index: index);
 
             var instance = m_set.Instances[index];
 

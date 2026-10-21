@@ -23,7 +23,8 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Application storage — one table, one derivation
 - `Compose` = check Control → rebuild the set → sync the latch
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
-- The emulator view — the camera frames the engaged screen, then shows its source
+- Tabletops — the context button sits a seat at a board
+- The framed screen — the camera frames the engaged screen's picture as an emulator shows it
 - `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 - `Dissolve` — three outcomes, no repair
 - The one fold
@@ -48,7 +49,7 @@ recipient-filtered state observations, and authoritative readbacks require a ful
 
 `ControlApplication(GrantSubject Target, string? Kit, ChannelReachMask Reach)`.
 
-- **target** — `Screen(index)` (a booted machine's pad) or `Body(index)` (its
+- **target** — `Screen(index)` (a booted machine's pad), `Placement(id)` (a tabletop) or `Body(index)` (its
   own body, or another body under possession).
 - **kit** — the `WorldKit` name whose `pad` map assigns the delivered channels
   their meaning at the target, or `null` for passthrough (every reached ordinal
@@ -232,61 +233,131 @@ identical decision at the identical tick.
 **Scope today**: local seats only (`AdvanceSeats`, indices 0..3) —
 `AdvanceSimulated`'s peers/inhabitants are not probed.
 
-## The emulator view — the camera frames the engaged screen, then shows its source
+## Tabletops — the context button sits a seat at a board
+
+A placement's board facet may carry an `engage` block (`WorldTabletopEngage`:
+`channel`, `radius`, `pitch`, `margin`, `surface`). The same probe
+(`ResolveEngageProbes`) considers it beside the screens and takes the nearest
+target on the ground plane (screens first on a tie): the board's centre
+(`WorldTabletopFrame.Centre`, the anchored topology's footprint) within
+`radius`, the channel declared, and `CheckEngage` passing for
+`GrantSubject.Placement(<id>)`. The probe composes a CAPTURING application onto
+`placement:<id>` (Control over a placement is a legitimate subject,
+`WorldGrants.IsLegitimateSubject`; seats hold it through their seeded
+`control all`), so the avatar idles exactly as on a screen, and
+`ResolveLeaveProbe` leaves on the same channel. A table takes no occupancy
+check: several seats may sit at one. `body.engage placement:<id>` composes the
+same application by hand, under the same policy (`CheckTabletopEngagePolicy`).
+`FoldTick` routes a placement member nowhere: the game is the world's rules,
+which read the seat's channels (`channel(<seat>, <name>)`) and three fixed-point
+seat operands — `board(engaged, <row>, <seat>)` (the set names the placement),
+`board(pointer, <row>, <seat>)` (the cell `PlayerIntent.SourceRay` meets on the
+plane `surface` above the topology origin, `WorldTabletopFrame.TryPointerCell`)
+and `board(side, <row>, <seat>)` (the board edge the body stands nearest,
+`SideOf`, 0 -Z, 1 +X, 2 +Z, 3 -X) — through `BoardSeatOperand`
+(`WorldRuleHost.ReadBoardSeat`). The windowed host casts the OS pointer whenever
+the world declares an engageable tabletop (`WorldPointerRayCapture`), so a
+seated seat's ray reaches the rules every tick.
+
+Presentation: `WorldSeatContextSync` publishes the seated placement into
+`WorldPerceptionAnchor.EngagedTabletop` and the `engagement` context family's
+`tabletop` state (instead of `engaged`), so a binding overlay's context row
+`{engagement, tabletop, <group>}` swaps the seat to the table's controls; the
+seat camera eases to `WorldTabletopFraming`'s board view (the whole board from
+the seat's side at `pitch`, near plane at the board) on the rig's dynamics
+through `WorldFramingEase`. `TabletopEngagementLawTests` (Server) and
+`WorldTabletopFramingLawTests` (Client) hold the probe, the reads and the view;
+the debug world's chess table (`worlds/debug/chess.puck`, `chess.md`) is the
+worked game, and `chess-tests.puck`'s seated-player test plays it headless with
+`body.press` and `source.pointer.*` steps. A tabletop has no matte or screen
+fidelity: the board view stays the in-world look.
+
+## The framed screen — the camera frames the engaged screen's picture as an emulator shows it
+
+The engaged view is diegetic: the seat's own camera on the in-world screen,
+panned and zoomed until the window shows the console's picture the way a desktop
+emulator does, and easing out reveals the room around it. There is no separate
+2D image.
 
 A seat captured on a screen frames it: `WorldSeatContextSync.Publish` publishes
 the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
 `Applications` read (−1 while unengaged, mirrored or possessing), and
-`WorldFramePresenter.ResolveCamera` hands the row to the seat's
-`WorldScreenFraming` (`src/Puck.World.Client`). `TryFrame` puts the eye on the
-face normal (`cross(right, up)`), far enough that the glass fills the
-viewport's limiting axis exactly at the seat rig's field of view, and sets the
-camera's `Near` one slab thickness (`2 × halfDepth`) short of the glass, so the
-engaging avatar and anything else between eye and glass draws nothing. The
-seat's camera eases to it and back on the seat rig's own reported `dynamics`
-(the Moth's `camera-boom`); a rig with none cuts. The overlay fact
+`WorldFramePresenter.Dress` hands the row to the seat's `WorldScreenFraming`
+(`src/Puck.World.Client`), refitted from the window's size every frame:
+
+- **The picture, not the slab.** `PictureHalfExtents` is the glass inside its
+  bezel band (`WorldScreenMappings.Glass`); a window-projection session screen
+  has no bezel and uses the whole face. A 4:3 glass showing 256×240 carries the
+  console's 8:7 pixels by its own shape: there is no pixel-aspect field and no
+  crop.
+- **The matte.** `Matte` is the rect of the seat's view the picture fills: each
+  source row the largest whole number of window pixels that fits the view
+  vertically and horizontally, the width following the picture's aspect, centred
+  on whole pixels; below 1× it fills the limiting axis. A 1280×900 window shows
+  a 256×240 source at 3× (720 rows), 960 columns wide on a 4:3 glass and 768
+  on a square-pixel one.
+- **The camera.** `TryFrame` puts the eye on the face normal (`cross(right,
+  up)`), far enough that the picture's height is the matte's share of the
+  view's at the seat rig's field of view, with `Near` one slab thickness
+  (`2 × halfDepth`) short of the glass so the avatar and anything else between
+  eye and glass draws nothing. It looks at the picture's centre shifted by
+  `MatteOffset`, the half pixel a matte centred on whole pixels sits off the
+  view's centre when a gutter is odd, so the picture's edges land on the
+  matte's pixel edges. The camera eases to it and back on the seat rig's own
+  reported `dynamics` (the Moth's `camera-boom`); a rig with none cuts.
+- **The settled view shows only its matte.** Once the ease settles
+  (`WorldScreenFraming.Framed`), the seat's view keeps its whole slot and
+  renders at native scale (its `RenderScale` and dynamic resolution pinned to
+  1), and `WorldViewGraphHost.PlaceViews` places it on the matte with the
+  `place` pass's `crop` set to the matte's part of its output, a crop of the
+  rect's own pixel extent, so the matte's pixels are copied one for one. What
+  no view covers is the root's letterbox, written in the route's
+  `display.fill`. A crop rather than a matte-sized view keeps the view's
+  extent exact: the render graph quantizes an arbitrary footprint
+  (`RenderGraphExtent`), while a whole display or a half is exact.
+- **Fidelity.** The ease's weight is the view's screen fidelity
+  (`SdfViewSnapshot.ScreenFidelity`, the `screenFidelity` pass-block value, and
+  the `place` pass's `fidelity`). At 1 the glass's grille, scanlines, bloom,
+  vignette and glint are off and its bezel band is a hard edge
+  (`shade/sdf-environment.hlsli`), the views stage and composite clear the
+  atmosphere's transmittance, in-scatter and bounded volumes, and the root's
+  `place` pass writes the view's native source past its sharpen and tone map.
+  Every view that frames nothing carries 0, the in-world look; leaving fades it
+  all back in as the camera pulls back.
+
+The route authors only the matte's surround (`screens[*].route.display`,
+`WorldScreenDisplay`): `fill` (`#RRGGBB`, default black), refused by name in
+`ValidateDisplay`, and only on an engageable route. Emulator-style borders or
+filler images around the matte belong there when they are built.
+`world.screens` echoes `display:fill=…` per engageable screen. The overlay fact
 `ScreenEngaged` (`WorldOverlayFacts`) reads the same anchor, so a panel, the
-cursor or the bar can show or step aside while engaged.
+cursor or the bar can step aside while engaged.
 
-Once the ease settles (`WorldScreenFraming.Framed`), the seat's view cuts to the
-2D emulator view, the way a desktop emulator shows a console: the screen's
-source alone, cropped, at the display aspect, fitted whole and centred in the
-seat's view, with a fill colour around it and no device, bezel or sky. Leaving
-cuts back to the framed 3D camera, which then eases out. The route authors it
-(`screens[*].route.display`, `WorldScreenDisplay`): `crop { top right bottom
-left }` in source pixels, `pixelAspect` (one source pixel's width over its
-height, within 1/4..4) and `fill` (`#RRGGBB`); absent is no crop, square pixels
-and black, and only an engageable route may author one (all refused by name in
-`ValidateDisplay`). `world.screens` echoes `display:crop=t,r,b,l,pixelAspect=…,
-fill=…` per engageable screen. The pieces:
-
-- `WorldViewGraphHost.PanesOf(views, screens)` adds every engageable screen's
-  source instance to the synthesized root's panes, after the document's, so a
-  `place` pass reads it and draws last; an unplaced pass draws nothing.
-- `WorldFramePresenter` lists each framed seat's screen and view region, and
-  `WorldViewGraphHost.PlaceEngaged` places the pass over it through
-  `WorldEmulatorView.TryFit` (crop, pixel aspect, Contain fit) with the
-  `place` package's `crop`, `surround` and `fill` config, and `pixelated` (sharp
-  bilinear, the glass's nearest-source reconstruction) for a `Nearest` screen.
-- The pass publishes as a pane (`world.view.panes` lists it with its crop), so
-  the picker answers it; the cursor never outlines it (`ShowsEngaged`).
+- `WorldViewGraphHost.FrameScreen` records each settled seat's screen and matte,
+  and `PublishFramed` publishes the screen's own mapping (`Screens`) on the
+  matte as the last pane, its warp dropped because the matte is the picture: the
+  picker maps a display point there to the source pixel the ray meets, and the
+  cursor never outlines it (`ShowsFramed`).
 - An engageable screen with no machine engages when it shows a producer
-  (`WorldTick.ShowsEngageTarget`): its pad reaches nothing, and the emulator
-  view shows its image.
-- A window capture's emulator view is a passthrough candidate: the local user's
-  physical press on it opens it (`WorldSourcePassthrough`, only the window pump
-  reaches that filter), the press reaches the window and takes the keyboard,
-  and the source closes once the view stops showing it. A console
-  `body.engage`, an addon's or a scripted press engages without opening it
+  (`WorldTick.ShowsEngageTarget`): its pad reaches nothing, and the framed
+  picture shows its image.
+- A framed window capture is a passthrough candidate: the local user's
+  physical press on its picture opens it (`WorldSourcePassthrough`, only the
+  window pump reaches that filter), the press reaches the window and takes the
+  keyboard, Control+Alt+Escape returns the keyboard to the game, and the source
+  closes once the seat no longer frames the screen. A console `body.engage`, an
+  addon's or a scripted press engages without opening it
   ([decision](../../../../docs/decisions/rendering.md)).
 
-Known limits: one place pass per source instance, so two seats framing the same
-screen show it in the first seat's view only; the seat's 3D view still renders
-beneath the emulator view; per-console theming (bezel art, border images) is
-not yet authored and lands on `WorldScreenDisplay`. `WorldScreenFramingLawTests`
-holds the fit, the near plane, the ease and the display fit;
-`WorldViewPaneMappingLawTests.Engaged` the placement and the passthrough
-press.
+Known limits: the matte cuts in when the ease settles and out when it starts
+back, while the treatment fades over the ease; the uncovered display takes the
+first framed seat's fill. `WorldScreenFramingLawTests` holds the picture, the
+matte, the whole-pixel landing, the near plane and the ease;
+`WorldViewPlacementLawTests` the matted placement;
+`WorldViewPaneMappingLawTests.Engaged` the framed mapping and the passthrough
+press; `SdfFrameBlockLawTests` the fidelity's pass-block member. Three-or-more
+seat layouts whose slots are not a whole display or a half render at a
+quantized extent, so their framed picture is resampled.
 
 ## `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 

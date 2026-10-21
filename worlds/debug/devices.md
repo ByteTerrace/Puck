@@ -1,12 +1,13 @@
 # Debug world device row
 
-The debug world shows one of each gaming device the World hosts, on a row of
-labelled plinths in the gallery hall's lobby ([`shapes.md`](shapes.md#the-hall)),
-on its level 0 floor at z = 28, 2.5 m apart and facing -Z, toward the entrance,
-so their screens light the lobby's floor and walls; the lobby's room lights
-start off so that light shows, and its wall switch or `gallery.lights 0 on`
-turns them on ([the hall's lighting](shapes.md#the-hall)). Each plinth carries the
-device's own name. `debug.go devices` stands you in front of the middle one.
+The debug world shows one of each gaming device the World hosts, at the size of
+the real thing, on a row of labelled stands in the gallery hall's lobby
+([`shapes.md`](shapes.md#the-hall)), on its level 0 floor at z = 28, 2.5 m apart
+and facing -Z, toward the entrance, so their screens light the lobby's floor and
+walls; the lobby's room lights start off so that light shows, and its wall
+switch or `gallery.lights 0 on` turns them on
+([the hall's lighting](shapes.md#the-hall)). Each stand carries the device's own
+name. `debug.go devices` stands you in front of the middle one.
 [`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
 it running, and each lists the folders its swappable content comes from in
@@ -18,6 +19,49 @@ git-ignored `roms/` at the repository root.
 | 17.5 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
 | 15 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
 | 12.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
+
+## The devices
+
+Each device is modelled at its real size in millimetres, as its own prototype
+beside its stand's, so the bake meshes it at its own scale (a 0.5 mm cell on
+the handhelds) rather than at the stand's:
+
+| Device | Body | On | Screen glass (exactly the picture) |
+|---|---|---|---|
+| Humble Gaming Brick: a Color brick in clear atomic orange, cartridge in its top, leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm | a 0.4 m square plinth 1.15 m tall | 160 by 144 at 0.275 mm square pixels: 44 by 39.6 mm |
+| Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed | a plinth like the brick's | 240 by 160 at 0.255 mm square pixels: 61.2 by 40.8 mm |
+| Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 14-inch television with rabbit ears | console 160 by 168 by 64 mm; television cabinet 370 by 330 mm, 375 mm deep with the tube's housing | a walnut cart whose top is 0.55 m up | 256 by 240 at 1 by 0.875 mm (8:7) pixels: 256 by 210 mm, so the 224 lines a set shows are a 256 by 196 mm, 4:3 picture |
+
+The plinths put a handheld's screen about 1.3 m up, turned up toward the Moth's
+eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall), and the
+cart puts the television's picture 0.79 m up, where a set stands on a low
+table. The stands are solid and the devices are not: the analytic contact
+provider collides each stand as its box.
+
+Each screen row's glass is exactly the picture, never the case: `halfWidth`
+is the source's width times the horizontal pixel pitch over 2, `halfHeight` its
+height times the vertical pitch over 2, as a thin slab (`halfDepth` 1 mm on the
+handhelds, 2 mm on the television) square to the device's face, `round: 0`.
+A screen's `origin` is the glass's front face (the slab runs back from it), and
+it stands 1 mm proud of the lens or glass round it (2 mm on the television): a
+face behind the lens's is hidden by it, and the device shows no picture until
+it is engaged. The
+handhelds' pitches are square; the television's horizontal pitch is its
+vertical pitch times 8/7, so the glass's own shape gives the console's 8:7
+pixels. The bezel, lens or tube glass round the picture is the device's own
+geometry, outside the glass.
+
+The Humble Gaming Brick's see-through shell is not real transparency: the
+renderer draws opaque surfaces. Each of its two shell slots carries a palette
+`inset`, a painted plane inside the case that the surface refracts the view onto
+(ior 1.49, acrylic) and shows in place of its own colour, under a clearcoat: the
+front's lies 7.5 mm under the face on the board, a ramp from the dark processor
+through the board to clear orange; the back's lies over the battery bay and
+paints its two cells. So the shell reads as orange plastic with a board and
+cells inside it, while what stands behind the brick (its rest, the plinth) does
+not show through it. The cost is the inset's shading arithmetic on the pixels
+those two slots cover (a refraction, a plane intersection and a four-stop
+ramp), with no extra march or pass.
 
 A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
 resolves when the world boots from its package in the checkout
@@ -69,8 +113,8 @@ The Humble Gaming Brick runs the Color model, which plays the forge's `cgb` and
 `dmg` cartridges alike; `device.model` switches a running brick to another
 revision (`dmg`, `mgb`, `sgb`, `agb` and the rest). A Color-only cartridge on
 a `dmg` model holds on the firmware logo, since its speed switch parks a
-monochrome processor. The Humble Gaming Deck is the NTSC NES console, a set
-above it showing the cartridge in its slot; its screen route names the
+monochrome processor. The Humble Gaming Deck is the NTSC NES console, the
+television beside it showing the cartridge in its slot; its screen route names the
 controller port an engaged seat plays (`controls`, port one), since the console
 has two.
 
@@ -110,8 +154,10 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
-| Frame the whole row | `view.override camera look 15 2.2 23.5 15 0.65 28`, then `view.override camera auto` |
-| Frame one device | `view.override camera look <x> 1.15 26.4 <x> 0.8 28` |
+| Frame the whole row | `view.override camera look 15 1.9 25.6 15 1 28`, then `view.override camera auto` |
+| Frame the Humble Gaming Brick, square to its face | `view.override camera look 17.5 1.41 27.64 17.5 1.27 28.02` |
+| Frame the Advanced Gaming Brick | `view.override camera look 15 1.46 27.66 15 1.26 28.01` |
+| Frame the deck and its television | `view.override camera look 12.5 1.2 26.9 12.5 0.72 28` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
 `advanced-gaming-brick` or `humble-gaming-deck`. `machine.state <instance>`
@@ -125,23 +171,20 @@ pad (the Moth's `interact` channel, which every screen route here names as its
 `engageChannel`). A press engages the nearest free device within its route's
 3 m (on the ground plane, the earlier in document order on a tie); no prompt shows, since the controller bar is the
 debug world's only on-screen UI. Engaging captures the seat, so the
-Moth stands still, and brings up the emulator view: the camera eases in until
-the device's screen fills the window's limiting axis, square-on, with
-everything between the camera and the screen (the Moth included) left out, and
-the binding bar and the cursor step aside. Once the camera settles, the window
-cuts to the console's picture alone, centred and as large as fits, on black,
-the way a desktop emulator shows it:
+Moth stands still, and the camera eases in on the device's screen, square-on,
+with everything between the camera and the screen (the Moth included) left out,
+while the binding bar and the cursor step aside. It frames the screen's picture,
+the glass inside its bezel, at the largest whole number of window pixels per
+source row that fits the window, its width following the glass's own shape, and
+as it settles the CRT look, the room's fog and the tone map fade away. Settled,
+the window is indistinguishable from a desktop emulator: the console's whole
+picture, centred, source-exact pixels and colours, on black. Resizing,
+maximizing or going full screen refits it at once.
 
-| Device | Picture shown | Pixels |
-|---|---|---|
-| Humble Gaming Brick | the whole 160 by 144 screen | square |
-| Advanced Gaming Brick | the whole 240 by 160 screen | square |
-| Humble Gaming Deck | 256 by 224, its 8 overscan lines cropped top and bottom | 8:7, so the picture is about 4:3 |
-
-Each screen route's `display` authors this (`crop`, `pixelAspect`, `fill`), and
-`world.screens` echoes it. Pixels stay crisp cells at any window size. The same
-button leaves the device: the window cuts back to the framed device and the
-camera eases back to the Moth. The device's pad does not play the context button, so it never
+Each screen route's `display` authors the black around the picture (`fill`),
+and `world.screens` echoes it. The same button leaves the device: the camera
+eases back to the Moth, and the screen's bezel, CRT look and the room fade back
+in around it. The device's pad does not play the context button, so it never
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,

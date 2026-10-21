@@ -1,8 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Presentation;
-using Puck.Abstractions.Sources;
 using Puck.Commands;
-using Puck.Hosting;
 using Puck.Input;
 using Puck.SdfVm;
 using Puck.World.Client;
@@ -12,10 +10,11 @@ namespace Puck.World.Presentation.Tests;
 
 public sealed partial class WorldViewPaneMappingLawTests {
     private static readonly NormalizedRect WholeDisplay = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
+    // The matte a framed screen's picture fills: the middle of the display.
+    private static readonly NormalizedRect Matted = new(Height: 0.5f, Width: 0.5f, X: 0.25f, Y: 0.25f);
 
-    // An engageable screen showing a test pattern, cropped 8 rows top and bottom at 8:7 pixels, its source scheduled at
-    // the pattern's extent.
-    private (WorldScreenMappingSet Screens, string Instance) EngageableScreen() {
+    // An engageable screen showing a test pattern.
+    private static (WorldScreenMappingSet Screens, string Instance) EngageableScreen() {
         var pattern = WorldImageProducerSettings.SourceOf(
             id: WorldImageProducerSettings.TestPatternId,
             settings: new WorldTestPatternSettings(
@@ -36,12 +35,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
                 Right: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitX),
                 Round: 0f,
                 Route: new WorldScreenRoute(
-                    Display: new WorldScreenDisplay(
-                        Crop: new WorldScreenDisplayCrop(Bottom: 8, Top: 8),
-                        PixelAspect: (8f / 7f)
-                    ),
-                    Engageable: true,
-                    EngageRadius: 3f
+                    EngageRadius: 3f,
+                    Engageable: true
                 ),
                 Source: pattern,
                 Up: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitY)
@@ -49,19 +44,10 @@ public sealed partial class WorldViewPaneMappingLawTests {
         );
         screens.Publish(images: new PatternImages(Height: ScreenSourceHeight, Width: ScreenSourceWidth));
 
-        var instance = screens.InstanceOf(screen: 0)!;
-
-        m_sources = [new RenderGraphSourceState(
-            Cadence: ImageSourceCadence.Static,
-            Height: ScreenSourceHeight,
-            Instance: instance,
-            Width: ScreenSourceWidth
-        )];
-
-        return (screens, instance);
+        return (screens, screens.InstanceOf(screen: 0)!);
     }
-    // One host frame with a lone whole-display view and, when `engaged`, the engaged screen's emulator view over it.
-    private void EngagedFrame(bool engaged) {
+    // One host frame with a lone whole-display view and, when `framed`, the screen framed on the matte.
+    private void FramedFrame(bool framed) {
         m_host.BeginFrame(
             tonemap: m_tonemap,
             views: m_document
@@ -73,12 +59,20 @@ public sealed partial class WorldViewPaneMappingLawTests {
             views: m_views
         );
 
-        if (engaged) {
-            _ = m_host.PlaceEngaged(
-                displayHeight: Display,
-                displayWidth: Display,
-                frame: WholeDisplay,
+        if (framed) {
+            m_host.FrameScreen(
+                region: Matted,
                 screen: 0
+            );
+            // A second seat framing the same screen publishes nothing more.
+            m_host.FrameScreen(
+                region: WholeDisplay,
+                screen: 0
+            );
+            // A screen that publishes no mapping publishes nothing.
+            m_host.FrameScreen(
+                region: WholeDisplay,
+                screen: 7
             );
         }
 
@@ -89,57 +83,46 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Schedule();
     }
 
-    // THE LAW: the synthesized root places every engageable screen's source after the document's panes, and a seat whose
-    // camera has framed that screen shows its source as an emulator view: its display's crop, at its pixel aspect,
-    // centred and whole inside the seat's view, published as a pane the picker answers, never outlined as a pane beside
-    // the view. A frame that places none publishes none.
+    // THE LAW: a screen a seat frames publishes its own mapping over the matte its picture fills, the glass's bezel left
+    // out since the matte is the picture, so a display point there maps to the source pixel the ray through the picture
+    // meets. It is never outlined as a pane beside the view, a steady frame publishes it without allocating, and a frame
+    // that frames nothing publishes none.
     [Fact]
-    public void AnEngagedScreensEmulatorViewShowsItsCropAtItsAspectOverTheSeatsView() {
+    public void AFramedScreenPublishesItsMappingOverItsMatte() {
         var (screens, instance) = EngageableScreen();
 
         m_host.Screens = screens;
         m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
-        EngagedFrame(engaged: true);
-        EngagedFrame(engaged: true);
-        EngagedFrame(engaged: true);
-
-        Assert.Equal(expected: [Pane, instance], actual: m_host.Synthesized!.Panes);
+        FramedFrame(framed: true);
+        FramedFrame(framed: true);
 
         var shown = Assert.Single(collection: m_host.Panes);
 
         Assert.Equal(expected: instance, actual: shown.Source.Name);
-        Assert.True(condition: m_host.ShowsEngaged(instance: instance));
-        Assert.Equal(
-            expected: new SourcePixelRect(Height: (shown.SourceHeight - 16), Width: shown.SourceWidth, X: 0, Y: 8),
-            actual: shown.Crop
-        );
-        Assert.True(condition: WorldEmulatorView.TryFit(
-            crop: out _,
-            display: screens.Screens[0].Route.Display,
-            displayHeight: Display,
-            displayWidth: Display,
-            drawn: out var drawn,
-            frame: WholeDisplay,
-            sourceHeight: shown.SourceHeight,
-            sourceWidth: shown.SourceWidth
-        ));
-        Assert.Equal(expected: new SourcePlacement.Pane(Region: drawn), actual: shown.Placement);
-        Assert.Equal(expected: instance, actual: Picked(x: 32.5, y: 32.5)?.Source);
+        Assert.True(condition: m_host.ShowsFramed(instance: instance));
+        Assert.Equal(expected: new SourcePlacement.Pane(Region: Matted), actual: shown.Placement);
+        Assert.Null(@object: shown.Warp);
+        Assert.Equal(expected: SourceDestination.Presentation, actual: shown.Destination);
 
-        // The root places the instance once a frame, however many seats frame it.
-        Assert.False(condition: m_host.PlaceEngaged(displayHeight: Display, displayWidth: Display, frame: WholeDisplay, screen: 0));
-        // A screen that shows no source instance places nothing.
-        Assert.False(condition: m_host.PlaceEngaged(displayHeight: Display, displayWidth: Display, frame: WholeDisplay, screen: 7));
+        // The matte's top-left pixel is the source's top-left pixel, and its centre the source's centre.
+        Assert.Equal(expected: (instance, 0L, 0L), actual: Picked(x: 16.1, y: 16.1));
+        Assert.Equal(expected: (instance, ((long)(ScreenSourceWidth / 2)), ((long)(ScreenSourceHeight / 2))), actual: Picked(x: 32.0, y: 32.0));
+        Assert.Null(@object: Picked(x: 8.5, y: 8.5));
 
-        EngagedFrame(engaged: false);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        FramedFrame(framed: true);
+        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
+
+        FramedFrame(framed: false);
         Assert.Empty(collection: m_host.Panes);
-        Assert.False(condition: m_host.ShowsEngaged(instance: instance));
+        Assert.False(condition: m_host.ShowsFramed(instance: instance));
     }
-    // THE LAW: engaging a window capture's screen only shows the window. The local user's own press on the emulator
-    // view, which only the window pump delivers to the filter, opens it as a passthrough source and reaches the window
-    // at once; the source closes once the view stops showing it, as when the seat leaves.
+    // THE LAW: engaging a window capture's screen only shows the window. The local user's own press on its framed picture,
+    // which only the window pump delivers to the filter, opens it as a passthrough source and reaches the window at
+    // once; the source closes once the seat no longer frames the screen, as when it leaves.
     [Fact]
-    public void APressOnAnEngagedWindowsEmulatorViewOpensItUntilTheViewEnds() {
+    public void APressOnAFramedWindowOpensItUntilTheSeatLeaves() {
         var (screens, instance) = EngageableScreen();
         var window = new PassthroughWindow();
         var passthrough = new WorldSourcePassthrough(
@@ -153,18 +136,17 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
         m_host.Screens = screens;
         m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
-        EngagedFrame(engaged: true);
-        EngagedFrame(engaged: true);
-        EngagedFrame(engaged: true);
+        FramedFrame(framed: true);
+        FramedFrame(framed: true);
         Assert.Contains(expectedSubstring: "none opened", actualString: passthrough.Describe());
 
-        // A press off the view (on the fill) opens nothing.
-        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 32.5f, y: 0.5f)));
+        // A press on the matte's fill opens nothing.
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 4.5f, y: 4.5f)));
         Assert.False(condition: passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(button: 0, phase: CommandPhase.Started)));
         _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(button: 0, phase: CommandPhase.Completed));
         Assert.Contains(expectedSubstring: "none opened", actualString: passthrough.Describe());
 
-        // A press on it opens the window and reaches it, taking the keyboard.
+        // A press on the picture opens the window and reaches it, taking the keyboard.
         _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(x: 32.5f, y: 32.5f)));
         Assert.True(condition: passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(button: 0, phase: CommandPhase.Started)));
         _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(button: 0, phase: CommandPhase.Completed));
@@ -172,8 +154,12 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(expected: SourceDestination.Passthrough, actual: Assert.Single(collection: m_host.Panes).Destination);
         Assert.Contains(expectedSubstring: $"{instance} engaged window", actualString: passthrough.Describe());
 
-        // The seat leaves: the view ends, and so does the source.
-        EngagedFrame(engaged: false);
+        // The next frame publishes it as the passthrough source it now is.
+        FramedFrame(framed: true);
+        Assert.Equal(expected: SourceDestination.Passthrough, actual: Assert.Single(collection: m_host.Panes).Destination);
+
+        // The seat leaves: nothing frames the screen, and the source closes.
+        FramedFrame(framed: false);
         Assert.Contains(expectedSubstring: "none opened", actualString: passthrough.Describe());
         Assert.Null(@object: passthrough.Router.Focus.Focused);
     }

@@ -136,6 +136,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public RuleFact Read(NearestOperand operand) => throw Unserved();
         public RuleFact Read(NavigationOperand operand) => throw Unserved();
         public RuleFact Read(BoardCellOfOperand operand) => throw Unserved();
+        public RuleFact Read(BoardSeatOperand operand) => throw Unserved();
         public int ResolveBody(in CompiledBodyRef bodyRef) => bodyRef.Index;
         public bool TryReadHostOwnedCell(int rowOrdinal, int cell, out long value) => throw Unserved();
         public bool TryReadHostOwnedSlot(int rowOrdinal, out CellValue value) => throw Unserved();

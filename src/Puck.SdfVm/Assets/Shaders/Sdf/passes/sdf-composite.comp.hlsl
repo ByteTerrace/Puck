@@ -52,6 +52,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             skyAir = sdfAirAlong(origin, direction, worldFarDistance(view), false);
         }
 
+        // The view's screen fidelity clears the atmosphere's in-scatter and the bounded volumes by its share, as the
+        // views stage cleared the transmittance, so a framed screen's pixels reach the output as the glass shaded them.
+        float fidelity = saturate(passGroup.screenFidelity);
+
+        weights *= (1.0 - fidelity);
+
         float3 kinds = max(weights, skyAir.weights);
         float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? sdfSkyPassEnvironment(direction) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);
@@ -94,6 +100,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
             if (geometryOnly) { color *= coverage; }
+            else if (fidelity > 0.0) { color = lerp(color, (surface + sky), fidelity); }
         }
         if (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) {
             // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.

@@ -43,23 +43,27 @@ public sealed partial class RenderGraphRuntime {
         m_captureInstance = index;
         m_captureFollowsRoot = followsRoot;
     }
-    // On a frame a presented capture still takes frames for, before anything renders: discards an instance's retained
-    // history that holds unfilled external pixels (IRenderGraphPackageFactory.DiscardTaintedHistory), which would
-    // otherwise keep every output it reaches tainted for as long as the capture is armed, and skips the presentations
-    // the history needs to converge again, so the burst reads the steady image rather than its reconvergence.
-    private void DiscardPresentedTaint(int index) {
-        if ((m_presented is not { Claimed: false }) || (m_graphs[index] is not { } graph)) {
+    // On a capture frame, before anything renders, for an instance the pending capture reads: has each of its packages
+    // discard retained state holding unfilled external pixels (IRenderGraphPackageFactory.DiscardTaintedState), which
+    // would otherwise keep every output it reaches tainted for as long as the capture is armed, settled or presented. A
+    // presented capture then skips the presentations the state needs to converge again, so the burst reads the steady
+    // image rather than its reconvergence. A presented capture that holds every frame discards nothing more.
+    private void DiscardCaptureTaint(int index) {
+        if ((m_presented is { Claimed: true }) || (m_graphs[index] is not { } graph)) {
             return;
         }
 
         var name = m_set.Instances[index].Name;
         var passes = graph.Pipeline.Plan.Passes;
+        var settling = 0;
 
         for (var position = 0; (position < passes.Count); position++) {
             if ((passes[position].Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory)) {
-                m_presentedWarmup = Math.Max(val1: m_presentedWarmup, val2: factory.DiscardTaintedHistory(instance: name));
+                settling = Math.Max(val1: settling, val2: factory.DiscardTaintedState(instance: name));
             }
         }
+
+        m_presentedWarmup = ((m_presented is null) ? 0 : Math.Max(val1: m_presentedWarmup, val2: settling));
     }
     // Refuses the presented capture still armed, if any.
     private void RefusePresented(Exception error) {

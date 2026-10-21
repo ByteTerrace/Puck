@@ -24,8 +24,11 @@ public static class WorldContextFamilies {
     /// beyond its own body.</summary>
     public const string Engagement = "engagement";
     /// <summary>The engagement state while the seat's principal's <c>IWorldGrantsView.Applications</c> set names any
-    /// target other than its own body.</summary>
+    /// target other than its own body and the seat is not sitting at a tabletop.</summary>
     public const string EngagementEngaged = "engaged";
+    /// <summary>The engagement state while the seat is captured at a tabletop: its set names a tabletop's placement
+    /// and not its own body, so a world's context row can give it the table's controls.</summary>
+    public const string EngagementTabletop = "tabletop";
     /// <summary>The engagement state while the seat's principal holds only its own-body application.</summary>
     public const string EngagementNone = "none";
     /// <summary>The layout family: the window composer's active layout selection — an authored
@@ -49,7 +52,7 @@ public static class WorldContextFamilies {
     public const string RosterUnjoined = "unjoined";
 
     private static readonly string[] RosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
-    private static readonly string[] EngagementStates = [EngagementEngaged, EngagementNone];
+    private static readonly string[] EngagementStates = [EngagementEngaged, EngagementTabletop, EngagementNone];
     private static readonly string[] EditorStates = [EditorPlay, EditorBuild];
 
     /// <summary>The built-in admitted family names, in the order the derivation read-back reports them — an

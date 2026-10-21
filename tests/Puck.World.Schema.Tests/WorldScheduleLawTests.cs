@@ -324,7 +324,7 @@ public sealed class WorldScheduleLawTests {
             ),
             // KEEP IN SYNC with tests/Puck.Cli.Worlds.Tests' ScheduledStepVocabularyLawTests, which ties this set to the
             // live registry rather than to another copy of the list.
-            expected: "body.carry body.control body.disengage body.engage body.fly body.impulse body.motion body.pose body.press body.release body.state-load body.stop player.identity player.join player.leave player.row.set player.state.cell.set player.state.cell.toggle world.row.add world.row.remove world.row.set world.row.step world.state.act world.state.cell.remove world.state.cell.set world.state.transform"
+            expected: "body.carry body.control body.disengage body.engage body.fly body.impulse body.motion body.pose body.press body.release body.state-load body.stop player.identity player.join player.leave player.row.set player.state.cell.set player.state.cell.toggle source.pointer.clear source.pointer.direction source.pointer.origin world.row.add world.row.remove world.row.set world.row.step world.state.act world.state.cell.remove world.state.cell.set world.state.transform"
         );
     }
     [Fact]

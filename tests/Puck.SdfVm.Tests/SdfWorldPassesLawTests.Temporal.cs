@@ -43,7 +43,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.NotEqual(actual: preceding, expected: 0u);
         Assert.True(condition: rig.PreviousValid());
-        Assert.Equal(expected: tainted, actual: rig.Passes.TaintedOf(instance: "world"));
+        Assert.Equal(expected: tainted, actual: (rig.Passes.TaintOf(instance: "world") is not null));
         if (tainted) { rig.Filling = true; }
         var request = new FrameCaptureRequest(converge: samples, path: "unused-capture-history-law.png");
         var convergence = new RenderGraphConvergence(request: request);
@@ -58,7 +58,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: first, actual: rig.HistoryFrames());
         Assert.Equal(expected: !restart, actual: rig.PreviousValid());
         Assert.Equal(expected: SdfTemporalHistory.Sample(index: first), actual: rig.Jitter());
-        Assert.False(condition: rig.Passes.TaintedOf(instance: "world"));
+        Assert.Null(@object: rig.Passes.TaintOf(instance: "world"));
         if (convergence.IsActive) { convergence.Count(); }
         rig.Produce();
         Assert.Equal(expected: (first + 1u), actual: rig.HistoryFrames());
@@ -78,11 +78,11 @@ public sealed partial class SdfWorldPassesLawTests {
         var preceding = rig.HistoryFrames();
 
         if (tainted) { rig.Filling = true; }
-        Assert.Equal(expected: (tainted ? ((int)SdfTemporalSamples.Period) : 0), actual: rig.Passes.DiscardTaintedHistory(instance: "world"));
-        Assert.Equal(expected: 0, actual: rig.Passes.DiscardTaintedHistory(instance: "world"));
+        Assert.Equal(expected: (tainted ? ((int)SdfTemporalSamples.Period) : 0), actual: rig.Passes.DiscardTaintedState(instance: "world"));
+        Assert.Equal(expected: 0, actual: rig.Passes.DiscardTaintedState(instance: "world"));
         rig.Produce();
         Assert.Equal(expected: (tainted ? 0u : (preceding + 1u)), actual: rig.HistoryFrames());
-        Assert.False(condition: rig.Passes.TaintedOf(instance: "world"));
+        Assert.Null(@object: rig.Passes.TaintOf(instance: "world"));
     }
     // A capture holds the frame it serves, and every render of the held frame under the motion view reads the motion
     // that frame was presented with: its previous view stays valid and the tables keep both pose revisions, rather than

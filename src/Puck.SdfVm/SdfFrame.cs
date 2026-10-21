@@ -54,6 +54,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
+
+    /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
+    /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
+    /// the CRT glass's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
+    /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
+    public float ScreenFidelity { get; init; }
 }
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>

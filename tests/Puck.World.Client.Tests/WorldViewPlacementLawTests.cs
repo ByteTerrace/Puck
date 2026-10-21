@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -213,6 +214,43 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             actual: PlacementOf(view: 0),
             expected: new RenderGraphPlacement(Height: 1f, Left: 0f, Sharpness: 0f, Shown: true, Top: 0f, Uncovered: false, Width: 1f)
         );
+    }
+    // A seat framing the screen it engaged shows only its matte of its view: the lone whole-display view is placed
+    // rather than stood in for, its rect is the matte and its crop the matte's part of its own output, which it still
+    // reads whole, and the rest of the display is the letterbox in the screen's fill at the view's fidelity.
+    [Fact]
+    public void AMattedViewShowsOnlyItsMatteOfItsOutputOverTheFill() {
+        var matte = new NormalizedRect(Height: 0.8f, Width: 0.75f, X: 0.125f, Y: 0.1f);
+        var fill = new Vector4(x: 0.1f, y: 0.2f, z: 0.3f, w: 1f);
+
+        m_host.PlaceViews(
+            letterboxColor: fill,
+            mattes: static view => ((view == 0) ? new NormalizedRect(Height: 0.8f, Width: 0.75f, X: 0.125f, Y: 0.1f) : null),
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [(View(region: Whole) with { ScreenFidelity = 1f })]
+        );
+
+        Assert.Equal(
+            actual: PlacementOf(view: 0),
+            expected: new RenderGraphPlacement(Crop: new Vector4(x: 0.125f, y: 0.1f, z: 0.75f, w: 0.8f), Fidelity: 1f, Height: matte.Height, Left: matte.X, LetterboxColor: fill, Sharpness: 0f, Shown: true, Top: matte.Y, Uncovered: true, Width: matte.Width)
+        );
+        Assert.Equal(
+            actual: WorldFootprints()[WorldRootGraph.ProducerOf(view: 0)],
+            expected: (1.0, 1.0)
+        );
+
+        // A matte of a view with no area crops nothing.
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            mattes: static _ => new NormalizedRect(Height: 0.5f, Width: 0.5f, X: 0f, Y: 0f),
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: new NormalizedRect(Height: 0f, Width: 0f, X: 0f, Y: 0f))]
+        );
+        Assert.Equal(actual: PlacementOf(view: 0).Crop, expected: default);
     }
     // The first view's pass owes the letterbox wherever no rect the root shows covers the display, shown or not: a
     // lone whole-display view, a shown whole-display view or a whole-display pane covers it, and anything else leaves

@@ -417,6 +417,15 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    public RuleFact Read(BoardSeatOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return RuleFact.Finite(
+            kind: CellKind.Int,
+            value: ReadBoardSeat(operand: operand)
+        );
+    }
+    /// <inheritdoc/>
     public int ResolveBody(in CompiledBodyRef bodyRef) => ResolveBodyRef(bodyRef: in bodyRef);
     /// <inheritdoc/>
     public CellKey PairKey(PairKeyFact key) {

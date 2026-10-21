@@ -34,6 +34,13 @@ edges; facing it toward the incoming ray can point into the solid. A reflected
 launch still needs a clear-interval certificate, and a failed certificate remains
 unknown rather than becoming a black reference sample.
 
+Plastic, glass, wood and other bare dielectrics take `specular` 0.04 to 0.06.
+The value is also the strength of the environment's mirror reflection
+(`worldEnvironmentReflection` under Fresnel, in `passes/sdf-light-stage.hlsli`),
+added over the diffuse without taking from it, so 0.3 to 0.6 on a coloured
+plastic washes it toward the room's grey (a clear orange reads cream), and on
+dark glass reads as a pale grey-blue panel. Use `coat` for a lacquered gloss.
+
 For painted metal with a clearcoat: a moderate `specular` around 0.35, a
 `roughness` in the 0.25 to 0.45 band, `metal` near 0 for paint over metal or near
 1 for bare metal, and `coat` around 0.3 to 0.5. None of it reads without

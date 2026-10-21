@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 /// A set that retains the own-body application (mirroring) does not swap: the seat is still driving a target AND
 /// walking its own avatar, so it still perceives from that avatar. A screen application (classic engage) does not
 /// swap the body; a captured one (no own-body application beside it) publishes the screen the seat engages
-/// (<see cref="EngagedScreen"/>), which the seat camera frames as its emulator view and the <c>ScreenEngaged</c>
+/// (<see cref="EngagedScreen"/>), whose picture the seat camera frames (<c>WorldScreenFraming</c>) and the <c>ScreenEngaged</c>
 /// overlay fact reads. <c>WorldSeatContextSync.Publish</c> is the sole writer — it already reads the application set per
 /// seat every tick over the loopback view for the engagement context family, so the anchor resolution rides that
 /// SAME read rather than opening a second one. Swapped in ONE place,
@@ -22,6 +22,7 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldPerceptionAnchor {
     private readonly int[] m_engagedScreen;
+    private readonly string?[] m_engagedTabletop = new string?[WorldSeatBindings.SeatCount];
     private readonly int[] m_perceivedBody;
 
     /// <summary>Constructs the anchor with every seat perceiving from its own bound body and engaging no screen — the
@@ -62,6 +63,24 @@ public sealed class WorldPerceptionAnchor {
     public void Publish(int slot, int bodyIndex) {
         if (((uint)slot) < ((uint)m_perceivedBody.Length)) {
             m_perceivedBody[slot] = bodyIndex;
+        }
+    }
+    /// <summary>The tabletop seat <paramref name="slot"/> sits at: the placement id of the first tabletop application in
+    /// its set while the set holds no own-body application, or <see langword="null"/> when it sits at none or is out of
+    /// range. The seat camera eases to that board's view (<see cref="WorldTabletopFraming"/>).</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <returns>The tabletop's placement id, or <see langword="null"/>.</returns>
+    public string? EngagedTabletop(int slot) => ((((uint)slot) < ((uint)m_engagedTabletop.Length))
+        ? m_engagedTabletop[slot]
+        : null
+    );
+    /// <summary>Publishes the tabletop seat <paramref name="slot"/> sits at. Called only from
+    /// <c>WorldSeatContextSync.Publish</c>, beside <see cref="Publish"/>.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <param name="placementId">The tabletop's placement id, or <see langword="null"/> for none.</param>
+    public void PublishEngagedTabletop(int slot, string? placementId) {
+        if (((uint)slot) < ((uint)m_engagedTabletop.Length)) {
+            m_engagedTabletop[slot] = placementId;
         }
     }
     /// <summary>Publishes the screen seat <paramref name="slot"/> is captured on. Called only from

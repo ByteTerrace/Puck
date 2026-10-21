@@ -220,27 +220,33 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
 
     // How many source texels the pixel's footprint spans along each axis.
     float2 footprintTexels = (footprint * sourceSize);
+    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the glass's treatment below: at
+    // one the picture's pixels leave exactly as sampled and the bezel band is a hard edge, which a framed seat's matte
+    // hides, so a framed screen shows its source as a desktop emulator does; at zero the glass is the in-world CRT.
+    float treatment = (1.0 - saturate(passGroup.screenFidelity));
+    bool inPicture = all(image >= 0.0) && all(image <= 1.0);
 
     // Aperture grille — faint vertical RGB phosphor stripes, one triad a source column: three cosines 120 degrees apart.
     // Continuous (cos), so a cross-backend UV delta never flips a hard edge; the period rides the source, so the stripe
     // stays on the image. CrtApertureGrille = 0 is a no-op.
     float3 grille = (0.5 + (0.5 * cos(((source.x * sourceSize.x) * SDF_TAU) - CrtGrillePhase)));
-    sampled *= (1.0 - ((CrtApertureGrille * sdfCrtPatternGain(footprintTexels.x)) * (1.0 - grille)));
+    sampled *= (1.0 - (((CrtApertureGrille * treatment) * sdfCrtPatternGain(footprintTexels.x)) * (1.0 - grille)));
 
     // Native-line scanlines (soft cosine, dark between source rows), and a radial vignette when CrtVignette is non-zero.
-    float scanline = (1.0 - ((CrtScanAmplitude * sdfCrtPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
-    float vignette = (1.0 - (CrtVignette * radiusSquared));
+    float scanline = (1.0 - (((CrtScanAmplitude * treatment) * sdfCrtPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
+    float vignette = (1.0 - ((CrtVignette * treatment) * radiusSquared));
 
     // Bloom knee: bright pixels bleed a little (single-pixel fake — no neighborhood pass).
     float luminance = dot(sampled, CrtLumaWeights);
-    sampled += ((CrtBloomGain * smoothstep(CrtBloomThreshold, 1.0, luminance)) * sampled);
+    sampled += (((CrtBloomGain * treatment) * smoothstep(CrtBloomThreshold, 1.0, luminance)) * sampled);
 
     // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The pair is
     // orthonormal by contract (SdfScreenSurface), so the normalize only absorbs the uploaded table's float drift.
     float3 screenNormal = normalize(cross(surface.right.xyz, surface.up.xyz));
     float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), CrtGlintPower);
 
-    outColor = ((((sampled * scanline) * vignette) * bezel) + (CrtGlint * glint));
+    bezel = lerp((inPicture ? 1.0 : 0.0), bezel, treatment);
+    outColor = ((((sampled * scanline) * vignette) * bezel) + ((CrtGlint * treatment) * glint));
     picture = bezel;
 
     return true;

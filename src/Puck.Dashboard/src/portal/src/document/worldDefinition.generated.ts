@@ -7179,6 +7179,10 @@ export type WorldPlacementBoard = {
    * The Verdict value the judge writes to accept a move — any other value is a refusal.
    */
   accept?: number;
+  /**
+   * How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat's pointer meets.
+   */
+  engage?: WorldTabletopEngage | null;
 };
 
 /**
@@ -10824,36 +10828,9 @@ export type WorldScreen = {
 
 export type WorldScreenDisplay = {
   /**
-   * The source pixels left out at each edge, or null for none. A crop that leaves nothing of the source shows the whole source.
-   */
-  crop?: WorldScreenDisplayCrop | null;
-  /**
-   * The width over the height of one source pixel as the console's display shows it (8/7 for a console drawing 256 columns across a 4:3 picture); positive and finite, at most MaxPixelAspect either way. Default 1, square pixels.
-   */
-  pixelAspect?: number;
-  /**
-   * The colour around the picture, as #RRGGBB, or null for black.
+   * The matte colour around the framed picture, as #RRGGBB, or null for black.
    */
   fill?: string | null;
-};
-
-export type WorldScreenDisplayCrop = {
-  /**
-   * The rows left out at the top.
-   */
-  top?: number;
-  /**
-   * The columns left out at the right.
-   */
-  right?: number;
-  /**
-   * The rows left out at the bottom.
-   */
-  bottom?: number;
-  /**
-   * The columns left out at the left.
-   */
-  left?: number;
 };
 
 export type WorldScreenMagazine = {
@@ -10916,7 +10893,7 @@ export type WorldScreenRoute = {
    */
   port?: string | null;
   /**
-   * How a seat engaged on this screen sees its source once its camera has framed the glass: the emulator view, the source alone filling the seat's view at its own aspect ratio (WorldScreenDisplay). null (the default) is Neutral: no crop, square pixels, black fill. Omitted from the wire when null.
+   * How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.
    */
   display?: WorldScreenDisplay | null;
 };
@@ -11939,6 +11916,32 @@ export type WorldStorageDefaults = {
    * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
    */
   discoveryEndpoint?: string | null;
+};
+
+/**
+ * A tabletop's engagement: a seat standing within Radius of the board's centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:<id> application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world's rules read the seat's channels as play (channel(...)), and the board reads where the seat points (board(pointer, <row>, <seat>)), whether the seat sits at it (board(engaged, …)) and from which side (board(side, …)), so the game itself stays document rules.
+ */
+export type WorldTabletopEngage = {
+  /**
+   * The declared channel whose press engages and leaves the table.
+   */
+  channel: string;
+  /**
+   * How near the board's centre, on the ground plane in world units, a seat must stand to engage. Positive.
+   */
+  radius?: number;
+  /**
+   * The board view's elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat's side. In (0, 90].
+   */
+  pitch?: number;
+  /**
+   * World units of room the board view leaves around the board's footprint. Non-negative.
+   */
+  margin?: number;
+  /**
+   * The height above the topology's origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.
+   */
+  surface?: number;
 };
 
 export type WorldTargetRegister = {

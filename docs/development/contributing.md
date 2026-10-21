@@ -727,6 +727,15 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- The owner's development machine (Ryzen 7 7800X3D, RTX 4070) powers off
+  without a bugcheck, a dump or a hardware-error record under sustained load, as
+  a thermal or power trip does, most often while a windowed World renders and
+  several lanes build and test beside it. Work runs on it at its normal load
+  (bounding the load would hide the trip the diagnosis needs to catch); a lane
+  whose session ends with the machine resumes from its worktree. LibreHardwareMonitor logs its sensors to a
+  CSV each second beside its executable (the winget package's folder under
+  `%LOCALAPPDATA%\Microsoft\WinGet\Packages`); after a trip, the last rows name
+  the sensor that ran away.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build

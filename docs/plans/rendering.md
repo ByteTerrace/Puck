@@ -3795,7 +3795,7 @@ When a source has keyboard focus, keys go to it instead of the game, and a
 reserved chord always returns focus to the game; with no source focused, the
 chord's Escape is the game's. Host passthrough exists only
 for a source the local user opened on their own machine, by the console verb or
-a physical press on an engaged window capture's emulator view
+a physical press on the framed picture of an engaged window capture's screen
 ([decision](../decisions/rendering.md)). A world document can
 never create a passthrough source or send it input, whether it was authored
 locally or arrived through a portal. A hit on a rendered source continues as a

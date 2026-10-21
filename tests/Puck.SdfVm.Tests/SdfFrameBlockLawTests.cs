@@ -87,6 +87,7 @@ public sealed class SdfFrameBlockLawTests {
                 ) {
                     Grid = Grid,
                     Quality = Restricted,
+                    ScreenFidelity = 0.75f,
                 },
             ],
             Time: 7f
@@ -222,12 +223,13 @@ public sealed class SdfFrameBlockLawTests {
         var authored = Frame();
         var defaults = (authored with {
             DisableScreenLights = false,
-            Views = [(authored.Views[0] with { Quality = default })],
+            Views = [(authored.Views[0] with { Quality = default, ScreenFidelity = 0f })],
         });
 
         SdfFrame WithQuality(SdfViewQuality quality) => (defaults with { Views = [(defaults.Views[0] with { Quality = quality })] });
 
         (string Member, SdfFrame Frame)[] levers = [
+            (SdfWorldPackage.ScreenFidelity, (defaults with { Views = [(defaults.Views[0] with { ScreenFidelity = 1f })] })),
             (SdfWorldPackage.GeometryOnly, WithQuality(quality: new() { GeometryOnly = true })),
             (SdfWorldPackage.DisableAmbientOcclusion, WithQuality(quality: new() { DisableAmbientOcclusion = true })),
             (SdfWorldPackage.DisableScreenLights, (defaults with { DisableScreenLights = true })),
