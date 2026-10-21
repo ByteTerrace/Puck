@@ -28,8 +28,8 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// <para>Probes are traced on the thread pool, nearest the camera first and every probe's first sweep before any second,
 /// and cached by cell, so a static world traces each cell once per lighting: a camera returning to a place reads its
 /// cached probes at once. A change of the static draws rebuilds the scene and retraces every probe; a change of the
-/// directional lights, the gains, the sources or the bounces retraces them over the same scene. Until a probe lands, the
-/// old one keeps drawing. The dynamic draws (moving bodies) receive the volume's light and do not cast into it.</para>
+/// directional lights, the gains, the sources, the bounces or what the program's materials reflect and emit retraces
+/// them over the same scene. Until a probe lands, the old one keeps drawing. The dynamic draws (moving bodies) receive the volume's light and do not cast into it.</para>
 /// </summary>
 public sealed class SdfMeshIrradiance {
     /// <summary>The most probes a volume holds, the High tier's.</summary>
@@ -54,6 +54,8 @@ public sealed class SdfMeshIrradiance {
     private Task? m_build;
     private Lighting? m_lighting;
     private int m_lightingKey;
+    private SdfProgram? m_materialsProgram;
+    private int m_materialsKey;
     private int m_generation;
     private Layout m_layout;
     private (int X, int Y, int Z) m_low;
@@ -180,7 +182,7 @@ public sealed class SdfMeshIrradiance {
     }
     // Captures the lighting the probes trace under, and restarts the trace when it changes.
     private void RefreshLighting(SdfFrame frame, Layout layout) {
-        var key = HashCode.Combine(value1: frame.IndirectGains, value2: frame.IndirectSources, value3: layout.Sweeps, value4: layout.Rays);
+        var key = HashCode.Combine(value1: frame.IndirectGains, value2: frame.IndirectSources, value3: layout.Sweeps, value4: layout.Rays, value5: MaterialsKey(program: frame.Program));
 
         foreach (var light in frame.Lights.Records) {
             if (light.Kind == SdfLightKind.Directional) { key = HashCode.Combine(value1: key, value2: light); }
@@ -195,6 +197,22 @@ public sealed class SdfMeshIrradiance {
         m_clock.Restart();
         m_traced = 0;
         m_rays = 0;
+    }
+    // The part of a program's materials the trace reads (Shade: what each reflects and emits), hashed once per program.
+    // A program rebuilt with a material changed in place (a bound color's move, a placement showing another
+    // creation over the same meshes) leaves the static draws as they were, so only this key retraces it.
+    private int MaterialsKey(SdfProgram program) {
+        if (ReferenceEquals(objA: program, objB: m_materialsProgram)) { return m_materialsKey; }
+
+        var key = 17;
+
+        foreach (var material in program.Materials) {
+            key = HashCode.Combine(value1: key, value2: material.Albedo, value3: material.Emissive, value4: material.Metal, value5: material.Bleed, value6: material.EmissiveLane);
+        }
+        m_materialsProgram = program;
+        m_materialsKey = key;
+
+        return key;
     }
     private bool InWindow((int X, int Y, int Z) cell) =>
         ((cell.X >= m_low.X) && (cell.X < (m_low.X + m_layout.Dims.X)) && (cell.Y >= m_low.Y) && (cell.Y < (m_low.Y + m_layout.Dims.Y)) &&

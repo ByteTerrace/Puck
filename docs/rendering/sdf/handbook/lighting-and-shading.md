@@ -165,7 +165,9 @@ in the frame.
   each cell once per lighting, and a camera returning to a place reads its
   cached probes at once. A change of the static draws rebuilds the scene and
   retraces every probe; a change of a directional light, the gains, the
-  sources or the bounces retraces them over the same scene. Old probes keep
+  sources, the bounces or what the materials reflect and emit (a bound
+  color's move, a placement showing another creation over the same meshes, as
+  the gallery hall's light switches do) retraces them over the same scene. Old probes keep
   drawing until new ones land. On the debug world the scene is 7 draws and
   about 25,000 triangles, built in about 0.02 s, and the High volume's three
   sweeps (36,864 probes, 14.2 million rays) take about 5 s on four threads of
