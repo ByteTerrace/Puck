@@ -326,6 +326,25 @@ public sealed class SdfSampledLatticeLawTests {
         Assert.True(condition: (refined.MeasuredCells > (plain.MeasuredCells + 50)), userMessage: $"{refined.MeasuredCells} cells measured with the region, {plain.MeasuredCells} without");
     }
 
+    // A refinement over the fine-sample budget splits each cell into fewer fine cells rather than none, and refuses only
+    // when even two a side are over it. Every cell of a lattice on the surface is measured: at 32 cells a side, eight a
+    // cell would measure 257³ samples, past the budget, and four 129³, within it.
+    [Fact]
+    public void ARefinementOverItsBudgetSplitsCoarserOrRefuses() {
+        static SdfSampledLattice OnTheSurface(int samples) {
+            var count = ((samples * samples) * samples);
+
+            return new(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: samples, samplesY: samples, samplesZ: samples, values: new float[count]);
+        }
+        static SdfLatticeRegion[] Whole(int samples) => [new SdfLatticeRegion(High: (Origin + new Vector3(value: (samples * Cell))), Low: Origin)];
+
+        var fits = OnTheSurface(samples: Samples);
+        var fine = fits.Refine(factor: 8, regions: Whole(samples: Samples));
+
+        Assert.Equal(expected: 4, actual: fits.Refinement);
+        Assert.Equal(expected: ((129 * 129 * 129) - (Samples * Samples * Samples)), actual: fine.Length);
+        Assert.Empty(collection: OnTheSurface(samples: 90).Refine(factor: 3, regions: Whole(samples: 90)));
+    }
     // A speck apart from the surface, as a sheet thinning to a knife edge leaves, is dropped; a surface that small on its
     // own is the whole part and stays.
     [Fact]

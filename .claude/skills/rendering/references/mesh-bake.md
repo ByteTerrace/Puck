@@ -23,7 +23,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   which keeps the mesh crack-free. Never refine a cell without that ring: a
   whole cell next to measured fine samples cracks (`SdfSampledLatticeLawTests`).
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
-  in 20 s.
+  in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
+  each cell into fewer fine cells, down to two, and contours whole only past
+  that: a sheet thinner than the coarse cell survives any refinement and none
+  of the coarse contour, so an all-or-nothing budget drops a long light strip
+  or keeps it depending on where the coarse samples fall.
 - **Crossings stay on their lattice edges.** Before measuring crossing normals,
   `SdfSampledLattice.CrossingPoints` and `AnswerCrossings` bracket each zero along
   its sign-changing edge through the bake's existing point batches. Both the
