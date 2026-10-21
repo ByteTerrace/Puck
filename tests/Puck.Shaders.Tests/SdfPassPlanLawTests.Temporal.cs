@@ -63,7 +63,7 @@ public sealed partial class SdfPassPlanLawTests {
         const ulong History = ((1920UL * 1080) * (8 + (4 * SdfWorldPackage.HistorySurfaceWords)));
         const ulong Reactivity = ((960UL * 540) * 4);
 
-        Assert.Equal(actual: ((InFlight * History) + Reactivity), expected: 151_372_800UL);
+        Assert.Equal(actual: ((InFlight * History) + Reactivity), expected: 201_139_200UL);
         Assert.Equal(
             expected: ((InFlight * History) + Reactivity),
             actual: (PlannedBytes(plan: TemporalPlan, counts: counts) - PlannedBytes(plan: ResolvedPlan, counts: counts))
