@@ -220,6 +220,12 @@ public sealed class InPlaceCarryPresentationLawTests {
         _ = Pack(client: client, pool: pool, transforms: transforms);
 
         var clip = Assert.Single(collection: pool.SlotClips);
+        var held = pool.SlotClips;
+
+        // At rest across the glass, the next pack hands on the same list, so the dressing keeps the draws it built.
+        Deliver(client: client, continuity: EntityContinuity.Continuous, position: new Vector3(x: 0.5f, y: 0.1f, z: 0f), tick: 2UL);
+        _ = Pack(client: client, pool: pool, transforms: transforms);
+        Assert.Same(expected: held, actual: pool.SlotClips);
 
         Assert.Equal(expected: (0, WorldStampPool.SlotsPerPlacement), actual: (clip.FirstSlot, clip.SlotCount));
         Assert.Equal(expected: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f), actual: clip.Plane);
@@ -232,7 +238,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: nearCeiling!.Value.Plane);
 
         // Clear of every glass: drawn once, unclipped.
-        Deliver(client: client, continuity: EntityContinuity.Teleport, position: new Vector3(x: 0f, y: 3f, z: 0f), tick: 2UL);
+        Deliver(client: client, continuity: EntityContinuity.Teleport, position: new Vector3(x: 0f, y: 3f, z: 0f), tick: 3UL);
         _ = Pack(client: client, pool: pool, transforms: transforms);
         Assert.Empty(collection: pool.SlotClips);
 

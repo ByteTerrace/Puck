@@ -56,6 +56,37 @@ public sealed class SdfSlotClipLawTests {
         SdfSlotClip.Apply(clips: [Straddle], draws: again);
         Assert.Equal(expected: copy.Identity, actual: again[1].Identity);
     }
+    // The motion history copies each draw's matrix words at its own index (SdfWorldTables.CopyMeshHistory) and keeps it
+    // while the identity at that index holds (StageMeshMotion); the kernels carry the previous matrix by the draw's own
+    // carry (sdfMeshPreviousPosition). A copy therefore reprojects through the carried previous pose only if it holds
+    // the original's matrix, its own carry, and the same identity at the same index frame after frame.
+    [Fact]
+    public void ACopyKeepsItsOwnHistoryTheOriginalsMatrixUnderItsOwnCarry() {
+        List<SdfMeshDraw> Frame() {
+            var draws = new List<SdfMeshDraw> { Draw(identity: "wall", slot: 3), Draw(identity: "body", slot: 12) };
+
+            SdfSlotClip.Apply(clips: [Straddle], draws: draws);
+
+            return draws;
+        }
+
+        var first = Frame();
+        var second = Frame();
+
+        Assert.Equal(expected: first.Select(selector: static draw => draw.Identity), actual: second.Select(selector: static draw => draw.Identity));
+
+        var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
+        var layout = SdfMeshRegion.Plan(draws: first, meshes: placements);
+        var words = new uint[layout.Words];
+
+        SdfMeshRegion.Write(destination: words, draws: first, layout: layout, meshes: placements);
+
+        var original = words.AsSpan(length: SdfMeshRecord.DrawWords, start: SdfMeshRecord.DrawWords);
+        var copy = words.AsSpan(length: SdfMeshRecord.DrawWords, start: (2 * SdfMeshRecord.DrawWords));
+
+        Assert.True(condition: copy[..16].SequenceEqual(other: original[..16]));
+        Assert.False(condition: copy.Slice(length: 7, start: SdfMeshRecord.CarryRotationWord).SequenceEqual(other: original.Slice(length: 7, start: SdfMeshRecord.CarryRotationWord)));
+    }
     [Fact]
     public void TheRecordCarriesTheCarryAndTheClipPlaneWhereTheKernelsReadThem() {
         var draw = (Draw(identity: "body", slot: 12) with {

@@ -33,12 +33,26 @@ public sealed partial class WorldStampPool {
     public long MeshDrawsRevision => m_meshDrawsRevision;
 
     /// <summary>Gets the slot runs of the body-rooted registrations the last <see cref="PackTransforms"/> found
-    /// straddling a portal whose counterpart stands in the same world (<see cref="WorldPortalStraddle"/>): a new list a
-    /// pack that found any, the one empty list otherwise.</summary>
+    /// straddling a portal whose counterpart stands in the same world (<see cref="WorldPortalStraddle"/>): the same list
+    /// for as long as the runs are unchanged, a new one when they change, the one empty list when there are none.</summary>
     public IReadOnlyList<SdfSlotClip> SlotClips { get; private set; } = [];
 
     private readonly List<SdfSlotClip> m_slotClipRun = [];
 
+    // Whether this pack found exactly the runs the held list names, in order.
+    private static bool SameRuns(IReadOnlyList<SdfSlotClip> held, List<SdfSlotClip> packed) {
+        if (held.Count != packed.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < packed.Count); index++) {
+            if (held[index] != packed[index]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     // A registration's creation's reach from its root, in creation units, measured once.
     private static float ReachOf(Registration live) {
         if (live.Reach < 0f) {
@@ -232,10 +246,14 @@ public sealed partial class WorldStampPool {
             );
         }
 
-        SlotClips = ((m_slotClipRun.Count == 0)
-            ? []
-            : [.. m_slotClipRun]
-        );
+        // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
+        // sees a new list, so a body holding still across a door keeps the one it was first clipped by.
+        if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
+            SlotClips = ((m_slotClipRun.Count == 0)
+                ? []
+                : [.. m_slotClipRun]
+            );
+        }
 
         if (m_meshDrawsChanged) {
             m_meshDrawList.Clear();
