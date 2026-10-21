@@ -159,7 +159,8 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
 
 // The temporal path: this frame's 3x3 samples joined by the history the pixel's motion reaches, which it writes back.
 // `accepted` says the history survived, `total` is the weight the mean `accumulated` (and its transport) gathered, and
-// `reactive` is the 3x3's greatest reactivity.
+// `reactive` is the reactivity of the tap nearest the pixel's center: the pixel's own, so a steady pixel beside a reactive
+// one keeps its history.
 void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
@@ -198,7 +199,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float3 ycocg = sdfToYCoCg(color.rgb);
             float4 transport = float4(0.0, 0.0, 0.0, 0.0);
 
-            reactive = max(reactive, reactivity[sdfReactivityIndex(pixel, 0u, render)]);
+            float tapReactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
 
             uint record = sdfVisibilityRecord(pixel, 0u, render);
             SdfVisibility visibility = sdfLoadVisibility(record);
@@ -213,6 +214,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             distances[tap] = (surface ? visibility.t : 0.0);
             if (weight > centerWeight) {
                 centerWeight = weight;
+                reactive = saturate(tapReactive);
                 centerIdentity = identities[tap];
                 centerT = distances[tap];
             }
@@ -235,7 +237,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         }
     }
 
-    reactive = saturate(reactive);
     accepted = false;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
@@ -362,6 +363,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // as the jitter moves, so it takes the spatial path whatever it gathered (weighing the two by that weight would
     // switch a whole reactive screen between the two filters frame by frame), and it takes it on the unjittered grid, as
     // a view with no temporal path does: a screen reads its image along the unjittered ray, so that sample holds still.
+    // Reactivity is the pixel's own sample's, so a jittered edge beside a screen keeps its history.
     float shown = (accepted ? (saturate(total) * (1.0 - reactive)) : 0.0);
     bool still = (unjittered || (reactive > 0.0));
     float4 resolved = accumulated;
