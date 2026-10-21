@@ -233,9 +233,19 @@ owner asks to play or pair in it.
 
 Codex lanes reach the same World: the repository's `.codex/config.toml` starts
 the same `puck` MCP launcher, so a companion `task` run in this checkout or a
-worktree of it can call `puck_worlds` and the rest. Both Astra and Sol accept
-`low` through `ultra` effort, but the companion passes only `none` through
-`xhigh`. The owner's own Codex Desktop thread holds a writer lock while it is
+worktree of it can call `puck_worlds` and the rest.
+
+| Codex model | Id | OpenAI's positioning | Effort | Price per 1M in / out |
+|---|---|---|---|---|
+| Astra | `gpt-6-astra` | Most capable, for the most demanding work | `low` to `max`; refuses `none` | $10 / $50 |
+| Sol | `gpt-6.1-sol` | Near-Astra for complex coding at lower cost | `low` to `max`, default `medium`; refuses `none` and `minimal` | $2 / $10 |
+
+Both have a 1,050,000-token context and 128,000 output tokens. The companion's
+`--effort` stops at `xhigh`; `max` needs `codex exec -c
+model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
+the effort). Prices are API list prices, a guide to relative cost. Astra asks more questions when input
+could change the result and follows `AGENTS.md` and skills more literally, so an
+Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
