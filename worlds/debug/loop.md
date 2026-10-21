@@ -15,8 +15,8 @@ than transferring it to another world.
 | (-20, 6, -20) | `loop-ceiling`, the ceiling glass, facing down, turned a half about up so a crossing keeps the body's heading |
 | Corners at ±1.4 m | `loop-posts`, four posts, not solid |
 
-The shaft stands south-west of the spawn, clear of the device row (z -6) and
-the portal frame at (3, 0, -8).
+The shaft stands south-west of the spawn, clear of the portal frame at
+(3, 0, -8).
 
 ## Get in
 
