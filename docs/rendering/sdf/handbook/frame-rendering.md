@@ -548,20 +548,25 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds four words per output pixel: the visibility
-  identity of the nearest of the render samples the resolve read; that sample's
-  ray distance and the samples' summed weight, capped at one jitter period of
-  full-weight samples, as two half floats; and the weighted mean of the samples'
-  surface transport, two words.
+- The **history surface** holds six words per output pixel
+  (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
+  pixel's receiver, the nearest of the render samples the resolve read that is
+  not a sub-pixel feature; that sample's ray distance and the samples' summed
+  weight, capped at one jitter period of full-weight samples (four periods
+  while the pixel carries a feature), as two half floats; the weighted mean of
+  the samples' surface transport, two words; and the feature the pixel's
+  footprint last showed, its YCoCg as three half floats with the frames the
+  memory has left, zero for none.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the
 pixel (its bezel band and an opening, a portal's window, are zero and keep their
 history like any surface, so the face's jittered edge resolves like any edge),
-and, since the material model cannot tell steady emission from animated, the
-share of the pixel's color it emits after material layers. Under a temporal view
-a screen reads its image along the pixel's unjittered ray, so the image holds
-still while the jitter moves.
+zero for every other surface. Emission is not reactive: an emission that changes
+is a shading change the clip below shows at once, and a steady one, a power light
+smaller than a pixel, needs the history the resolve gathers over the jitter.
+Under a temporal view a screen reads its image along the pixel's unjittered ray,
+so the image holds still while the jitter moves.
 Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
@@ -590,6 +595,34 @@ Non-finite history colors or transports are rejected before clipping. History
 writes stay within the half-float range; a non-finite accumulation stores zero
 weight, so a bright transient cannot contaminate later history after its source
 recovers.
+
+A detail smaller than a render sample (a device's power light, a thin bright
+trim, a glint on a glossy part, a label's stroke) is hit by the jitter in some
+positions of the period and missed in others; in a missed frame no sample in the
+whole image holds it, so the 3x3 box alone would clip its history to the
+background each time and the detail would flicker. The resolve tells such a
+**sub-pixel feature** by its shape rather than by the pixel's past: over a 5x5
+luma window it marks a render sample whose two neighbours in at least three of
+the four directions through it (across, down, the two diagonals) lie half its
+luma below it, or it below them, so a dot and a line thinner than a sample
+count and the corner of a sweeping edge, which keeps a neighbour on its own
+side, never does (`sdfResolveFeature`). The most contrasting unreactive feature
+in a pixel's 3x3 is written to its history surface for one jitter period, by
+which time the jitter has come round to it; an accepted history carries its
+memory on, one frame shorter, and a restarted one drops it. While the memory
+lives and the pixel's history moved less than 0.05 output pixels to reach it,
+the clip box widens to the feature's color, so the mean the jitter gathers over
+the feature (the coverage a supersampled image would give it) survives the
+frames that miss it, and the history saturates at four periods rather than one,
+so that mean pulses by about a fifth over the period rather than doubling. A
+feature is never the pixel's receiver, so the frame the jitter leaves it does
+not reject the history the surface under it carries. The memory is one point
+added to the box, not a tolerance: a shadow sweeping behind a power light is
+still clipped to the lit neighbourhood, because the widening runs toward the
+feature's color alone. What it cannot tell is a sub-pixel feature that turns
+off from one the jitter missed, so such a light fades over a period rather than
+at once; and under camera or surface motion the memory is unused, so the
+feature flickers as it did, hidden by the motion.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a

@@ -22,14 +22,16 @@ public static partial class SdfWorldPackage {
     /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
     /// visibility identity of the render-extent sample nearest the pixel's center, then its ray distance and the sample
     /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport's two
-    /// words as <see cref="Parts.Transport"/> packs them.</summary>
+    /// words as <see cref="Parts.Transport"/> packs them, then the sub-pixel feature the pixel's footprint last showed:
+    /// its YCoCg as three half floats, Y and Co in one word and Cg low in the next, with the frames the memory has left
+    /// above it, zero for none.</summary>
     public const string HistorySurface = "historySurface";
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
     /// <summary>The words one output pixel holds in the history surface: its identity, its ray distance with its gathered
-    /// weight, and its transport's two words. SdfIsaHlsl generates it into the kernels as <c>SDF_HISTORY_SURFACE_WORDS</c>, read by
-    /// <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
-    public const uint HistorySurfaceWords = 4;
+    /// weight, its transport's two words, and its remembered feature's two. SdfIsaHlsl generates it into the kernels as
+    /// <c>SDF_HISTORY_SURFACE_WORDS</c>, read by <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
+    public const uint HistorySurfaceWords = 6;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the resolved lit image and surface
     /// transport it writes, the visibility records it reads the render grid through, and what the
