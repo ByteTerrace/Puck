@@ -58,8 +58,6 @@ public sealed partial class SdfWorldTables {
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
-    // One more for every new draw list the region packs, which the view's cadence signature follows.
-    internal long MeshRevision => m_meshRevision;
 
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
