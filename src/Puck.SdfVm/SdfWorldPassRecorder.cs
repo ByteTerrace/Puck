@@ -85,7 +85,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
     private bool m_disposed;
-    private bool m_sourceTainted;
+    // What made the latest views render read external content, or null when nothing did.
+    private string? m_sourceTaint;
     private bool m_readsHistory;
 
     private readonly SdfWorldPickReadback? m_pick;
@@ -307,7 +308,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     public void Submitted() {
         if (m_part == SdfWorldPackage.Parts.Views) {
-            m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
+            m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
         }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
     }
@@ -351,7 +352,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         if (m_part == SdfWorldPackage.Parts.Views) {
-            m_sourceTainted = (SdfWorldPasses.SourceTainted(frame: frame, tables: tables) || (recording.Reads is { Tainted: true }));
+            m_sourceTaint = (SdfWorldPasses.SourceTaintOf(frame: frame, tables: tables) ?? SdfWorldPasses.ReadTaintOf(reads: recording.Reads));
             m_readsHistory = (m_temporal && temporal.HasPreviousView);
         }
 

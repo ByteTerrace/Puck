@@ -37,8 +37,9 @@ public sealed partial class RenderGraphRuntime {
             m_taintedReads[index] = producer;
         }
     }
+    // A read's own taint, noted first, names the cause more nearly than the package state it went into, so it stays.
     private void NotePackageTaint(int index) {
-        if (PackageTaintOf(index: index) is { } retained) {
+        if ((m_taintedReads[index] is null) && (PackageTaintOf(index: index) is { } retained)) {
             NoteTaint(index: index, producer: retained, tainted: true);
         }
     }
