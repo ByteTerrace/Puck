@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
@@ -20,16 +19,15 @@ namespace Puck.Shaders;
 /// the base; over a covered output it stands for its base as any unshown pass does.</param>
 /// <param name="Sharpen">Whether a source at the rect's own extent is sharpened by <paramref name="Sharpness"/> rather
 /// than copied exactly (<see cref="RenderGraphPackageCatalog.PlaceSharpen"/>): a temporally resolved view's is.</param>
+/// <param name="LetterboxColor">The linear RGBA color the pass writes outside its rect when it letterboxes
+/// (<see cref="RenderGraphPackageCatalog.PlaceLetterboxColor"/>), or <see langword="null"/> for
+/// <see cref="RenderGraphPackageCatalog.DefaultLetterboxColor"/>.</param>
+/// <param name="Fidelity">The share, from 0 to 1, of the source the pass writes as it is, past the sharpen and the
+/// tonemap (<see cref="RenderGraphPackageCatalog.PlaceFidelity"/>).</param>
 /// <param name="Crop">The part of the source the rect shows, as fractions of the source's extent: left, top, width and
 /// height in <c>X</c>, <c>Y</c>, <c>Z</c> and <c>W</c> (<see cref="RenderGraphPackageCatalog.PlaceCrop"/>); a zero
-/// width or height shows the whole source.</param>
-/// <param name="Surround">The surround the fill colour covers around the rect, as fractions of the output's extent:
-/// left, top, width and height (<see cref="RenderGraphPackageCatalog.PlaceSurround"/>); zero fills nothing.</param>
-/// <param name="Fill">The surround's linear RGBA colour (<see cref="RenderGraphPackageCatalog.PlaceFill"/>).</param>
-/// <param name="Pixelated">Whether each source pixel stays a crisp cell at any scale
-/// (<see cref="RenderGraphPackageCatalog.PlacePixelated"/>), as a nearest-filtered source asks.</param>
-public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false, bool Sharpen = false,
-    Vector4 Crop = default, Vector4 Surround = default, Vector4 Fill = default, bool Pixelated = false);
+/// width or height shows the whole source. A crop whose pixels match the rect's is an exact copy of them.</param>
+public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false, bool Sharpen = false, System.Numerics.Vector4? LetterboxColor = null, float Fidelity = 0f, System.Numerics.Vector4 Crop = default);
 /// <summary>Answers where a host shows each <c>place</c> pass's source this frame. The recorder asks once per recorded
 /// frame, on the frame thread.</summary>
 public interface IRenderGraphPlacements {
@@ -46,11 +44,11 @@ public interface IRenderGraphPlacements {
 /// letterbox color when the config's <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> is set, and the source
 /// reconstructed inside it.
 /// <para>
-/// The kernel reads the frame group and a pass group holding the extent, the config (the letterbox switch, the rect, the
-/// sharpness, the sharpen switch, the crop, the surround and its fill, and the pixelated switch) and the images the
-/// catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host that places the source per frame
-/// (<see cref="IRenderGraphPlacements"/>) overrides the rect, the sharpness, the sharpen switch, the crop, the surround,
-/// the fill and the pixelated switch in the pass block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
+/// The kernel reads the frame group and a pass group holding the extent, the config (the letterbox switch and color, the
+/// rect, the sharpness and the sharpen switch) and the images the catalog declares
+/// (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host that places the source per frame
+/// (<see cref="IRenderGraphPlacements"/>) overrides the rect, the sharpness, the sharpen switch, the letterbox color, the
+/// fidelity and the crop in the pass block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
 /// output stands for the base; when the pass may not stand in, it copies the base everywhere. A letterboxing pass whose
 /// source is not shown writes the letterbox color everywhere instead when the host says part of the output is
 /// uncovered (<see cref="RenderGraphPlacement.Uncovered"/>). Its build leases the compute pipeline, one for every place
@@ -171,11 +169,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly string m_instance;
         private readonly string m_pass;
         private readonly IRenderGraphPlacements? m_placements;
-        private readonly int m_cropOffset;
-        private readonly int m_fillOffset;
-        private readonly int m_surroundOffset;
         private readonly int m_letterboxOffset;
-        private readonly int m_pixelatedOffset;
+        private readonly int m_letterboxColorOffset;
+        private readonly int m_fidelityOffset;
+        private readonly int m_cropOffset;
         private readonly int m_rectOffset;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
@@ -197,11 +194,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             m_services = context.Services;
 
             try {
-                m_cropOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceCrop));
-                m_fillOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceFill));
-                m_surroundOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSurround));
                 m_letterboxOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox));
-                m_pixelatedOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlacePixelated));
+                m_letterboxColorOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterboxColor));
+                m_fidelityOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceFidelity));
+                m_cropOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceCrop));
                 m_rectOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
                 m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
                 m_sharpenOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpen));
@@ -242,7 +238,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private bool Hidden(ReadOnlySpan<byte> passBlock, in RenderGraphPlacement placement) =>
             (!placement.Shown &&
             !(placement.Uncovered && (BinaryPrimitives.ReadUInt32LittleEndian(source: passBlock[m_letterboxOffset..]) != 0u)));
-        private static void WriteVector(Span<byte> destination, Vector4 value) {
+        private static void WriteVector(Span<byte> destination, System.Numerics.Vector4 value) {
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination, value: value.X);
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[4..], value: value.Y);
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[8..], value: value.Z);
@@ -301,23 +297,20 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     destination: recording.PassBlock[m_sharpenOffset..],
                     value: (placement.Sharpen ? 1u : 0u)
                 );
+
+                WriteVector(
+                    destination: recording.PassBlock[m_letterboxColorOffset..],
+                    value: (placement.LetterboxColor ?? RenderGraphPackageCatalog.DefaultLetterboxColor)
+                );
                 WriteVector(
                     destination: recording.PassBlock[m_cropOffset..],
                     value: (((placement.Crop.Z > 0f) && (placement.Crop.W > 0f))
                         ? placement.Crop
-                        : new Vector4(x: 0f, y: 0f, z: 1f, w: 1f))
+                        : new System.Numerics.Vector4(x: 0f, y: 0f, z: 1f, w: 1f))
                 );
-                WriteVector(
-                    destination: recording.PassBlock[m_surroundOffset..],
-                    value: (placement.Shown ? placement.Surround : default)
-                );
-                WriteVector(
-                    destination: recording.PassBlock[m_fillOffset..],
-                    value: placement.Fill
-                );
-                BinaryPrimitives.WriteUInt32LittleEndian(
-                    destination: recording.PassBlock[m_pixelatedOffset..],
-                    value: (placement.Pixelated ? 1u : 0u)
+                BinaryPrimitives.WriteSingleLittleEndian(
+                    destination: recording.PassBlock[m_fidelityOffset..],
+                    value: Math.Clamp(max: 1f, min: 0f, value: placement.Fidelity)
                 );
 
                 // A source shown nowhere that must still draw writes the letterbox everywhere when it owes it, its empty

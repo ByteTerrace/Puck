@@ -59,6 +59,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     /// <summary>Gets the geometry the group was sealed with, which keys its mesh.</summary>
     public SdfMeshGeometry Sealed { get; private set; }
+    /// <summary>Gets the form the group was sealed with (<see cref="SdfMeshGeometryBuilder.Form"/>): its geometry without
+    /// the poses of the slots besides its own.</summary>
+    public UInt128 Form { get; private set; }
 
     /// <summary>Gets the materials the group's shapes carry, in the order its geometry numbers them.</summary>
     public int[] MaterialOrder { get; private set; } = [];
@@ -256,6 +259,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     // Seals the group: its geometry, its materials, and the pose rows its lattices read.
     private void Seal() {
         Sealed = Geometry.Geometry;
+        Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];
 
         var poses = Geometry.Poses;

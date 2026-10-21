@@ -93,8 +93,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// default while <see cref="HoveredPane"/> is <see langword="null"/>.</summary>
     public SourcePick HoveredPick => m_hoveredPick;
     /// <summary>Gets the mapping of every pane the root's <c>place</c> passes draw, in drawing order (the views, then the
-    /// <c>views.graphs</c> panes), as <see cref="PublishPanes"/> last published it. The host rewrites the list in
-    /// place.</summary>
+    /// <c>views.graphs</c> panes), then of every screen a seat's view frames (<see cref="FrameScreen"/>), as
+    /// <see cref="PublishPanes"/> last published it. The host rewrites the list in place.</summary>
     public IReadOnlyList<SourceMapping> Panes => m_panes;
     /// <summary>Gets the whole-display mapping of the lone view covering the whole display, which is no pane (the display
     /// is that view) and so is never hovered or outlined, but which <see cref="Walk"/> starts from where no pane holds the
@@ -176,12 +176,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             }
         }
 
+        PublishFramed();
         Picker.Publish(
             displayHeight: m_displayHeight,
             displayWidth: m_displayWidth,
             panes: m_panes
         );
-        PublishEngaged();
     }
     /// <summary>Marks an instance as a passthrough source the local user opened: the mapping of each published pane
     /// showing it takes <see cref="SourceDestination.Passthrough"/> with the <see cref="SourceOpener.LocalUser"/> opener at
@@ -428,12 +428,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         var fit = FitOf(instance: instance);
         var mapping = MappingOf(
             cached: m_mappings.GetValueOrDefault(key: pass),
-            crop: (m_paneCrops.TryGetValue(
-                key: pass,
-                value: out var crop
-            )
-                ? crop
-                : null),
             fit: fit,
             instance: instance,
             latest: latest,
@@ -492,10 +486,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         return SourceFit.Stretch;
     }
     // The mapping of an instance's whole image over a region of the display once the instance has rendered at an extent:
-    // the cached one while its region, extent, crop, fit, source and destination hold, so a steady frame allocates
-    // nothing. Its pixels are the source's own (IWorldViewScenes.TrySourceExtent) where they differ from the rendered
-    // extent, and a crop that leaves those pixels shows the whole image.
-    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached, SourceFit fit = SourceFit.Stretch, SourcePixelRect? crop = null) {
+    // the cached one while its region, extent, fit, source and destination hold, so a steady frame allocates nothing. Its
+    // pixels are the source's own (IWorldViewScenes.TrySourceExtent) where they differ from the rendered extent.
+    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached, SourceFit fit = SourceFit.Stretch) {
         var index = set.IndexOf(name: instance);
 
         if (
@@ -522,12 +515,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         ))
             ? (sourceWidth, sourceHeight)
             : (row.Width, row.Height));
-        var shownCrop = (((crop is { } part) && (part.X >= 0) && (part.Y >= 0) && (part.Width > 0) && (part.Height > 0) && ((((long)part.X) + part.Width) <= width) && ((((long)part.Y) + part.Height) <= height))
-            ? part
-            : SourcePixelRect.Whole(
-                height: height,
-                width: width
-            ));
         var mapping = cached;
 
         if (
@@ -536,7 +523,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             (shown != region) ||
             (mapping.SourceWidth != width) ||
             (mapping.SourceHeight != height) ||
-            (mapping.Crop != shownCrop) ||
             (mapping.Fit != fit) ||
             (mapping.Source != source) ||
             (mapping.Destination != destination)
@@ -547,7 +533,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 source: source,
                 width: width
             ) with {
-                Crop = shownCrop,
                 Destination = destination,
                 Fit = fit,
                 Opener = ((destination == SourceDestination.Passthrough)

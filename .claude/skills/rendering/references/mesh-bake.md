@@ -210,8 +210,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   anything a world means. `world.counters sdf.mesh-settle` reads queued, done,
   reused, moving (frames a drifted group waited while it moved), capped and
   refused, summed over the residencies sharing the presentation's library. A
-  program that arrives later still plans every group at the pose of its frame,
-  unsnapped.
+  program that arrives later plans every group at the pose of its frame,
+  unsnapped, but keeps a dynamic group whose form held (`SdfMeshBakeGroup.Form`,
+  `SdfMeshGeometryBuilder.Form`: the geometry without the other slots' poses):
+  a body breathing while a placement elsewhere changes keeps its skinned mesh,
+  and only its settle rebakes it (`SdfMeshPathBakeLawTests`, the rebuild law).
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
@@ -264,7 +267,18 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   the symptom of a miss is an edit that shows only once the group's first shape
   changes. The key is taken from the frame a program arrives in, so shapes that
   move against one another later keep the mesh of that pose until they settle
-  and the group bakes again (the settle rebake above).
+  and the group bakes again (the settle rebake above). A geometry whose bake
+  found no surface is held as empty (`SdfMeshLibrary.StoreEmpty`), so a group
+  of it at another selector finishes at once instead of baking again.
+- **A material id shift renumbers every later mesh.** A group whose material
+  ids moved takes its mesh renumbered (`SdfMeshLibrary.TryTake`), a new
+  `SdfMesh` the mesh region lands again word for word, 2 MB a frame, with its
+  draw held out of the frame until it lands. Program material ids are dense in
+  registration order, so a placement that stops or starts showing a palette
+  shifts every group after it: a responding static row registers the palette
+  of every creation it can show (`WorldPlacementStamper.EmitStatic`,
+  `ResponsePaletteLawTests`), and a creation with nothing to draw emits no
+  instance, so a response swaps one row's materials alone.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity: the bake kernels'
   bytecode, `Puck.SignedDistance`'s build, and the hash of the

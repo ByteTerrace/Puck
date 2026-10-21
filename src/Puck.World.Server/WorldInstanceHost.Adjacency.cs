@@ -131,7 +131,8 @@ public sealed partial class WorldInstanceHost {
             observe: instance.Server.AttachSink,
             adjacencies: () => instance.Server.Adjacencies,
             nextInputTick: () => instance.Server.NextInputTick,
-            clockOwnedHere: true
+            clockOwnedHere: true,
+            drivesDevice: index => instance.Server.Engagement.DrivesDevice(bodyIndex: index)
         );
         m_authorityEndpoints[instance.Name] = endpoint;
         return endpoint;

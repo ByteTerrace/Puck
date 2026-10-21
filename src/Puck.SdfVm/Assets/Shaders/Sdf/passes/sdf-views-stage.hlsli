@@ -122,7 +122,9 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         return viewColor;
     }
 
-    return (viewColor * (s.hit ? sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t) : 1.0));
+    // The view's screen fidelity clears the atmosphere's hold on what the view shows, so a framed screen's pixels leave
+    // as the glass shaded them (SdfViewSnapshot.ScreenFidelity); the composite clears the in-scatter by the same share.
+    return (viewColor * (s.hit ? lerp(sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t), 1.0, saturate(passGroup.screenFidelity)) : 1.0));
 }
 
 #endif

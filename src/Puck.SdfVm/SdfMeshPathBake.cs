@@ -613,14 +613,14 @@ public sealed partial class SdfMeshPathBake {
         ));
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
-        // a group whose geometry moved bakes again.
+        // a group whose geometry moved bakes again (Keeps).
         var rebaked = 0;
         var loading = 0;
 
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
-            if (previous.TryGetValue(key: group.Selector, value: out var old) && (old.Sealed == group.Sealed) && old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) {
+            if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)) {
                 m_groups[index] = old;
                 continue;
             }
@@ -629,6 +629,12 @@ public sealed partial class SdfMeshPathBake {
             // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
             if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {
                 group.Mesh = baked;
+                group.Done = true;
+                continue;
+            }
+            // Geometry an earlier bake found no surface in meshes nothing again.
+            if (Library.HoldsEmpty(geometry: group.Sealed)) {
+                group.Outcome = "no surface, as baked before";
                 group.Done = true;
                 continue;
             }
@@ -662,6 +668,15 @@ public sealed partial class SdfMeshPathBake {
         if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
+    }
+    // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
+    // materials, or, for a dynamic group, the same form and materials, which are the same shapes in another relative pose,
+    // so the skinned mesh drawing (or baking) carries on, rides each member's slot, and bakes again only once the members
+    // settle away from the pose it was baked at (Settle).
+    private static bool Keeps(Group group, Group old) {
+        if (!old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
+
+        return ((old.Sealed == group.Sealed) || (old.Dynamic && group.Dynamic && (old.Form == group.Form) && ((old.Mesh is not null) || !old.Done)));
     }
     // Starts a group the library holds no mesh of at the coarse lattice over its box, under the bake's identity. Geometry
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
@@ -734,6 +749,7 @@ public sealed partial class SdfMeshPathBake {
 
         if (!(low.X <= high.X)) {
             group.Outcome = $"no surface after {group.Refinements} refinements";
+            Library.StoreEmpty(geometry: group.Sealed);
             group.Next = null;
             group.Done = true;
             group.Mesh = null;
@@ -872,6 +888,7 @@ public sealed partial class SdfMeshPathBake {
         }
         if (!(inside && outside)) {
             group.Outcome = "no crossed cell in the final lattice";
+            Library.StoreEmpty(geometry: group.Sealed);
             group.Final = null;
             group.Next = null;
             group.Done = true;
@@ -925,6 +942,7 @@ public sealed partial class SdfMeshPathBake {
             if ((refusal is not null) || (points is null) || (points.Length == 0)) {
                 if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); }
                 group.Outcome = ((refusal is null) ? "no crossed cell in the final lattice" : "lattice refused");
+                if (refusal is null) { Library.StoreEmpty(geometry: group.Sealed); }
                 group.Final = null;
                 group.Next = null;
                 group.Done = true;
@@ -1021,6 +1039,7 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             if ((contour is null) || (contour.QuadCount == 0)) {
                 group.Outcome = ((contour is null) ? "contour refused" : "contour empty");
+                if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed); }
                 group.Done = true;
                 group.Mesh = null;
                 Finish();

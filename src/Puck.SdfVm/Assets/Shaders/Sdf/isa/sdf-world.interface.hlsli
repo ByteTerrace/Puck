@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/9888b00de5f0f5f07993948a905d73cbf0c1048f3ff84cf6fb70635fe5d17f7d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/e7402b4ed19d35bff47ad6c0acffbab1cb09a06146b6f05cd37e2da24464ebad). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -192,9 +192,9 @@ struct SdfWorldPass {
     [[vk::offset(1612)]] uint _pad1612;
     [[vk::offset(1616)]] float4 previousView[6];
     [[vk::offset(1712)]] uint screenCount;
-    [[vk::offset(1716)]] uint shadowFadeCount;
-    [[vk::offset(1720)]] uint shadowSlotCount;
-    [[vk::offset(1724)]] uint _pad1724;
+    [[vk::offset(1716)]] float screenFidelity;
+    [[vk::offset(1720)]] uint shadowFadeCount;
+    [[vk::offset(1724)]] uint shadowSlotCount;
     [[vk::offset(1728)]] int4 shadowSlots;
     [[vk::offset(1744)]] float tanHalfFieldOfView;
     [[vk::offset(1748)]] uint temporal;
@@ -211,8 +211,8 @@ struct SdfWorldPass {
     [[vk::offset(1824)]] uint workCounterRow;
     [[vk::offset(1828)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaB9D28E47 : register(b0, space3);
-#define passGroup passGroupIsaB9D28E47
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaB81EC221 : register(b0, space3);
+#define passGroup passGroupIsaB81EC221
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

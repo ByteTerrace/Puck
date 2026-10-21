@@ -227,4 +227,46 @@ public sealed class ControlApplicationLawTests {
         );
         Assert.False(condition: fixture.Server.Body(index: seat.Index)!.Engaged);
     }
+    // The client composes a seat's movement pair raw exactly when this reads true, so a device's pad reads right as
+    // right whichever way the camera faces; every other set keeps its camera-relative movement.
+    [Fact]
+    public void OnlyACapturedDeviceSetDrivesADevice() {
+        using var fixture = Fixtures.FreshServer();
+
+        var seat = Join(
+            fixture: fixture,
+            slot: 0
+        );
+        var engagement = fixture.Server.Engagement;
+        var screen = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
+
+        void Set(params GrantSubject[] targets) => fixture.Server.Grants.SetApplications(
+            applications: targets.Select(selector: static target => new ControlApplication(
+                Kit: null,
+                Reach: ChannelReachMask.All,
+                Target: target
+            )).ToArray(),
+            principal: seat
+        );
+
+        Assert.False(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+        Assert.False(condition: engagement.DrivesDevice(bodyIndex: 4095));
+
+        Set(screen);
+        Assert.True(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+
+        Set(GrantSubject.Placement(id: "board"));
+        Assert.True(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+
+        // Mirrored: the avatar still walks.
+        Set(GrantSubject.Body(index: seat.Index), screen);
+        Assert.False(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+
+        // Possession drives a body, and a screen with no row is a portal face onto one.
+        Set(screen, GrantSubject.Body(index: 1));
+        Assert.False(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+
+        Set(GrantSubject.Screen(index: 999));
+        Assert.False(condition: engagement.DrivesDevice(bodyIndex: seat.Index));
+    }
 }

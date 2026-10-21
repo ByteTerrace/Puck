@@ -55,6 +55,22 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
             _ = Disk?.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh);
         }
     }
+    /// <summary>Records that a geometry's bake found no surface, so a later group of it, in another program or residency,
+    /// finishes with no mesh rather than baking again. The record lasts the run and empties with the meshes.</summary>
+    /// <param name="geometry">The geometry that meshed nothing.</param>
+    public void StoreEmpty(SdfMeshGeometry geometry) {
+        lock (m_gate) {
+            if (m_meshes.ContainsKey(key: geometry)) { return; }
+            if (m_meshes.Count >= Capacity) { m_meshes.Clear(); }
+            m_meshes.Add(key: geometry, value: []);
+        }
+    }
+    /// <summary>Returns whether a geometry's bake found no surface (<see cref="StoreEmpty"/>).</summary>
+    /// <param name="geometry">The geometry.</param>
+    /// <returns><see langword="true"/> when the library holds the geometry as one that meshes nothing.</returns>
+    public bool HoldsEmpty(SdfMeshGeometry geometry) {
+        lock (m_gate) { return (m_meshes.TryGetValue(key: geometry, value: out var variants) && (variants.Count == 0)); }
+    }
     /// <summary>Returns whether <see cref="Disk"/> holds a geometry's mesh under a bake's identity, without reading it.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The geometry.</param>
@@ -92,7 +108,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         lock (m_gate) {
-            if (!m_meshes.TryGetValue(key: geometry, value: out var variants)) {
+            if (!m_meshes.TryGetValue(key: geometry, value: out var variants) || (variants.Count == 0)) {
                 mesh = null;
                 return false;
             }

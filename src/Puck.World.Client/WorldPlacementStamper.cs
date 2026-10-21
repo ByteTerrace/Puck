@@ -297,6 +297,10 @@ public static class WorldPlacementStamper {
         if ((hidden is not null) && (Array.IndexOf(array: hidden, value: false) < 0)) {
             return;
         }
+        // Nor does a creation with no shapes, text, mesh or volume (a response's "nothing shown" entry).
+        if ((creation.Shapes is not { Count: > 0 }) && (creation.TextRuns is not { Count: > 0 }) && (mesh is null) && (creation.Volumes is not { Count: > 0 })) {
+            return;
+        }
 
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
@@ -822,6 +826,16 @@ public static class WorldPlacementStamper {
             _ = builder.EndInstance();
         }
     }
+    // Registers the palette of a responding row's authored creation and of each response entry's, in that order.
+    private static void RegisterAlternatives(SdfProgramBuilder builder, WorldBakedColors colors, IReadOnlyList<WorldPrototype> creations, WorldPlacement placement, WorldStaticPalettes registered, IReadOnlyList<WorldPlacementResponse> responses) {
+        for (var index = -1; (index < responses.Count); index++) {
+            var id = ((index < 0) ? placement.PrototypeId : responses[index].PrototypeId);
+
+            if (WorldDefinitionRows.FindCreation(creations: creations, id: id) is { } creation) {
+                _ = registered.Resolve(builder: builder, colors: colors, creation: creation);
+            }
+        }
+    }
     /// <summary>Emits every STATIC placement (animated rows skip — the animator owns them). Palettes register once per
     /// distinct untinted creation; a tinted stamp (selection amber / change shimmer) registers its own lerped palette
     /// (act-scale rare, never steady-state).</summary>
@@ -875,6 +889,14 @@ public static class WorldPlacementStamper {
             }
 
             var tint = tintFor?.Invoke(arg: placement.Id);
+
+            // A responding row registers every creation it can show, in its authored order, before the one it shows: the
+            // program's material ids then stand whichever entry holds, so a response swaps one row's materials and moves no
+            // other group's, and the mesh library hands every other group its mesh as it was.
+            if ((tint is null) && (placement.Respond is { Count: > 0 } responses)) {
+                RegisterAlternatives(builder: builder, colors: baked, creations: creations, placement: placement, registered: registered, responses: responses);
+            }
+
             var paletteIds = ((tint is null)
                 ? registered.Resolve(
                     builder: builder,

@@ -11,12 +11,14 @@ spawnPoints [
   // Two and a half metres in front of the device row's middle plinth in the gallery lobby (devices.puck), facing its
   // screens.
   { id: "devices", position [15, 0.05, 25.5], yawDegrees: 180 }
-  // Four and a half metres from the chess table's centre (chess.puck), on Black's side.
-  { id: "chess", position [-6, 0, -7.5], yawDegrees: 0 }
+  // At White's edge of the chess table in the gallery lobby (chess.puck), 1.6 m from the board's centre and facing it,
+  // inside the board's engage radius: the context button sits her down.
+  { id: "chess", position [12.2, 0.05, 18.4], yawDegrees: 180 }
   // Five metres short of the loop shaft's floor glass (loop.puck); walk ahead to drop in.
   { id: "loop", position [-20, 0, -15], yawDegrees: 0 }
-  // Five metres in front of the wall screen (desktop.puck).
-  { id: "screen", position [8, 0, -3], yawDegrees: 0 }
+  // Behind the chair at the desktop computer in the gallery lobby (desktop.puck), facing its monitor, inside the
+  // screen's engage radius.
+  { id: "desktop", position [12.4, 0.05, 23.7], yawDegrees: 90 }
   // Outside the gallery hall's entrance (hall.puck), facing in; the map board stands in the lobby ahead and left.
   { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
 ]
@@ -24,7 +26,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, chess, loop, screen, gallery, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, chess, desktop, loop, gallery, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

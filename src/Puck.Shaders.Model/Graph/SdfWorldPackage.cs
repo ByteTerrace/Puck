@@ -129,6 +129,11 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to publish premultiplied geometry color and coverage without background sky
     /// (<c>uint</c>), for a far sky layer.</summary>
     public const string GeometryOnly = "geometryOnly";
+    /// <summary>The pass-group value holding the view's screen fidelity, from 0 to 1 (<c>float</c>): the share of a
+    /// screen's own pixels that reaches the view untouched, past the CRT glass's treatment and the world's atmosphere. A
+    /// seat framing the screen it engaged carries its ease's weight here, so at 1 a framed picture is its source scaled;
+    /// every other view carries 0.</summary>
+    public const string ScreenFidelity = "screenFidelity";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -270,6 +275,7 @@ public static partial class SdfWorldPackage {
         Value(name: DisableAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
+        Value(name: ScreenFidelity, type: ShaderValueType.Float),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),

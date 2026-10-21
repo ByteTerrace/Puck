@@ -32,6 +32,7 @@ public static partial class SdfFrameBlock {
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
     private static readonly int DisableAmbientOcclusion = Offset(member: SdfWorldPackage.DisableAmbientOcclusion);
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
+    private static readonly int ScreenFidelity = Offset(member: SdfWorldPackage.ScreenFidelity);
     private static readonly int DisableScreenLights = Offset(member: SdfWorldPackage.DisableScreenLights);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
@@ -209,6 +210,7 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
+        WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
     }
 
     // The offset a pass-block member lies at.
