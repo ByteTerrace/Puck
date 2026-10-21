@@ -108,7 +108,8 @@ public static class WorldPlacementStamper {
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
                 Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool),
-                EmissiveLane: entry?.EmissiveLane
+                EmissiveLane: entry?.EmissiveLane,
+                Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f))
             ));
         }
     }
@@ -301,6 +302,9 @@ public static class WorldPlacementStamper {
             definition: definition,
             placement: placement
         );
+        // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
+        // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
+        var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
         // Laid out ONCE here (rather than once for the reach measure below plus once per pattern/scatter instance
         // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
         // options), all fixed for this whole EmitPlacement call, so every reader below shares this one result.
@@ -347,8 +351,10 @@ public static class WorldPlacementStamper {
             builder: builder,
             creation: creation,
             firstMesh: firstMesh,
+            glassHidden: glassHidden,
             hasText: hasText,
             hidden: hidden,
+            hiddenOpaque: hiddenOpaque,
             mesh: ((hidden is null) ? mesh : null),
             meshDraws: meshDraws,
             meshMaterial: meshMaterial,
@@ -377,6 +383,31 @@ public static class WorldPlacementStamper {
         );
     }
 
+    // The masks a creation with glass shapes emits through: the opaque emission's hidden shapes (the isolation's and
+    // every glass shape) and the glass emission's (everything but the isolation's visible glass shapes). Both null for a
+    // creation with no visible glass shape, which emits as it stands.
+    private static (bool[]? HiddenOpaque, bool[]? GlassHidden) GlassMasks(CreationDocument creation, bool[]? hidden) {
+        if (!creation.HasGlass) {
+            return (hidden, null);
+        }
+
+        var shapes = creation.Shapes!;
+        var hiddenOpaque = new bool[shapes.Count];
+        var glassHidden = new bool[shapes.Count];
+        var any = false;
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shown = ((hidden is null) || !hidden[index]);
+            var glass = (shown && creation.IsGlassShape(shape: shapes[index]));
+
+            hiddenOpaque[index] = (!shown || glass);
+            glassHidden[index] = !glass;
+            any |= glass;
+        }
+
+        return (hiddenOpaque, (any ? glassHidden : null));
+    }
+
     // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke, about
     // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldStampPool).
     internal static float TextDetail(CreationDocument creation, float scale) {
@@ -391,7 +422,7 @@ public static class WorldPlacementStamper {
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
-    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, bool[]? hiddenOpaque, bool[]? glassHidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         // A bound measures a shape's reach, not its smallest curved feature. Thin strands, shells and warped edges
         // need their own spacing even when the unwarped primitive or the containing creation has a large bound.
         private static float ShapeDetail(ShapeDocument shape, float scale) {
@@ -453,16 +484,54 @@ public static class WorldPlacementStamper {
 
             return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
         }
-        private static float CreationDetail(CreationDocument document, float scale) {
+        private static float CreationDetail(CreationDocument document, float scale, bool[]? hidden = null) {
             var detail = float.PositiveInfinity;
+            var shapes = (document.Shapes ?? []);
 
-            foreach (var shape in (document.Shapes ?? [])) {
-                var own = ShapeDetail(scale: scale, shape: shape);
+            for (var index = 0; (index < shapes.Count); index++) {
+                if ((hidden is not null) && hidden[index]) { continue; }
+
+                var own = ShapeDetail(scale: scale, shape: shapes[index]);
 
                 if (own > 0f) { detail = MathF.Min(x: detail, y: own); }
             }
 
             return (float.IsFinite(f: detail) ? detail : 0f);
+        }
+        // The creation's glass shapes, one static instance of their own after the opaque shapes and text: their own
+        // group, so they never bake with an opaque shape, carve or are carved by one, and draw in the glass pass. They
+        // take a field scope of their own only when one of them composes by something other than a union, so a hollow
+        // shell cut from a glass box stays glass.
+        private void EmitGlassShapes(CreationStampInstance instance) {
+            if (glassHidden is null) {
+                return;
+            }
+
+            var glassScoped = creation.GlassNeedsScope();
+
+            _ = builder.BeginInstance(
+                boundCenter: instance.Origin,
+                boundRadius: (reach + PlacementBoundMargin),
+                detail: CreationDetail(document: creation, hidden: glassHidden, scale: placement.Scale)
+            );
+            if (glassScoped) {
+                _ = builder.PushField(compose: SdfBlendOp.Union);
+            }
+            EmitPlacedShapes(
+                builder: builder,
+                creation: creation,
+                hidden: glassHidden,
+                inScope: glassScoped,
+                paletteIds: paletteIds,
+                placement: placement,
+                placementOrigin: instance.Origin,
+                placementRotation: rotation,
+                reflectionNormal: instance.ReflectionNormal
+            );
+            if (glassScoped) {
+                _ = builder.PopField();
+            }
+            _ = builder.EndInstance();
         }
         private void EmitTextRuns(CreationStampInstance instance) {
             // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
@@ -522,7 +591,7 @@ public static class WorldPlacementStamper {
                 for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
                     var shape = creation.Shapes[shapeIndex];
 
-                    if ((hidden is not null) && hidden[shapeIndex]) {
+                    if ((hiddenOpaque is not null) && hiddenOpaque[shapeIndex]) {
                         continue;
                     }
                     // A fold's copies leave any shape-local sphere, so a domain-bearing shape keeps the
@@ -577,55 +646,60 @@ public static class WorldPlacementStamper {
                     EmitTextRuns(instance: instance);
                     _ = builder.EndInstance();
                 }
+                EmitGlassShapes(instance: instance);
 
                 return;
             }
 
-            _ = builder.BeginInstance(
-                boundCenter: instance.Origin,
-                boundRadius: (reach + PlacementBoundMargin),
-                detail: CreationDetail(document: creation, scale: placement.Scale)
-            );
-            if (scoped) {
-                _ = builder.PushField(compose: SdfBlendOp.Union);
-            }
-            EmitPlacedShapes(
-                builder: builder,
-                creation: creation,
-                hidden: hidden,
-                inScope: scoped,
-                paletteIds: paletteIds,
-                placement: placement,
-                placementOrigin: instance.Origin,
-                placementRotation: rotation,
-                reflectionNormal: instance.ReflectionNormal
-            );
             // Text that carves the shapes (engraved) or takes their noise stays inside their scope; embossed text on a
-            // noiseless creation bakes as its own detailed group after it, as in the per-shape branch above.
-            var textApart = (hasText && (creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)));
+            // noiseless creation bakes as its own detailed group after it, as in the per-shape branch above. A creation
+            // whose every shown shape is glass has no opaque instance for the text to stay in, so it goes apart too.
+            var anyOpaque = ((hiddenOpaque is null) || (Array.IndexOf(array: hiddenOpaque, value: false) >= 0));
+            var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)))));
 
-            if (hasText && !textApart) {
-                EmitTextRuns(instance: instance);
-            }
-            if (
-                scoped &&
-                (creation.Noise is { } noise)
-            ) {
-                CreationStampEmitter.EmitNoise(
-                    builder: builder,
-                    noise: noise,
-                    transform: new CreationStampTransform(
-                        Origin: instance.Origin,
-                        Rotation: rotation,
-                        Scale: placement.Scale,
-                        ReflectionNormal: instance.ReflectionNormal
-                    )
+            if (anyOpaque) {
+                _ = builder.BeginInstance(
+                    boundCenter: instance.Origin,
+                    boundRadius: (reach + PlacementBoundMargin),
+                    detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale)
                 );
+                if (scoped) {
+                    _ = builder.PushField(compose: SdfBlendOp.Union);
+                }
+                EmitPlacedShapes(
+                    builder: builder,
+                    creation: creation,
+                    hidden: hiddenOpaque,
+                    inScope: scoped,
+                    paletteIds: paletteIds,
+                    placement: placement,
+                    placementOrigin: instance.Origin,
+                    placementRotation: rotation,
+                    reflectionNormal: instance.ReflectionNormal
+                );
+                if (hasText && !textApart) {
+                    EmitTextRuns(instance: instance);
+                }
+                if (
+                    scoped &&
+                    (creation.Noise is { } noise)
+                ) {
+                    CreationStampEmitter.EmitNoise(
+                        builder: builder,
+                        noise: noise,
+                        transform: new CreationStampTransform(
+                            Origin: instance.Origin,
+                            Rotation: rotation,
+                            Scale: placement.Scale,
+                            ReflectionNormal: instance.ReflectionNormal
+                        )
+                    );
+                }
+                if (scoped) {
+                    _ = builder.PopField();
+                }
+                _ = builder.EndInstance();
             }
-            if (scoped) {
-                _ = builder.PopField();
-            }
-            _ = builder.EndInstance();
 
             if (textApart) {
                 _ = builder.BeginInstance(
@@ -636,6 +710,7 @@ public static class WorldPlacementStamper {
                 EmitTextRuns(instance: instance);
                 _ = builder.EndInstance();
             }
+            EmitGlassShapes(instance: instance);
         }
     }
 

@@ -32,7 +32,13 @@ namespace Puck.World.Authoring;
 /// <param name="EmissiveLane">The render lane in [0, 3] whose saturated value scales <paramref name="Emissive"/> at
 /// shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null
 /// keeps the emissive static.</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PalettePaintDocument>? Paints = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null);
+/// <param name="Glass">The slot's glass (<see cref="PaletteGlassDocument"/>), whose tint is <paramref name="Color"/>
+/// and whose frost is <paramref name="Roughness"/>; null keeps the slot opaque.</param>
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PalettePaintDocument>? Paints = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassDocument? Glass = null) {
+    /// <summary>Gets whether the slot is glass.</summary>
+    [JsonIgnore]
+    public bool IsGlass => (Glass is not null);
+}
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
 /// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
@@ -562,6 +568,39 @@ public sealed record CreationDocument(
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
+    /// <summary>Returns whether a shape's palette slot is glass (<see cref="PaletteEntryDocument.Glass"/>): the shape
+    /// bakes and draws apart from the creation's opaque shapes. A shape naming no slot, or one past the palette, reads
+    /// the slot the stampers resolve it to, the nearest within the palette.</summary>
+    /// <param name="shape">The shape.</param>
+    /// <returns><see langword="true"/> for a glass shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public bool IsGlassShape(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(argument: shape);
+
+        var palette = (Palette ?? []);
+        var count = Math.Min(val1: palette.Count, val2: PaletteSize);
+
+        if (count == 0) { return false; }
+
+        return palette[Math.Clamp(value: (shape.Material ?? 0), max: (count - 1), min: 0)].IsGlass;
+    }
+    /// <summary>Gets whether any shape of the creation is glass (<see cref="IsGlassShape"/>).</summary>
+    [JsonIgnore]
+    public bool HasGlass => (Shapes ?? []).Any(predicate: IsGlassShape);
+
+    /// <summary>Returns whether any glass shape of the creation composes by something other than a plain union with
+    /// the glass shapes before it, so the glass shapes need a field scope of their own when they emit apart from the
+    /// opaque ones.</summary>
+    /// <returns><see langword="true"/> when a glass shape blends other than by union.</returns>
+    public bool GlassNeedsScope() {
+        foreach (var shape in (Shapes ?? [])) {
+            if (IsGlassShape(shape: shape) && ((shape.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>The creation's total per-stamp shape budget: its authored shapes (a panelled shape counts as 2 — its
     /// eroded copy is a second emitted primitive; each of a shape's trims counts 2 more — the host's own eroded copy
     /// plus the reference's own dilated copy) plus every text run's expanded glyph count (a run counts as its
