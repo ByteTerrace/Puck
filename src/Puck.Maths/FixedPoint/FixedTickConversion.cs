@@ -155,7 +155,9 @@ public static class FixedTickConversion {
             return false;
         }
 
-        var bits = decimal.GetBits(d: seconds);
+        Span<int> bits = stackalloc int[4];
+
+        _ = decimal.GetBits(d: seconds, destination: bits);
         var scale = ((int)((((uint)bits[3]) >> 16) & 0xFFU));
         var unscaled = (((UInt128)((uint)bits[2])) << 64) | (((UInt128)((uint)bits[1])) << 32) | ((uint)bits[0]);
         var denominator = UInt128.One;
