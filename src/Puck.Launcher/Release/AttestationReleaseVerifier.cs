@@ -33,6 +33,11 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: "manifest carries no signature");
         }
 
+        if (signature.Claim is null || signature.Chain is null ||
+            (signature.Chain.Count is not (0 or 2)) || signature.Chain.Any(predicate: entry => entry is null)) {
+            return ReleaseVerifyOutcome.Refuse(reason: "malformed signature: a claim and zero or two non-null chain entries are required");
+        }
+
         SignedAttestation claim;
         List<SignedAttestation> chain;
 
@@ -114,8 +119,8 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: $"version '{manifest.Version}' is not strictly greater than the installed version '{installedVersion}'");
         }
 
-        if (advanceSequence) {
-            m_sequenceStore.Advance(requirement: requirement);
+        if (advanceSequence && !m_sequenceStore.TryAdvance(requirement: requirement)) {
+            return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
         }
 
         return ReleaseVerifyOutcome.Accept();

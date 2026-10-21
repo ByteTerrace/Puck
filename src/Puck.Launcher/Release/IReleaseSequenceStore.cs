@@ -1,5 +1,7 @@
 using Puck.Assets;
 using Puck.Attestation;
+using System.Globalization;
+using System.Text;
 
 namespace Puck.Launcher.Release;
 
@@ -8,15 +10,16 @@ namespace Puck.Launcher.Release;
 /// against (README.md §8's replay-commit contract, applied to a single-consumer client rather than a concurrent
 /// server). <see cref="AttestationReleaseVerifier"/> compares against the stored mark BEFORE trusting anything else
 /// in the manifest (a replayed old manifest is refused before its embedded <c>revoked</c>/<c>minimumSupported</c>
-/// are even read), and calls <see cref="Advance"/> only after every other check (hash, revocation,
-/// <c>minimumSupported</c>, version monotonicity) has passed — the mark must never record a claim whose effect was
-/// not actually applied.
+/// are even read), and calls <see cref="TryAdvance"/> only after every other verification check has passed.
+/// Compare-and-advance is atomic within the shared store instance. Coupling that write to installation and
+/// coordinating separate processes remain the install transaction's responsibility.
 /// </summary>
 public interface IReleaseSequenceStore {
-    /// <summary>Advances the stored mark to <paramref name="requirement"/>. Callers must have already confirmed
-    /// <see cref="IsAcceptable"/> for the same requirement — this method does not itself refuse a stale mark.</summary>
+    /// <summary>Atomically compares and advances the stored mark to <paramref name="requirement"/>. A preceding
+    /// <see cref="IsAcceptable"/> is only a preview: another verifier may have committed since then.</summary>
     /// <param name="requirement">The replay-commit requirement to record.</param>
-    void Advance(ReplayCommitRequirement requirement);
+    /// <returns>True only when this call advanced the mark; false for a stale requirement or malformed stored state.</returns>
+    bool TryAdvance(ReplayCommitRequirement requirement);
     /// <summary>Compares <paramref name="requirement"/> against the stored mark for its <c>(domain, subject)</c>
     /// pair without writing anything.</summary>
     /// <param name="requirement">The replay-commit requirement to check.</param>
@@ -31,9 +34,14 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     private readonly Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> m_marks = [];
 
     /// <inheritdoc/>
-    public void Advance(ReplayCommitRequirement requirement) {
+    public bool TryAdvance(ReplayCommitRequirement requirement) {
         lock (m_gate) {
+            if (!IsAcceptable(requirement: requirement)) {
+                return false;
+            }
+
             m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence);
+            return true;
         }
     }
     /// <inheritdoc/>
@@ -54,69 +62,102 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
         }
     }
 }
-/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one small text file, written through
+/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one mark per domain/subject in a text file, written through
 /// <see cref="AtomicFile"/> — the mark a compromised CDN cannot roll back by replaying old bytes, because it is never
 /// carried in the bytes being replayed.</summary>
-/// <param name="filePath">The mark file's path (created, with its parent directory, on first <see cref="Advance"/>).</param>
+/// <param name="filePath">The mark file's path (created, with its parent directory, on first <see cref="TryAdvance"/>).</param>
 public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequenceStore {
     private readonly string m_filePath = Path.GetFullPath(path: filePath);
     private readonly Lock m_gate = new();
 
-    private (string Domain, string Subject, long EpochStart, ulong Sequence)? ReadMark() {
+    private Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> ReadMarks() {
+        var marks = new Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)>();
+
         if (!File.Exists(path: m_filePath)) {
-            return null;
+            return marks;
         }
 
-        var fields = File.ReadAllText(path: m_filePath).Split(separator: '\t');
+        var lines = File.ReadAllLines(path: m_filePath);
 
-        if (
-            (fields.Length != 4) ||
-            !long.TryParse(
-            s: fields[2],
-            result: out var epochStart
-        ) ||
-            !ulong.TryParse(
-            s: fields[3],
-            result: out var sequence
-        )
-        ) {
-            return null;
+        if ((lines.Length < 2) || (lines[0] != "puck.release.sequence.v1")) {
+            throw new InvalidDataException(message: "the release sequence store is malformed");
         }
 
-        return (fields[0], fields[1], epochStart, sequence);
+        foreach (var line in lines.AsSpan(start: 1)) {
+            var fields = line.Split(separator: '\t');
+
+            if ((fields.Length != 4) ||
+                !long.TryParse(s: fields[2], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var epochStart) ||
+                !ulong.TryParse(s: fields[3], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var sequence)) {
+                throw new InvalidDataException(message: "the release sequence store is malformed");
+            }
+
+            // Encode identities so a subject containing a tab or newline cannot change the record boundaries.
+            try {
+                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                var domain = utf8.GetString(bytes: Convert.FromBase64String(s: fields[0]));
+                var subject = utf8.GetString(bytes: Convert.FromBase64String(s: fields[1]));
+
+                if ((domain.Length == 0) || (subject.Length == 0) ||
+                    !marks.TryAdd(key: (domain, subject), value: (epochStart, sequence))) {
+                    throw new InvalidDataException(message: "the release sequence store contains an empty or duplicate identity");
+                }
+            } catch (Exception error) when (error is FormatException or DecoderFallbackException) {
+                throw new InvalidDataException(message: "the release sequence store contains a malformed identity", innerException: error);
+            }
+        }
+
+        return marks;
     }
 
     /// <inheritdoc/>
-    public void Advance(ReplayCommitRequirement requirement) {
+    public bool TryAdvance(ReplayCommitRequirement requirement) {
         lock (m_gate) {
+            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> marks;
+
+            try {
+                marks = ReadMarks();
+            } catch (InvalidDataException) {
+                return false;
+            }
+
+            if (marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) &&
+                !ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence)) {
+                return false;
+            }
+
+            marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence);
+
+            var text = new StringBuilder(value: "puck.release.sequence.v1\n");
+
+            foreach (var (identity, mark) in marks.OrderBy(keySelector: pair => pair.Key.Domain, comparer: StringComparer.Ordinal)
+                .ThenBy(keySelector: pair => pair.Key.Subject, comparer: StringComparer.Ordinal)) {
+                text.Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Domain))).Append(value: '\t')
+                    .Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Subject))).Append(value: '\t')
+                    .Append(value: mark.EpochStart.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
+                    .Append(value: mark.Sequence.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\n');
+            }
+
             AtomicFile.WriteAllText(
-                contents: $"{requirement.Domain}\t{requirement.Subject}\t{requirement.EpochStartUnixSeconds}\t{requirement.Sequence}",
+                contents: text.ToString(),
                 path: m_filePath
             );
+            return true;
         }
     }
     /// <inheritdoc/>
     public bool IsAcceptable(ReplayCommitRequirement requirement) {
         lock (m_gate) {
-            var mark = ReadMark();
+            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> marks;
 
-            if (
-                (mark is not { } stored) ||
-                !string.Equals(
-                a: stored.Domain,
-                b: requirement.Domain,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                !string.Equals(
-                a: stored.Subject,
-                b: requirement.Subject,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return true;
+            try {
+                marks = ReadMarks();
+            } catch (InvalidDataException) {
+                // An existing corrupt mark is not an empty store: refuse rather than reopening every old release.
+                return false;
             }
 
-            return ReleaseSequenceComparison.IsAcceptable(
+            return !marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) || ReleaseSequenceComparison.IsAcceptable(
                 requirement: requirement,
                 storedEpochStart: stored.EpochStart,
                 storedSequence: stored.Sequence

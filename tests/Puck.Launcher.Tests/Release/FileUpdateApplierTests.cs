@@ -9,6 +9,21 @@ namespace Puck.Launcher.Tests.Release;
 public sealed class FileUpdateApplierTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
+    [Fact]
+    public void Apply_RefusesDowngradeAndReapplyAgainstTheCurrentPointer() {
+        var content = "verified bytes"u8.ToArray();
+        var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+        StageFile(version: "1.0.2", relativePath: file.Path, content: content);
+        StageFile(version: "1.0.3", relativePath: file.Path, content: content);
+        var applier = new FileUpdateApplier();
+
+        Assert.True(condition: applier.Apply(manifest: ManifestFor(version: "1.0.3", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.False(condition: applier.Apply(manifest: ManifestFor(version: "1.0.2", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.False(condition: applier.Apply(manifest: ManifestFor(version: "1.0.3", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.Equal(expected: "1.0.3", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current")));
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
+    }
+
     private static ReleaseManifest ManifestFor(string version, int stateGeneration, ReleasePayloadFile file) => new(
         App: "puck.world",
         Channel: "stable",

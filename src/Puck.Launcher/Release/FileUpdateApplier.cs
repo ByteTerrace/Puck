@@ -9,11 +9,25 @@ namespace Puck.Launcher.Release;
 /// OS-specific is needed once the update model is a pointer swap rather than an in-place executable/DLL replacement.
 /// </summary>
 public sealed class FileUpdateApplier : IUpdateApplier {
+    private readonly Lock m_gate = new();
+
     /// <inheritdoc/>
     public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot) {
+        lock (m_gate) {
+            return ApplyCore(manifest: manifest, rid: rid, cacheRoot: cacheRoot);
+        }
+    }
+
+    private static UpdateApplyResult ApplyCore(ReleaseManifest manifest, string rid, string cacheRoot) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: cacheRoot);
+
+        var errors = ReleaseCanonicalizer.Validate(document: manifest);
+
+        if (errors.Count != 0) {
+            return UpdateApplyResult.Refuse(reason: $"manifest fails structural validation: {errors[0]}");
+        }
 
         var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(
             a: candidate.Rid,
@@ -57,14 +71,6 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             }
         }
 
-        AtomicFile.WriteAllText(
-            path: Path.Combine(
-                path1: versionDirectory,
-                path2: "state-generation"
-            ),
-            contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
-        );
-
         var currentPath = Path.Combine(
             path1: root,
             path2: "current"
@@ -75,6 +81,12 @@ public sealed class FileUpdateApplier : IUpdateApplier {
         );
 
         if (previousVersion is { Length: > 0 }) {
+            // InstalledVersion belongs to the running process. A previous apply may already have advanced this
+            // pointer without restarting it, so the on-disk version is the final downgrade gate.
+            if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: previousVersion)) {
+                return UpdateApplyResult.Refuse(reason: $"version '{manifest.Version}' does not exceed the current install '{previousVersion}'");
+            }
+
             AtomicFile.WriteAllText(
                 path: Path.Combine(
                     path1: root,
@@ -83,6 +95,11 @@ public sealed class FileUpdateApplier : IUpdateApplier {
                 contents: previousVersion
             );
         }
+
+        AtomicFile.WriteAllText(
+            path: Path.Combine(path1: versionDirectory, path2: "state-generation"),
+            contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
+        );
 
         AtomicFile.WriteAllText(
             path: currentPath,
