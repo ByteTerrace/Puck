@@ -30,7 +30,7 @@ let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", 
 let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
 let foldRow = ["shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped", "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m", "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"]
 let formRow = ["shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle", "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid", "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"]
-let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color"]
+let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color", "shape-glass"]
 let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend", "motion-carve", "motion-mirror", "motion-polar"]
 let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
 let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
@@ -58,7 +58,7 @@ let galleryRows = [
   { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
   { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
   { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
-  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
+  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text, glass" }
   { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
   { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
   { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
@@ -1191,6 +1191,50 @@ template surfacePrototypes() {
         scale [0.45, 0.45, 0.45]
       }
       exhibit(label: "STATE COLOR", extra: [{ color: "state.galleryInputs.tint", roughness: 0.45, specular: 0.3 }])
+    }
+  }
+  // Glass: slot 4 an orange acrylic whose colour is reached 12 cm in, so the box holding the sphere reads clear orange
+  // and deepest through its middle; slot 5 one window glass twice, as an 8 mm pane and a 6 cm block, which the same
+  // depth tints faintly and deeply; slot 6 a frosted pane. Glass slots bake and draw apart from the opaque shapes: the
+  // sphere and rods are ordinary shapes seen through them, shifted by the refraction and blurred by the frost.
+  prototype "shape-glass" {
+    document {
+      shape Sphere "core" {
+        material: accentMaterial
+        position [-0.38, 1.2, 0]
+        scale [0.1, 0.1, 0.1]
+      }
+      shape Cylinder "rod" {
+        material: accentMaterial
+        position [0.2, 1.2, 0.14]
+        scale [0.015, 0.3, 0.015]
+      }
+      shape Cylinder "frost-rod" {
+        material: accentMaterial
+        position [0.46, 1.2, 0.1]
+        scale [0.015, 0.3, 0.015]
+      }
+      shape Box "shell" {
+        material: 4
+        position [-0.38, 1.2, 0]
+        scale [0.18, 0.18, 0.18]
+      }
+      shape Box "thin" {
+        material: 5
+        position [-0.05, 1.2, 0]
+        scale [0.1, 0.22, 0.004]
+      }
+      shape Box "thick" {
+        material: 5
+        position [0.2, 1.2, 0]
+        scale [0.08, 0.22, 0.03]
+      }
+      shape Box "frost" {
+        material: 6
+        position [0.46, 1.2, 0]
+        scale [0.1, 0.22, 0.004]
+      }
+      exhibit(label: "GLASS", extra: [accent, { color: "#F58220", roughness: 0.05, glass { depth: 0.12, ior: 1.49 } }, { color: "#C8F0DC", roughness: 0, glass { depth: 0.01, ior: 1.5 } }, { color: "#F0F0F0", roughness: 0.7, glass { depth: 0.01, ior: 1.5 } }], note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods.")
     }
   }
 }

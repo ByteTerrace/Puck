@@ -2186,8 +2186,11 @@ foliage, and hair stay out until a scene shows the need. When one returns,
 field evaluation is priced as many operations with no zero-penetration
 guarantee assumed, import is a bounded subset that follows the procedural
 geometry proof, and static geometry comes before skinning. Reflections beyond
-one glossy bounce, volumes, and transparency remain distinct contracts after
-opaque visibility,
+one glossy bounce and volumes remain distinct contracts after opaque
+visibility; transparency is one, landed as the glass passes
+([glass after the opaque image](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image):
+one glass layer a pixel after the opaque image, with its open items under
+[open items](open-items.md)),
 and facial deformation and richer materials remain separate measured slices.
 Every representation preserves identity, transforms, authority, and editing
 relationships. Transient aliasing, output-selected specialization,
