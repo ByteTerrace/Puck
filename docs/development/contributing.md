@@ -730,10 +730,9 @@ unverified when no device run exists.
 - The owner's development machine (Ryzen 7 7800X3D, RTX 4070) powers off
   without a bugcheck, a dump or a hardware-error record under sustained load, as
   a thermal or power trip does, most often while a windowed World renders and
-  several lanes build and test beside it. Until it is
-  diagnosed, keep that machine's load bounded: at most two lanes build or test
-  at once, each build capped at half the cores (`dotnet build -m:4`), and no GPU
-  tests while a World holds the GPU. LibreHardwareMonitor logs its sensors to a
+  several lanes build and test beside it. Work runs on it at its normal load
+  (bounding the load would hide the trip the diagnosis needs to catch); a lane
+  whose session ends with the machine resumes from its worktree. LibreHardwareMonitor logs its sensors to a
   CSV each second beside its executable (the winget package's folder under
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages`); after a trip, the last rows name
   the sensor that ran away.
