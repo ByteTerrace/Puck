@@ -101,7 +101,8 @@ through how it plays.
 
 [`chess-tests.puck`](chess-tests.puck) holds the table's scenarios, each booted
 in the whole debug world: a seated player playing a move with the keys and one
-with a pointer drag, legal and illegal moves, captures, castling through
+with a pointer drag, a seated player cancelling a lift, having an illegal
+put-down put back and standing up, legal and illegal moves, captures, castling through
 and clear of attack, en passant, a move left in check, threefold repetition and
 the opponent on either side. Run them with
 `puck test worlds/debug/chess-tests.puck`.

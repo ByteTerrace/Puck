@@ -178,6 +178,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] G1 Go.
 - [ ] S6's remainder: the forcing world, and the island, districts, and shards onto its modules.
 - [ ] A `test` block in a source that takes its state from a `basis` or an import resolves its `given` lines and enum member names against the source's own `state` section alone, so `worlds/debug/chess-tests.puck` (on the debug world as basis) sets cells through `seat1: world.state.cell.set` steps and writes enum members as numbers. Done when a test's `given` and `expect` lines resolve against the composed document, and those scenarios use `given` and the chess enums.
+- [ ] The debug world's chess board is a mirror image of a real one: White's back rank is on the table's -Z side and files run toward +X, and a camera looking toward +Z has -X on its right (`CameraSnapshot.LookAt`: right is forward crossed with up), so from White's seat the a-file lies on the right, h1 on the left is dark, and the queen stands right of the king. Done when White's seat sees a1 on its left (White on the +Z side with ranks running toward -Z, or files running toward -X), with `chess.md`'s square formula, the seated cursor's step directions and `chess-tests.puck`'s coordinates moved with it.
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
 
 ## [Runtime and delivery](runtime-and-delivery.md)
