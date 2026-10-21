@@ -5,7 +5,7 @@
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
-        <!-- xUnit discovers facts through reflection, and the suite deliberately exercises IVT-visible verifier internals. -->
+        <!-- xUnit discovers facts through reflection. -->
         <IsAotCompatible>false</IsAotCompatible>
         <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
         <NoWarn>$(NoWarn);CS1591</NoWarn>

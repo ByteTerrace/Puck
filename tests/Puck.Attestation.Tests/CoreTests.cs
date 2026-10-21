@@ -43,7 +43,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
-            profile: AttestationProfile.Base,
+            profile: AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1),
             codec: codec,
             claim: confusedClaim,
             chain: chain,

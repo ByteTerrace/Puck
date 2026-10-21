@@ -734,6 +734,29 @@ public static class AttestationVerifier {
         AttestationProfile profile
     ) {
         ArgumentNullException.ThrowIfNull(argument: profile);
+
+        return profile.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: trustList,
+            now: now,
+            expectedPurpose: expectedPurpose,
+            expectedAudience: expectedAudience
+        );
+    }
+    /// <summary>Walks the chain after the receiver-selected profile has checked every outer envelope.
+    /// Both public entry points pass through those checks before reaching this implementation.</summary>
+    internal static AttestationVerifyResult VerifyChainCore(
+        IAttestationCodec codec,
+        SignedAttestation claim,
+        IReadOnlyList<SignedAttestation>? chain,
+        TrustList trustList,
+        DateTimeOffset now,
+        string expectedPurpose,
+        string? expectedAudience,
+        AttestationProfile profile
+    ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedPurpose);
 
         if (!HasCoherentProjection(
