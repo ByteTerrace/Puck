@@ -37,10 +37,17 @@ let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
 let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
 let devicePlinthKick = { color: "#25292F", roughness: 0.7 }
 
-// A handheld's plinth: a box with a darker kick at its foot and the device's name on its face, which faces +Z. The name
-// stays on one line: at a 24 mm em the longest, ADVANCED GAMING BRICK, spans about 0.34 m of the 0.4 m face, inside
-// the 0.37 m the run may take before it wraps.
-template plinth(label) {
+// The stands' names, at a size their bake keeps. An embossed run bakes as a group of its own, refined toward its
+// declared detail (the thinner of its relief and a tenth of its em, about its stroke) but no finer than an eighth of a
+// 15 mm cell along the run: 1.875 mm. At a 40 mm em a stroke is about 4 mm, two of those cells, and a 2 mm relief
+// declares a detail that reaches them; a stroke near one cell wide, as at an 18 mm em, drops out where it falls
+// between samples (an "I" lost from the deck's label).
+let labelEm = 0.04
+let labelDepth = 0.002
+
+// A handheld's plinth: a box with a darker kick at its foot and the device's name on its face, which faces +Z, on two
+// lines, the model over GAMING BRICK, the longer about 0.32 m of the 0.4 m face.
+template plinth(label, model) {
   name: label
   schema: "puck.creation.v1"
   palette [devicePlinth, deviceLabel, devicePlinthKick]
@@ -54,29 +61,29 @@ template plinth(label) {
     position [0, 0.04, 0]
     scale [0.205, 0.04, 0.205]
   }
-  textRuns [{ text: label, position [0, (plinthTop - 0.1), 0.2], rotation [0, 0, 0, 1], emHeight: 0.024, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 0.37 }]
+  textRuns [{ text: $"{model}\nGAMING BRICK", position [0, (plinthTop - 0.075), 0.2], rotation [0, 0, 0, 1], emHeight: labelEm, depth: labelDepth, mode: "emboss", material: 1, align: "center", maxWidth: 0.38 }]
 }
 
-// The Humble Gaming Brick's slots. Its shell is glass (`glass`): clear atomic-orange acrylic (ior 1.49) whose tint is
-// reached through 4 cm, so the 11 mm of it over the board reads pale orange and the whole 34 mm body (at the
-// placement's scale; a static placement's glass depth is world units) a deeper one. It bakes and draws apart from the
-// opaque parts, which show through it: the board and its parts, the cells, the cartridge, and the keys sunk into the
-// face. Then the lens, the smoked buttons, the d-pad and slots, the rubber keys, the stand, the marking, the power
-// light, the cartridge, the green board, the chips, the board's small parts, the cells and the speaker's can.
+// The Humble Gaming Brick's slots. Its shell is glass (`glass`): atomic-orange acrylic (ior 1.49) whose tint is reached
+// through 12 mm, about the 11 mm of shell over the board at the placement's scale (a static placement's glass depth is
+// world units), so the board reads through a saturated orange and the parts deeper in, or the 34 mm through the whole
+// body at its rim, a deeper red-orange. Glass only tints what it transmits, so the board is a pale green: through the
+// orange it reads amber, where a dark board would turn the shell brown. The shell bakes and draws apart from the opaque
+// parts, which show through it: the board and its parts, the cells, the speaker, the cartridge, and the keys sunk into
+// the face. Then the lens, the smoked buttons, the d-pad and slots, the rubber keys, the stand, the power light, the
+// cartridge, the board, the chips and the speaker's cone, the board's small parts and the cells.
 let brickShell = 0
 let brickLens = 1
 let brickButtons = 2
 let brickKeys = 3
 let brickRubber = 4
 let brickStand = 5
-let brickMarking = 6
-let brickLed = 7
-let brickCartridge = 8
-let brickBoard = 9
-let brickChip = 10
-let brickPart = 11
-let brickCell = 12
-let brickMetal = 13
+let brickLed = 6
+let brickCartridge = 7
+let brickBoard = 8
+let brickChip = 9
+let brickPart = 10
+let brickCell = 11
 
 let advancedPalette = [
   { color: "#454A7A", metal: 0.9, roughness: 0.34, specular: 0.5, sheen: 0.3 }
@@ -85,19 +92,18 @@ let advancedPalette = [
   { color: "#1A1B1F", roughness: 0.22, specular: 0.05, coat: 0.3 }
   { color: "#5F636B", roughness: 0.5, specular: 0.04 }
   { color: "#7CFFB0", emissive: 3 }
-  { color: "#9EA3AE", roughness: 0.4 }
   { color: "#D9DBDF", metal: 1, roughness: 0.3, specular: 0.5 }
 ]
 // The Advanced Gaming Brick's slots: anodised aluminium shells, the edge-to-edge dark glass and speaker slots, polished
-// aluminium (the hinge, the d-pad's ring), black ceramic keys, the cartridge, the power light, the wordmark and the stand.
+// aluminium (the hinge, the d-pad's ring), black ceramic keys, the cartridge, the power light and the stand. It carries
+// no wordmark: lettering a few millimetres high is finer than an embossed text run's bake keeps (devices.md).
 let agbShell = 0
 let agbGlass = 1
 let agbPolished = 2
 let agbKeys = 3
 let agbCartridge = 4
 let agbLed = 5
-let agbMarking = 6
-let agbStand = 7
+let agbStand = 6
 
 // The deck's cabinet: walnut veneer, its label, the black kick and the spare cartridges in its bay.
 let standWood = 0
@@ -152,21 +158,21 @@ let deckBarBlack = 13
 prototypes {
   prototype "device-humble-gaming-brick-plinth" {
     document {
-      plinth(label: "HUMBLE GAMING BRICK")
+      plinth(label: "HUMBLE GAMING BRICK", model: "HUMBLE")
     }
   }
 
   prototype "device-advanced-gaming-brick-plinth" {
     document {
-      plinth(label: "ADVANCED GAMING BRICK")
+      plinth(label: "ADVANCED GAMING BRICK", model: "ADVANCED")
     }
   }
 
   // The brick in its frame: origin at the body's centre, x right, y up the face, z out of it, leaning back 20 degrees
   // (turned -20 degrees about x), its bottom-back edge 1 mm into the stand's base plate, whose underside is the
-  // prototype's y = 0 (the plinth's top). In that frame the body is 75 by 133 by 23 mm of clear shell, the battery bay
+  // prototype's y = 0 (the plinth's top). In that frame the body is 75 by 133 by 23 mm of orange shell, the battery bay
   // 4.5 mm proud of its back. Inside it lie the board 7.5 mm under the face (its processor at (-2, -13) mm, its memory,
-  // regulator and two rows of parts), the screen's module behind the lens, the speaker's can at (22.5, -50.5), the
+  // regulator and two rows of parts), the screen's module behind the lens, the speaker's dark cone at (22.5, -50.5), the
   // cartridge down its slot behind the board on its connector, and two AA cells across the bay. On the face: the
   // screen's picture (screen 0) centred at y 31 on a dark lens 57 by 49 mm, its face 1 mm proud of the lens; the d-pad
   // at (-21.5, -25.5), A and B at (26.2, -20.5) and (13.2, -28.3), select and start at (-8.5, -46.5) and
@@ -176,20 +182,18 @@ prototypes {
       name: "HUMBLE GAMING BRICK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#FF8A2B", roughness: 0.06, glass { depth: 0.04, ior: 1.49 } }
+        { color: "#FF4A0C", roughness: 0.06, glass { depth: 0.012, ior: 1.49 } }
         { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
         { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
         { color: "#2A2624", roughness: 0.4, specular: 0.04 }
         { color: "#5E5E64", roughness: 0.75 }
         { color: "#BFC2C7", metal: 1, roughness: 0.28, specular: 0.5 }
-        { color: "#FBE6D2", roughness: 0.5 }
         { color: "#FF3A2A", emissive: 4, roughness: 0.3 }
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
-        { color: "#1E5A3A", roughness: 0.5, specular: 0.04 }
-        { color: "#151617", roughness: 0.35, specular: 0.05 }
-        { color: "#B8A27A", roughness: 0.5, specular: 0.04 }
+        { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
+        { color: "#151617", roughness: 0.6, specular: 0.04 }
+        { color: "#D8C49A", roughness: 0.5, specular: 0.04 }
         { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
-        { color: "#9A9DA3", metal: 0.8, roughness: 0.35, specular: 0.4 }
       ]
       shape Prism "shell" {
         material: brickShell
@@ -263,7 +267,7 @@ prototypes {
         domain [repeat(spacing: [0.003, 1, 1], limit: [3, 0, 0], origin: [0.02, 0.033238, -0.001951])]
       }
       shape Cylinder "speaker-can" {
-        material: brickMetal
+        material: brickChip
         position [0.0225, 0.02602, 0.006972]
         rotation [0.573576, 0, 0, 0.819152]
         scale [0.01, 0.0025, 0.01]
@@ -430,7 +434,6 @@ prototypes {
           ]
         }
       }
-      textRuns [{ text: "HUMBLE GAMING BRICK", position [0, 0.073852, -0.004584], rotation [-0.173648, 0, 0, 0.984808], emHeight: 0.0032, depth: 0.0003, mode: "emboss", material: brickMarking, align: "center" }]
     }
   }
 
@@ -609,13 +612,12 @@ prototypes {
           ]
         }
       }
-      textRuns [{ text: "ADVANCED GAMING BRICK", position [0, 0.074711, -0.021441], rotation [-0.258819, 0, 0, 0.965926], emHeight: 0.0021, depth: 0.00015, mode: "emboss", material: agbMarking, align: "center" }]
     }
   }
 
-  // The deck's stand: a walnut AV cabinet 1.2 m wide and 0.58 m deep, its top 0.65 m up, open bays under the set and
-  // the console with two spare cartridges in the right-hand one, a black kick, and the deck's name on the top's front
-  // edge. Every part is a box, so the analytic contact collides the cabinet as it looks.
+  // The deck's stand: a walnut AV cabinet 1.2 m wide and 0.58 m deep, its 50 mm top 0.65 m up, open bays under the set
+  // and the console with two spare cartridges in the right-hand one, a black kick, and the deck's name centred on the
+  // top's front edge. Every part is a box, so the analytic contact collides the cabinet as it looks.
   prototype "device-humble-gaming-deck-stand" {
     document {
       name: "HUMBLE GAMING DECK"
@@ -628,8 +630,8 @@ prototypes {
       ]
       shape Box "top" {
         material: standWood
-        position [0, (deckTop - 0.015), 0]
-        scale [0.6, 0.015, 0.29]
+        position [0, (deckTop - 0.025), 0]
+        scale [0.6, 0.025, 0.29]
         chamfer: 0.003
       }
       shape Box "side-left" {
@@ -680,7 +682,7 @@ prototypes {
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
       }
-      textRuns [{ text: "HUMBLE GAMING DECK", position [0, (deckTop - 0.015), 0.29], rotation [0, 0, 0, 1], emHeight: 0.018, depth: 0.003, mode: "emboss", material: standLabel, align: "center" }]
+      textRuns [{ text: "HUMBLE GAMING DECK", position [0, (deckTop - 0.04), 0.29], rotation [0, 0, 0, 1], emHeight: labelEm, depth: labelDepth, mode: "emboss", material: standLabel, align: "center" }]
     }
   }
 
