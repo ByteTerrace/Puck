@@ -720,12 +720,16 @@ samples cannot resolve the surface (`SdfSampledLattice.Refine`):
   well under the distance (a fifth of it on the Moth's shins), and a test in
   world units misses every sheet such a field holds. A solid's edge or corner
   that a line crosses near its tip, or grazes, is as thin along the line, but
-  the lines beside it cross its body two samples thick or more, which a sheet
-  thinner than a cell cannot: such a cell does not refine, and the contour's
-  tangent planes keep the edge sharp at the lattice's own spacing. An acute rim
-  (a cone's foot) or a cut tilted against the lattice would otherwise refine in
-  patches along its length, and the merged cells around each patch cut the
-  crease at the coarse spacing;
+  the lines beside it either cross its body two samples thick or more, which a
+  sheet thinner than a cell cannot, or see it along one direction alone, where
+  a sheet spans both directions across the line that caught it
+  (`ThinBeside`: a line beside it on each cross axis must cross the same sheet
+  or gap thinly within the window): such a cell does not refine, and the
+  contour's tangent planes keep the edge sharp at the lattice's own spacing. An
+  acute rim (a cone's foot), a cut tilted against the lattice or a box turned
+  off every axis would otherwise refine in patches along its edges and at its
+  corners, and the merged cells around each patch cut the crease at the coarse
+  spacing or fold its fine vertices into slivers along it;
 - a crossed cell whose corner signs hold more than one surface patch, two sheets
   in one cell.
 

@@ -408,6 +408,77 @@ public sealed class SdfSampledLattice {
 
             return false;
         }
+        // Whether one of the four lattice lines beside sample `at`'s line along `axis` crosses the same sheet or gap
+        // (whose samples are inside when `sheetInside`) thinly from `first` to `last` along it: a run of one sheet
+        // sample between two of the other sign, or two samples of the other sign the field falls toward from both sides
+        // and passes between (PassesBetween). A sheet or gap thinner than a step spans the lines beside the one that
+        // caught it; a convex corner a line crosses near its tip is seen by that line alone, the lines beside it either
+        // missing the solid or crossing its body, and refining its cells merges their fine vertices into collinear
+        // slivers along the crease that the coarse contour's tangent planes keep sharp.
+        bool ThinBeside(Span<int> at, int axis, bool sheetInside, int first, int last) {
+            Span<int> p = stackalloc int[3];
+            var h = spacing[axis];
+            var n = samples[axis];
+
+            for (var offset = 1; (offset < 3); offset++) {
+                var across = ((axis + offset) % 3);
+
+                if (!ThinAcross(across: across, at: at, p: p)) {
+                    return false;
+                }
+            }
+
+            return true;
+
+            // Whether a line beside this one along `across`, on either side, crosses the sheet thinly: a sheet spans both
+            // directions across the line that caught it, where a solid's edge spans one, its own.
+            bool ThinAcross(Span<int> at, Span<int> p, int across) {
+                for (var direction = -1; (direction <= 1); direction += 2) {
+                    at.CopyTo(destination: p);
+                    p[across] += direction;
+                    if ((p[across] < 0) || (p[across] >= samples[across])) {
+                        continue;
+                    }
+
+                    float Beside(Span<int> q, int i) {
+                        q[axis] = i;
+
+                        return m_values[Index(x: q[0], y: q[1], z: q[2])];
+                    }
+
+                    for (var i = Math.Max(val1: 1, val2: first); (i <= Math.Min(val1: last, val2: (n - 2))); i++) {
+                        var before = Beside(i: (i - 1), q: p);
+                        var value = Beside(i: i, q: p);
+                        var after = Beside(i: (i + 1), q: p);
+
+                        if (((value < 0f) == sheetInside) && ((before < 0f) != sheetInside) && ((after < 0f) != sheetInside)) {
+                            var middle = MathF.Abs(value);
+
+                            if (((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after)))) < 1f) {
+                                return true;
+                            }
+                        }
+                        if (((i + 2) < n) && ((before < 0f) != sheetInside) && ((value < 0f) != sheetInside) && ((after < 0f) != sheetInside)) {
+                            var further = Beside(i: (i + 2), q: p);
+
+                            if ((further < 0f) != sheetInside) {
+                                p[axis] = i;
+
+                                var slope = Slope(x: p[0], y: p[1], z: p[2]);
+
+                                p[axis] = (i + 1);
+                                slope = MathF.Max(slope, Slope(x: p[0], y: p[1], z: p[2]));
+                                if (PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            }
+        }
         // Marks the cells around the lattice edge from sample `at` along `axis`.
         void MarkEdge(Span<int> at, int axis) {
             var u = ((axis + 1) % 3);
@@ -516,15 +587,15 @@ public sealed class SdfSampledLattice {
 
                         // A run of one sample between two of the other sign: a sheet or gap the lattice caught once. A
                         // solid's edge or corner the line crosses near its tip (an acute rim's, a tilted cut's) is as thin
-                        // along the line, but thickens beside it (Thickens), and the contour's tangent planes keep it
-                        // sharp at the lattice's own spacing.
+                        // along the line, but thickens beside it (Thickens) or is seen by this line alone (ThinBeside),
+                        // and the contour's tangent planes keep it sharp at the lattice's own spacing.
                         if (((before < 0f) != inside) && ((after < 0f) != inside)) {
                             var middle = MathF.Abs(value);
                             var thickness = ((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after))));
 
                             at[axis] = i;
 
-                            if ((thickness < 1f) && !Thickens(at: at, axis: axis, first: (i - 1), inside: inside, last: (i + 1))) {
+                            if ((thickness < 1f) && !Thickens(at: at, axis: axis, first: (i - 1), inside: inside, last: (i + 1)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 1), sheetInside: inside)) {
                                 at[axis] = (i - 1);
                                 MarkEdge(at: at, axis: axis);
                                 at[axis] = i;
@@ -552,8 +623,9 @@ public sealed class SdfSampledLattice {
                         at[axis] = i;
 
                         // A solid's edge or corner the line grazes falls toward the pair from both sides as a sheet does,
-                        // but the lines beside the pair cross its body a step thick or more (Thickens).
-                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                        // but the lines beside the pair cross its body a step thick or more (Thickens) or miss it
+                        // (ThinBeside).
+                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
