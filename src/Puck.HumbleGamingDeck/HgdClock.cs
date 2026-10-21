@@ -23,6 +23,7 @@ public sealed class HgdClock : ISnapshotable {
     private readonly int m_cpuDivider;
     private readonly int m_m2RiseHalfTick;
     private readonly int m_ppuDivider;
+    private readonly int m_readTick;
 
     private ulong m_masterTicks;
     private ulong m_runTargetCycles;
@@ -38,6 +39,7 @@ public sealed class HgdClock : ISnapshotable {
         m_cpuDivider = configuration.Model.CpuDivider();
         m_m2RiseHalfTick = configuration.Model.M2RiseHalfTick();
         m_ppuDivider = configuration.Model.PpuDivider();
+        m_readTick = configuration.Model.ReadTick();
         m_cpuPhase = configuration.PowerOn.AlignmentPhase;
         Rate = configuration.Model.MasterClockRate();
     }
@@ -52,6 +54,8 @@ public sealed class HgdClock : ISnapshotable {
     }
     /// <summary>Gets the master-tick phase within the CPU divider.</summary>
     public int CpuPhase => m_cpuPhase;
+    /// <summary>Gets whether the tick just completed is the one after which the CPU cycle's read takes its data.</summary>
+    public bool AtReadPoint => (m_cpuPhase == m_readTick);
     /// <summary>Gets the internal CPU half-cycle, distinct from the cartridge's M2 signal.</summary>
     public HgdCpuSubphase Subphase => ((m_cpuPhase < (m_cpuDivider / 2)) ? HgdCpuSubphase.Phi1 : HgdCpuSubphase.Phi2);
 

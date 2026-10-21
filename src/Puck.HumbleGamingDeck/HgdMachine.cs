@@ -103,30 +103,43 @@ public sealed class HgdMachine : ISnapshotableMachine {
             StepMasterTick();
         }
     }
-    /// <summary>Advances the reference clock one tick: a PPU dot when the tick ends one, then, when M2 falls, the CPU
-    /// cycle (or the DMA unit's) and the APU's, before the board sees the edge.</summary>
+    /// <summary>Advances the reference clock one tick. M2's rise reaches the board half a tick before a dot that ends on
+    /// the same tick; the cycle's transaction (the CPU's or the DMA unit's) runs at the read point in the middle of M2's
+    /// high phase, after that tick's dot, and its write, if any, lands as M2 falls, followed by the interrupt sampling,
+    /// the APU's cycle and the board's view of the falling edge.</summary>
     public void StepMasterTick() {
         var edge = Clock.StepTick(
             edgeHalfTick: out var edgeHalfTick,
             ppuDot: out var ppuDot
         );
 
+        if (edge == HgdM2Edge.Rising) {
+            Bus.Mapper.ObserveM2(high: true, masterHalfTick: edgeHalfTick);
+        }
+
+        // The board's IRQ output trails its inputs: a request raised by the address a dot drives, or by the write that
+        // lands, on the tick M2 falls reaches the CPU's next sample, while an acknowledgement that lands then counts.
+        var boardIrq = Bus.Mapper.Irq;
+
         if (ppuDot) {
             Ppu.StepDot(masterTick: Clock.MasterTicks);
             Cpu.Nmi = Ppu.NmiOutput;
         }
-        if (edge == HgdM2Edge.Falling) {
-            Cpu.Irq = (Bus.Mapper.Irq || Apu.Irq);
+        if (Clock.AtReadPoint) {
             Dma.Step(
                 apu: Apu,
                 bus: Bus,
                 cpu: Cpu
             );
+        }
+        if (edge == HgdM2Edge.Falling) {
+            Bus.CommitWrite();
+            Cpu.Irq = ((boardIrq && Bus.Mapper.Irq) || Apu.Irq);
+            Cpu.Nmi = Ppu.NmiOutput;
+            Cpu.CompleteCycle();
             Apu.StepCpuCycle();
             Audio.Sample(apu: Apu);
             Bus.Mapper.ObserveM2(high: false, masterHalfTick: edgeHalfTick);
-        } else if (edge == HgdM2Edge.Rising) {
-            Bus.Mapper.ObserveM2(high: true, masterHalfTick: edgeHalfTick);
         }
     }
     /// <summary>Captures all components, including CPU latches and the master-clock phase.</summary>

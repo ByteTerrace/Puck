@@ -48,6 +48,19 @@ public static class HgdConsoleModelExtensions {
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
         };
     }
+    /// <summary>Gets the master tick of a CPU cycle after which a read takes its data: the middle of M2's high phase.
+    /// Register reads that race a PPU event resolve against the dots that end by this tick, while writes land as M2
+    /// falls.</summary>
+    /// <param name="model">The implemented hardware revision.</param>
+    /// <returns>The tick within the cycle, counted from 1.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The model is unimplemented.</exception>
+    public static int ReadTick(this HgdConsoleModel model) {
+        // M2 is high from 4.5 to 12 ticks; blargg's ppu_vbl_nmi and mmc3_test_2 pin reads between 8 and 12.
+        return model switch {
+            HgdConsoleModel.NtscRp2A03G => 8,
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
+        };
+    }
     /// <summary>Gets the deterministic special-bus precharge for the unstable immediate instructions.</summary>
     /// <param name="model">The implemented hardware revision.</param>
     /// <returns>The unhalted bus precharge mask.</returns>
