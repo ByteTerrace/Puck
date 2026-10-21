@@ -24,6 +24,11 @@ tables the upload wrote. The passes finish that view's own output image:
    upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → pyramid → surface → views → sky → composite
 ```
 
+A view of a program that holds a glass shape runs three more passes between
+views and the sky, `glass-clear → glass → glass-shade`
+([glass after the opaque image](#glass-after-the-opaque-image)); any other view
+runs the chain as it stands and pays nothing for them.
+
 The render graph plans the view's passes like any other graph: the package
 declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
@@ -164,7 +169,11 @@ scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the
 lights and volumes it reads. `composite` scales with the output's pixels and
-`sky` with the uncovered ones.
+`sky` with the uncovered ones. In a view with glass, `glass` scales with the
+glass draws' fragments (every face of each, front and back) and `glass-shade`
+with the render grid's pixels, a copy for every pixel no glass covers and a
+refracted read, up to eight for a frosted pane, for every pixel glass does;
+`glass-clear` is one buffer clear.
 
 Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
 baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
@@ -524,6 +533,68 @@ each hit's transmittance is in the lit image, a change of an atmosphere density
 reaches views and the resolve, while a change of a kind's colour, the fog's, the
 medium's or the gradient the fog and the haze in-scatter, reaches only the
 composite.
+
+## Glass after the opaque image
+
+The opaque chain draws one surface a pixel, so a surface that transmits what
+lies behind it is a contract of its own, run once the opaque image exists. A
+palette slot that declares `glass` (`SdfGlass`: the slot's `color` as its tint,
+a `depth` over which light through it takes on that colour, an index of
+refraction `ior`, and the slot's `roughness` as its frost) makes every shape in
+it glass. Glass shapes bake into groups of their own
+([the bake](#the-bake): `SdfMeshBakeGroup.Glass`, never merged with an opaque
+instance), so a glass draw is glass whole, and the mesh pass, the shadow
+cascades and the irradiance volume's trace leave it out: glass casts no shadow
+and neither blocks nor bounces the probes' rays.
+
+A view of a program with a glass shape runs the glass fragment
+(`SdfWorldPackage.WithGlass`), three passes between views and the sky, and
+every later pass reads the image the last of them writes in the lit image's
+place:
+
+| Pass | Does |
+|---|---|
+| `glass-clear` | Zeroes the **glass sums**, two words a render-grid pixel: a signed distance sum and a face count. |
+| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, and its face count, with atomics, so the sums hold the distance the ray travels through glass whatever order the faces draw in. |
+| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read where the ray bent by Snell's law leaves the glass and carries on, parallel to the pixel's ray, to the opaque hit's depth, and absorbed over the distance through the glass by Beer–Lambert; the sky reflects by Fresnel from the environment map under the sky's reflection gain, and each light adds its highlight through the one GGX lobe; frost spreads the read over a disc of taps whose radius grows with the roughness and the distance behind the glass. |
+
+The distance through the glass is the sums' matched distance plus the opaque
+hit's distance for each unmatched front face, never more than the distance from
+the nearest front face to the opaque hit: a hollow shell absorbs over both its
+walls, a solid holding an opaque object over the glass before it, and a thin
+pane over its thickness alone. Absorption is `exp(−σ · distance)` per channel
+with `σ = −ln(tint) / depth`, so light through one depth of the glass is the
+tint and light through two is the tint squared: thicker reads deeper, never a
+stacked blend. The glass pixel's coverage is the light behind's, darkened by
+the glass's luminous transmittance, so the sky the composite puts behind a
+clear pane shows through at the pixel's own direction. The reflection and the
+highlights pass through the atmosphere over the glass's own distance; the light
+behind carries the atmosphere over the opaque hit's distance already, and the
+composite's in-scatter and media composite at the opaque hit's distance.
+
+In a temporal view the glass pass raises a pixel's reactivity to one where its
+refracted read comes from a pixel away or more
+([temporal reconstruction](#temporal-reconstruction)): the resolve's history
+follows the opaque hit the visibility record names, not what the glass shows
+there, so such a pixel resolves its own sample as a reactive screen does. A
+flat pane that bends nothing keeps its history and its edges resolve like any
+other, and a frosted pane's taps turn by a pattern fixed per pixel, so its blur
+converges over the history rather than flickering. Captures, the capture gate
+and its taint rules see glass as any surface: the glass passes read nothing
+external. A debug view's image passes through the glass pass unshaded, and the
+pick reads the visibility record, the opaque hit behind the glass.
+
+The limits: one glass layer a pixel, the nearest front face before the opaque
+hit, so glass seen through glass shades as the opaque image behind the nearer
+pane; the sky seen through glass is not refracted and is darkened rather than
+tinted; refraction reads a screen-space neighbour, so what lies off screen or
+behind a nearer surface reads the pixel's own sample; an eye inside a glass
+solid sees no front face, so the pixel passes through untinted; the glass
+surface reads no occlusion and no cascade; and tinted shadows and glass in the
+irradiance volume are open items ([open items](../../../plans/open-items.md)).
+A world with no glass shape allocates and runs none of this; `world.budget`
+prints the glass storages' bytes and the glass draw count, and
+`world.counters gpu` the three passes' work.
 
 ## Temporal reconstruction
 

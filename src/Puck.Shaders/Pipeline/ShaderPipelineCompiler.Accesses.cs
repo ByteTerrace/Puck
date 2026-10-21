@@ -23,10 +23,11 @@ public sealed partial class ShaderPipelineCompiler {
 
     // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
     // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
-    // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
-    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics, bool Transfer)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
+    // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares,
+    // a fragment-shader write (RenderGraphPortAccess.FragmentWrite) in the fragment stage through a shader binding.
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics, bool Transfer, bool Fragment)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
         if (pass.DispatchArguments is { } arguments) {
-            yield return (new ResourceReference(Name: arguments), false, false, true, false, false);
+            yield return (new ResourceReference(Name: arguments), false, false, true, false, false, false);
         }
 
         var inputs = pass.InputReferences;
@@ -36,23 +37,35 @@ public sealed partial class ShaderPipelineCompiler {
             yield return (inputs[index], false, (package?.InputAccess(index: index) == RenderGraphPortAccess.ComputeReadWrite), false, ((package is null)
                 ? pass.IsGraphics
                 : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)),
-                (package?.InputAccess(index: index) == RenderGraphPortAccess.TransferRead));
+                (package?.InputAccess(index: index) == RenderGraphPortAccess.TransferRead), false);
         }
         for (var index = 0; (index < outputs.Count); index++) {
             yield return (outputs[index], true, false, false, ((package is null)
                 ? pass.IsGraphics
                 : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)),
-                (package?.OutputAccess(index: index) == RenderGraphPortAccess.TransferWrite));
+                (package?.OutputAccess(index: index) == RenderGraphPortAccess.TransferWrite),
+                (package?.OutputAccess(index: index) == RenderGraphPortAccess.FragmentWrite));
         }
     }
     // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
     // graphics read samples in the fragment stage, and a graphics write is a render pass's attachment, which it keeps in
     // its attachment layout, so a later sampling reader's planned barrier is the transition to shader-readable. A
     // preserving write also reads what its predecessor left: a compute pass through the shader, a render pass through
-    // the attachment load. A depth test always reads.
-    private static ShaderPipelineAccessState UseOf(bool graphics, ShaderPipelineResource resource, bool write, bool preserve) {
+    // the attachment load. A depth test always reads. A fragment-shader write is a shader write in the fragment stage.
+    private static ShaderPipelineAccessState UseOf(bool graphics, ShaderPipelineResource resource, bool write, bool preserve, bool fragment = false) {
         var buffer = (resource.Kind == ShaderPipelineResourceKind.Buffer);
 
+        if (fragment && write) {
+            return new ShaderPipelineAccessState(
+                Access: (preserve
+                    ? GpuAccess.ShaderRead | GpuAccess.ShaderWrite
+                    : GpuAccess.ShaderWrite),
+                Layout: (buffer
+                    ? GpuImageLayout.Undefined
+                    : GpuImageLayout.General),
+                Stage: GpuStage.FragmentShader
+            );
+        }
         if (!write) {
             return new ShaderPipelineAccessState(
                 Access: GpuAccess.ShaderRead,
@@ -182,7 +195,7 @@ public sealed partial class ShaderPipelineCompiler {
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
             var combined = new Dictionary<(int Storage, bool PreviousFrame), int>();
 
-            foreach (var (reference, write, mutate, arguments, graphics, transfer) in ReferencesOf(
+            foreach (var (reference, write, mutate, arguments, graphics, transfer, fragment) in ReferencesOf(
                 package: packages[index],
                 pass: declaration
             )) {
@@ -193,6 +206,7 @@ public sealed partial class ShaderPipelineCompiler {
                     ? ArgumentsUse
                     : (transfer ? new ShaderPipelineAccessState(Access: (write ? GpuAccess.TransferWrite : GpuAccess.TransferRead),
                         Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer) : UseOf(
+                        fragment: fragment,
                         graphics: graphics,
                         preserve: (mutate || (resource.From is not null)),
                         resource: resource,

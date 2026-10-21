@@ -9,6 +9,8 @@ public sealed partial class SdfWorldPasses {
     // Each fragment with its cascades shaped, one per shadow resolution and second-slot choice, made once each for the
     // same reason.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment?[]> ShadowedFragments = new();
+    // Each fragment with the glass passes added (SdfWorldPackage.WithGlass), made once for the same reason.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade.
     private const int ShadowShapes = 6;
 
@@ -53,16 +55,22 @@ public sealed partial class SdfWorldPasses {
         // Whether the view's world holds a second stable shadow slot, whose one cascade the view then allocates. The slot
         // count is the world's configured policy, so a handoff between lights never allocates.
         private bool RequestsSecondShadow => ((View?.Residency.Frame?.Lights.ShadowSlots.SlotCount ?? 0) > 1);
-        public RenderGraphPackageFragment Fragment => Shadowed(fragment: (RequestsTemporal
+        // Whether the view's program holds a glass shape, so the view runs the glass passes and allocates their
+        // storages (SdfWorldPackage.WithGlass); a view of any other program pays nothing for them.
+        private bool RequestsGlass => (View?.Residency.Frame?.Program.HasGlass ?? false);
+        public RenderGraphPackageFragment Fragment => Shadowed(fragment: Glassed(fragment: (RequestsTemporal
             ? SdfWorldPackage.TemporalFragment
-            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)));
+            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment))));
 
-        // The low bits distinguish temporal reconstruction, the shadows, their resolution and the second slot's cascade.
-        // Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize): their binary
-        // exponents share the two high bits shifted out here, and their mantissas' low bits, which the shadow bits land
-        // in, are zero.
+        // The low bits distinguish temporal reconstruction, the shadows, their resolution, the second slot's cascade and
+        // the glass passes. Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize):
+        // their binary exponents share the two high bits shifted out here, and their mantissas' low bits, which the
+        // shadow and glass bits land in, are zero.
         long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) |
-            (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
+            (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
+
+        private RenderGraphPackageFragment Glassed(RenderGraphPackageFragment fragment) =>
+            (RequestsGlass ? GlassFragments.GetValue(key: fragment, createValueCallback: SdfWorldPackage.WithGlass) : fragment);
 
         private RenderGraphPackageFragment Shadowed(RenderGraphPackageFragment fragment) {
             if (!RequestsShadows) {

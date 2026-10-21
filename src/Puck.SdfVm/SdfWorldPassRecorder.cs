@@ -71,8 +71,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly nint m_meshPool;
 
     private readonly nint[] m_meshSets = [];
-    // The buffers each mesh set binds now: its mesh region, its dynamic transforms and its work counters.
+    // The buffers each mesh set binds now: its mesh region, its dynamic transforms, its work counters, and the
+    // visibility records and glass sums the glass pass reads and accumulates (the dummy in every other raster part).
     private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
+    private const int MeshSetCounters = 2;
+    private const int MeshSetVisibility = 3;
+    private const int MeshSetGlassSums = 4;
+    private const int MeshSetBuffers = 5;
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
@@ -122,6 +127,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             for (var slot = 0; (slot < slots); slot++) { m_bakeSlots[slot] = new BakeSlot(); }
             owner.ReadBakes(reader: this, reads: true);
         }
+        // The glass clear records one buffer clear and binds nothing.
+        if (m_part == SdfWorldPackage.Parts.GlassClear) {
+            return;
+        }
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
@@ -163,7 +172,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             for (var set = 0; (set < sets); set++) {
                 var slot = (set / SdfWorldTables.FrameRingSize);
 
-                m_meshSetBuffers[set] = new IGpuBuffer?[3];
+                m_meshSetBuffers[set] = new IGpuBuffer?[MeshSetBuffers];
                 m_meshSets[set] = bindings.AllocateSet(
                     descriptorSetLayoutHandle: tables.MeshPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
                     name: new GpuObjectName(
@@ -211,9 +220,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
     }
 
-    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, or one of the shadow
-    // cascades, which draw from the cascade's light camera.
-    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh || IsShadowCascade);
+    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, one of the shadow
+    // cascades, which draw from the cascade's light camera, or the glass pass, which draws the glass draws alone.
+    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass || IsShadowCascade);
+    private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
     private bool TargetsWritten => Array.TrueForAll(array: m_targetsWritten, match: static written => written);
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
 
@@ -261,7 +271,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             case SdfWorldPackage.Parts.Mesh: {
                 Follow();
                 m_owner.Begin(residency: m_view.Residency);
-                return ((m_view.Residency.Submit(context: in context).MeshDrawCount == 0) && TargetsWritten);
+                return ((m_view.Residency.Submit(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
+            }
+            // The glass pass skips a frame with no glass draw once its target holds a clear; the clear and the shading
+            // pass never skip, since the shading pass writes the lit image every pass after it reads.
+            case SdfWorldPackage.Parts.Glass: {
+                Follow();
+                m_owner.Begin(residency: m_view.Residency);
+                return ((m_view.Residency.Submit(context: in context).GlassDrawCount == 0) && TargetsWritten);
             }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
@@ -277,7 +294,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 var tables = m_view.Residency.Submit(context: in context);
                 var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                return ((cascades.Count == 0) || ((tables.MeshDrawCount == 0) && TargetsWritten) ||
+                return ((cascades.Count == 0) || ((tables.OpaqueDrawCount == 0) && TargetsWritten) ||
                     ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
             }
             default:
@@ -302,6 +319,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Begin(residency: residency);
 
         var tables = residency.Submit(context: recording.Context);
+
+        // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation.
+        if (m_part == SdfWorldPackage.Parts.GlassClear) {
+            var sums = recording.Outputs[0].Buffer!;
+
+            recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, sums.SizeBytes);
+
+            return RenderGraphPackageOutcome.Drew;
+        }
         var frame = residency.Frame!;
         var view = Math.Min(
             val1: m_view.View,
@@ -573,7 +599,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        var pipeline = (IsShadowCascade ? tables.ShadowPipeline : tables.MeshPipeline);
+        var pipeline = (IsShadowCascade ? tables.ShadowPipeline : (IsGlass ? tables.GlassPipeline : tables.MeshPipeline));
         var meshSet = MeshSetOf(slot: slot, tables: tables);
         var set = m_meshSets[meshSet];
         var target = recording.Outputs[0].Owned!;
@@ -596,8 +622,22 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 slot: tables.CurrentSlot
             );
             tables.WriteMeshWorkCounters(
-                bound: ref m_meshSetBuffers[meshSet][2],
+                bound: ref m_meshSetBuffers[meshSet][MeshSetCounters],
                 counters: WorkCountersOf(recording: in recording).Buffer,
+                set: set
+            );
+            // The glass pass reads each pixel's opaque hit, its one input, and accumulates into the glass sums, its
+            // third output; every other raster part binds the dummy at both.
+            tables.WriteMeshBuffer(
+                bound: ref m_meshSetBuffers[meshSet][MeshSetVisibility],
+                buffer: (IsGlass ? recording.Inputs[0].Buffer! : tables.DummyBuffer),
+                member: SdfWorldPackage.VisibilityRecords,
+                set: set
+            );
+            tables.WriteMeshBuffer(
+                bound: ref m_meshSetBuffers[meshSet][MeshSetGlassSums],
+                buffer: (IsGlass ? recording.Outputs[2].Buffer! : tables.DummyBuffer),
+                member: SdfWorldPackage.GlassSumsWritten,
                 set: set
             );
         }
@@ -624,7 +664,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
     }
-    // Binds a pipeline and the pass set, then draws every draw.
+    // Binds a pipeline and the pass set, then draws every draw of the part's kind: the glass pass the glass draws, every
+    // other raster part the opaque ones, each pushed by its index in the staged list.
     private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Graphics,
@@ -640,6 +681,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         for (var draw = 0u; (draw < count); draw++) {
+            if (draws[((int)draw)].Glass != IsGlass) {
+                continue;
+            }
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: m_meshPushedIndex,
                 value: SdfKernelInterfaces.MeshPushedIndex(

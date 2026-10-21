@@ -112,7 +112,10 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.ShadowSecond:
                 hash.Add(value: shadow.Value);
                 break;
+            // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
+            // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.
             case SdfWorldPackage.Parts.Views:
+            case SdfWorldPackage.Parts.GlassShade:
             case SdfWorldPackage.Resolve:
                 hash.Add(value: lighting.Value);
                 if (part == SdfWorldPackage.Resolve) {

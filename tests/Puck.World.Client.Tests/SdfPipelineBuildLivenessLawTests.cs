@@ -194,14 +194,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
-        // cache lists only the pass pipelines (the region copy, the mesh pass and the shadow cascades' pass), released
-        // after the set, the held creations can return: no canceled build starts another.
+        // cache lists only the pass pipelines (the region copy, the mesh pass, the shadow cascades' pass and the glass
+        // pass), released after the set, the held creations can return: no canceled build starts another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 3)
+            step: () => (cache.Pipelines.SharedPipelines <= 4)
         );
         driver.Open();
         loss.Join();
@@ -251,7 +251,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (10, "building (0 of 10 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
+            expected: (11, "building (0 of 11 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
         );
 
         var release = new Thread(start: last.Dispose);

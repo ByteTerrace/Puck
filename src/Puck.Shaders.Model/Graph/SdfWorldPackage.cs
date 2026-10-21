@@ -502,7 +502,7 @@ public static partial class SdfWorldPackage {
     );
 
     /// <summary>The names of the fragment's passes and versions.</summary>
-    public static class Parts {
+    public static partial class Parts {
         /// <summary>The mesh bake's instance-mask pass, selecting each bake lattice's instances.</summary>
         public const string Mask = "mask";
         /// <summary>The bake pass, sampling one instance group's field on a lattice for the host to mesh.</summary>

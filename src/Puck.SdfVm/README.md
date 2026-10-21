@@ -59,7 +59,11 @@ irradiance volume and diagnostics, shading hits only into the lit image,
 premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
 coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
 order, the lit image over them by its coverage, the atmosphere's in-scatter and
-the bounded media, into the output). The surface and views kernels call no
+the bounded media, into the output). A view of a program with a glass shape runs
+`glass-clear` (a buffer clear), `sdf-mesh-glass.frag` (the glass draws into the
+glass target and the glass sums) and `sdf-glass.comp` (the lit image written
+again with each glass pixel shaded) between views and the sky
+(`SdfWorldPackage.WithGlass`). The surface and views kernels call no
 field query. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that

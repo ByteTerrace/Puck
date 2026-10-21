@@ -71,49 +71,46 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         return m_liveText.ToString();
     }
     // The bytes the world's view allocates for its visibility records, and for the mesh pass's target and depth
-    // attachment: storages of its sdf.world passes, zero before its graph installs.
-    private (ulong Visibility, ulong MeshAttachments) WorldViewBytes() {
+    // attachment, and for the glass passes' target, depth, sums and lit image: storages of its sdf.world passes, zero
+    // before its graph installs, and the glass's zero for a world with no glass shape.
+    private (ulong Visibility, ulong MeshAttachments, ulong Glass) WorldViewBytes() {
         var visibility = 0UL;
         var mesh = 0UL;
+        var glass = 0UL;
 
         if (renderProbe?.Root?.Runtime.NodeOf(instance: WorldViewGraphs.WorldInstance) is { } node) {
             foreach (var status in node.ResourceStatus) {
-                if (string.Equals(
-                    a: status.Name,
-                    b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
-                        name: Puck.Shaders.SdfWorldPackage.Parts.Visibility,
-                        pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
-                    ),
-                    comparisonType: StringComparison.Ordinal
-                )) {
+                if (IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.Visibility)) {
                     visibility += status.AllocationBytes;
                 } else if (
-                    string.Equals(
-                        a: status.Name,
-                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
-                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshTarget,
-                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
-                        ),
-                        comparisonType: StringComparison.Ordinal
-                    ) ||
-                    string.Equals(
-                        a: status.Name,
-                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
-                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshDepth,
-                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
-                        ),
-                        comparisonType: StringComparison.Ordinal
-                    )
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.MeshTarget) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.MeshDepth)
                 ) {
                     mesh += status.AllocationBytes;
+                } else if (
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassTarget) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassDepth) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassSumsCleared) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassLit)
+                ) {
+                    glass += status.AllocationBytes;
                 }
             }
         }
 
-        return (visibility, mesh);
+        return (visibility, mesh, glass);
     }
+    // Whether a node's storage is one of the world view's sdf.world fragment storages, by its spliced name.
+    private static bool IsWorldStorage(string name, string part) => string.Equals(
+        a: name,
+        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+            name: part,
+            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+        ),
+        comparisonType: StringComparison.Ordinal
+    );
     private string DescribeBudget() {
-        var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();
+        var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
@@ -128,7 +125,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                     format: "0.###",
                     provider: CultureInfo.InvariantCulture
                 )} at instruction {binder.InstructionIndex}, unscoped)"
-                : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s)"
+                : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s), glass {glassBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) ({node.GlassDrawCount.ToString(provider: CultureInfo.InvariantCulture)} glass draw(s))"
             : "renderer not built yet"
         );
 

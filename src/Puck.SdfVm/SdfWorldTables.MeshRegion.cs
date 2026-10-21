@@ -40,8 +40,9 @@ public sealed partial class SdfWorldTables {
     // renders.
     private long m_meshRevision;
     private ulong m_meshRegionBytes;
-    // The draws the frame being rendered rasterizes, from its staged draw list.
+    // The draws the frame being rendered rasterizes, from its staged draw list, and how many of them are glass.
     private uint m_meshDrawCount;
+    private uint m_glassDrawCount;
 
     // The draw records, and one mesh's words, as the next write sends them.
     private uint[] m_meshDrawWords = [];
@@ -53,8 +54,13 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
     /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
-    /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view.</summary>
+    /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
+    /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass (<see cref="SdfMeshDraw.Glass"/>): the glass pass
+    /// draws them, and the mesh pass and the shadow cascades draw the rest.</summary>
+    public uint GlassDrawCount => m_glassDrawCount;
+    /// <summary>Gets the opaque draws the latest frame's mesh pass and shadow cascades rasterize.</summary>
+    public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
@@ -132,6 +138,10 @@ public sealed partial class SdfWorldTables {
 
         m_meshDraws = staged;
         m_meshDrawCount = ((uint)staged.Count);
+        m_glassDrawCount = 0;
+        foreach (var draw in staged) {
+            if (draw.Glass) { m_glassDrawCount++; }
+        }
         m_meshRevision++;
         m_meshStaged = ReferenceEquals(objA: staged, objB: draws);
     }

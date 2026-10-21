@@ -292,6 +292,9 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords) and the weight its history saturates at, one period of samples (SdfTemporalSamples.Period).");
         declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
         declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfTemporalSamples.Period);
+        declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
+        declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);

@@ -197,6 +197,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <param name="shadowRaster">The device's shadow cascade pipeline, built on <paramref name="device"/> with the mesh
     /// pass's layout and the depth-only render pass a view's cascades draw in. The caller keeps ownership and disposes it
     /// after the tables.</param>
+    /// <param name="glassRaster">The device's glass raster pipeline, built on <paramref name="device"/> with the mesh
+    /// pass's layout and render pass, which a view's glass pass draws the glass draws with. The caller keeps ownership
+    /// and disposes it after the tables.</param>
     /// <param name="options">The construction options (scene program, capacities, brick pool, work ledger).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The options enable a brick pool the pipelines were built without, or the mesh
@@ -204,12 +207,13 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, SdfWorldTablesOptions options) {
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline glassRaster, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
         ArgumentNullException.ThrowIfNull(meshRaster);
         ArgumentNullException.ThrowIfNull(shadowRaster);
+        ArgumentNullException.ThrowIfNull(glassRaster);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
             instance: pipelines
@@ -268,6 +272,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_meshRenderPass = (meshRaster.RenderPass ?? throw new ArgumentException(message: "The mesh pass pipeline names no render pass.", paramName: nameof(meshRaster)));
         m_shadowPipeline = (shadowRaster.Graphics ?? throw new ArgumentException(message: "The shadow pass pipeline is not a graphics pipeline.", paramName: nameof(shadowRaster)));
         m_shadowRenderPass = (shadowRaster.RenderPass ?? throw new ArgumentException(message: "The shadow pass pipeline names no render pass.", paramName: nameof(shadowRaster)));
+        m_glassPipeline = (glassRaster.Graphics ?? throw new ArgumentException(message: "The glass pass pipeline is not a graphics pipeline.", paramName: nameof(glassRaster)));
         m_regionCopyPipeline = regionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
