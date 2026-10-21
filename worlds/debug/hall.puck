@@ -67,6 +67,14 @@ let tread = 0.4
 let riser = 0.25
 let landingSouth = 37.7
 
+// Each level's ceiling (the strips hang 6 cm under it; level 3's is the roof) and the z of each viewing aisle's strip.
+let hallLightLevels = [
+  { k: 0, top: ((storey * 1) - 0.27), aisles [13.6, 19.6, 25.6, 31.6] }
+  { k: 1, top: ((storey * 2) - 0.27), aisles [14.6, 22.6, 30.6] }
+  { k: 2, top: ((storey * 3) - 0.27), aisles [14.6, 22.6, 30.6] }
+  { k: 3, top: 17.75, aisles [15, 37] }
+]
+
 // The lift. Its car is a population body (`lift-car`, kit `lift`) whose look draws the cab, carrying an attached solid
 // platform (`lift-platform`) the Moth stands on. The car moves only by the rules below: `liftAt` is its height in
 // sixteenths of a metre, `liftTarget` where it is going, and every tick `lift-ride` poses the car at cell `liftAt` of
@@ -209,27 +217,20 @@ prototypes {
     }
   }
 
-  // The ceiling light strips: one over each viewing aisle and two over each landing, 6 cm deep under the ceiling. Level 3
-  // has its skylights instead, and strips under the roof's south and north spans.
-  prototype "hall-lights" {
-    document {
-      name: "hall-lights"
-      schema: "puck.creation.v1"
-      palette: hallPalette
-      for z in [13.6, 19.6, 25.6, 31.6] {
-        hallBox(label: $"strip-0-{z}", x0: 21, x1: 69, y0: 4.17, y1: 4.23, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
-      }
-      for k in range(1, 2) {
-        for z in [14.6, 22.6, 30.6] {
-          hallBox(label: $"strip-{k}-{z}", x0: 21, x1: 69, y0: ((storey * (k + 1)) - 0.33), y1: ((storey * (k + 1)) - 0.27), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+  // The ceiling light strips, one prototype per level so each bakes as a flat group: one strip over each viewing aisle
+  // and two over each landing, 6 cm deep under the ceiling. Level 3 has its skylights, and strips under the roof's south
+  // and north spans.
+  for level in hallLightLevels {
+    prototype $"hall-lights-{level.k}" {
+      document {
+        name: $"hall-lights-{level.k}"
+        schema: "puck.creation.v1"
+        palette: hallPalette
+        for z in level.aisles {
+          hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (level.top - 0.06), y1: level.top, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
         }
-      }
-      for z in [15, 37] {
-        hallBox(label: $"strip-3-{z}", x0: 21, x1: 69, y0: 17.69, y1: 17.75, z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
-      }
-      for k in range(0, 4) {
         for z in [18, 26] {
-          hallBox(label: $"landing-{k}-{z}", x0: 11.5, x1: 19, y0: ((k == 3) ? 17.69 : ((storey * (k + 1)) - 0.33)), y1: ((k == 3) ? 17.75 : ((storey * (k + 1)) - 0.27)), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
+          hallBox(label: $"landing-{z}", x0: 11.5, x1: 19, y0: (level.top - 0.06), y1: level.top, z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
         }
       }
     }
@@ -347,9 +348,11 @@ placements {
     position [0, 0, 0]
     solid
   }
-  placement "hall-lights" {
-    prototype: "hall-lights"
-    position [0, 0, 0]
+  for level in hallLightLevels {
+    placement $"hall-lights-{level.k}" {
+      prototype: $"hall-lights-{level.k}"
+      position [0, 0, 0]
+    }
   }
 
   // The car: one body, posed every tick by `lift-ride`, starting on level 0.

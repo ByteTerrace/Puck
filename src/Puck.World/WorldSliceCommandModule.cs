@@ -100,9 +100,13 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
             var position = (Vector3)placement.Position;
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
-            var reach = ((creation is null) ? 1f : CreationGeometry.Reach(document: creation.EngineDocument));
+            var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
 
             half = (WorldSliceRequest.PlacementMargin * reach * MathF.Abs(x: placement.Scale));
+            if (!float.IsFinite(f: half) || !(half > 0f)) {
+                refusal = $"{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>";
+                return false;
+            }
             path = args[2];
             next = 3;
             offset = Component(axis: axis, value: position);
@@ -251,6 +255,15 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         }
 
         return nearest;
+    }
+    // A creation's reach; an unbounded lattice clipped by a creation-wide intersection is bounded by its clip, which only
+    // the composed bound sees (a scope-free creation's shapes are not one field, so their blends bound nothing).
+    private static float PlacementReach(CreationDocument document) {
+        var reach = CreationGeometry.Reach(document: document);
+
+        return (float.IsFinite(f: reach) || !CreationStampEmitter.RequiresScope(document: document))
+            ? reach
+            : CreationStampEmitter.RenderReach(document: document, scale: 1f, fontFor: null, composeBlends: true);
     }
     private static bool IsFileToken(string token) =>
         ((token.Length is > 0 and <= 96) && token.All(predicate: static c => (char.IsAsciiLetterOrDigit(c: c) || (c is '-' or '_' or '.'))) && (token is not ("." or "..")));

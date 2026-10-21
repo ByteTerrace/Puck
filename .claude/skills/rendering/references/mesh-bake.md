@@ -104,7 +104,15 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   A bound alone misses thin strands and leaves warped corners under-resolved.
   Convex rounding reads the scaled polygon's inradius and extrusion clamp;
   warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
-  an offset and may be zero while its radial extent remains positive.
+  an offset and may be zero while its radial extent remains positive. A plate
+  longer than eight of its half-thicknesses (a slab, a wall, a light strip)
+  declares its half thickness: a lattice sized by its length steps clean over
+  a sheet thinner than its cell, and the sheet bakes to nothing.
+- **A tall union misses thin layers.** One static creation holding stacked
+  floors bakes as one union whose lattice is sized by its height, so a 0.3 m
+  slab between two samples never crosses and is dropped while it still
+  collides. Give each storey's floor its own prototype and placement
+  (`worlds/debug/hall.puck`), so each is a flat group.
   The bake caps declared-detail refinement at eight cells per coarse axis.
   A dynamic instance declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
