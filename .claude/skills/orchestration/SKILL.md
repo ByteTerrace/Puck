@@ -226,7 +226,10 @@ World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
 the lead merges and reloads, or in a World of its own under a GPU grant, named
 by `world` on every call. Reads and captures of the live World are always
-allowed; a brief names the live mutations a lane may make.
+allowed; a brief names the live mutations a lane may make. The machine belongs
+to the agents (the owner's ruling): the lead boots a World for a check and stops
+it when the check ends, and it leaves one running for the owner only when the
+owner asks to play or pair in it.
 
 Codex lanes reach the same World: the repository's `.codex/config.toml` starts
 the same `puck` MCP launcher, so a companion `task` run in this checkout or a
