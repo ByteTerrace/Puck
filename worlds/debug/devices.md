@@ -118,8 +118,8 @@ machine under a new generation.
 
 Walk up to a device and press the context button, E on a keyboard or X on a
 pad (the Moth's `interact` channel, which every screen route here names as its
-`engageChannel`). A press within the route's 3 m engages the first device in
-document order that is free; no prompt shows, since the controller bar is the
+`engageChannel`). A press engages the nearest free device within its route's
+3 m (on the ground plane, the earlier in document order on a tie); no prompt shows, since the controller bar is the
 debug world's only on-screen UI. Engaging captures the seat, so the
 Moth stands still, and brings up the emulator view: the camera eases in until
 the device's screen fills the window's limiting axis, square-on, with
@@ -129,7 +129,8 @@ and the camera eases back to the Moth. The device's pad does not play the contex
 reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
-jump is A, flight is B and the Moth's `start` channel is start. On a brick, each
+jump is A, flight is B, the Moth's `start` channel is start and her `select`
+channel is select. On a brick, each
 control lands in the joypad byte a forged cartridge copies to `0xC280` each
 frame (`screen.peek <screen> 0xC280`):
 
@@ -139,6 +140,7 @@ frame (`screen.peek <screen> 0xC280`):
 | `gamepad.buttonSouth` | `space` | A | `0x10` |
 | `gamepad.buttonNorth` | `f` | B | `0x20` |
 | `gamepad.start` | `enter` | start | `0x80` |
+| `gamepad.back` | `shiftRight` | select | `0x40` |
 | `gamepad.buttonWest` | `e` | none: engages and leaves | none |
 
 Each `machine.swap` restarts the device on the new cartridge and keeps the rest

@@ -15,10 +15,14 @@
 // names back; an #if would trade a free runtime knob for a compile-time one.
 static const float CrtCornerRadius = 0.004;  // corner rounding of the bezel mask (near-square)
 static const float CrtBezelSoft = 0.008;     // a crisp bezel edge
-static const float CrtScanAmplitude = 0.06;  // subtle scanlines — a hint of CRT, not a filter
-static const float CrtScanLines = 144.0;
-static const float CrtApertureGrille = 0.05; // aperture-grille strength — barely there (0 = off, purely additive)
-static const float CrtGrilleColumns = 160.0; // vertical RGB phosphor-stripe triads across the screen width
+static const float CrtScanAmplitude = 0.06;  // subtle scanlines, one a source row — a hint of CRT, not a filter
+static const float CrtApertureGrille = 0.05; // aperture-grille strength, one triad a source column — barely there (0 = off)
+// The share of the scanlines' and the grille's strength that survives a pixel whose footprint spans this many source
+// texels: whole while a row or column covers four or more pixels, none once it covers two or fewer, where the pattern
+// would alias against the pixel grid and the temporal jitter would move that alias every frame.
+float sdfCrtPatternGain(float footprintTexels) {
+    return (1.0 - smoothstep(0.25, 0.5, footprintTexels));
+}
 static const float CrtVignette = 0.0;        // radial corner darkening (0 = flat, even brightness)
 static const float CrtBloomGain = 0.5;
 static const float CrtBloomThreshold = 0.6;
@@ -94,11 +98,17 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 }
 #endif
 
-// Samples a screen's source through the sampler its row names. A descriptor array is indexed only by a dynamically
-// uniform value, so each pass of the loop takes the first active lane's screen, samples it for every lane showing that
-// screen, and retires them; a wave spanning one screen passes once.
-float4 sampleScreenSource(uint screenIndex, float2 uv) {
+// Samples a screen's source through the filter its row names, and reports the source's size in texels. A Nearest source
+// keeps each texel flat and blends into its neighbour only across the pixel footprint's width at the texel's edge
+// (`footprint`, in source UV units a pixel spans), through the linear sampler: a texel boundary a pixel straddles shows
+// both texels' share, so a one-texel line never breaks into dashes where the samples fall either side of it, and never
+// crawls as the camera moves a fraction of a pixel. A descriptor array is indexed only by a dynamically uniform value,
+// so each pass of the loop takes the first active lane's screen, samples it for every lane showing that screen, and
+// retires them; a wave spanning one screen passes once.
+float4 sampleScreenSource(uint screenIndex, float2 uv, float2 footprint, out float2 size) {
     float4 sampled = float4(0.0, 0.0, 0.0, 0.0);
+
+    size = float2(1.0, 1.0);
 
     [loop]
     for (;;) {
@@ -107,6 +117,20 @@ float4 sampleScreenSource(uint screenIndex, float2 uv) {
         if (screen == screenIndex) {
             uint filter = (uint)worldScreenMapping(screen).state.y;
 
+            uint width;
+            uint height;
+
+            screenSources[screen].GetDimensions(width, height);
+            size = float2(width, height);
+            if (filter == SDF_FILTER_NEAREST) {
+                float2 texel = (uv * size);
+                float2 cell = floor(texel);
+                float2 fromCenter = ((texel - cell) - 0.5);
+                float2 reach = saturate((((abs(fromCenter) - 0.5) / max((footprint * size), 1.0e-4)) + 0.5));
+
+                uv = ((cell + 0.5 + (sign(fromCenter) * reach)) / size);
+                filter = SDF_FILTER_LINEAR;
+            }
             sampled = screenSources[screen].SampleLevel(samplers[filter], uv, 0);
 
             break;
@@ -171,9 +195,17 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float3 warped = float3(image, 1.0);
     float2 source = float2(dot(mapping.imageU.xyz, warped), dot(mapping.imageV.xyz, warped));
     bool letterbox = ((mapping.imageV.w != 0.0) && (any(source < mapping.crop.xy) || any(source >= mapping.crop.zw)));
-    float3 sampled = (letterbox
-        ? float3(0.0, 0.0, 0.0)
-        : sampleScreenSource(screenIndex, clamp(source, mapping.sampleClamp.xy, mapping.sampleClamp.zw)).rgb);
+    // The pixel's footprint in source UV units along each axis: its world width in face units, through the warp and the
+    // layout's linear part.
+    float2 sourcePerFace = float2(
+        abs((mapping.imageU.x * mapping.warpU.x) + (mapping.imageU.y * mapping.warpV.x)),
+        abs((mapping.imageV.x * mapping.warpU.y) + (mapping.imageV.y * mapping.warpV.y))
+    );
+    float2 footprint = (((0.5 * footprintDiameter) / float2(surface.right.w, surface.up.w)) * sourcePerFace);
+    float2 sourceSize;
+    float3 sampled = sampleScreenSource(screenIndex, clamp(source, mapping.sampleClamp.xy, mapping.sampleClamp.zw), footprint, sourceSize).rgb;
+
+    sampled = (letterbox ? float3(0.0, 0.0, 0.0) : sampled);
 
     // An opening (a portal's window) is no display: it shows its image as the world beyond it, with no grille,
     // scanlines, bloom, bezel or glint.
@@ -183,14 +215,17 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return true;
     }
 
-    // Aperture grille — faint vertical RGB phosphor stripes: three cosines 120 degrees apart. Continuous (cos), so a
-    // cross-backend UV delta never flips a hard edge; the period rides the screen-local UV, so the stripe stays on the
-    // image. CrtApertureGrille = 0 is a no-op.
-    float3 grille = (0.5 + (0.5 * cos(((image.x * CrtGrilleColumns) * SDF_TAU) - CrtGrillePhase)));
-    sampled *= (1.0 - (CrtApertureGrille * (1.0 - grille)));
+    // How many source texels the pixel's footprint spans along each axis.
+    float2 footprintTexels = (footprint * sourceSize);
 
-    // Native-line scanlines (soft cosine), and a radial vignette when CrtVignette is non-zero.
-    float scanline = (1.0 - (CrtScanAmplitude * (0.5 - (0.5 * cos(((image.y * CrtScanLines) * SDF_TAU))))));
+    // Aperture grille — faint vertical RGB phosphor stripes, one triad a source column: three cosines 120 degrees apart.
+    // Continuous (cos), so a cross-backend UV delta never flips a hard edge; the period rides the source, so the stripe
+    // stays on the image. CrtApertureGrille = 0 is a no-op.
+    float3 grille = (0.5 + (0.5 * cos(((source.x * sourceSize.x) * SDF_TAU) - CrtGrillePhase)));
+    sampled *= (1.0 - ((CrtApertureGrille * sdfCrtPatternGain(footprintTexels.x)) * (1.0 - grille)));
+
+    // Native-line scanlines (soft cosine, dark between source rows), and a radial vignette when CrtVignette is non-zero.
+    float scanline = (1.0 - ((CrtScanAmplitude * sdfCrtPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
     float vignette = (1.0 - (CrtVignette * radiusSquared));
 
     // Bloom knee: bright pixels bleed a little (single-pixel fake — no neighborhood pass).

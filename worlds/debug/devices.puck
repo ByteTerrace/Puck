@@ -250,8 +250,8 @@ machines [
   }
 ]
 
-// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B and the
-// start channel (the pad's Start, Enter on a keyboard) is start.
+// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B, the start
+// channel (the pad's Start, Enter on a keyboard) is start and the select channel (the pad's Back, right Shift) is select.
 kits {
   rows [
     {
@@ -290,6 +290,7 @@ kits {
         jump: "South"
         flight: "East"
         start: "Start"
+        select: "Back"
       }
     }
   ]

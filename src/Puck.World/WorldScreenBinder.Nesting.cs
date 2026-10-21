@@ -492,7 +492,7 @@ public sealed partial class WorldScreenBinder {
             binder.ReleaseSession(
                 feed: child,
                 index: child.ScreenIndex,
-                reason: "its world's screen no longer shows it"
+                reason: null
             );
         }
     }

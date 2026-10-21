@@ -86,8 +86,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
     // tablet, RDP) is normalized against. RAWMOUSE.Flags selects which space applies.
     private const int SmCxScreen = 0;
     private const int SmCyScreen = 1;
-    private const int SmXVirtualScreen = 76;
-    private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
     // WM_SETICON wParam.
@@ -134,10 +132,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
     private bool m_isVisible;
     private bool m_locksPointer;
-    // Where a pointer lock holds the cursor about and where it returns the cursor to, in screen pixels, and the client
-    // area it holds the cursor in.
+    // Where a pointer lock holds the cursor and where it returns the cursor to, in screen pixels.
     private Point m_lockCentre;
-    private Rectangle m_lockClient;
     private Point m_lockRestore;
     private bool m_showsSystemCursor;
     private Vector2 m_frameMouseDelta;
@@ -148,6 +144,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
     // The physical mouse whose raw report moved last, which the aggregate cursor position is attributed to; default
     // while raw input names no mouse, when the position stays the aggregate's.
     private InputDeviceId m_lastRawMouseDevice;
+    // Whether the latest raw report that moved the pointer was absolute (Win32AbsolutePointer): a lock never warps the
+    // cursor such a device drives, since the device moves it straight back.
+    private bool m_lastRawMouseAbsolute;
     private bool m_rawKeyboardRegistered;
     private bool m_rawMouseRegistered;
     private int? m_lastMouseX;
@@ -220,9 +219,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
     }
 
-    // The cursor the client area wears: none while the pointer is locked, or while the options hide it and the host asks
-    // for no system arrow.
-    private nint ClientCursor => (m_locksPointer || (m_options.HideMouseCursor && !m_showsSystemCursor))
+    // Whether a lock holds the cursor: hides it, freezes its reported position and recentres it. A cursor an absolute
+    // report moved last is not held, since the device puts it back where its own cursor is: it stays shown and reported
+    // where it is, so it never hides through a drag and reappears somewhere else.
+    private bool HoldsCursor => (m_locksPointer && !m_lastRawMouseAbsolute);
+    // The cursor the client area wears: none while a lock holds it, or while the options hide it and the host asks for no
+    // system arrow.
+    private nint ClientCursor => (HoldsCursor || (m_options.HideMouseCursor && !m_showsSystemCursor))
         ? 0
         : ArrowCursorHandle;
 
@@ -253,7 +256,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
 
         m_locksPointer = true;
-        m_lockClient = client;
         m_lockRestore = restore;
         m_lockCentre = new Point {
             X = (origin.X + (client.Right / 2)),
@@ -265,9 +267,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         }
 
         // No ClipCursor: the capture already routes every mouse message here wherever the cursor is, the recentre
-        // brings it back, and confining it could only move the cursor a Remote Desktop client reports from without
-        // the window knowing.
-        _ = User32.SetCursor(cursorHandle: 0);
+        // brings it back, and confining it pins a Remote Desktop session's cursor, which then reports no motion.
+        _ = User32.SetCursor(cursorHandle: ClientCursor);
         RecentrePointer();
     }
     // Frees a locked pointer, at the point the lock began when restoring, and gives back the capture no held button
@@ -279,7 +280,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
         m_locksPointer = false;
 
-        if (restore) {
+        if (restore && !m_lastRawMouseAbsolute) {
             WarpPointer(screen: m_lockRestore);
         }
         if (m_pointerButtons == 0) {
@@ -289,31 +290,19 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             _ = User32.SetCursor(cursorHandle: ClientCursor);
         }
     }
-    // Returns a locked pointer to the client area's centre once it has wandered far enough from it
-    // (Win32AbsolutePointer.ShouldRecentre), after the pump has taken the motion that moved it, and never while an
-    // absolute-mode device has yet to report from the last warp.
+    // Returns a locked pointer to the client area's centre once it has left it, after the pump has taken the motion
+    // that moved it, while the lock holds it.
     private void RecentrePointer() {
-        foreach (var state in m_rawMouseStates.Values) {
-            if (state.Absolute.WarpPending) {
-                return;
-            }
-        }
-
         if (
+            HoldsCursor &&
             User32.GetCursorPos(point: out var at) &&
-            Win32AbsolutePointer.ShouldRecentre(
-                clientHeight: m_lockClient.Bottom,
-                clientWidth: m_lockClient.Right,
-                offsetX: (at.X - m_lockCentre.X),
-                offsetY: (at.Y - m_lockCentre.Y)
-            )
+            ((at.X != m_lockCentre.X) || (at.Y != m_lockCentre.Y))
         ) {
             WarpPointer(screen: m_lockCentre);
         }
     }
-    // Moves the cursor to a screen point and rebases every motion baseline on it, so the move itself reports no motion:
-    // the window-message fallback's last client point, and each absolute-mode device's expected next report, which a
-    // device that follows the warp reports near the point and one that does not keeps reporting from where it was.
+    // Moves the cursor to a screen point and rebases the window-message fallback's last client point on it, so the move
+    // itself reports no motion.
     private void WarpPointer(Point screen) {
         if (!User32.SetCursorPos(
             x: screen.X,
@@ -330,25 +319,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         )) {
             m_lastMouseX = client.X;
             m_lastMouseY = client.Y;
-        }
-
-        foreach (var state in m_rawMouseStates.Values) {
-            if (!state.Absolute.HasReported) {
-                continue;
-            }
-
-            var (left, top, width, height) = (state.VirtualDesktop
-                ? (User32.GetSystemMetrics(index: SmXVirtualScreen), User32.GetSystemMetrics(index: SmYVirtualScreen), User32.GetSystemMetrics(index: SmCxVirtualScreen), User32.GetSystemMetrics(index: SmCyVirtualScreen))
-                : (0, 0, User32.GetSystemMetrics(index: SmCxScreen), User32.GetSystemMetrics(index: SmCyScreen)));
-
-            if ((width <= 0) || (height <= 0)) {
-                continue;
-            }
-
-            state.Absolute.Warp(
-                x: ((int)((((long)(screen.X - left)) * 65535L) / width)),
-                y: ((int)((((long)(screen.Y - top)) * 65535L) / height))
-            );
         }
     }
 
@@ -1166,6 +1136,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             (mouse.LastY != 0)
         ) {
             m_lastRawMouseDevice = state.DeviceId;
+            m_lastRawMouseAbsolute = ((mouse.Flags & RiMouseMoveAbsolute) != 0);
         }
 
         // Absolute mode (RDP / VMs / tablets / touch-as-mouse): LastX/LastY are absolute normalized coordinates
@@ -1380,8 +1351,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
-        // A locked pointer keeps the position it had when the lock began; only its motion is reported.
-        m_pointerPositionDirty |= !m_locksPointer;
+        // A held pointer keeps the position it had when the lock began; only its motion is reported.
+        m_pointerPositionDirty |= !HoldsCursor;
 
         if (!m_pointerLeaveTracked) {
             ArmPointerLeave(windowHandle: windowHandle);
@@ -1491,7 +1462,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         return 0;
     }
     private void SetPointerPosition(nint lParam) {
-        if (m_locksPointer) {
+        if (HoldsCursor) {
             return;
         }
 

@@ -57,20 +57,25 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        var position = body.FixedPosition;
-        var delta = new FixedVector2(
-            X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
-            Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
-        );
         var radius = FixedQ4816.FromDouble(value: screen.Route.EngageRadius);
 
-        if (delta.LengthSquared > (radius * radius)) {
+        if (PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) {
             reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({screen.Route.EngageRadius.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})";
             return false;
         }
 
         reason = string.Empty;
         return true;
+    }
+
+    // The squared distance on the ground plane from a body to a screen's origin, which the engage radius bounds.
+    private static FixedQ4816 PlanarDistanceSquared(WorldBody body, WorldScreen screen) {
+        var position = body.FixedPosition;
+
+        return new FixedVector2(
+            X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
+            Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
+        ).LengthSquared;
     }
 
     // body.press and body.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
@@ -182,7 +187,8 @@ public sealed partial class WorldTick {
         }
     }
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>AGENTS.md</c>'s
-    /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
+    /// overworld intent) — for each active, un-routed local seat, the nearest screen (on the ground plane, the earlier in
+    /// document order on a tie) that is
     /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
     /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
@@ -240,6 +246,8 @@ public sealed partial class WorldTick {
                 continue;
             }
 
+            var nearest = FixedQ4816.Zero;
+
             for (var index = 0; (index < screenRows.Count); index++) {
                 var screen = screenRows[index];
 
@@ -272,10 +280,13 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                ordinals[slot] = ordinal;
-                screens[slot] = screen.Index;
+                var distance = PlanarDistanceSquared(body: body, screen: screen);
 
-                break;
+                if ((screens[slot] < 0) || (distance < nearest)) {
+                    ordinals[slot] = ordinal;
+                    screens[slot] = screen.Index;
+                    nearest = distance;
+                }
             }
         }
     }
