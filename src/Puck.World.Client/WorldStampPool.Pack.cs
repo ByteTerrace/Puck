@@ -283,9 +283,12 @@ public sealed partial class WorldStampPool {
         var facts = 0;
 
         if (live.BodyIndex is { } watched) {
+            // An in-place crossing carries the body continuously, but its slots jump through the portal pair: the frame
+            // that carries them reseats their history, so reprojection never reads the far side as motion.
             discontinuity |= (
                 (live.RootEpoch != client.PoseEpoch(index: watched)) ||
-                (live.RootAddress != client.EntityAddress(index: watched))
+                (live.RootAddress != client.EntityAddress(index: watched)) ||
+                (live.RootCarryEpoch != client.Carries.Epoch(index: watched))
             );
             facts = ((int)client.Facts(index: watched));
         }

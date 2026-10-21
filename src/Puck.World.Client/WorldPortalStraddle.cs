@@ -38,7 +38,9 @@ public static class WorldPortalStraddle {
     }
     /// <summary>Returns the clip a body straddling one of a world's same-world doors is drawn with, or
     /// <see langword="null"/> when it straddles none: its bounding sphere crosses a door's glass plane within the
-    /// door's opening, widened by the sphere's radius. The first door in document order wins.</summary>
+    /// door's opening, widened by the sphere's radius. Of several, the door whose glass plane lies nearest the center
+    /// wins, so a conservative radius that reaches both doors of a shaft still clips at the one the body stands
+    /// in.</summary>
     /// <param name="doors">The world's same-world doors (<see cref="Doors"/>).</param>
     /// <param name="center">The body's bounding sphere's center.</param>
     /// <param name="radius">Its radius.</param>
@@ -49,27 +51,77 @@ public static class WorldPortalStraddle {
     public static SdfSlotClip? Clip(IReadOnlyList<Door> doors, Vector3 center, float radius, int firstSlot, int slotCount) {
         ArgumentNullException.ThrowIfNull(argument: doors);
 
-        foreach (var door in doors) {
-            var glass = door.Glass;
+        var nearest = -1;
+        var nearestDistance = float.PositiveInfinity;
+
+        for (var index = 0; (index < doors.Count); index++) {
+            var glass = doors[index].Glass;
             var offset = (center - glass.Origin);
+            var distance = MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Normal));
 
             if (
-                (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Normal)) <= radius) &&
+                (distance <= radius) &&
+                (distance < nearestDistance) &&
                 (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Right)) <= (glass.HalfWidth + radius)) &&
                 (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Up)) <= (glass.HalfHeight + radius))
             ) {
-                return new SdfSlotClip(
-                    CopyPlane: PlaneOf(glass: door.Counterpart),
-                    CopyRotation: door.Carry.Rotation,
-                    CopyTranslation: door.Carry.Translation,
-                    FirstSlot: firstSlot,
-                    Plane: PlaneOf(glass: glass),
-                    SlotCount: slotCount
-                );
+                nearest = index;
+                nearestDistance = distance;
             }
         }
 
-        return null;
+        if (nearest < 0) {
+            return null;
+        }
+
+        var door = doors[nearest];
+
+        return new SdfSlotClip(
+            CopyPlane: PlaneOf(glass: door.Counterpart),
+            CopyRotation: door.Carry.Rotation,
+            CopyTranslation: door.Carry.Translation,
+            FirstSlot: firstSlot,
+            Plane: PlaneOf(glass: door.Glass),
+            SlotCount: slotCount
+        );
+    }
+    /// <summary>Carries a camera boom that passes through one of a world's same-world doors: when the segment from the
+    /// framed body out to the eye crosses a door's glass from its front to its back within the opening, the eye stands
+    /// past the counterpart's glass, so the eye and the look target move through the pair's rigid motion and the
+    /// camera looks back through the counterpart at its subject. The first door the boom crosses in document order
+    /// wins.</summary>
+    /// <param name="doors">The world's same-world doors (<see cref="Doors"/>).</param>
+    /// <param name="anchor">The framed body's position, in metres, where the boom starts.</param>
+    /// <param name="target">The look target, in metres; carried in place when the boom crosses a door.</param>
+    /// <param name="eye">The eye, in metres; carried in place when the boom crosses a door.</param>
+    /// <returns><see langword="true"/> when the boom crossed a door and the eye and target were carried.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="doors"/> is <see langword="null"/>.</exception>
+    public static bool CarryBoom(IReadOnlyList<Door> doors, Vector3 anchor, ref Vector3 target, ref Vector3 eye) {
+        ArgumentNullException.ThrowIfNull(argument: doors);
+
+        foreach (var door in doors) {
+            var glass = door.Glass;
+            var front = Vector3.Dot(vector1: (anchor - glass.Origin), vector2: glass.Normal);
+            var back = Vector3.Dot(vector1: (eye - glass.Origin), vector2: glass.Normal);
+
+            if (!((front > 0f) && (back < 0f))) {
+                continue;
+            }
+
+            var offset = ((anchor + ((eye - anchor) * (front / (front - back)))) - glass.Origin);
+
+            if (
+                (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Right)) <= glass.HalfWidth) &&
+                (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Up)) <= glass.HalfHeight)
+            ) {
+                target = door.Carry.Point(point: target);
+                eye = door.Carry.Point(point: eye);
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // The plane a glass keeps the front of: its outward normal and the offset that puts the glass at zero.

@@ -226,6 +226,11 @@ public sealed class InPlaceCarryPresentationLawTests {
         Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: clip.CopyPlane);
         Assert.Equal(expected: 6.1f, actual: (Vector3.Transform(value: new Vector3(x: 0.5f, y: 0.1f, z: 0f), rotation: clip.CopyRotation) + clip.CopyTranslation).Y, tolerance: Tolerance);
 
+        // A conservative reach that spans the whole shaft clips at the glass the body stands nearest.
+        var nearCeiling = WorldPortalStraddle.Clip(center: new Vector3(x: 0f, y: 5.5f, z: 0f), doors: doors, firstSlot: 0, radius: 10f, slotCount: 1);
+
+        Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: nearCeiling!.Value.Plane);
+
         // Clear of every glass: drawn once, unclipped.
         Deliver(client: client, continuity: EntityContinuity.Teleport, position: new Vector3(x: 0f, y: 3f, z: 0f), tick: 2UL);
         _ = Pack(client: client, pool: pool, transforms: transforms);
@@ -233,6 +238,31 @@ public sealed class InPlaceCarryPresentationLawTests {
 
         // A world whose doors lead elsewhere has none to straddle.
         Assert.Empty(collection: WorldPortalStraddle.Doors(definition: (client.Definition with { DocumentId = "elsewhere" })));
+    }
+    [Fact]
+    public void AChaseBoomThroughASameWorldDoorLooksBackThroughItsCounterpart() {
+        var (client, _, _) = Stage(shaft: true);
+        var doors = WorldPortalStraddle.Doors(definition: client.Definition);
+
+        // Standing just below the ceiling glass, its look target and the boom reaching up through it: the eye and
+        // the target stand over the floor glass instead.
+        var body = new Vector3(x: 0f, y: 5.5f, z: 0f);
+        var target = new Vector3(x: 0f, y: 6.5f, z: 0f);
+        var eye = new Vector3(x: 0f, y: 7.5f, z: 0.5f);
+
+        Assert.True(condition: WorldPortalStraddle.CarryBoom(anchor: body, doors: doors, eye: ref eye, target: ref target));
+        Assert.Equal(actual: eye.Y, expected: 1.5f, tolerance: Tolerance);
+        Assert.Equal(actual: target.Y, expected: 0.5f, tolerance: Tolerance);
+
+        // A boom that stays on one side, or passes the glass's plane outside its opening, is left where it is.
+        var clearTarget = new Vector3(x: 0f, y: 4f, z: 0f);
+        var clearEye = new Vector3(x: 0f, y: 4.5f, z: 2f);
+        var wideTarget = new Vector3(x: 0f, y: 6.5f, z: 0f);
+        var wideEye = new Vector3(x: 0f, y: 7f, z: 6f);
+
+        Assert.False(condition: WorldPortalStraddle.CarryBoom(anchor: new Vector3(x: 0f, y: 3f, z: 0f), doors: doors, eye: ref clearEye, target: ref clearTarget));
+        Assert.False(condition: WorldPortalStraddle.CarryBoom(anchor: body, doors: doors, eye: ref wideEye, target: ref wideTarget));
+        Assert.Equal(actual: wideEye.Y, expected: 7f);
     }
     [Fact]
     public void ACorrectionEasingThroughACrossingTurnsWithIt() {

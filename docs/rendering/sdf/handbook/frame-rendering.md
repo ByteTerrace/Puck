@@ -913,7 +913,11 @@ through last (words 33 to 39), and the world-space clip plane (words 40 to 43,
 `dot(n, x) + d`, all zeros for none), which the mesh and shadow vertex stages
 write to `SV_ClipDistance0`. Vulkan devices are created with
 `shaderClipDistance` for it. Only stamp-pool bodies are covered: a catalog
-avatar or a prototype mesh draw is still drawn whole on one side.
+avatar or a prototype mesh draw is still drawn whole on one side. The frame
+that carries a body through such a door reseats its slots' history, so
+reprojection never reads the 6 m jump as motion. A chase camera whose boom
+passes through a same-world door's glass stands past the counterpart's glass
+instead (`WorldPortalStraddle.CarryBoom`), looking back through it at the body.
 
 The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a

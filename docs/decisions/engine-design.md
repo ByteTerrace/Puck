@@ -195,7 +195,9 @@ transferring it. The body keeps its index and state. Its every point and
 direction, its previous position included, moves through the isometry, and
 presentation carries what it latched the same way, so the crossing reads as
 continuous motion, never a teleport. A body straddling a door is drawn on both
-sides of it, each copy clipped by its own glass.
+sides of it, each copy clipped by its own glass, and a chase camera whose boom
+reaches through a door's glass stands past the counterpart's glass, looking
+back through it at the body.
 
 Why: a door that fires early moves the body, and the camera that follows it,
 to the far side before it has reached the glass. A floor door also needs the

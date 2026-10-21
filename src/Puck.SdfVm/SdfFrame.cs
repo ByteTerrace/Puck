@@ -127,11 +127,11 @@ public sealed record SdfFrame(
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }
 
-    /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): composition
-    /// fills it from every emitter's <see cref="ISdfSceneEmitter.SlotClips"/>, and the mesh bake's dressing clips each
-    /// draw in a range and adds its carried copy (<see cref="SdfSlotClip.Apply"/>). Empty when no body straddles a
-    /// portal.</summary>
-    public IReadOnlyList<SdfSlotClip> SlotClips { get; internal set; } = [];
+    /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
+    /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
+    /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
+    /// carried copy (<see cref="SdfSlotClip.Apply"/>). Empty when no body straddles a portal.</summary>
+    public IReadOnlyList<SdfSlotClip> SlotClips { get; set; } = [];
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
     /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore
