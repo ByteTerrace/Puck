@@ -8112,6 +8112,11 @@
         "offset": {
           "$ref": "#/$defs/DocumentVector3",
           "description": "The displacement from the cell centre, in world units."
+        },
+        "glide": {
+          "description": "Whether the body moves there as continuous motion, which a client interpolates and which keeps the body\u0027s attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

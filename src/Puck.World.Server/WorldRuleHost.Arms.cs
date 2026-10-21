@@ -475,9 +475,13 @@ public sealed partial class WorldRuleHost {
         refusal = EffectRefusal.None;
         if (!preflight) {
             var centre = topology.CellCentre(cell: ((int)cell));
+            var position = new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z));
 
-            body.Pose(position: new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z)),
-                yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+            if (effect.Glide) {
+                body.Glide(position: position);
+            } else {
+                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+            }
         }
         return true;
     }

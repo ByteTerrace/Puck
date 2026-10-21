@@ -169,7 +169,12 @@ Puck.World extends the rule compiler the way any host does (see
   action acts on its own body, and a rule names the body with `key`
   (`WorldBodyEffects` is the one check both scopes lower through). Its predicate arms `held`, `now`,
   `recently`, and `timerElapsed` belong to body programs; a rule that uses one
-  is refused with `RuleRefusal.PredicateKindInadmissible`.
+  is refused with `RuleRefusal.PredicateKindInadmissible`. `pose` and
+  `poseCell` teleport: the client snaps the body and its contact state is
+  dropped. `poseCell(…, glide: true)` instead moves the body as continuous
+  motion, keeping its attitude, velocity and contact state, so a client
+  interpolates it; a rule that steps a body along a topology every tick (the
+  debug world's lift car) glides it.
 - **`WorldFactsCompileContext`** is the derived compile context. It carries the
   world definition, resolves body references, anchors topologies in a
   placement's frame, and prices reads that scan the population at its capacity.

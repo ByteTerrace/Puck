@@ -441,6 +441,26 @@ state {
     slot liftCall = -1 bounds(-1..3)
     slot galleryStop = -1 bounds(-1..galleryLast)
     slot galleryStep = 0 bounds(-1..1)
+
+    // The gallery wheel's sector labels and icons, by sector id (icons rows in controls.puck).
+    table galleryWheelLabels {
+      next = "Next"
+      prev = "Previous"
+      flag = "Flag"
+      view = "View"
+      slice = "Slice"
+      entrance = "Entrance"
+      cancel = "Cancel"
+    }
+
+    table galleryWheelIcons {
+      next = "act.next"
+      prev = "act.prev"
+      flag = "act.flag"
+      view = "act.view"
+      slice = "act.slice"
+      entrance = "act.respawn"
+    }
   }
 }
 
@@ -466,7 +486,7 @@ rule "lift-fall" {
 rule "lift-ride" {
   when liftAt >= 0
   mode: Level
-  poseCell(key: `placement:lift-car`, topology: liftShaft, expression: liftAt, offset: [0, liftRoot, 0])
+  poseCell(key: `placement:lift-car`, topology: liftShaft, expression: liftAt, offset: [0, liftRoot, 0], glide: true)
 }
 
 // Stepping onto a landing's pad calls the car to that level; stepping onto a pad in the car sends it to the pad's.
@@ -560,9 +580,11 @@ commands [
   }
 ]
 
-// The gallery's keys, on the debug world's own resting page: the right shoulder or = steps the tour on, - steps it
-// back, G flags the exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. The garden
-// shares the Moth's base page and has no gallery, so these live here.
+// The gallery's keys, on the debug world's own resting page: = steps the tour on, - steps it back, G flags the
+// exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. Holding the right shoulder or Q
+// opens the gallery wheel, aimed with the right stick or the mouse and committed on release, as the left shoulder and
+// Tab open the play wheel: its ring holds every gallery action, so a pad reaches them all. The garden shares the
+// Moth's base page and has no gallery, so these live here.
 bindingOverlays [
   {
     id: "gallery-keys"
@@ -570,6 +592,46 @@ bindingOverlays [
       version: "puck.input.bindings.v1"
       modifiers []
       chords [
+        {
+          chord ["keyboard.q"]
+          group: "play"
+          page {
+            id: "gallery-wheel-keys"
+            inherits: "base"
+            label: "Gallery"
+            entries [
+              {
+                command: "player.wheel.select"
+                sources ["mouse.motion"]
+              }
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["keyboard.q"]
+              }
+            ]
+          }
+        }
+        {
+          chord ["gamepad.rightShoulder"]
+          group: "play"
+          page {
+            id: "gallery-wheel-pad"
+            inherits: "base"
+            label: "Gallery"
+            entries [
+              {
+                command: "player.wheel.select"
+                sources ["gamepad.rightStick"]
+              }
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["gamepad.rightShoulder"]
+              }
+            ]
+          }
+        }
         {
           chord []
           group: "play"
@@ -580,7 +642,7 @@ bindingOverlays [
                 command: "gallery.next"
                 id: "galleryNext"
                 label: "Next exhibit"
-                sources ["keyboard.equals", "gamepad.rightShoulder"]
+                sources ["keyboard.equals"]
               }
               {
                 command: "gallery.prev"
@@ -608,6 +670,32 @@ bindingOverlays [
               }
             ]
           }
+        }
+      ]
+      wheels [
+        {
+          id: "gallery"
+          group: "play"
+          holdPages ["gallery-wheel-keys", "gallery-wheel-pad"]
+          labelRow: "state.galleryWheelLabels"
+          iconRow: "state.galleryWheelIcons"
+          style {
+            placement: ViewportCenter
+          }
+          rings [
+            {
+              id: "gallery-acts"
+              label: "Gallery"
+              entries [
+                { id: "next", command: "gallery.next", sources: null }
+                { id: "prev", command: "gallery.prev", sources: null }
+                { id: "flag", command: "gallery.flag", sources: null }
+                { id: "view", command: "gallery.view", sources: null }
+                { id: "slice", command: "gallery.slice", sources: null }
+                { id: "entrance", command: "gallery.go", sources: null }
+              ]
+            }
+          ]
         }
       ]
     }

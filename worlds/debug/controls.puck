@@ -62,6 +62,7 @@ icons {
     { name: "key.e", label: "E" }
     { name: "key.f", label: "F" }
     { name: "key.g", label: "G" }
+    { name: "key.q", label: "Q" }
     { name: "key.v", label: "V" }
     { name: "key.b", label: "B" }
     { name: "key.equals", label: "=" }
@@ -152,6 +153,7 @@ icons {
     { source: "keyboard.e", icon: "key.e" }
     { source: "keyboard.f", icon: "key.f" }
     { source: "keyboard.g", icon: "key.g" }
+    { source: "keyboard.q", icon: "key.q" }
     { source: "keyboard.v", icon: "key.v" }
     { source: "keyboard.b", icon: "key.b" }
     { source: "keyboard.equals", icon: "key.equals" }

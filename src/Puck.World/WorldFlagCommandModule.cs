@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -23,7 +22,7 @@ namespace Puck.World;
 /// The capture arms the way <c>world.screenshot</c> does and the same stderr <c>[capture]</c> line says when the
 /// PNG exists; headless, or while another capture is pending, the record is still written and the echo says no
 /// capture was armed.</remarks>
-internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient client, WorldCaptureScheduler captureScheduler, Func<string> packageDirectory, WorldSeatViewports? viewports = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient client, WorldCaptureScheduler captureScheduler, Func<string> packageDirectory, WorldSeatViewports? viewports = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     /// <summary>The folder under the package the records and captures land in.</summary>
     public const string FolderName = "flags";
     /// <summary>The exhibit token that names the spawn point nearest the flagging seat's body, so a key bound to
@@ -135,18 +134,10 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
         }
 
         // The capture is decided before the record is written so the record says whether a PNG is coming.
-        string? captureRefusal = null;
-        ICaptureRequestTarget? render = null;
-
-        if (renderProbe is null) {
-            captureRefusal = "no renderer to capture (headless)";
-        } else if (renderProbe.Root is not { } root) {
-            captureRefusal = "the renderer is not built yet";
-        } else if (root.PendingCapturePath is { } outstanding) {
-            captureRefusal = $"a capture of {outstanding} is still pending";
-        } else {
-            render = root;
-        }
+        var captureRefusal = ((renderProbe is null)
+            ? "no renderer to capture (headless)"
+            : CaptureRefusal(probe: renderProbe)
+        );
 
         try {
             using var stream = new FileStream(
@@ -210,43 +201,20 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
             } else {
                 writer.WriteNull(propertyName: "camera");
             }
-            if (render is null) {
-                writer.WriteNull(propertyName: "capture");
-                writer.WriteString(
-                    propertyName: "captureRefused",
-                    value: captureRefusal
-                );
-            } else {
-                writer.WriteString(
-                    propertyName: "capture",
-                    value: Path.GetFileName(path: capturePath)
-                );
-            }
+            WriteCapture(
+                capturePath: capturePath,
+                refusal: captureRefusal,
+                writer: writer
+            );
             writer.WriteEndObject();
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException)) {
             return CommandResult.Error(output: $"[world.flag: could not write {recordPath} ({exception.Message})]");
         }
 
-        var captureWord = $"no capture armed ({captureRefusal})";
-
-        if (render is { } target) {
-            var request = new FrameCaptureRequest(path: capturePath);
-
-            _ = request.Completion.ContinueWith(
-                continuationAction: static (completed, state) => {
-                    if (completed.Result.Error is { } error) {
-                        Console.Error.WriteLine(value: $"[capture] refused {state}: {error.Message}");
-                    }
-                },
-                scheduler: TaskScheduler.Default,
-                state: capturePath
-            );
-            captureScheduler.ArmUnscheduled(
-                request: request,
-                target: target
-            );
-            captureWord = $"capture pending {capturePath}";
-        }
+        var captureWord = ((captureRefusal is null)
+            ? Arm(capturePath: capturePath, probe: renderProbe!)
+            : $"no capture armed ({captureRefusal})"
+        );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
