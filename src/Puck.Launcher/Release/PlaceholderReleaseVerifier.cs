@@ -9,6 +9,9 @@ namespace Puck.Launcher.Release;
 /// </summary>
 public sealed class PlaceholderReleaseVerifier : IReleaseVerifier {
     /// <inheritdoc/>
+    public ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion) =>
+        Verify(manifest: manifest, now: verifiedAt, installedVersion: installedVersion, advanceSequence: false);
+    /// <inheritdoc/>
     public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence) =>
         ReleaseVerifyOutcome.Refuse(reason: "the release trust anchor is still the build-time placeholder — no release can be accepted until the composition root pins a real one");
 }

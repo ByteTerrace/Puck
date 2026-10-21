@@ -11,10 +11,15 @@ namespace Puck.Launcher.Release;
 /// server). <see cref="AttestationReleaseVerifier"/> compares against the stored mark BEFORE trusting anything else
 /// in the manifest (a replayed old manifest is refused before its embedded <c>revoked</c>/<c>minimumSupported</c>
 /// are even read), and calls <see cref="TryAdvance"/> only after every other verification check has passed.
-/// Compare-and-advance is atomic within the shared store instance. Coupling that write to installation and
-/// coordinating separate processes remain the install transaction's responsibility.
+/// File-backed compare-and-advance excludes other writers, including separate processes. Install reservations
+/// bind the mark to a full signed-manifest pin so UpdateService can resume its durable intent before activation.
 /// </summary>
 public interface IReleaseSequenceStore {
+    /// <summary>Atomically reserves an install, or resumes the same epoch, sequence and full manifest pin.
+    /// An ordinary committed mark or a different manifest never grants recovery.</summary>
+    bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin);
+    /// <summary>Whether this exact install reservation is still the current mark for its identity.</summary>
+    bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin);
     /// <summary>Atomically compares and advances the stored mark to <paramref name="requirement"/>. A preceding
     /// <see cref="IsAcceptable"/> is only a preview: another verifier may have committed since then.</summary>
     /// <param name="requirement">The replay-commit requirement to record.</param>
@@ -31,7 +36,25 @@ public interface IReleaseSequenceStore {
 /// where a durable file would leak state across runs that expect a clean high-water mark.</summary>
 public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     private readonly Lock m_gate = new();
-    private readonly Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> m_marks = [];
+    private readonly Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> m_marks = [];
+
+    /// <inheritdoc/>
+    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin) {
+        lock (m_gate) {
+            return m_marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark) &&
+                mark.EpochStart == requirement.EpochStartUnixSeconds && mark.Sequence == requirement.Sequence && mark.ManifestPin == manifestPin;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) {
+        lock (m_gate) {
+            if (IsReserved(requirement: requirement, manifestPin: manifestPin)) { return true; }
+            if (!IsAcceptable(requirement: requirement)) { return false; }
+            m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
+            return true;
+        }
+    }
 
     /// <inheritdoc/>
     public bool TryAdvance(ReplayCommitRequirement requirement) {
@@ -40,7 +63,7 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
                 return false;
             }
 
-            m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence);
+            m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, null);
             return true;
         }
     }
@@ -70,8 +93,17 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     private readonly string m_filePath = Path.GetFullPath(path: filePath);
     private readonly Lock m_gate = new();
 
-    private Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> ReadMarks() {
-        var marks = new Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)>();
+    private FileStream? TryAcquireLease() {
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: m_filePath)!);
+        try {
+            return new FileStream(path: m_filePath + ".lock", mode: FileMode.OpenOrCreate, access: FileAccess.ReadWrite, share: FileShare.None);
+        } catch (IOException) {
+            return null;
+        }
+    }
+
+    private Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> ReadMarks() {
+        var marks = new Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)>();
 
         if (!File.Exists(path: m_filePath)) {
             return marks;
@@ -86,10 +118,18 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
         foreach (var line in lines.AsSpan(start: 1)) {
             var fields = line.Split(separator: '\t');
 
-            if ((fields.Length != 4) ||
+            if ((fields.Length != 5) ||
                 !long.TryParse(s: fields[2], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var epochStart) ||
                 !ulong.TryParse(s: fields[3], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var sequence)) {
                 throw new InvalidDataException(message: "the release sequence store is malformed");
+            }
+
+            ContentPin? manifestPin = null;
+            if (fields[4].Length != 0) {
+                if (!ContentPin.TryParse(text: fields[4], pin: out var parsedPin)) {
+                    throw new InvalidDataException(message: "the release sequence store contains a malformed manifest pin");
+                }
+                manifestPin = parsedPin;
             }
 
             // Encode identities so a subject containing a tab or newline cannot change the record boundaries.
@@ -99,7 +139,7 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
                 var subject = utf8.GetString(bytes: Convert.FromBase64String(s: fields[1]));
 
                 if ((domain.Length == 0) || (subject.Length == 0) ||
-                    !marks.TryAdd(key: (domain, subject), value: (epochStart, sequence))) {
+                    !marks.TryAdd(key: (domain, subject), value: (epochStart, sequence, manifestPin))) {
                     throw new InvalidDataException(message: "the release sequence store contains an empty or duplicate identity");
                 }
             } catch (Exception error) when (error is FormatException or DecoderFallbackException) {
@@ -111,9 +151,30 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     }
 
     /// <inheritdoc/>
-    public bool TryAdvance(ReplayCommitRequirement requirement) {
+    public bool TryAdvance(ReplayCommitRequirement requirement) => TryWrite(requirement: requirement, manifestPin: null);
+
+    /// <inheritdoc/>
+    public bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) => TryWrite(requirement: requirement, manifestPin: manifestPin);
+
+    /// <inheritdoc/>
+    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin) {
         lock (m_gate) {
-            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> marks;
+            try {
+                return ReadMarks().TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark) &&
+                    mark.EpochStart == requirement.EpochStartUnixSeconds && mark.Sequence == requirement.Sequence && mark.ManifestPin == manifestPin;
+            } catch (InvalidDataException) {
+                return false;
+            }
+        }
+    }
+
+    private bool TryWrite(ReplayCommitRequirement requirement, ContentPin? manifestPin) {
+        lock (m_gate) {
+            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
+
+            // Keep the lease file in place: deleting it could give two processes locks on different inodes.
+            using var lease = TryAcquireLease();
+            if (lease is null) { return false; }
 
             try {
                 marks = ReadMarks();
@@ -123,10 +184,11 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
 
             if (marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) &&
                 !ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence)) {
-                return false;
+                return manifestPin is not null && stored.ManifestPin == manifestPin &&
+                    stored.EpochStart == requirement.EpochStartUnixSeconds && stored.Sequence == requirement.Sequence;
             }
 
-            marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence);
+            marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
 
             var text = new StringBuilder(value: "puck.release.sequence.v1\n");
 
@@ -135,7 +197,8 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
                 text.Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Domain))).Append(value: '\t')
                     .Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Subject))).Append(value: '\t')
                     .Append(value: mark.EpochStart.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
-                    .Append(value: mark.Sequence.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\n');
+                    .Append(value: mark.Sequence.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
+                    .Append(value: mark.ManifestPin?.ToString()).Append(value: '\n');
             }
 
             AtomicFile.WriteAllText(
@@ -148,7 +211,7 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     /// <inheritdoc/>
     public bool IsAcceptable(ReplayCommitRequirement requirement) {
         lock (m_gate) {
-            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence)> marks;
+            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
 
             try {
                 marks = ReadMarks();

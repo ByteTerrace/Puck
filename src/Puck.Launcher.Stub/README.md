@@ -19,10 +19,20 @@ that case keeps launching the current version to avoid an incompatible read.
 records. See [Puck.Launcher](../Puck.Launcher/README.md) for update staging and
 the application's side of the release workflow.
 
+The stub holds the same persistent `update.lock` lease as `UpdateService`
+while reading pointers, deciding rollback and recording the launch attempt. It
+releases the lease before starting the child so the application can update.
+Contention refuses the launch for retry. Before rolling back, it deletes only
+the pending `install-intent.json` whose manifest version matches the rejected
+version; cancellation precedes the pointer write so interrupted cleanup cannot
+resurrect that version. An unrelated newer pending intent is preserved. A
+malformed intent refuses rollback before changing the pointer.
+
 ## Verification
 
 The [launcher tests](../../tests/Puck.Launcher.Tests/README.md) exercise the
-stub's decision table alongside the release chain. Tests of that policy do
+stub's decision table, shared update lease and interrupted-install rollback
+alongside the release chain. Tests of that policy do
 not demonstrate recovery from damage to the stub executable itself.
 
 ## Documentation

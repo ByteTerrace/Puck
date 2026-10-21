@@ -8,6 +8,20 @@ namespace Puck.Launcher.Tests.Release;
 /// <c>minimumSupported</c>, and version-monotonicity refusals, plus the discriminating replayed-older-manifest
 /// leg.</summary>
 public sealed class AttestationReleaseVerifierTests {
+    [Fact]
+    public void InstallReservation_RefusesAnotherSignedManifestAtTheSameSequence() {
+        var (verifier, fixture) = BuildVerifier();
+        var manifest = fixture.Sign(document: UnsignedDocument(), notBefore: ReleaseChainFixture.Epoch,
+            notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        var different = fixture.Sign(document: UnsignedDocument() with { Notes = "different signed payload" }, notBefore: ReleaseChainFixture.Epoch,
+            notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        var now = DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch);
+        Assert.True(condition: verifier.ReserveInstall(manifest: manifest, verifiedAt: now, installedVersion: "1.0.0").Accepted);
+        Assert.True(condition: verifier.ReserveInstall(manifest: manifest, verifiedAt: now, installedVersion: "1.0.0").Accepted);
+        Assert.False(condition: verifier.ReserveInstall(manifest: different, verifiedAt: now, installedVersion: "1.0.0").Accepted);
+        Assert.False(condition: verifier.Verify(manifest: manifest, now: now, installedVersion: "1.0.0", advanceSequence: false).Accepted);
+    }
+
     private sealed class RacingSequenceStore : IReleaseSequenceStore, IDisposable {
         private readonly InMemoryReleaseSequenceStore m_inner = new();
         private readonly Barrier m_previews = new(participantCount: 2);
@@ -19,6 +33,8 @@ public sealed class AttestationReleaseVerifierTests {
         }
 
         public bool TryAdvance(ReplayCommitRequirement requirement) => m_inner.TryAdvance(requirement: requirement);
+        public bool TryReserve(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.TryReserve(requirement: requirement, manifestPin: manifestPin);
+        public bool IsReserved(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.IsReserved(requirement: requirement, manifestPin: manifestPin);
         public void Dispose() => m_previews.Dispose();
     }
 

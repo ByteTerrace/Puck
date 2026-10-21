@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Puck.Launcher.Stub;
 
 /// <summary>
@@ -8,6 +10,35 @@ namespace Puck.Launcher.Stub;
 /// and shares no code with the app it launches.
 /// </summary>
 public static class StubInstall {
+    /// <summary>Excludes UpdateService and other stub decisions for this install root. Hold across reading
+    /// current, selecting rollback and writing pointers; dispose before launching the child. The lease file is
+    /// persistent so all processes lock the same inode. This BCL-only stub shares its name with UpdateService.</summary>
+    public static FileStream AcquireUpdateLease(string installRoot) {
+        Directory.CreateDirectory(path: installRoot);
+        return new FileStream(path: Path.Combine(path1: installRoot, path2: "update.lock"), mode: FileMode.OpenOrCreate,
+            access: FileAccess.ReadWrite, share: FileShare.None);
+    }
+
+    /// <summary>Under the caller's update lease, cancels a matching interrupted install before rolling back its
+    /// pointer. A crash between cancellation and rollback cannot leave a resumable rejected version. A pending
+    /// newer version is preserved. The local intent's camel-case manifest/version fields are written by
+    /// UpdateService with DocumentJsonOptions; malformed intent state refuses rollback rather than guessing.</summary>
+    public static void RevertToLastGood(string installRoot, string failedVersion, string lastGoodVersion) {
+        var intentPath = Path.Combine(path1: installRoot, path2: "install-intent.json");
+        if (File.Exists(path: intentPath)) {
+            using var intent = JsonDocument.Parse(json: File.ReadAllText(path: intentPath));
+            if (intent.RootElement.ValueKind != JsonValueKind.Object ||
+                !intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var manifest) || manifest.ValueKind != JsonValueKind.Object ||
+                !manifest.TryGetProperty(propertyName: "version", value: out var version) || version.ValueKind != JsonValueKind.String) {
+                throw new JsonException(message: "pending install intent has no manifest version");
+            }
+            if (string.Equals(a: version.GetString(), b: failedVersion, comparisonType: StringComparison.Ordinal)) {
+                File.Delete(path: intentPath);
+            }
+        }
+        WritePointerAtomic(installRoot: installRoot, fileName: CurrentFileName, value: lastGoodVersion);
+    }
+
     /// <summary>The current-version pointer file name, directly under the install root.</summary>
     public const string CurrentFileName = "current";
     /// <summary>The subdirectory the health attempt counter lives under.</summary>

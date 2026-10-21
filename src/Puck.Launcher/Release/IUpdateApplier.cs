@@ -18,6 +18,7 @@ public sealed record UpdateApplyResult(bool Applied, string? PreviousVersion, st
 /// its <c>state-generation</c>, and atomically swaps the install's <c>current</c> pointer — the ONE update model,
 /// selection-by-pointer rather than in-place replacement, so nothing this process has already loaded is ever
 /// touched. The swap is only ever observed by the stub at its NEXT launch.
+/// Callers must hold the install root's update.lock lease across staging and this call, as UpdateService does.
 /// </summary>
 public interface IUpdateApplier {
     /// <summary>Applies <paramref name="rid"/>'s staged payload from <paramref name="manifest"/>.</summary>
@@ -25,5 +26,7 @@ public interface IUpdateApplier {
     /// <param name="rid">The .NET runtime identifier staged under <c>cacheRoot/versions/&lt;version&gt;/</c>.</param>
     /// <param name="cacheRoot">The install root — the same directory <see cref="IUpdateStager"/> staged under and
     /// the stub reads <c>current</c>/<c>last-good</c>/<c>versions/</c> from.</param>
-    UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot);
+    /// <param name="recoverInterruptedApply">Permit the already-current version only while recovering a durable,
+    /// exact-manifest install reservation under the install-root writer lease. Files and generation are rechecked.</param>
+    UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot, bool recoverInterruptedApply = false);
 }

@@ -1,4 +1,5 @@
 using Puck.Attestation;
+using Puck.Assets;
 using Puck.Launcher.Release;
 using Xunit;
 
@@ -7,6 +8,36 @@ namespace Puck.Launcher.Tests.Release;
 public sealed class ReleaseSequenceStoreTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
     private string StorePath => Path.Combine(path1: m_root.RootPath, path2: "sequence");
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InstallReservation_ResumesOnlyItsExactManifestAndEpoch(bool persistent) {
+        IReleaseSequenceStore store = persistent ? new FileReleaseSequenceStore(filePath: StorePath) : new InMemoryReleaseSequenceStore();
+        var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 5);
+        var pin = ContentPin.Compute(content: new byte[] { 1 });
+        var other = ContentPin.Compute(content: new byte[] { 2 });
+        Assert.True(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
+        if (persistent) { store = new FileReleaseSequenceStore(filePath: StorePath); }
+        Assert.True(condition: store.IsReserved(requirement: requirement, manifestPin: pin));
+        Assert.True(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
+        Assert.False(condition: store.TryAdvance(requirement: requirement));
+        Assert.False(condition: store.TryReserve(requirement: requirement, manifestPin: other));
+        Assert.False(condition: store.IsAcceptable(requirement: requirement));
+        Assert.True(condition: store.TryAdvance(requirement: requirement with { EpochStartUnixSeconds = 1, Sequence = 0 }));
+        Assert.False(condition: store.IsReserved(requirement: requirement, manifestPin: pin));
+        Assert.False(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
+    }
+
+    [Fact]
+    public void SeparateFileStoreInstances_CannotBothCommitTheSameSequence() {
+        var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 5);
+        var outcomes = new bool[16];
+        Parallel.For(fromInclusive: 0, toExclusive: outcomes.Length,
+            body: index => outcomes[index] = new FileReleaseSequenceStore(filePath: StorePath).TryAdvance(requirement: requirement));
+        Assert.Single(collection: outcomes, predicate: accepted => accepted);
+        Assert.False(condition: new FileReleaseSequenceStore(filePath: StorePath).IsAcceptable(requirement: requirement));
+    }
 
     [Fact]
     public void FileStore_RetainsEverySignerAcrossReopenAndEpochChanges() {

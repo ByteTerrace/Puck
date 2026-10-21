@@ -12,13 +12,13 @@ public sealed class FileUpdateApplier : IUpdateApplier {
     private readonly Lock m_gate = new();
 
     /// <inheritdoc/>
-    public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot) {
+    public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot, bool recoverInterruptedApply = false) {
         lock (m_gate) {
-            return ApplyCore(manifest: manifest, rid: rid, cacheRoot: cacheRoot);
+            return ApplyCore(manifest: manifest, rid: rid, cacheRoot: cacheRoot, recoverInterruptedApply: recoverInterruptedApply);
         }
     }
 
-    private static UpdateApplyResult ApplyCore(ReleaseManifest manifest, string rid, string cacheRoot) {
+    private static UpdateApplyResult ApplyCore(ReleaseManifest manifest, string rid, string cacheRoot, bool recoverInterruptedApply) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: cacheRoot);
@@ -81,6 +81,14 @@ public sealed class FileUpdateApplier : IUpdateApplier {
         );
 
         if (previousVersion is { Length: > 0 }) {
+            if (recoverInterruptedApply && previousVersion == manifest.Version) {
+                var generationPath = Path.Combine(path1: versionDirectory, path2: "state-generation");
+                if (!File.Exists(path: generationPath) || File.ReadAllText(path: generationPath) != manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)) {
+                    return UpdateApplyResult.Refuse(reason: "the current install's state generation does not match its pending intent");
+                }
+                var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
+                return new UpdateApplyResult(Applied: true, PreviousVersion: File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null, RefusalReason: null);
+            }
             // InstalledVersion belongs to the running process. A previous apply may already have advanced this
             // pointer without restarting it, so the on-disk version is the final downgrade gate.
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: previousVersion)) {
