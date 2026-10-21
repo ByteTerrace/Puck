@@ -80,7 +80,8 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             roster: m_client.Roster,
             grants: m_server.Grants,
             anchor: m_anchor,
-            activeLayout: m_composer.ActiveLayoutName
+            activeLayout: m_composer.ActiveLayoutName,
+            screens: m_server.Definition.Screens
         );
     }
 

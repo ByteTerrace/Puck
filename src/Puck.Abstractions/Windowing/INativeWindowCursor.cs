@@ -18,4 +18,12 @@ public interface INativeWindowCursor {
     /// <see cref="NativeWindowOptions.HideMouseCursor"/> hides the cursor. A change applies at once while the pointer is
     /// over the client area. Defaults to <see langword="false"/>.</summary>
     bool ShowsSystemCursor { get; set; }
+
+    /// <summary>Moves the cursor to a point of the client area, as a pad driving the pointer does, so the window reports
+    /// the pointer there as it would a mouse's move. Only the foreground window moves the cursor, and never while the
+    /// pointer is locked, so the user's cursor never moves while they work elsewhere.</summary>
+    /// <param name="x">The client-area x coordinate, in client pixels from the left edge.</param>
+    /// <param name="y">The client-area y coordinate, in client pixels from the top edge.</param>
+    /// <returns><see langword="true"/> when the cursor moved.</returns>
+    bool WarpPointer(int x, int y);
 }

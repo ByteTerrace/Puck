@@ -910,6 +910,10 @@ public static class WorldBootComposition {
         // on every group (play, editor), so a headless boot must carry the SAME verb NAMES; WorldWheelFeed is
         // OPTIONAL (default null) and every handler refuses BY NAME at use when it is absent.
         services.AddSingleton<ICommandModule, WorldWheelCommandModule>();
+        // The pad's desktop verbs (source.passthrough.pointer/.scroll/.button.*/.arrow.*), CORE-registered for the same
+        // vocabulary-parity reason: the debug world's desktop page commits them. The passthrough door is
+        // presentation-only and OPTIONAL here; every verb refuses by name without it.
+        services.AddSingleton<ICommandModule, WorldPassthroughPadCommandModule>();
 
         // The window-composition verb surface — view.override camera|layout (the live overrides) and the
         // world.view.state/.pointer reads. The authored rows live under world.row.set/world.row.remove over
@@ -1246,6 +1250,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshIrradiance);
         AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
@@ -1530,9 +1535,16 @@ public static class WorldBootComposition {
         // (the panes the local user opened as passthrough sources with source.passthrough, so a focused source's keys
         // and the pointer over its pane reach its window instead of the game).
         services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
-            windows: sp.GetRequiredService<WorldScreenBinder>(),
+            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
-            viewports: sp.GetRequiredService<WorldSeatViewports>()
+            seats: new WorldPassthroughSeats(
+                client: sp.GetRequiredService<WorldClient>(),
+                link: sp.GetRequiredService<IServerLink>(),
+                roster: sp.GetRequiredService<PlayerRoster>()
+            ),
+            time: TimeProvider.System,
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            windows: sp.GetRequiredService<WorldScreenBinder>()
         ));
         services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
             CapabilityType: typeof(IWindowInputFilter),
@@ -1555,6 +1567,7 @@ public static class WorldBootComposition {
                 CapabilityType: typeof(IWindowCursorPolicy),
                 Instance: new WorldCursorPolicy(
                     steering: sp.GetRequiredService<WorldSeatViewInput>().IsSteering,
+                    warp: passthrough.TakeWarp,
                     windowHoldsPointer: () => passthrough.HoldsPointer
                 ),
                 IsHeld: true
@@ -1611,6 +1624,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSettle);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshIrradiance);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.

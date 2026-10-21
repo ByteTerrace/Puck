@@ -346,10 +346,13 @@ and it offers each event to `WorldAnnotationInput` and then
 `WorldSourcePassthrough` until one consumes it. A consumed event (a pointer
 button or relative motion in annotate mode, a key a focused passthrough source
 takes, a click or wheel over a passthrough pane) never reaches the observer,
-the held-input reassertion or the command router. Only `source.passthrough
-open`, run as typed text from the host's own console, makes a pane a
-passthrough source; never add a document field, binding or other principal's
-door to it. A new raw-event consumer that must withhold events from the game
+the held-input reassertion or the command router. Only the local user opens a
+passthrough source: `source.passthrough open`, run as typed text from the
+host's own console, or their own press on an engaged window capture's framed
+picture (a physical click, or a local pad's bound press, which
+`WorldPassthroughPad.IsLocalPad` admits); never add a document field, a
+scripted door or another principal's door to it. A binding page may only name
+which local pad control means which pointer act. A new raw-event consumer that must withhold events from the game
 joins that fan-out rather than registering a second capability.
 
 Annotate mode (`WorldAnnotations`, toggled by `view.annotate`) is a

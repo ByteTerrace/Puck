@@ -362,6 +362,10 @@ public enum WorldPadElement : byte {
 /// <param name="Display">How the window shows this screen to a seat engaged on it once its camera has framed the
 /// picture: what surrounds the matte (<see cref="WorldScreenDisplay"/>). <see langword="null"/> (the default) is
 /// <see cref="WorldScreenDisplay.Neutral"/>: a black matte. Omitted from the wire when null.</param>
+/// <param name="PadPointer">How a local pad's sticks drive the pointer over this screen's framed picture while a seat
+/// engaged on it frames a window capture (<see cref="WorldScreenPadPointer"/>). Only an engageable screen showing a
+/// window capture may author it. <see langword="null"/> (the default) moves and scrolls nothing from a stick; a pad's
+/// buttons still click and press keys. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
@@ -369,7 +373,8 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,
@@ -392,6 +397,23 @@ public sealed record WorldScreenDisplay(
     /// <summary>Gets the display an engaged screen shows that authors none: a black matte.</summary>
     public static WorldScreenDisplay Neutral { get; } = new();
 }
+/// <summary>How a local pad's sticks drive the pointer over an engaged window capture's framed picture, the way a
+/// controller's desktop mode does: one stick moves the pointer and the other turns the wheel. A stick's deflection (its
+/// length clamped to 1) is raised to <see cref="Curve"/>, so a small tilt places the pointer finely, and a held deflection
+/// speeds up from <see cref="Speed"/> to <see cref="Speed"/> times <see cref="Boost"/> over <see cref="RampSeconds"/>.
+/// Every speed is per second and integrated exactly over each frame's interval, so the distance covered does not depend
+/// on the frame rate. Presentation only: nothing here reaches the simulation, and nothing here sends the window input,
+/// which only the local user's own pad does (<c>Puck.World.Client.WorldSourcePassthrough</c>).</summary>
+/// <param name="Speed">The pointer's speed at full deflection before any boost, in heights of the framed picture per
+/// second. Positive.</param>
+/// <param name="Curve">The exponent the deflection's length is raised to; 1 is a linear response. At least 1.</param>
+/// <param name="Boost">The speed's multiplier once a deflection has been held for <paramref name="RampSeconds"/>, rising
+/// linearly from 1 while it is held and back to 1 once the stick rests. At least 1.</param>
+/// <param name="RampSeconds">How long a held deflection takes to reach <paramref name="Boost"/>; 0 applies it at once.
+/// Non-negative.</param>
+/// <param name="ScrollSpeed">The wheel's speed at full deflection of the scrolling stick, in wheel notches per second,
+/// its deflection raised to <paramref name="Curve"/> too. Non-negative; 0 scrolls nothing.</param>
+public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float Boost = 1f, float RampSeconds = 0f, float ScrollSpeed = 0f);
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
