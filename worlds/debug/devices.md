@@ -1,13 +1,12 @@
 # Debug world device row
 
-The debug world shows one of each gaming device the World hosts, at the size of
-the real thing, on a row of labelled stands in the gallery hall's lobby
-([`shapes.md`](shapes.md#the-hall)), on its level 0 floor at z = 28, 2.5 m apart
-and facing -Z, toward the entrance, so their screens light the lobby's floor and
-walls; the lobby's room lights start off so that light shows, and its wall
-switch or `gallery.lights 0 on` turns them on
-([the hall's lighting](shapes.md#the-hall)). Each stand carries the device's own
-name. `debug.go devices` stands you in front of the middle one.
+The debug world shows one of each gaming device the World hosts on a row of
+labelled stands in the gallery hall's lobby ([`shapes.md`](shapes.md#the-hall)),
+on its level 0 floor at z = 28, 2.5 m apart and facing -Z, toward the entrance,
+so their screens light the lobby's floor and walls; the lobby's room lights
+start off so that light shows, and its wall switch or `gallery.lights 0 on`
+turns them on ([the hall's lighting](shapes.md#the-hall)). Each stand carries
+the device's own name. `debug.go devices` stands you in front of the middle one.
 [`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
 it running, and each lists the folders its swappable content comes from in
@@ -22,46 +21,49 @@ git-ignored `roms/` at the repository root.
 
 ## The devices
 
-Each device is modelled at its real size in millimetres, as its own prototype
-beside its stand's, so the bake meshes it at its own scale (a 0.5 mm cell on
-the handhelds) rather than at the stand's:
+Each device is modelled in its real millimetres, as its own prototype beside
+its stand's, so the bake meshes it at its own scale rather than at the
+stand's. The handhelds are shown at 1.5 times their real size (their
+placements' `scale`, `handheldScale`), so they read from the walking distance
+on their plinths; the deck and its television are at their real size.
 
-| Device | Body | On | Screen glass (exactly the picture) |
+| Device | Body (real) | On | Screen glass (exactly the picture) |
 |---|---|---|---|
-| Humble Gaming Brick: a Color brick in clear atomic orange, cartridge in its top, leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm | a 0.4 m square plinth 1.15 m tall | 160 by 144 at 0.275 mm square pixels: 44 by 39.6 mm |
-| Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed | a plinth like the brick's | 240 by 160 at 0.255 mm square pixels: 61.2 by 40.8 mm |
-| Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 14-inch television with rabbit ears | console 160 by 168 by 64 mm; television cabinet 370 by 330 mm, 375 mm deep with the tube's housing | a walnut cart whose top is 0.55 m up | 256 by 240 at 1 by 0.875 mm (8:7) pixels: 256 by 210 mm, so the 224 lines a set shows are a 256 by 196 mm, 4:3 picture |
+| Humble Gaming Brick: a Color brick whose shell is clear atomic-orange glass over its green board, chips, speaker, cartridge and two AA cells; leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm, shown 112.5 by 199.5 by 41 mm | a 0.4 m square plinth 1.15 m tall | 160 by 144 at 0.4125 mm square pixels (0.275 mm real): 66 by 59.4 mm |
+| Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed, shown 127 by 123 by 35.6 mm | a plinth like the brick's | 240 by 160 at 0.3825 mm square pixels (0.255 mm real): 91.8 by 61.2 mm |
+| Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 27-inch flat-faced television (silver bezel, black body, tapered tube housing, a speaker grille under the picture) | console 160 by 168 by 64 mm; television 740 by 621 mm, 505 mm deep | a walnut AV cabinet 1.2 by 0.58 m whose top is 0.65 m up | 256 by 240 at 2.143 by 1.875 mm (8:7) pixels: 548.6 by 450 mm, so the 224 lines a set shows are a 548.6 by 420 mm, 4:3 picture |
 
-The plinths put a handheld's screen about 1.3 m up, turned up toward the Moth's
-eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall), and the
-cart puts the television's picture 0.79 m up, where a set stands on a low
-table. The stands are solid and the devices are not: the analytic contact
-provider collides each stand as its box.
+The plinths put a handheld's screen about 1.35 m up, turned up toward the
+Moth's eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall). The
+cabinet puts the television's picture centre 1.06 m up, a little under her eye
+seated and 0.74 m under it standing, about 16 degrees down from 2.5 m away. The
+stands are solid and the devices are not: the analytic contact provider
+collides each stand as its boxes.
 
 Each screen row's glass is exactly the picture, never the case: `halfWidth`
 is the source's width times the horizontal pixel pitch over 2, `halfHeight` its
-height times the vertical pitch over 2, as a thin slab (`halfDepth` 1 mm on the
-handhelds, 2 mm on the television) square to the device's face, `round: 0`.
-A screen's `origin` is the glass's front face (the slab runs back from it), and
-it stands 1 mm proud of the lens or glass round it (2 mm on the television): a
-face behind the lens's is hidden by it, and the device shows no picture until
-it is engaged. The
-handhelds' pitches are square; the television's horizontal pitch is its
-vertical pitch times 8/7, so the glass's own shape gives the console's 8:7
-pixels. The bezel, lens or tube glass round the picture is the device's own
-geometry, outside the glass.
+height times the vertical pitch over 2, as a thin slab square to the device's
+face, `round: 0`. A screen's `origin` is the glass's front face (the slab runs
+back from it), and it stands proud of the lens or tube round it (1 mm at a
+handheld's real size, 1.5 mm shown; 3 mm on the television): a face behind the
+lens's is hidden by it, and the device shows no picture until it is engaged.
+The handhelds' pitches are square and scale with them; the television's
+horizontal pitch is its vertical pitch times 8/7, so the glass's own shape
+gives the console's 8:7 pixels. The bezel, lens or tube round the picture is
+the device's own geometry, outside the glass.
 
-The Humble Gaming Brick's see-through shell is not real transparency: the
-renderer draws opaque surfaces. Each of its two shell slots carries a palette
-`inset`, a painted plane inside the case that the surface refracts the view onto
-(ior 1.49, acrylic) and shows in place of its own colour, under a clearcoat: the
-front's lies 7.5 mm under the face on the board, a ramp from the dark processor
-through the board to clear orange; the back's lies over the battery bay and
-paints its two cells. So the shell reads as orange plastic with a board and
-cells inside it, while what stands behind the brick (its rest, the plinth) does
-not show through it. The cost is the inset's shading arithmetic on the pixels
-those two slots cover (a refraction, a plane intersection and a four-stop
-ramp), with no extra march or pass.
+The Humble Gaming Brick's shell is real glass: its palette slot declares
+`glass { depth: 0.04, ior: 1.49 }` over an atomic-orange tint, so it bakes into
+a group of its own and the glass passes shade it over the opaque image
+([glass after the opaque image](../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)):
+the board, chips, cells and cartridge inside it are ordinary opaque shapes seen
+through it, bent by its refraction and tinted by Beer–Lambert over the distance
+through it, about 11 mm (shown) over the board and 34 mm through the whole body,
+so the board reads through pale orange and the rest and plinth behind it through
+a deeper one. A static placement's glass depth is world units, unscaled by the
+placement. The limits are the glass passes': one glass layer a pixel, and the
+glass casts no shadow. The cost is the three glass passes over the views the
+brick shows in, and a glass draw of the shell's own mesh.
 
 A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
 resolves when the world boots from its package in the checkout
@@ -154,10 +156,10 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
-| Frame the whole row | `view.override camera look 15 1.9 25.6 15 1 28`, then `view.override camera auto` |
-| Frame the Humble Gaming Brick, square to its face | `view.override camera look 17.5 1.41 27.64 17.5 1.27 28.02` |
-| Frame the Advanced Gaming Brick | `view.override camera look 15 1.46 27.66 15 1.26 28.01` |
-| Frame the deck and its television | `view.override camera look 12.5 1.2 26.9 12.5 0.72 28` |
+| Frame the whole row | `view.override camera look 15 1.9 25.4 15 1.05 28`, then `view.override camera auto` |
+| Frame the Humble Gaming Brick, square to its face | `view.override camera look 17.5 1.5 27.51 17.5 1.31 28.02` |
+| Frame the Advanced Gaming Brick | `view.override camera look 15 1.56 27.52 15 1.28 28` |
+| Frame the deck and its television | `view.override camera look 12.5 1.45 26.4 12.5 0.95 28` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
 `advanced-gaming-brick` or `humble-gaming-deck`. `machine.state <instance>`

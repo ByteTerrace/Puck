@@ -109,14 +109,15 @@ bodies {
 }
 
 placements {
-  // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck).
+  // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck). The scale envelope
+  // reaches 1.5 for the device row's handhelds, shown at 1.5 times their real size (devices.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
     derivedFaceScreens: 3
-    maxPlacementScale: 1
+    maxPlacementScale: 1.5
     minPlacementScale: 1
     previewDeadlineFrames: 1
   }
