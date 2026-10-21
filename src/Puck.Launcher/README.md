@@ -85,9 +85,9 @@ an unchanged file costs nothing to restage), a signature chain rooted at the
 publisher, a deterministic staged rollout bucket, revocation, and a
 minimum-supported version. `IUpdateStager` stages a new version side by side
 with the running one; `IUpdateApplier` rechecks its files and swaps the current
-pointer for the next launch. `IReleaseVerifier` checks the
-signature chain — `PlaceholderReleaseVerifier` refuses every manifest at
-build time, standing in until a real signing chain replaces it. The
+pointer for the next launch. `AddSelfUpdate` selects `AttestationReleaseVerifier`
+for a configured trust anchor; `PlaceholderReleaseVerifier` refuses every
+manifest when the anchor is a placeholder. The
 [launcher stub](../Puck.Launcher.Stub/README.md) selects the installed
 version to start and handles the health-based rollback decision. The
 [release guide](../../docs/development/ci.md) owns the shared publishing

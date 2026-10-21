@@ -5,7 +5,7 @@ namespace Puck.Launcher.Release;
 /// <summary>The <see cref="IUpdateStager"/> every <c>AddSelfUpdate</c> registration wires: <see cref="IReleaseSource"/>
 /// for transport, a <see cref="ContentAddressedStore"/> rooted at <c>&lt;cacheRoot&gt;/objects/</c> for the
 /// download/verify/dedup cache, and <c>&lt;cacheRoot&gt;/versions/&lt;version&gt;/</c> as the staged directory a
-/// future <c>Puck.Platform.IUpdateApplier</c> points the stub at.</summary>
+/// <see cref="IUpdateApplier"/> points the stub at.</summary>
 /// <param name="source">The transport to fetch missing files through.</param>
 /// <param name="cache">The content-addressed object cache.</param>
 /// <param name="cacheRoot">The root directory staged versions live under.</param>

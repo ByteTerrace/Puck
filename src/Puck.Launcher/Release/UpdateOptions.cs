@@ -12,9 +12,8 @@ namespace Puck.Launcher.Release;
 /// <param name="CacheRoot">The on-disk root staged versions and update state live under.</param>
 /// <param name="TrustAnchor">The release channel's root trust anchor, compiled in at build time.</param>
 /// <param name="InstalledVersion">The version this running binary reports itself as, for <c>update.check</c>'s
-/// version-monotonicity comparison. Before <c>Puck.Platform.IUpdateApplier</c> lands, this is the composition
-/// root's own compiled-in version; once staging is real, the composition root reads it from local install state
-/// instead (the version the stub most recently launched).</param>
+/// version-monotonicity comparison. An update can advance the on-disk pointer before this process restarts;
+/// <see cref="FileUpdateApplier"/> also checks that pointer before activating another version.</param>
 /// <param name="CheckInterval">How often an automatic check runs. <see langword="null"/> or non-positive disables automatic checking; <c>update.check</c> still works manually.</param>
 /// <param name="KeepVersions">The number of most-recent staged versions to retain beyond the current one.</param>
 /// <param name="InstallId">The 16-byte, hex-encoded rollout-bucketing identity. When <see langword="null"/>, one is minted via <see cref="System.Security.Cryptography.RandomNumberGenerator"/> and persisted at <c>&lt;cacheRoot&gt;/install-id</c> on first use.</param>
