@@ -681,3 +681,31 @@ authored fill, and no volume is traced.
 ---
 
 [Decisions](README.md) · [The programme](../plans/rendering.md)
+
+## In-world devices and screens
+
+**An engaged screen is the in-world screen, framed until it passes for an
+emulator (the owner's ruling).** Engaging eases the seat camera onto the
+screen and mattes the window to the screen's picture; no separate 2D image
+stands in for it. Framed, the picture is source-exact: whole window pixels per
+source row, no CRT treatment, post or bezel on those pixels, and the matte's
+fill around it, so the window is indistinguishable from a desktop emulator.
+Easing out fades the screen's glass, the CRT look and the room back in, which
+is the reveal that the player was in the world all along.
+
+**A device is modelled at the size a person who used one expects, and its
+screen glass is exactly its picture (the owner's ruling).** A screen row's half
+extents are the source's pixels times the device's pixel pitch, the pitch
+carrying the pixel aspect (a 4:3 tube for a 256 by 240 console gives 8:7), and
+the bezel lies outside the glass. Because the camera alone sets how large the
+glass appears, no object is ever resized for a window.
+
+**A screen lit by external content keeps lighting the room live (the owner's
+ruling), and captures complete anyway.** A desktop or camera screen's glow
+follows its pixels; every capture frame discards and re-derives each retained
+state that holds external content, so no unfilled pixel or light reaches a
+capture and no capture waits on it.
+
+**Glass is a surface of its own after opaque visibility (the owner's ruling).**
+A see-through shell, a window pane and a screen's front glass are drawn as
+transparent surfaces over the opaque image, not painted fakes.
