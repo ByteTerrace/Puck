@@ -65,8 +65,9 @@ template plinth(label, model) {
 }
 
 // The Humble Gaming Brick's slots. Its shell is glass (`glass`): atomic-orange acrylic (ior 1.49) whose tint is reached
-// through 12 mm, about the 11 mm of shell over the board at the placement's scale (a static placement's glass depth is
-// world units), so the board reads through a saturated orange and the parts deeper in, or the 34 mm through the whole
+// through 14 mm, about the 13 mm of shell over the board at the placement's scale (the shell is a solid prism, so the
+// ray crosses it from its face to the first opaque part; a static placement's glass depth is world units), so the board
+// reads through a saturated orange and the parts deeper in, or the 34 mm through the whole
 // body at its rim, a deeper red-orange. Glass only tints what it transmits, so the board is a pale green: through the
 // orange it reads amber, where a dark board would turn the shell brown. The shell bakes and draws apart from the opaque
 // parts, which show through it: the board and its parts, the cells, the speaker, the cartridge, and the keys sunk into
@@ -182,7 +183,7 @@ prototypes {
       name: "HUMBLE GAMING BRICK"
       schema: "puck.creation.v1"
       palette [
-        { color: "#FF4A0C", roughness: 0.06, glass { depth: 0.012, ior: 1.49 } }
+        { color: "#FF4F10", roughness: 0.06, glass { depth: 0.014, ior: 1.49 } }
         { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
         { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
         { color: "#2A2624", roughness: 0.4, specular: 0.04 }
