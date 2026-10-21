@@ -304,6 +304,12 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
   kernel compiles. The trace reads static mesh draws through
   `SdfMeshIrradianceScene`; never route it through the field interpreter. The
+  scene is two-level and keyed by each mesh's position and index buffers, so a
+  static-draw change builds only geometry new to the previous scene: a slow
+  `[sdf.mesh-gi] scene` line with a large `built-triangles=` means new geometry,
+  not the trace. `puck mesh scene --world <file>` times a build and a one-draw
+  change over the stored meshes with no device, and `world.counters
+  sdf.mesh-gi` counts builds. The
   [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
   owns the technique and its limits.
 

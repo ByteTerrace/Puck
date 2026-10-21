@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -27,13 +28,35 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// probe, and a move of the camera rewrites only the slots of cells it brings in.</para>
 /// <para>Probes are traced on the thread pool, nearest the camera first and every probe's first sweep before any second,
 /// and cached by cell, so a static world traces each cell once per lighting: a camera returning to a place reads its
-/// cached probes at once. A change of the static draws rebuilds the scene and retraces every probe; a change of the
+/// cached probes at once. A change of the static draws rebuilds the scene from the one it replaces, building only the
+/// geometry new to it, and retraces every probe; a change of the
 /// directional lights, the gains, the sources, the bounces or what the program's materials reflect and emit retraces
 /// them over the same scene. Until a probe lands, the old one keeps drawing. The dynamic draws (moving bodies) receive the volume's light and do not cast into it.</para>
 /// </summary>
 public sealed class SdfMeshIrradiance {
     /// <summary>The most probes a volume holds, the High tier's.</summary>
     public const int MaxProbes = ((48 * 16) * 48);
+    /// <summary>The counter source's name.</summary>
+    public const string SourceName = "sdf.mesh-gi";
+
+    /// <summary>Counts each trace scene built for a change of the static draws.</summary>
+    public static readonly WorkKind Scenes = new(name: "sdf.mesh-gi.scenes", unit: "scenes", workClass: WorkClass.Pacing);
+    /// <summary>Counts each geometry a scene build built: one no earlier scene held.</summary>
+    public static readonly WorkKind GeometriesBuilt = new(name: "sdf.mesh-gi.geometries-built", unit: "geometries", workClass: WorkClass.Pacing);
+    /// <summary>Counts each geometry a scene build took from the scene it replaced.</summary>
+    public static readonly WorkKind GeometriesReused = new(name: "sdf.mesh-gi.geometries-reused", unit: "geometries", workClass: WorkClass.Pacing);
+    /// <summary>Counts the triangles of the geometries scene builds built.</summary>
+    public static readonly WorkKind TrianglesBuilt = new(name: "sdf.mesh-gi.triangles-built", unit: "triangles", workClass: WorkClass.Pacing);
+    /// <summary>Counts each probe sweep traced.</summary>
+    public static readonly WorkKind Probes = new(name: "sdf.mesh-gi.probes", unit: "sweeps", workClass: WorkClass.Pacing);
+
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Probes];
+
+    /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
+    /// volume exists.</summary>
+    public static ReadOnlySpan<WorkKind> Kinds => DeclaredKinds;
+    /// <summary>Gets the volume's counts: its scene builds, the geometry they built and reused, and its probe sweeps.</summary>
+    public WorkCounterSet Counters { get; } = new(kinds: DeclaredKinds, name: SourceName);
 
     private static readonly (int X, int Y, int Z) HighDims = (48, 16, 48);
     private static readonly (int X, int Y, int Z) MediumDims = (32, 12, 32);
@@ -146,7 +169,8 @@ public sealed class SdfMeshIrradiance {
         }
     }
 
-    // Rebuilds the scene on the thread pool when the static draws changed; the old scene traces until the new one lands.
+    // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
+    // to it builds; the old scene traces until the new one lands.
     private void RefreshScene(SdfFrame frame) {
         var key = 17;
         var draws = 0;
@@ -160,12 +184,17 @@ public sealed class SdfMeshIrradiance {
         if (m_build is { IsCompleted: false }) { return; }
 
         var snapshot = frame.MeshDraws.ToArray();
+        var previous = m_scene;
 
         m_buildingKey = key;
         m_build = Task.Run(action: () => {
             var clock = Stopwatch.StartNew();
-            var scene = SdfMeshIrradianceScene.Build(draws: snapshot);
+            var scene = SdfMeshIrradianceScene.Build(draws: snapshot, previous: previous);
 
+            Counters.Count(kind: Scenes);
+            Counters.Add(amount: (scene?.GeometriesBuilt ?? 0), kind: GeometriesBuilt);
+            Counters.Add(amount: (scene?.GeometriesReused ?? 0), kind: GeometriesReused);
+            Counters.Add(amount: (scene?.TrianglesBuilt ?? 0L), kind: TrianglesBuilt);
             lock (m_gate) {
                 m_scene = scene;
                 m_sceneKey = key;
@@ -177,7 +206,7 @@ public sealed class SdfMeshIrradiance {
                 m_traced = 0;
                 m_rays = 0;
             }
-            Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
         });
     }
     // Captures the lighting the probes trace under, and restarts the trace when it changes.
@@ -336,6 +365,7 @@ public sealed class SdfMeshIrradiance {
                 }
                 m_traced += count;
                 m_rays += ((long)count * layout.Rays);
+                Counters.Add(amount: count, kind: Probes);
             }
         }
     }
@@ -352,17 +382,15 @@ public sealed class SdfMeshIrradiance {
 
         for (var ray = 0; (ray < layout.Rays); ray++) {
             var direction = Vector3.Transform(value: Fibonacci(index: ray, count: layout.Rays), rotation: rotation);
-            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, triangle: out var triangle);
+            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out var material, normal: out var normal);
             var light = Vector3.Zero;
             var open = !hit;
 
             if (hit) {
-                var normal = scene.NormalOf(triangle: triangle);
-
                 if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) {
                     backFaces++;
                 } else {
-                    light = Shade(layout: layout, lighting: lighting, low: low, material: scene.MaterialOf(triangle: triangle), normal: normal, point: (origin + (direction * distance)), scene: scene, sweep: sweep);
+                    light = Shade(layout: layout, lighting: lighting, low: low, material: material, normal: normal, point: (origin + (direction * distance)), scene: scene, sweep: sweep);
                 }
             }
 

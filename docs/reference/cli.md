@@ -112,7 +112,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
-| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
@@ -2931,6 +2931,21 @@ name. The group of segments no instance owns matches a
 stored mesh only when nothing but the scene emits into the program. Exit codes:
 0 every selected group reported; 1 the world failed to load, or no selected
 group had a stored mesh (with how to store them); 2 a usage error.
+
+`puck mesh scene --world <path> [--change <label text>]` times the irradiance
+volume's CPU trace scene (`SdfMeshIrradianceScene`) over the static meshes the
+store holds for the world's rest scene, with no device. It prints a full build,
+one sweep of a High-tier window (48 × 16 × 48 probes of 128 rays, each
+front-facing hit casting a shadow ray) about the changed draw, then the scene
+updated for that draw's mesh replaced by new geometry, for the draw moved and
+for the original draws back, each update with its wall and processor seconds
+and the geometries it built, took from the previous scene and retained, and
+each trace with its hits, lit hits and mean distance, which agree across scenes
+of one geometry. `--change` names the static group by text its label holds
+(absent, the group with the most triangles); `--cache-dir`, `--build`,
+`--identity` and `--backend` name the store as for `mesh audit`. Exit codes: 0
+timed; 1 the world failed to load or no static group had a stored mesh; 2 a
+usage error.
 
 ## `puck schema`—world.def JSON Schema
 

@@ -184,6 +184,52 @@ public sealed class MeshCommandTests {
         // This build's own identity, read from its assemblies and kernels, keys nothing in an empty store.
         Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
     }
+    // mesh scene builds the irradiance trace scene over the stored static meshes, traces it, updates it for one draw's new
+    // geometry (building that alone), a move and a return (building nothing), and traces each answer alike; a change no
+    // label holds, an empty store and the usages audit refuses are refused by name.
+    [Fact]
+    public void TheSceneVerbTimesABuildAndAOneDrawChangeOverStoredStaticMeshes() {
+        using var directory = new TemporaryDirectory(prefix: "puck-mesh-scene-");
+        var world = Placed(path: TempWorldCopy(directory: directory));
+        var (scene, groups) = Plan(world: world);
+        var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
+        var identity = Identity.ToString(format: "x32", provider: null);
+
+        SdfMeshBakeGroup Placement(string name) =>
+            groups.Single(predicate: group => scene.Label(group: group, owner: null).Contains(value: $" {name} ({name})", comparisonType: StringComparison.Ordinal));
+
+        foreach (var (placement, samples) in new[] { ("plain", 17), ("hexagonal", 9) }) {
+            var group = Placement(name: placement);
+            var plain = Placement(name: "plain");
+            var mesh = SdfMeshContour.Bake(field: new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: plain, program: scene.Program), reading: SdfFieldReading.Render), high: plain.High, low: plain.Low, samples: samples);
+
+            Assert.True(condition: store.Write(geometry: group.Sealed, identity: Identity, materials: group.MaterialOrder, mesh: mesh));
+        }
+
+        var (changed, report) = Invoke("mesh", "scene", "--world", world, "--change", "hexagonal", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+
+        Assert.Equal(expected: 0, actual: changed);
+        Assert.Matches(expectedRegexPattern: @"2 static draw\(s\) with stored meshes \(\d+ without\)", actualString: report);
+        Assert.Contains(expectedSubstring: "change: ", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"build: .* geometries=2 built=2 ", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"new geometry: .* built=1 .* reused=1 ", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"move: .* built=0 ", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"back: .* built=0 built-triangles=0 reused=2 ", actualString: report);
+        Assert.Single(collection: report.Split(separator: '\n').Where(predicate: static line => line.Contains(value: " trace: ", comparisonType: StringComparison.Ordinal)).Select(selector: static line => line[..line.IndexOf(value: " seconds=", comparisonType: StringComparison.Ordinal)]).Distinct());
+
+        var (largest, largestReport) = Invoke("mesh", "scene", "--world", world, "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+
+        Assert.Equal(expected: 0, actual: largest);
+        Assert.Contains(expectedSubstring: "plain (plain)", actualString: largestReport.Split(separator: '\n')[1]);
+
+        var malformed = directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]");
+
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--change", "nothing-holds-this", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache")), text: "has a label holding 'nothing-holds-this'"));
+        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", identity, "--cache-dir", directory.PathOf(name: "empty")), text: "holds no static mesh"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--backend", "metal"), text: "unknown --backend 'metal'"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", "not-hex"), text: "mesh scene: --identity takes 32 hex digits"));
+        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "scene", "--world", malformed), text: "failed to load"));
+    }
     [Fact]
     public void TheRestScenesSurroundSendsAndAnswersNothing() {
         var inert = new RestScene.Inert();

@@ -303,6 +303,7 @@ public static class WorldRenderRoot {
 
         probe.Device = device;
         probe.Residency = residency;
+        probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
         // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
