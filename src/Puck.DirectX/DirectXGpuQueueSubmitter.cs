@@ -125,8 +125,7 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         device->CreateFence(
             Flags: default,
             InitialValue: 0,
-            ppFence: out var fence,
-            riid: ID3D12Fence.IID_Guid
+            ppFence: out ID3D12Fence* fence
         );
         m_fence = ((nint)fence);
         m_fenceEvent = PInvoke.CreateEvent(

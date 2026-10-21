@@ -1040,19 +1040,19 @@
       },
       "OpenTelemetry.Instrumentation.AspNetCore": {
         "type": "Transitive",
-        "resolved": "1.20.0",
-        "contentHash": "sJF0pjXDlROVcOz/zOihIlbC8mtb5/zm2q3zs0z+qWUtoZnlFJlHHZ1pHNUJ7VVZu3FmD8EwYGGglw5sbVr8jQ==",
+        "resolved": "1.20.1",
+        "contentHash": "pDO+Ed5iblMTvSVGcXzoLp8q20XHhXmK0wD/H3PGNHwDFlwZpV+bDWd/Euo6hNB4E0ruqzTFD76Btm+m0uCYNw==",
         "dependencies": {
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.0, 2.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.1, 2.0.0)"
         }
       },
       "OpenTelemetry.Instrumentation.Http": {
         "type": "Transitive",
-        "resolved": "1.20.0",
-        "contentHash": "803Ryeh5gWtGPdy7knumXKzMmMIG6tbX18Y5Din0z9V5IOiWjfbK1qvgw45b6ffyR6+CATw9yOa/6LOU2gvS1A==",
+        "resolved": "1.20.1",
+        "contentHash": "XJTM6imVztxLraOrzsdlZf5shdH9TVeEWNBxpyepB5e3Gy+KNeQf2hyic398210UxqlPtt4iOkBELtjfIFTzug==",
         "dependencies": {
           "Microsoft.Extensions.Configuration": "10.0.0",
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.0, 2.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.1, 2.0.0)"
         }
       },
       "OpenTelemetry.PersistentStorage.Abstractions": {
@@ -1070,8 +1070,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "1.5.12",
-        "contentHash": "jS8FebSXj3GKkBMDGnRboeA8/goF1AB7HPhqChiznU5R1KPTeU6JlJXP1FXd8MQ4A/+p8xR8rn7ICgznPqPLKQ=="
+        "resolved": "2.0.0",
+        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
       },
       "Polly": {
         "type": "Transitive",
@@ -1517,7 +1517,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "Parlot": "[1.5.*, )"
+          "Parlot": "[2.*, )"
         }
       },
       "ByteTerrace.Puck.Vulkan": {

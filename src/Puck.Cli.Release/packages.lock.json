@@ -997,26 +997,26 @@
       },
       "ModelContextProtocol": {
         "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "4Pb9u02Nwsp0poueDsqNdyGRojFxOYpljB7zDBsq+aHL+Afou3OgxlBc3GWFVnsRMRJrUtWqDh3s6k2JgPzmrQ==",
+        "resolved": "2.3.0",
+        "contentHash": "PHZ0q8xTAoysqUKpA5gC0RGJSfwpZhfsNz+9Sw0X0RzFFVHjIE52sx6C+ogMn+LSE+FfiYiNscPJhM6q6DMT6Q==",
         "dependencies": {
-          "ModelContextProtocol.Core": "[2.2.0]"
+          "ModelContextProtocol.Core": "[2.3.0]"
         }
       },
       "ModelContextProtocol.AspNetCore": {
         "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "3JelDMuFIwFzXybsh6K30G6wXu5gmqKnuRnieqgBMuR0FkqqXRv4B+NYZuPgthSyNq5UwRyvv2U2VJBE3RD3PQ==",
+        "resolved": "2.3.0",
+        "contentHash": "YaRK007jAIFYAGH65I2SPsXVHzaFDRBx+d3swxLCziRYysmk9zGCWm+Lqdt5geHq0wDwCcvwYkMzAOSUWLpajw==",
         "dependencies": {
-          "ModelContextProtocol": "[2.2.0]"
+          "ModelContextProtocol": "[2.3.0]"
         }
       },
       "ModelContextProtocol.Core": {
         "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "FeBfXU6T8k+jw4afg4sfxdEX2rL/e5oKOk9ROOGztu9k47+7Bz08sdaToYt2XvMY1opNbwxYQOFMj6wH9TInhA==",
+        "resolved": "2.3.0",
+        "contentHash": "EDpbQholhVWoNumb0Ab3oGv9LmXOLgaD5ixEIUkrnzpnqD0TJCSHTJ5G71/J1KlrQ98aWDclWTPMffKTnCJoMw==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.8.3"
+          "Microsoft.Extensions.AI.Abstractions": "10.11.0"
         }
       },
       "Newtonsoft.Json": {
@@ -1065,19 +1065,19 @@
       },
       "OpenTelemetry.Instrumentation.AspNetCore": {
         "type": "Transitive",
-        "resolved": "1.20.0",
-        "contentHash": "sJF0pjXDlROVcOz/zOihIlbC8mtb5/zm2q3zs0z+qWUtoZnlFJlHHZ1pHNUJ7VVZu3FmD8EwYGGglw5sbVr8jQ==",
+        "resolved": "1.20.1",
+        "contentHash": "pDO+Ed5iblMTvSVGcXzoLp8q20XHhXmK0wD/H3PGNHwDFlwZpV+bDWd/Euo6hNB4E0ruqzTFD76Btm+m0uCYNw==",
         "dependencies": {
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.0, 2.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.1, 2.0.0)"
         }
       },
       "OpenTelemetry.Instrumentation.Http": {
         "type": "Transitive",
-        "resolved": "1.20.0",
-        "contentHash": "803Ryeh5gWtGPdy7knumXKzMmMIG6tbX18Y5Din0z9V5IOiWjfbK1qvgw45b6ffyR6+CATw9yOa/6LOU2gvS1A==",
+        "resolved": "1.20.1",
+        "contentHash": "XJTM6imVztxLraOrzsdlZf5shdH9TVeEWNBxpyepB5e3Gy+KNeQf2hyic398210UxqlPtt4iOkBELtjfIFTzug==",
         "dependencies": {
           "Microsoft.Extensions.Configuration": "10.0.0",
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.0, 2.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.1, 2.0.0)"
         }
       },
       "OpenTelemetry.PersistentStorage.Abstractions": {
@@ -1095,8 +1095,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "1.5.12",
-        "contentHash": "jS8FebSXj3GKkBMDGnRboeA8/goF1AB7HPhqChiznU5R1KPTeU6JlJXP1FXd8MQ4A/+p8xR8rn7ICgznPqPLKQ=="
+        "resolved": "2.0.0",
+        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
       },
       "Polly": {
         "type": "Transitive",
@@ -1482,7 +1482,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "Parlot": "[1.5.*, )"
+          "Parlot": "[2.*, )"
         }
       },
       "puck.actors": {

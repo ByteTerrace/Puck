@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Puck.Abstractions.Lighting;
 using Puck.Maths;
+using Puck.Platform.Windows.Hid;
 using Windows.Win32;
 using Windows.Win32.Devices.HumanInterfaceDevice;
 using Windows.Win32.Foundation;
@@ -78,9 +79,9 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         var preparsedData = ((PHIDP_PREPARSED_DATA)nint.Zero);
 
         try {
-            if (!PInvoke.HidD_GetPreparsedData(
-                HidDeviceObject: deviceHandle,
-                PreparsedData: out preparsedData
+            if (!Win32HumanInterfaceDevice.TryGetPreparsedData(
+                device: deviceHandle,
+                preparsedData: out preparsedData
             )) {
                 deviceHandle.Dispose();
 
@@ -281,7 +282,7 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
     // kind by a usage that is unique to it (LampArrayKind → attributes, PositionX → response, RedUpdateChannel →
     // multi-update, LampIdStart → range-update, AutonomousMode → control). The request report is the remaining one
     // that carries LampId but is neither response nor multi-update.
-    private unsafe void DiscoverReports() {
+    private void DiscoverReports() {
         var capsLength = m_capabilities.NumberFeatureValueCaps;
 
         if (capsLength == 0) {
@@ -291,15 +292,13 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         var valueCaps = new HIDP_VALUE_CAPS[capsLength];
         var lampIdReportIds = new HashSet<byte>();
 
-        fixed (HIDP_VALUE_CAPS* pValueCaps = valueCaps) {
-            if (NTSTATUS.HIDP_STATUS_SUCCESS != PInvoke.HidP_GetValueCaps(
-                PreparsedData: m_preparsedData,
-                ReportType: HIDP_REPORT_TYPE.HidP_Feature,
-                ValueCaps: pValueCaps,
-                ValueCapsLength: ref capsLength
-            )) {
-                return;
-            }
+        if (NTSTATUS.HIDP_STATUS_SUCCESS != PInvoke.HidP_GetValueCaps(
+            PreparsedData: m_preparsedData,
+            ReportType: HIDP_REPORT_TYPE.HidP_Feature,
+            ValueCaps: valueCaps,
+            ValueCapsLength: ref capsLength
+        )) {
+            return;
         }
 
         for (var index = 0; (index < capsLength); index++) {
@@ -658,27 +657,27 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         return SetFeature(reportId: m_controlReportId);
     }
 
-    private unsafe bool GetFeature(byte reportId) {
+    private bool GetFeature(byte reportId) {
         m_scratch[0] = reportId;
 
         // GetFeature and HidP reads use the collection's MAX feature report length; the driver selects the actual
         // report from the id byte. Only SetFeature needs the specific report length.
-        fixed (byte* pReport = m_scratch) {
-            return PInvoke.HidD_GetFeature(
-                HidDeviceObject: m_deviceHandle,
-                ReportBuffer: pReport,
-                ReportBufferLength: m_capabilities.FeatureReportByteLength
-            );
-        }
+        return PInvoke.HidD_GetFeature(
+            HidDeviceObject: m_deviceHandle,
+            ReportBuffer: m_scratch.AsSpan(
+                length: m_capabilities.FeatureReportByteLength,
+                start: 0
+            )
+        );
     }
-    private unsafe bool SetFeature(byte reportId) {
-        fixed (byte* pReport = m_scratch) {
-            return PInvoke.HidD_SetFeature(
-                HidDeviceObject: m_deviceHandle,
-                ReportBuffer: pReport,
-                ReportBufferLength: ((uint)ReportLength(reportId: reportId))
-            );
-        }
+    private bool SetFeature(byte reportId) {
+        return PInvoke.HidD_SetFeature(
+            HidDeviceObject: m_deviceHandle,
+            ReportBuffer: m_scratch.AsSpan(
+                length: ReportLength(reportId: reportId),
+                start: 0
+            )
+        );
     }
     // Reads one usage value out of the report currently sitting in the scratch buffer. HidP_GetUsageValue requires
     // the ReportLength to be the collection's MAX feature report length (it selects the report from the id byte).

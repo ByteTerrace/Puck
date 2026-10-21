@@ -469,13 +469,12 @@ internal sealed unsafe class Win32ProbeKernelBench {
                             preexistingHandle: handles[slot]
                         );
 
-                        void* opened = null;
+                        ID3D11Texture2D* texture = null;
 
                         try {
                             device.Device1->OpenSharedResource1(
                                 hResource: handle,
-                                ppResource: out opened,
-                                returnedInterface: ID3D11Texture2D.IID_Guid
+                                ppResource: out texture
                             );
                         } catch (Exception exception) {
                             throw new InvalidOperationException(
@@ -483,10 +482,9 @@ internal sealed unsafe class Win32ProbeKernelBench {
                                 innerException: exception
                             );
                         } finally {
-                            openedTextures[slot] = ((nint)opened);
+                            openedTextures[slot] = ((nint)texture);
                         }
 
-                        var texture = ((ID3D11Texture2D*)opened);
                         var description = default(D3D11_TEXTURE2D_DESC);
 
                         texture->GetDesc(pDesc: &description);

@@ -139,8 +139,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
                     ? D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_SHARED
                     : default),
                 InitialValue: 0,
-                ppFence: out var fence,
-                riid: ID3D12Fence.IID_Guid
+                ppFence: out ID3D12Fence* fence
             );
             m_fence = ((nint)fence);
             m_fenceValue = 1;

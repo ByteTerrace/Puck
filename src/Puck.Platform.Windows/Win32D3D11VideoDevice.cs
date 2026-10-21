@@ -52,27 +52,17 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             m_device = device;
 
             // ID3D11Device1 carries OpenSharedResource1 (the NT-handle open).
-            var device1Iid = ID3D11Device1.IID_Guid;
-
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var device1,
-                    riid: in device1Iid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D11Device1>(ppvObject: out var device1),
                 operation: "QueryInterface(ID3D11Device1)"
             );
-            m_device1 = ((ID3D11Device1*)device1);
-
-            var multithreadIid = ID3D10Multithread.IID_Guid;
+            m_device1 = device1;
 
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var multithread,
-                    riid: in multithreadIid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D10Multithread>(ppvObject: out var multithread),
                 operation: "QueryInterface(ID3D10Multithread)"
             );
-            m_multithread = ((ID3D10Multithread*)multithread);
+            m_multithread = multithread;
         } finally {
             _ = adapter->Release();
         }
@@ -140,10 +130,9 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             preexistingHandle: sharedHandle
         );
 
-        m_device1->OpenSharedResource1(
+        m_device1->OpenSharedResource1<ID3D11Texture2D>(
             hResource: handle,
-            ppResource: out var texture,
-            returnedInterface: ID3D11Texture2D.IID_Guid
+            ppResource: out var texture
         );
 
         return ((nint)texture);

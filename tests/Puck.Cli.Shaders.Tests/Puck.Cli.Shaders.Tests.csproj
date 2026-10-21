@@ -13,7 +13,7 @@
     <ItemGroup>
         <!-- The shader host lifetime laws compile the inline task and exercise it through MSBuild's task interfaces. The
              package keeps Microsoft.Build.Framework and Microsoft.Build.Utilities.Core at one version. -->
-        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="[17.*, )" />
+        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="[18.*, )" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
     </ItemGroup>
     <ItemGroup>

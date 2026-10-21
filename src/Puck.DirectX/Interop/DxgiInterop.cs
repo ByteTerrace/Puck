@@ -14,15 +14,13 @@ internal static unsafe class DxgiInterop {
     /// <returns>A pointer to the newly created factory.</returns>
     /// <exception cref="DirectXException"><c>CreateDXGIFactory2</c> failed.</exception>
     public static IDXGIFactory4* CreateFactory() {
-        void* factory;
         var result = PInvoke.CreateDXGIFactory2(
             Flags: default,
-            ppFactory: out factory,
-            riid: IDXGIFactory4.IID_Guid
+            ppFactory: out IDXGIFactory4* factory
         );
 
         result.ThrowIfFailed(operation: "CreateDXGIFactory2");
-        return ((IDXGIFactory4*)factory);
+        return factory;
     }
     /// <summary>Packs a native <c>LUID</c> into a single 64-bit value.</summary>
     /// <param name="luid">The locally unique identifier to pack.</param>

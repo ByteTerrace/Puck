@@ -93,16 +93,10 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         source->GetDevice(ppDevice: &device);
 
         try {
-            var device1Iid = ID3D11Device1.IID_Guid;
-
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var device1Pointer,
-                    riid: in device1Iid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D11Device1>(ppvObject: out device1),
                 operation: "QueryInterface(ID3D11Device1)"
             );
-            device1 = ((ID3D11Device1*)device1Pointer);
             device->GetImmediateContext(ppImmediateContext: &context);
             multithread = ProtectMultithreaded(device: device);
             ValidateAdapter(
@@ -287,12 +281,11 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                     preexistingHandle: sharedTargetHandles[index]
                 );
 
-                m_device1->OpenSharedResource1(
+                m_device1->OpenSharedResource1<ID3D11Texture2D>(
                     hResource: handle,
-                    ppResource: out var opened,
-                    returnedInterface: ID3D11Texture2D.IID_Guid
+                    ppResource: out var opened
                 );
-                targets[index] = ((ID3D11Texture2D*)opened);
+                targets[index] = opened;
 
                 var description = default(D3D11_TEXTURE2D_DESC);
 
@@ -566,32 +559,20 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         path4: $"{KernelStem}.{entry}.dxbc"
     );
     private static ID3D10Multithread* ProtectMultithreaded(ID3D11Device* device) {
-        var iid = ID3D10Multithread.IID_Guid;
-
         Win32D3D11.ThrowIfFailed(
-            hr: ((IUnknown*)device)->QueryInterface(
-                ppvObject: out var pointer,
-                riid: in iid
-            ),
+            hr: ((IUnknown*)device)->QueryInterface<ID3D10Multithread>(ppvObject: out var multithread),
             operation: "QueryInterface(ID3D10Multithread)"
         );
-        var multithread = ((ID3D10Multithread*)pointer);
 
         _ = multithread->SetMultithreadProtected(bMTProtect: true);
 
         return multithread;
     }
     private static void ValidateAdapter(ID3D11Device* device, long expectedLuid) {
-        var iid = IDXGIDevice.IID_Guid;
-
         Win32D3D11.ThrowIfFailed(
-            hr: ((IUnknown*)device)->QueryInterface(
-                ppvObject: out var pointer,
-                riid: in iid
-            ),
+            hr: ((IUnknown*)device)->QueryInterface<IDXGIDevice>(ppvObject: out var dxgiDevice),
             operation: "QueryInterface(IDXGIDevice)"
         );
-        var dxgiDevice = ((IDXGIDevice*)pointer);
         IDXGIAdapter* adapter = null;
 
         try {

@@ -61,7 +61,7 @@
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
              generated props, which import after Directory.Build.props but before this file. Properties
              evaluate before items, so csproj-body HintPaths resolve this correctly. -->
-        <WindowsSdkNetRefRoot>$(NuGetPackageRoot)/microsoft.windows.sdk.net.ref/$(WindowsSdkNetRefVersion)/lib/net8.0</WindowsSdkNetRefRoot>
+        <WindowsSdkNetRefRoot>$(NuGetPackageRoot)/microsoft.windows.sdk.net.ref/$(WindowsSdkNetRefVersion)/lib/net9.0</WindowsSdkNetRefRoot>
     </PropertyGroup>
 
     <!-- Flow the Windows Graphics Capture projection references to every project automatically. The imported

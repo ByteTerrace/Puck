@@ -72,7 +72,7 @@
              per-file version drift (a missed bump degrades to a runtime FileNotFoundException, not
              a build error). $(WindowsSdkNetRefRoot) lives in Directory.Build.targets because
              $(NuGetPackageRoot) is not yet defined when this file is imported. -->
-        <WindowsSdkNetRefVersion>10.0.22621.57</WindowsSdkNetRefVersion>
+        <WindowsSdkNetRefVersion>10.0.28000.87</WindowsSdkNetRefVersion>
 
         <!-- The SDK synthesizes "foo.cs.csproj" for a file-based program, while the IDE language server's
              virtual project system synthesizes "foo.csproj" for standalone .cs files that have no physical

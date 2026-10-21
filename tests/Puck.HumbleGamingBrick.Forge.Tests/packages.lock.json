@@ -103,16 +103,6 @@
         "resolved": "0.11.6",
         "contentHash": "f33RkDtZO8VlGXCtmQIviOtxgnUdym9xx/b1p9h91CRGOsJFxCFOFK1FDbVt1OCf1aWwYejUFa2MOQyFWTFjbA=="
       },
-      "System.CommandLine": {
-        "type": "Transitive",
-        "resolved": "2.0.13",
-        "contentHash": "TIO2lMV+sSP7WW7pD/oCRHD9ENWY+jqwXmYzgks3R46cEdDzwjQOAhsiBn+M3EegfGjgTpa2h+eIrcU+AM2k6A=="
-      },
-      "System.Formats.Cbor": {
-        "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "WdxppUxfamltxOsieYg3gJCJW+lB/udiWrya4UCUg0DjTr/w07E4XoivqS35xoM5kVfMyyXEkRgPBRb24H+fWA=="
-      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.13",
@@ -205,37 +195,12 @@
           "System.IO.Hashing": "[10.*, )"
         }
       },
-      "ByteTerrace.Puck.Attestation": {
-        "type": "Project",
-        "dependencies": {
-          "System.Formats.Cbor": "[10.*, )"
-        }
-      },
-      "ByteTerrace.Puck.Commands": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
-        }
-      },
       "ByteTerrace.Puck.GamingBricks.Forge": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
-        }
-      },
-      "ByteTerrace.Puck.Hosting": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.HumbleGamingBrick": {
@@ -260,21 +225,12 @@
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Microsoft.Extensions.DependencyInjection": "[10.*, )"
         }
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
-      },
-      "ByteTerrace.Puck.Networking": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
       },
       "ByteTerrace.Puck.State": {
         "type": "Project",

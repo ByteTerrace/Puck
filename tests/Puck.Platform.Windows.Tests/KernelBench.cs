@@ -61,12 +61,7 @@ internal sealed unsafe class KernelBench : IDisposable {
         ID3D11DeviceContext* context = null;
 
         try {
-            D3D_FEATURE_LEVEL granted;
             ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
-            using var noSoftwareModule = new SafeFileHandle(
-                ownsHandle: false,
-                preexistingHandle: 0
-            );
 
             {
                 var devicePointer = &device;
@@ -79,9 +74,9 @@ internal sealed unsafe class KernelBench : IDisposable {
                     ? D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT
                     : 0),
                     SDKVersion: PInvoke.D3D11_SDK_VERSION,
-                    Software: noSoftwareModule,
+                    Software: HMODULE.Null,
                     pAdapter: ((IDXGIAdapter*)adapter),
-                    pFeatureLevel: &granted,
+                    pFeatureLevel: out _,
                     pFeatureLevels: levels,
                     ppDevice: devicePointer,
                     ppImmediateContext: contextPointer
@@ -104,13 +99,8 @@ internal sealed unsafe class KernelBench : IDisposable {
                 );
             }
 
-            var device1Iid = ID3D11Device1.IID_Guid;
-
             ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var device1Pointer,
-                    riid: in device1Iid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D11Device1>(ppvObject: out var device1),
                 operation: "QueryInterface(ID3D11Device1)"
             );
 
@@ -118,7 +108,7 @@ internal sealed unsafe class KernelBench : IDisposable {
                 adapter: adapter,
                 context: context,
                 device: device,
-                device1: ((ID3D11Device1*)device1Pointer)
+                device1: device1
             );
         } catch {
             Release(value: context);
@@ -209,17 +199,11 @@ internal sealed unsafe class KernelBench : IDisposable {
                 ppTexture2D: &texture
             );
 
-            var resourceIid = IDXGIResource1.IID_Guid;
-
             ThrowIfFailed(
-                hr: ((IUnknown*)texture)->QueryInterface(
-                    ppvObject: out var resourcePointer,
-                    riid: in resourceIid
-                ),
+                hr: ((IUnknown*)texture)->QueryInterface<IDXGIResource1>(ppvObject: out var resource),
                 operation: "QueryInterface(IDXGIResource1)"
             );
 
-            var resource = ((IDXGIResource1*)resourcePointer);
             HANDLE handle;
 
             try {
@@ -306,13 +290,11 @@ internal sealed unsafe class KernelBench : IDisposable {
             preexistingHandle: sharedHandle
         );
 
-        m_device1->OpenSharedResource1(
+        m_device1->OpenSharedResource1<ID3D11Texture2D>(
             hResource: handle,
-            ppResource: out var opened,
-            returnedInterface: ID3D11Texture2D.IID_Guid
+            ppResource: out var texture
         );
 
-        var texture = ((ID3D11Texture2D*)opened);
         ID3D11ShaderResourceView* view = null;
 
         m_device->CreateShaderResourceView(
@@ -409,14 +391,9 @@ internal sealed unsafe class KernelBench : IDisposable {
 
     private static IDXGIAdapter1* FindHardwareAdapter() {
         ThrowIfFailed(
-            hr: PInvoke.CreateDXGIFactory1(
-                ppFactory: out var factoryPointer,
-                riid: IDXGIFactory1.IID_Guid
-            ),
+            hr: PInvoke.CreateDXGIFactory1<IDXGIFactory1>(ppFactory: out var factory),
             operation: "CreateDXGIFactory1"
         );
-
-        var factory = ((IDXGIFactory1*)factoryPointer);
 
         try {
             for (var index = 0u; ; index++) {

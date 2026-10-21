@@ -180,17 +180,13 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             var paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
             var modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
 
-            fixed (DISPLAYCONFIG_PATH_INFO* pathPointer = paths)
-            fixed (DISPLAYCONFIG_MODE_INFO* modePointer = modes) {
-                result = PInvoke.QueryDisplayConfig(
-                    currentTopologyId: null,
-                    flags: queryFlags,
-                    modeInfoArray: modePointer,
-                    numModeInfoArrayElements: ref modeCount,
-                    numPathArrayElements: ref pathCount,
-                    pathArray: pathPointer
-                );
-            }
+            result = PInvoke.QueryDisplayConfig(
+                flags: queryFlags,
+                modeInfoArray: modes,
+                numModeInfoArrayElements: ref modeCount,
+                numPathArrayElements: ref pathCount,
+                pathArray: paths
+            );
 
             if (result == WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER) {
                 continue;
@@ -345,22 +341,21 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
         if (!PInvoke.SetupDiOpenDeviceInterface(
             DeviceInfoSet: deviceInfoSet,
-            DeviceInterfaceData: &interfaceData,
+            DeviceInterfaceData: ref interfaceData,
             DevicePath: monitorDevicePath,
             OpenFlags: 0u
         )) {
             return false;
         }
 
-        var requiredSize = 0u;
+        var deviceInfoData = new SP_DEVINFO_DATA { cbSize = ((uint)sizeof(SP_DEVINFO_DATA)) };
 
         _ = PInvoke.SetupDiGetDeviceInterfaceDetail(
-            DeviceInfoData: null,
+            DeviceInfoData: ref deviceInfoData,
             DeviceInfoSet: deviceInfoSet,
             DeviceInterfaceData: in interfaceData,
-            DeviceInterfaceDetailData: null,
-            DeviceInterfaceDetailDataSize: 0u,
-            RequiredSize: &requiredSize
+            DeviceInterfaceDetailData: default,
+            RequiredSize: out var requiredSize
         );
 
         if (
@@ -373,23 +368,24 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         var detailBuffer = ArrayPool<byte>.Shared.Rent(minimumLength: ((int)requiredSize));
 
         try {
-            var deviceInfoData = new SP_DEVINFO_DATA { cbSize = ((uint)sizeof(SP_DEVINFO_DATA)) };
+            var detail = detailBuffer.AsSpan(
+                length: ((int)requiredSize),
+                start: 0
+            );
 
-            fixed (byte* detailPointer = detailBuffer) {
-                var detailData = ((SP_DEVICE_INTERFACE_DETAIL_DATA_W*)detailPointer);
+            MemoryMarshal.Write(
+                destination: detail,
+                value: ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W))
+            );
 
-                detailData->cbSize = ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W));
-
-                if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
-                    DeviceInfoData: &deviceInfoData,
-                    DeviceInfoSet: deviceInfoSet,
-                    DeviceInterfaceData: in interfaceData,
-                    DeviceInterfaceDetailData: detailData,
-                    DeviceInterfaceDetailDataSize: requiredSize,
-                    RequiredSize: &requiredSize
-                )) {
-                    return false;
-                }
+            if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
+                DeviceInfoData: ref deviceInfoData,
+                DeviceInfoSet: deviceInfoSet,
+                DeviceInterfaceData: in interfaceData,
+                DeviceInterfaceDetailData: detail,
+                RequiredSize: out requiredSize
+            )) {
+                return false;
             }
 
             using var deviceRegistryHandle = PInvoke.SetupDiOpenDevRegKey(

@@ -160,12 +160,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
             );
         }
 
-        var device5Iid = ID3D11Device5.IID_Guid;
-
-        if (((IUnknown*)device)->QueryInterface(
-            ppvObject: out var device5,
-            riid: in device5Iid
-        ).Failed) {
+        if (((IUnknown*)device)->QueryInterface<ID3D11Device5>(ppvObject: out var device5).Failed) {
             return new SharedFenceOrder(
                 Reason: "the Direct3D 11 device has no ID3D11Device5",
                 SharedFence: false
@@ -173,12 +168,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
         }
 
         try {
-            var context4Iid = ID3D11DeviceContext4.IID_Guid;
-
-            if (((IUnknown*)context)->QueryInterface(
-                ppvObject: out var queried,
-                riid: in context4Iid
-            ).Failed) {
+            if (((IUnknown*)context)->QueryInterface<ID3D11DeviceContext4>(ppvObject: out var queried).Failed) {
                 return new SharedFenceOrder(
                     Reason: "the Direct3D 11 immediate context has no ID3D11DeviceContext4",
                     SharedFence: false
@@ -189,7 +179,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
             var fenceIid = ID3D11Fence.IID_Guid;
 
             try {
-                ((ID3D11Device5*)device5)->OpenSharedFence(
+                device5->OpenSharedFence(
                     hFence: new HANDLE(value: ((void*)sharedFenceHandle)),
                     ReturnedInterface: &fenceIid,
                     ppFence: &opened
@@ -206,7 +196,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
                 );
             }
 
-            context4 = ((ID3D11DeviceContext4*)queried);
+            context4 = queried;
             fence = ((ID3D11Fence*)opened);
 
             return new SharedFenceOrder(

@@ -14,16 +14,9 @@ public static partial class DirectXRemovalReport {
     /// <returns>The record's lines.</returns>
     [SupportedOSPlatform("windows10.0.10240")]
     public static unsafe IReadOnlyList<string> Read(ID3D12Device* device, int reason) {
-        var dredIid = ID3D12DeviceRemovedExtendedData1.IID_Guid;
-
-        if (((IUnknown*)device)->QueryInterface(
-            ppvObject: out var dredObject,
-            riid: in dredIid
-        ).Failed) {
+        if (((IUnknown*)device)->QueryInterface(ppvObject: out ID3D12DeviceRemovedExtendedData1* dred).Failed) {
             return [Line(text: $"device removed, reason 0x{reason:X8}; the runtime has no DRED record (ID3D12DeviceRemovedExtendedData1)")];
         }
-
-        var dred = ((ID3D12DeviceRemovedExtendedData1*)dredObject);
 
         try {
             return Format(
@@ -32,7 +25,7 @@ public static partial class DirectXRemovalReport {
                 trails: ReadTrails(dred: dred)
             );
         } finally {
-            _ = ((IUnknown*)dredObject)->Release();
+            _ = ((IUnknown*)dred)->Release();
         }
     }
     [SupportedOSPlatform("windows10.0.10240")]

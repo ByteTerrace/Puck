@@ -98,8 +98,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         device->CreateFence(
             Flags: default,
             InitialValue: 0,
-            ppFence: out var fence,
-            riid: ID3D12Fence.IID_Guid
+            ppFence: out ID3D12Fence* fence
         );
         m_fence = ((nint)fence);
         m_fenceValue = 1;

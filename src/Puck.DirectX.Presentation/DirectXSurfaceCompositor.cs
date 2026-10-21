@@ -685,15 +685,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_presentFlags = 0;
         m_frameAccepted = false;
 
-        void* factory;
-
-        PInvoke.CreateDXGIFactory2(
+        PInvoke.CreateDXGIFactory2<IDXGIFactory4>(
             Flags: default,
-            ppFactory: out factory,
-            riid: IDXGIFactory4.IID_Guid
+            ppFactory: out var dxgiFactory
         ).ThrowIfFailed(operation: "CreateDXGIFactory2");
-
-        var dxgiFactory = ((IDXGIFactory4*)factory);
 
         try {
             // Immediate and Adaptive present need an ALLOW_TEARING swap chain (carried into Present too) AND a
@@ -765,7 +760,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 _ = ((IUnknown*)sc1)->Release();
             }
         } finally {
-            _ = ((IUnknown*)factory)->Release();
+            _ = ((IUnknown*)dxgiFactory)->Release();
         }
     }
     private DisplayOutput Select(IReadOnlyCollection<DisplayOutput> reported, DisplayColorSpace requested) {
@@ -1000,36 +995,33 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
-            device->CreateCommandAllocator(
+            device->CreateCommandAllocator<ID3D12CommandAllocator>(
                 ppCommandAllocator: out var allocator,
-                riid: ID3D12CommandAllocator.IID_Guid,
                 type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
             );
             m_commandAllocators[i] = ((nint)allocator);
 
-            device->CreateCommandList(
+            device->CreateCommandList<ID3D12GraphicsCommandList>(
                 nodeMask: 0,
-                pCommandAllocator: ((ID3D12CommandAllocator*)allocator),
+                pCommandAllocator: allocator,
                 pInitialState: null,
                 ppCommandList: out var commandList,
-                riid: ID3D12GraphicsCommandList.IID_Guid,
                 type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
             );
             m_commandLists[i] = ((nint)commandList);
             DirectXCommandCalls.Close(
                 calls: new DirectXDeviceCommandCalls(device: device),
-                commandList: ((ID3D12GraphicsCommandList*)commandList)
+                commandList: commandList
             );
 
             // A fresh allocator has nothing recorded against it yet, so its slot needs no wait before first use.
             m_frameFenceValues[i] = 0;
         }
 
-        device->CreateFence(
+        device->CreateFence<ID3D12Fence>(
             Flags: default,
             InitialValue: 0,
-            ppFence: out var frameFence,
-            riid: ID3D12Fence.IID_Guid
+            ppFence: out var frameFence
         );
         m_frameFence = ((nint)frameFence);
         m_nextFrameFenceValue = 1;

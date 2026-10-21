@@ -246,13 +246,9 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             );
         }
 
-        void* pso;
-        var psoIid = ID3D12PipelineState.IID_Guid;
-
         device->CreateGraphicsPipelineState(
             pDesc: in psoDesc,
-            ppPipelineState: out pso,
-            riid: in psoIid
+            ppPipelineState: out ID3D12PipelineState* pso
         );
 
         return ((nint)pso);

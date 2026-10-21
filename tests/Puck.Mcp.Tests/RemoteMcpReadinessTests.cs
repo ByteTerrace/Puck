@@ -193,9 +193,8 @@ public sealed class RemoteMcpReadinessTests {
         );
     }
     // Law: a delegated challenge is decided before dispatch, so it reaches HTTP however long the token exchange takes,
-    // while a dispatched long call still gets its headers promptly. The exchange is held on a gate until a concurrent
-    // dispatched call has received the headers the MCP transport flushes after its grace period; that call was sent
-    // after the exchange began, so the exchange provably outlasted the grace period.
+    // while a concurrent call is still dispatched and served. The exchange is held on a gate until a concurrent
+    // dispatched call sent after the exchange began has entered and flushed its response, then released to answer 401.
     [Fact]
     public async Task AChallengeFromAnExchangeThatOutlastsTheHeaderFlushStillReachesHttp() {
         await using var fixture = new RemoteMcpFixture();
@@ -216,17 +215,25 @@ public sealed class RemoteMcpReadinessTests {
 
         await host.ExchangeEntered.Task.WaitAsync(cancellationToken: Token);
         using var longRequest = McpRequest(name: "long_service");
-        using var running = await http.SendAsync(
+        var runningTask = http.SendAsync(
             longRequest,
             HttpCompletionOption.ResponseHeadersRead,
             Token
         );
 
+        await host.LongEntered.Task.WaitAsync(cancellationToken: Token);
+        Assert.False(condition: challenged.IsCompleted);
+        host.ReleaseLong.SetResult();
+        using var running = await runningTask;
+
         Assert.Equal(
             HttpStatusCode.OK,
             running.StatusCode
         );
-        await host.LongEntered.Task.WaitAsync(cancellationToken: Token);
+        Assert.Contains(
+            "finished",
+            await running.Content.ReadAsStringAsync(cancellationToken: Token)
+        );
         Assert.False(condition: challenged.IsCompleted);
         host.ReleaseExchange.SetResult();
         using var response = await challenged;
@@ -238,11 +245,6 @@ public sealed class RemoteMcpReadinessTests {
         Assert.Equal(
             actual: host.Completed,
             expected: 0
-        );
-        host.ReleaseLong.SetResult();
-        Assert.Contains(
-            "finished",
-            await running.Content.ReadAsStringAsync(cancellationToken: Token)
         );
     }
     [Fact]

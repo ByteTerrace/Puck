@@ -1025,24 +1025,14 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             m_context = context;
             m_device = device;
 
-            var device1Iid = ID3D11Device1.IID_Guid;
-
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var device1,
-                    riid: in device1Iid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D11Device1>(ppvObject: out var device1),
                 operation: "QueryInterface(ID3D11Device1)"
             );
-            m_device1 = ((ID3D11Device1*)device1);
-
-            var dxgiIid = IDXGIDevice.IID_Guid;
+            m_device1 = device1;
 
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var dxgiDevice,
-                    riid: in dxgiIid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<IDXGIDevice>(ppvObject: out var dxgiDevice),
                 operation: "QueryInterface(IDXGIDevice)"
             );
             try {
@@ -1082,10 +1072,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             preexistingHandle: sharedHandle
         );
 
-        m_device1->OpenSharedResource1(
+        m_device1->OpenSharedResource1<ID3D11Texture2D>(
             hResource: handle,
-            ppResource: out var texture,
-            returnedInterface: ID3D11Texture2D.IID_Guid
+            ppResource: out var texture
         );
 
         D3D11_TEXTURE2D_DESC description;
@@ -1093,7 +1082,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             ? DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT
             : DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM);
 
-        ((ID3D11Texture2D*)texture)->GetDesc(pDesc: &description);
+        texture->GetDesc(pDesc: &description);
         if (
             (description.Format != expectedFormat) ||
             (description.Width != ((uint)expectedWidth)) ||
