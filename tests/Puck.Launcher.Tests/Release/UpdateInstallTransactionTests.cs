@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.Launcher.Tests.Release;
 
 /// <summary>Exercises persisted restart boundaries with real signatures, replay files, payload hashes and pointers.</summary>
-public sealed class UpdateInstallTransactionTests : IDisposable {
+public sealed partial class UpdateInstallTransactionTests : IDisposable {
     private readonly ReleaseChainFixture m_fixture = new();
     private readonly TempStagingRoot m_root = new();
     private static readonly byte[] Payload = [1, 2, 3, 4];

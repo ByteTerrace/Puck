@@ -6,6 +6,13 @@ console sessions, release manifests and signatures, content staging, update
 application, rollout selection, and the
 [stub's](../../src/Puck.Launcher.Stub/README.md) rollback policy.
 
+`UpdateInstallTransactionTests` uses signed manifests, persisted replay state and
+real install pointers. Its process-death cases terminate a child updater before
+and after replay reservation and pointer activation, then check lock release and
+recovery of the originally authorized manifest. `InstallProcessChild` is an
+explicit helper selected by those cases; it skips in an ordinary suite run.
+These cases exercise process termination, not storage power loss.
+
 `OverlayGlyphPackTests` also checks the fixed-grid text consumer: equal-sized
 cells pack unchanged, half-integer texel-center bounds include both endpoints,
 and variable-size, unsupported fractional, and out-of-image cells are refused,
