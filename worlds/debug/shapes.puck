@@ -69,6 +69,8 @@ let galleryRows = [
 let gallerySpawns = reduce(galleryRows, [], (spawns, row) => concat(spawns, map(row.names, (name, index) => { id: name, position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)], yawDegrees: 180 })))
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
+// The hex wallpapers' clip: a clockwise pointy-top hexagon of inradius 0.45 (circumradius 0.45 / cos 30 degrees).
+let galleryHexClip = [[0, 0.519615], [0.45, 0.259808], [0.45, -0.259808], [0, -0.519615], [-0.45, -0.259808], [-0.45, 0.259808]]
 
 // Slot 0 the exhibit, slot 1 the plinth, slot 2 the label, slot 3 an exhibit's own second material (a blend's tool,
 // a palette channel under test) and slots past it whatever else an exhibit appends.
@@ -175,11 +177,10 @@ template gallerySignPlacements() {
 }
 
 // The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit's spawn
-// point, isolate an exhibit's shape, and flag one that looks wrong. A flag records the exhibit and note in state
-// (galleryFlags) and prints the body's pose; the capture that goes with it lands in the git-ignored worlds/debug/flags/
-// folder by hand, since an authored command may call only what a binding may name, and world.screenshot is not
-// bindable. The debug views and the field slice stay console lines (shapes.md): a command may call only verbs every
-// presentation registers, and world.debug-view and world.slice exist only in a rendered World.
+// point, isolate an exhibit's shape, flag one that looks wrong (world.flag writes the record and its capture into the
+// package's git-ignored flags folder), cycle the debug views, and slice an exhibit's field into the package's slices
+// folder. world.debug-view and world.slice.save exist only in a rendered World, so a headless host refuses those two
+// commands when they run.
 let galleryCommands = [
   {
     name: "gallery.go"
@@ -207,14 +208,35 @@ let galleryCommands = [
   }
   {
     name: "gallery.flag"
-    help: "Flags an exhibit that looks wrong: records it and a one-word note in galleryFlags and prints the body's pose, for an agent to read back and capture (world.screenshot worlds/debug/flags/<exhibit>.png)."
+    help: "Flags an exhibit that looks wrong (near, the default, names the one the seat stands at): world.flag writes worlds/debug/flags/<exhibit>.json (the note, the seat's pose and camera) and captures the view to <exhibit>.png beside it, for an agent to read back."
     parameters [
-      { name: "exhibit", kind: Spawn }
+      { name: "exhibit", kind: Text, default: "near" }
       { name: "note", kind: Text, default: "looks-wrong" }
     ]
     lines [
-      "world.state.cell.set galleryFlags last {exhibit}:{note}"
-      "body.where 0"
+      "world.flag {exhibit} {note}"
+    ]
+  }
+  {
+    name: "gallery.view"
+    help: "Steps every camera to the next debug view (off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow, then off again), or selects one by name."
+    parameters [
+      { name: "view", kind: Choice, values ["next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao", "shadow"], default: "next" }
+    ]
+    lines [
+      "world.debug-view {view}"
+    ]
+  }
+  {
+    name: "gallery.slice"
+    help: "Cuts an exhibit's field (near, the default, names the one the seat stands at) on a plane through its placement and writes the distance diagnostic to worlds/debug/slices/<exhibit>-<axis>.png: by default the level plane through the exhibit's middle, 1.2 m over its floor; an x or z cut wants offset 0 to pass through its centre."
+    parameters [
+      { name: "exhibit", kind: Text, default: "near" }
+      { name: "axis", kind: Choice, values ["y", "x", "z"], default: "y" }
+      { name: "offset", kind: Number, default: "1.2" }
+    ]
+    lines [
+      "world.slice.save {exhibit} {axis} offset {offset}"
     ]
   }
 ]
@@ -267,10 +289,6 @@ template galleryState() {
     tint = "#D9822B"
   }
 
-  // The last exhibit a player flagged (gallery.flag), as `<exhibit>:<note>`; its capture lies in worlds/debug/flags/.
-  table galleryFlags {
-    last = "none"
-  }
 }
 
 // The one driver every motion exhibit runs on: the gallery clock times `cadence` radians a gallery second, gated on
@@ -402,7 +420,8 @@ template foldPrototypes() {
     }
   }
   // An unbounded lattice clipped by an intersection: the creation-wide scope keeps the clip off every other placement.
-  // The sphere sits in the lattice's central cell, at the creation origin; a shape authored off it is never reached.
+  // The sphere sits in the lattice's central cell, at the creation origin; a shape authored off it is never reached. The
+  // clip box's faces lie on cell walls (0.09 + 0.18k), so it cuts no bead and leaves no sliver for the bake to fold.
   prototype "shape-repeat-clipped" {
     document {
       shape Sphere "lattice" {
@@ -413,13 +432,13 @@ template foldPrototypes() {
         position [0, 0, 0]
         scale [0.06, 0.06, 0.06]
       }
-      shape Sphere "clip" {
+      shape Box "clip" {
         blend: Intersection
         material: exhibitMaterial
-        position [0, 1.2, 0]
+        position [0, 1.26, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "REPEAT CLIPPED", note: "an unbounded lattice of spheres clipped by an intersection: a ball of beads cut flat at the clip")
+      exhibit(label: "REPEAT CLIPPED", note: "an unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut")
     }
   }
   prototype "shape-polar-mirror" {
@@ -493,7 +512,9 @@ template foldPrototypes() {
       exhibit(label: "WALLPAPER P4M", note: "square symmetry with mirrors through the 4-fold centres: eight images per cell")
     }
   }
-  // A hex group carries no limit: an intersection inside the creation-wide scope bounds the lattice.
+  // A hex group carries no limit: an intersection inside the creation-wide scope bounds the lattice. The clip is a
+  // pointy-top hexagonal prism of inradius 0.45 stood upright, its flat faces 1.5 cells out on the lattice's mirror
+  // planes, so every cut face is a tile's own flat section rather than a sliver a cell thin.
   prototype "shape-wallpaper-p3m1" {
     document {
       shape Box "subject" {
@@ -505,13 +526,18 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
-      shape Cylinder "clip" {
+      shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.5, 0.1, 0.5]
+        rotation [0.707107, 0, 0, 0.707107]
+        profile {
+          kind: "Convex"
+          vertices: galleryHexClip
+        }
+        scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P3M1", note: "a hex lattice with mirrors through the corners, clipped by a disc; creases run along the mirrors")
+      exhibit(label: "WALLPAPER P3M1", note: "a hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases")
     }
   }
   prototype "shape-wallpaper-p6m" {
@@ -525,13 +551,18 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
-      shape Cylinder "clip" {
+      shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.5, 0.1, 0.5]
+        rotation [0.707107, 0, 0, 0.707107]
+        profile {
+          kind: "Convex"
+          vertices: galleryHexClip
+        }
+        scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P6M", note: "the richest hex group, twelve images per cell; the bake creases where mirrors meet")
+      exhibit(label: "WALLPAPER P6M", note: "the richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly")
     }
   }
   prototype "shape-wallpaper-stride" {
@@ -2516,7 +2547,8 @@ template warpPrototypes() {
       exhibit(label: "ELONGATE", note: "a sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere")
     }
   }
-  // A jittered lattice of spheres, each cell's copy displaced and recoloured by its hash, clipped by a sphere.
+  // A jittered lattice of spheres, each cell's copy displaced and recoloured by its hash, clipped by a box whose faces
+  // lie on cell walls, so no copy is cut into a sliver; the tumbled boxes' lattice (spacing 0.2) is clipped the same way.
   prototype "shape-jitter" {
     document {
       shape Sphere "lattice" {
@@ -2527,10 +2559,10 @@ template warpPrototypes() {
         position [0, 0, 0]
         scale [0.045, 0.045, 0.045]
       }
-      shape Sphere "clip" {
+      shape Box "clip" {
         blend: Intersection
         material: exhibitMaterial
-        position [0, 1.2, 0]
+        position [0, 1.26, 0]
         scale [0.45, 0.45, 0.45]
       }
       exhibit(label: "JITTER", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }], note: "a repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall")
@@ -2546,11 +2578,11 @@ template warpPrototypes() {
         position [0, 0, 0]
         scale [0.035, 0.035, 0.035]
       }
-      shape Sphere "clip" {
+      shape Box "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.45, 0.45, 0.45]
+        scale [0.5, 0.5, 0.5]
       }
       exhibit(label: "JITTER TUMBLE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }], note: "boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped")
     }

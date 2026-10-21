@@ -60,9 +60,9 @@ under the roof and ambient occlusion.
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` or the right shoulder steps on, `-` steps back; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
-| Flag the exhibit the tour stands at | `gallery.mark`, or `G`: writes `<exhibit>:marked` to `galleryFlags.last` and prints body 0's pose |
-| Flag any exhibit with a note | `gallery.flag <exhibit> [note]`: writes `<exhibit>:<note>` to `galleryFlags.last` and prints the body's pose; then `world.screenshot worlds/debug/flags/<exhibit>.png` captures it into the git-ignored `worlds/debug/flags/` folder an agent reads back |
-| Read the last flag | `world.state galleryFlags` |
+| Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the one at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body |
+| Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao and shadow; a view's name selects it |
+| Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
 The lift car is a population body (`lift-car`, body 40) whose look draws the
 cab and which carries the attached solid platform the Moth stands on. Rules move
@@ -75,14 +75,13 @@ with the attached solid under it; `src/Puck.World.Server/README.md`). The shaft
 has no landing doors: walking into the shaft on a level where the car is not
 drops to the car's roof or the pit.
 
-The tour keys live in `hall.puck`'s `gallery-keys` overlay on the debug world's
-resting page; the bar shows the right shoulder with `=` beside it. Each
+The gallery's keys live in `hall.puck`'s `gallery-keys` overlay on the debug
+world's resting page; the bar shows the right shoulder with `=` beside it, and
+`-`, `G`, `V` and `B` are keyboard keys with no pad button of their own. Each
 exhibit's and sign's in-world text is a text run on its placement: the debug
-world draws no HUD, so there is nothing to show or hide. An authored command
-may call only verbs every presentation registers and a binding may name, which
-keeps `world.debug-view`, `world.slice` and `world.screenshot` out of them: the
-debug views and the slice stay the console lines under "Looking at one
-exhibit".
+world draws no HUD, so there is nothing to show or hide. `gallery.view` and
+`gallery.slice` call verbs only a rendered World registers, so a headless host
+refuses them when they run.
 
 ## Rows
 
@@ -245,9 +244,13 @@ Every inspection the debug world offers works on an exhibit:
 - `view.isolate <prototype> <shape>...` draws the named shapes of one prototype
   alone (`view.isolate motion-smooth-blend visitor`); `view.isolate off`
   restores them.
-- `world.slice <placement> <x|y|z> <path.png>` cuts the live field through an
-  exhibit, and `puck creation shape --world worlds/debug/debug.puck
-  --prototype <id>` says which of its shapes are exact distances.
+- `gallery.slice <exhibit>` (`world.slice.save <placement> <x|y|z> [offset
+  <m>]`) cuts the live field through an exhibit 1.2 m over its floor into
+  `worlds/debug/slices/`, and `world.slice <placement> <x|y|z> <path.png>
+  [offset <m>]` writes anywhere; without an offset a placement cut passes
+  through the plinth's foot. `puck creation shape --world
+  worlds/debug/debug.puck --prototype <id>` says which of its shapes are exact
+  distances.
 - `world.wait bakes 60` waits for the bake after a `world.reload` or a state
   write that rebakes, so a capture shows the baked mesh and not the bake in
   progress. It holds until a frame captured after it has built the new program
@@ -385,7 +388,7 @@ field, in millimetres, and what the exhibit's score is made of:
 | Cells F1, F2 − F1 | `shape-cells-f1`, `-f2` | 0.06 to 0.09 | correct; the slope deficit the audit reports is the relief's own, not a defect |
 | Polar fold, mirrored, about Z, material stride | `shape-polar-*` | 0.14 to 1.3 | correct; the mirrored fold's crease at the sector bisector is the kaleidoscope's, where its box straddles the mirror |
 | Wallpaper Pmm, P4M, stride | `shape-wallpaper-pmm`, `-p4m`, `-stride` | 0.15 to 0.35 | correct; `shape-wallpaper-pmm` alone has two small patches 17 mm off the field at x = 38 ± 0.43 in the GPU bake, which the CPU bake does not have (open) |
-| Wallpaper P3M1, P6M | `shape-wallpaper-p3m1`, `-p6m` | 3.4, 4.2 | field correct on both interpreters; both bakes crease and flip triangles along the twelve mirrors of a cell (open) |
+| Wallpaper P3M1, P6M | `shape-wallpaper-p3m1`, `-p6m` | 3.4, 4.2 under the old disc clip | field correct on both interpreters; the folds were clip slivers where the disc cut tiles thin, and the mirror-plane hexagon clip leaves none (CPU audit 182 and 78) |
 | Erode (LaneErode), creation noise (NoiseDisplace) | `shape-erode`, `shape-noise` | 0.05, 0.27 | correct |
 | Smooth, chamfer, groove, pipe blends | `shape-smooth-*`, `-chamfer-*`, `-groove-*`, `-pipe-*` | 0.1 to 0.5 | correct; creases score as normal error at hard seams |
 | Subtraction, intersection, xor | `shape-blend-*` | 0.2 to 0.7 | correct; `shape-blend-union` bakes 48 open edges where box and sphere meet (open) |
@@ -397,16 +400,15 @@ field, in millimetres, and what the exhibit's score is made of:
 Each of these was seen in a Direct3D 12 capture of the gallery or in
 `puck mesh audit`. `docs/plans/open-items.md` tracks them.
 
-- **Warped shapes bake coarse.** `shape-flare` bakes at a 57 mm cell and
-  `shape-shear` at 69 mm where their neighbours bake at 21 to 30 mm: a group's
-  final lattice takes its spacing from each member's influence sphere, which
-  a warp inflates by its reach factor, so the lattice is sized for a shape up
-  to twice the size of the one it meshes and the flare's barrel reads faceted
-  (`normal face p50 18 deg` in the audit).
-- **Hex wallpaper creases.** `shape-wallpaper-p3m1` and `-p6m` fold and flip
-  hundreds of triangles along their mirrors in both the CPU and the GPU bake
-  while the field itself matches `SdfWallpaperFold.Fold` to 2 mm: the contour
-  reads the mirror seams as creases a cell wide.
+- **Clipped lattices fold where a clip cuts a copy thin.** An intersection
+  that cuts a tile or bead a few millimetres from its face leaves a sheet
+  thinner than a bake cell, which the contour folds. The hex wallpapers are
+  clipped by a hexagonal prism on their mirror planes and the bead lattices by
+  boxes on their cell walls, so no copy is cut: `puck mesh audit --cpu` scores
+  `shape-wallpaper-p3m1` 182, `-p6m` 78, `shape-repeat-clipped` 9.9 and
+  `shape-jitter` 496. `shape-jitter-tumble` still scores 2948, its worst
+  clusters inside the lattice at tumbled boxes' corners rather than at the
+  clip.
 
 - **Moving blends stretch while they move.** `motion-smooth-blend`,
   `motion-carve` and `motion-pulse` join shapes that move independently

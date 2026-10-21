@@ -62,6 +62,8 @@ icons {
     { name: "key.e", label: "E" }
     { name: "key.f", label: "F" }
     { name: "key.g", label: "G" }
+    { name: "key.v", label: "V" }
+    { name: "key.b", label: "B" }
     { name: "key.equals", label: "=" }
     { name: "key.minus", label: "-" }
     { name: "key.1", label: "1" }
@@ -133,10 +135,12 @@ icons {
     { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
     { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
     { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
-    // The gallery tour's keys (hall.puck): the next and previous exhibit, and marking the one in view.
+    // The gallery's keys (hall.puck): the next and previous exhibit, flagging and slicing the one at hand, the debug view.
     { name: "act.next", label: ">" }
     { name: "act.prev", label: "<" }
-    { name: "act.mark", label: "!" }
+    { name: "act.flag", label: "!" }
+    { name: "act.view", label: "DV" }
+    { name: "act.slice", label: "SL" }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -148,6 +152,8 @@ icons {
     { source: "keyboard.e", icon: "key.e" }
     { source: "keyboard.f", icon: "key.f" }
     { source: "keyboard.g", icon: "key.g" }
+    { source: "keyboard.v", icon: "key.v" }
+    { source: "keyboard.b", icon: "key.b" }
     { source: "keyboard.equals", icon: "key.equals" }
     { source: "keyboard.minus", icon: "key.minus" }
     { source: "keyboard.1", icon: "key.1" }
@@ -238,7 +244,9 @@ state {
       respawn = "act.respawn"
       galleryNext = "act.next"
       galleryPrev = "act.prev"
-      galleryMark = "act.mark"
+      galleryFlag = "act.flag"
+      galleryView = "act.view"
+      gallerySlice = "act.slice"
     }
 
     // The play wheel's sector labels and icons, by sector id; `cancel` is the hub's label while nothing is hovered.

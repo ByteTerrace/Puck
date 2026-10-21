@@ -441,8 +441,6 @@ state {
     slot liftCall = -1 bounds(-1..3)
     slot galleryStop = -1 bounds(-1..galleryLast)
     slot galleryStep = 0 bounds(-1..1)
-    // Set by gallery.mark: the rules below record the tour's current exhibit in galleryFlags and clear it.
-    slot galleryMark = 0 bounds(0..1)
   }
 }
 
@@ -543,17 +541,6 @@ for (name, index) in galleryOrder {
     mode: Edge
     pose(key: 0, spawnPoint: name)
   }
-  rule $"gallery-mark-{index}" {
-    when galleryMark == 1 and galleryStop == index
-    mode: Level
-    setState(state: galleryFlags, key: last, text: $"{name}:marked")
-  }
-}
-
-rule "gallery-mark-done" {
-  when galleryMark == 1
-  mode: Level
-  galleryMark = 0
 }
 
 commands [
@@ -571,18 +558,11 @@ commands [
       "world.state.cell.set galleryStep $value -1"
     ]
   }
-  {
-    name: "gallery.mark"
-    help: "Flags the tour's current exhibit: records it in galleryFlags as <exhibit>:marked and prints body 0's pose, for an agent to read back (world.state galleryFlags) and capture."
-    lines [
-      "world.state.cell.set galleryMark $value 1"
-      "body.where 0"
-    ]
-  }
 ]
 
 // The gallery's keys, on the debug world's own resting page: the right shoulder or = steps the tour on, - steps it
-// back, and G marks the exhibit in view. The garden shares the Moth's base page and has no gallery, so these live here.
+// back, G flags the exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. The garden
+// shares the Moth's base page and has no gallery, so these live here.
 bindingOverlays [
   {
     id: "gallery-keys"
@@ -609,10 +589,22 @@ bindingOverlays [
                 sources ["keyboard.minus"]
               }
               {
-                command: "gallery.mark"
-                id: "galleryMark"
-                label: "Mark exhibit"
+                command: "gallery.flag"
+                id: "galleryFlag"
+                label: "Flag exhibit"
                 sources ["keyboard.g"]
+              }
+              {
+                command: "gallery.view"
+                id: "galleryView"
+                label: "Debug view"
+                sources ["keyboard.v"]
+              }
+              {
+                command: "gallery.slice"
+                id: "gallerySlice"
+                label: "Slice exhibit"
+                sources ["keyboard.b"]
               }
             ]
           }
