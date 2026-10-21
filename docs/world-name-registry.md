@@ -2606,6 +2606,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].zones` | Zone | Names | Read | `WorldSearchRow.Zones` |
 | `search.jobs[].turn` | State | Names | Read | `WorldSearchRow.Turn` |
 | `search.jobs[].verdict` | State | Names | Read | `WorldSearchRow.Verdict` |
+| `search.jobs[].shapes[][relocate].codes` | State | Names | Read | `WorldSearchShape.Relocate.Codes` |
 | `search.jobs[].shapes[][promote].codes` | State | Names | Read | `WorldSearchShape.Promote.Codes` |
 | `search.jobs[].legal` | State | Names | Read | `WorldSearchRow.Legal` |
 | `search.jobs[].reach` | State | Names | Read | `WorldSearchRow.Reach` |

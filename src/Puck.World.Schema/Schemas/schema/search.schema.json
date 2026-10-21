@@ -80,7 +80,7 @@
               ],
               "anyOf": [
                 {
-                  "description": "One own token moves onto any other cell of the board. Displace (default true) evicts whatever token already stood on the target \u2014 the section\u0027s original, unconditional behavior; false leaves it standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.",
+                  "description": "One own token moves onto any other cell of the board, or, with Moves, onto a cell one of the patterns that apply to it reaches. Displace (default true) evicts whatever token already stood on the target \u2014 the section\u0027s original, unconditional behavior; false leaves it standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.",
                   "properties": {
                     "$type": {
                       "const": "relocate"
@@ -89,6 +89,73 @@
                       "description": "Whether the token standing on the target leaves the board.",
                       "type": "boolean",
                       "default": true
+                    },
+                    "codes": {
+                      "description": "An integer row keyed by the tokens holding each token\u0027s code, which a pattern naming codes reads; required when one does.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "moves": {
+                      "description": "The move patterns that narrow the targets tried; absent, every other cell is tried.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "description": "One move pattern of a Relocate: the lattice offsets a token whose code is one of Codes may step along on Turn, each up to Range times, a ray ending on the first cell a token stands on, which it still reaches. A pattern only narrows the candidates a job tries; the judge still decides what is legal, so a pattern reaching more than the rules allow is safe and one reaching less hides legal moves.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "offsets": {
+                            "description": "The offsets along the topology\u0027s own axes (CompiledTopology.TryOffset): [dx, dz] on a grid or ring, [dq, dr] on a hex, plus a third layer step on a box. At least one, none all zero.",
+                            "type": "array",
+                            "items": {
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "codes": {
+                            "description": "The token codes the pattern applies to; absent or empty, every token.",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "integer"
+                            },
+                            "default": null
+                          },
+                          "turn": {
+                            "description": "The turn slot value the pattern applies on; absent, every turn.",
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "range": {
+                            "description": "How many times each offset repeats: 1 (the default) for a leaper\u0027s one step, more for a short slide, and 0 to slide to the board\u0027s edge.",
+                            "type": "integer",
+                            "default": 1
+                          }
+                        },
+                        "required": [
+                          "offsets"
+                        ],
+                        "additionalProperties": false,
+                        "title": "WorldSearchMove"
+                      },
+                      "default": null
                     }
                   },
                   "additionalProperties": false,

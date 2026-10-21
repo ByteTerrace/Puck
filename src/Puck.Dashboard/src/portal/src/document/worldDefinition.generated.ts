@@ -11044,6 +11044,25 @@ export type WorldSearchChance = {
   atDepth: number;
 };
 
+export type WorldSearchMove = {
+  /**
+   * The offsets along the topology's own axes (CompiledTopology.TryOffset): [dx, dz] on a grid or ring, [dq, dr] on a hex, plus a third layer step on a box. At least one, none all zero.
+   */
+  offsets: (number[] | null)[];
+  /**
+   * The token codes the pattern applies to; absent or empty, every token.
+   */
+  codes?: number[] | null;
+  /**
+   * The turn slot value the pattern applies on; absent, every turn.
+   */
+  turn?: number | null;
+  /**
+   * How many times each offset repeats: 1 (the default) for a leaper's one step, more for a short slide, and 0 to slide to the board's edge.
+   */
+  range?: number;
+};
+
 export type WorldSearchRow = {
   /**
    * The stable job name.
@@ -11174,6 +11193,14 @@ export type WorldSearchShapeRelocate = {
    * Whether the token standing on the target leaves the board.
    */
   displace?: boolean;
+  /**
+   * An integer row keyed by the tokens holding each token's code, which a pattern naming codes reads; required when one does.
+   */
+  codes?: string | null;
+  /**
+   * The move patterns that narrow the targets tried; absent, every other cell is tried.
+   */
+  moves?: (WorldSearchMove | null)[] | null;
 };
 
 export type WorldSearchShapeTandem = {

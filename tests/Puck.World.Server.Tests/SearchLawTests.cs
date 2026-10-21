@@ -434,6 +434,93 @@ public sealed class SearchLawTests {
         Assert.Equal(1L, fixture.KeyedValue(key: "a", row: "pieceCode"));
     }
 
+    // Move-pattern fixture: a 4x4 grid (cell = 4 * row + column), a slider "r" (code 4) at cell 0, a blocker "b"
+    // (code 7) at cell 2 and a leaper "k" (code 2) at cell 15. The judge accepts every relocation, so each token's
+    // legal mask is exactly what its patterns reach.
+    private static readonly WorldSearchMove[] FixtureMoves = [
+        new WorldSearchMove(Codes: [4L], Offsets: [[1, 0], [0, 1]], Range: 0),
+        new WorldSearchMove(Codes: [2L], Offsets: [[-1, -2], [-2, -1]]),
+        new WorldSearchMove(Codes: [2L], Offsets: [[0, -1]], Turn: 5L),
+        new WorldSearchMove(Offsets: [[-1, 0]], Range: 2),
+    ];
+
+    private static WorldDefinition MovesWorld(WorldSearchShape.Relocate shape, LatticeTopology? lattice = null) {
+        StateCell Cell(string key, long value) => new(CellName.Parse(candidate: key), CellValue.Int(value: value));
+
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [Cell(key: "r", value: 0L), Cell(key: "b", value: 2L), Cell(key: "k", value: 15L)]),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCode"), CellKind.Int, Cells: [Cell(key: "r", value: 4L), Cell(key: "b", value: 7L), Cell(key: "k", value: 2L)]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+            ],
+            Lattices: [(lattice ?? new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 4))]
+        );
+
+        return Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [shape], Legal: "legal", Counts: "counts"),
+            ]),
+        };
+    }
+
+    [Fact]
+    public void RelocateMovesTryOnlyTheCellsATokensPatternsReachOnItsTurn() {
+        var definition = MovesWorld(shape: new WorldSearchShape.Relocate(Codes: "pieceCode", Moves: FixtureMoves));
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var status = fixture.SettleSearch();
+
+        Assert.True(condition: status.Done, userMessage: status.ToString());
+        // The slider runs east onto the blocker and stops there, and north to the edge.
+        Assert.Equal((1L << 1) | (1L << 2) | (1L << 4) | (1L << 8) | (1L << 12), fixture.KeyedValue(key: "r", row: "legal"));
+        // The blocker's code names no pattern: only the code-free westward one, onto the slider's cell and no further.
+        Assert.Equal((1L << 0) | (1L << 1), fixture.KeyedValue(key: "b", row: "legal"));
+        // The leaper's two jumps and the code-free westward pair; its turn-5 pattern applies on no turn this world reaches.
+        Assert.Equal((1L << 6) | (1L << 9) | (1L << 13) | (1L << 14), fixture.KeyedValue(key: "k", row: "legal"));
+        Assert.Equal(11L, status.Count);
+    }
+
+    [Theory]
+    [InlineData("no moves to read")]
+    [InlineData("moves name codes")]
+    [InlineData("declares 0 moves")]
+    [InlineData("declares 0 offsets")]
+    [InlineData("range -1")]
+    [InlineData("not all zero")]
+    [InlineData("has no translations")]
+    public void RelocateMovesAreRefusedByName(string refusal) {
+        var definition = refusal switch {
+            "no moves to read" => MovesWorld(shape: new WorldSearchShape.Relocate(Codes: "pieceCode")),
+            "moves name codes" => MovesWorld(shape: new WorldSearchShape.Relocate(Moves: FixtureMoves)),
+            "declares 0 moves" => MovesWorld(shape: new WorldSearchShape.Relocate(Moves: [])),
+            "declares 0 offsets" => MovesWorld(shape: new WorldSearchShape.Relocate(Moves: [new WorldSearchMove(Offsets: [])])),
+            "range -1" => MovesWorld(shape: new WorldSearchShape.Relocate(Moves: [new WorldSearchMove(Offsets: [[1, 0]], Range: -1)])),
+            "not all zero" => MovesWorld(shape: new WorldSearchShape.Relocate(Moves: [new WorldSearchMove(Offsets: [[0, 0]])])),
+            _ => MovesWorld(
+                lattice: new LatticeTopology.Tiling(Name: "board", Origin: new DocumentVector3(x: 0, y: 0, z: 0), CellSize: 1, Family: TilingFamily.Penrose, Radius: 2),
+                shape: new WorldSearchShape.Relocate(Moves: [new WorldSearchMove(Offsets: [[1, 0]])])
+            ),
+        };
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
+        Assert.Contains(actualString: reason, expectedSubstring: refusal);
+    }
+
     // Zones are cells: a 1x3 strip whose cells are three piles, two cards standing on the first two, and a relocate
     // shape that never evicts — a transfer between zones is a relocation on the zone topology, so the card search
     // needs no vocabulary of its own.

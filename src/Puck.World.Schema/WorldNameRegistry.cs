@@ -994,6 +994,7 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Names
         ),
+        new(typeof(WorldSearchShape.Relocate), nameof(WorldSearchShape.Relocate.Codes), WorldNameKind.State, WorldNameRole.Names),
         new(
             typeof(WorldSearchChance),
             nameof(WorldSearchChance.Row),

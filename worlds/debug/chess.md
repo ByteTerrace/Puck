@@ -103,10 +103,14 @@ the console.
 `world.state.cell.set aiSide $value 1` gives Black to the computer (the
 default), `0` gives it White and `-1` leaves both sides to people. The computer
 moves only once the board has rested, the last arrangement was legal (or nothing
-moved), it is its turn and the game has not reached a draw limit. A search runs
-for a few seconds of play: it spends a bounded amount of work each tick, and it
-restarts only when a row it reads changes, so the rest of the world's living
-state never holds it up. The
+moved), it is its turn and the game has not reached a draw limit. Its search tries only
+the squares each of its pieces could move to (the `chessMoves` patterns in
+`chess.puck`: pawn steps, double steps and captures, knight jumps, slides to
+the first piece, king steps and castling), a few dozen candidates, and answers
+within about half a second of its turn starting; the full rules judge each
+candidate as before. It spends a bounded amount of work each tick and restarts
+only when a row it reads changes, so the rest of the world's living state never
+holds it up. `world.search` shows its progress (`judged`, `accepted`, `spent`). The
 [state reference](../../docs/reference/state/worlds.md#the-chess-opponent) walks
 through how it plays.
 

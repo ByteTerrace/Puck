@@ -34,11 +34,15 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
 [JsonDerivedType(typeof(WorldSearchShape.Transferred), "transfer")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record WorldSearchShape {
-    /// <summary>One own token moves onto any other cell of the board. <see cref="Displace"/> (default true) evicts
-    /// whatever token already stood on the target — the section's original, unconditional behavior; false leaves it
-    /// standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.</summary>
+    /// <summary>One own token moves onto any other cell of the board, or, with <see cref="Moves"/>, onto a cell one of
+    /// the patterns that apply to it reaches. <see cref="Displace"/> (default true) evicts whatever token already stood
+    /// on the target — the section's original, unconditional behavior; false leaves it standing, so a judge rule that
+    /// reads two tokens sharing a cell decides the candidate itself.</summary>
     /// <param name="Displace">Whether the token standing on the target leaves the board.</param>
-    public sealed record Relocate(bool Displace = true) : WorldSearchShape;
+    /// <param name="Codes">An integer row keyed by the tokens holding each token's code, which a pattern naming
+    /// codes reads; required when one does.</param>
+    /// <param name="Moves">The move patterns that narrow the targets tried; absent, every other cell is tried.</param>
+    public sealed record Relocate(bool Displace = true, string? Codes = null, IReadOnlyList<WorldSearchMove>? Moves = null) : WorldSearchShape;
     /// <summary>A token whose current value is off the board (see <see cref="WorldSearchRow.Tokens"/>'s remarks)
     /// enters any cell no other token stands on.</summary>
     public sealed record Drop : WorldSearchShape;
@@ -76,6 +80,20 @@ public abstract record WorldSearchShape {
     /// <param name="InsertFirst">Whether the token lands first in the destination rather than last.</param>
     public sealed record Transferred(ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false) : WorldSearchShape;
 }
+/// <summary>One move pattern of a <see cref="WorldSearchShape.Relocate"/>: the lattice offsets a token whose code is
+/// one of <see cref="Codes"/> may step along on <see cref="Turn"/>, each up to <see cref="Range"/> times, a ray ending
+/// on the first cell a token stands on, which it still reaches. A pattern only narrows the candidates a job tries;
+/// the judge still decides what is legal, so a pattern reaching more than the rules allow is safe and one reaching
+/// less hides legal moves.</summary>
+/// <param name="Offsets">The offsets along the topology's own axes (<c>CompiledTopology.TryOffset</c>): <c>[dx,
+/// dz]</c> on a grid or ring, <c>[dq, dr]</c> on a hex, plus a third layer step on a box. At least one, none all
+/// zero.</param>
+/// <param name="Codes">The token codes the pattern applies to; absent or empty, every token.</param>
+/// <param name="Turn">The turn slot value the pattern applies on; absent, every turn.</param>
+/// <param name="Range">How many times each offset repeats: 1 (the default) for a leaper's one step, more for a short
+/// slide, and 0 to slide to the board's edge.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldSearchMove(IReadOnlyList<IReadOnlyList<int>> Offsets, IReadOnlyList<long>? Codes = null, long? Turn = null, int Range = 1);
 /// <summary>A job's chance node: the ply whose move choice the search averages over instead of choosing, weighted
 /// by <see cref="Row"/>'s own draw — every one of its cells must carry a <c>draw</c> facet naming a
 /// <c>uniformRange</c> or <c>weightedNumeric</c> generator, enumerated as their cross product rather than sampled
@@ -336,6 +354,139 @@ public static class WorldSearchCompilation {
 
         return true;
     }
+    // The most cells a ray along one lattice offset holds, from any cell: it stops off the board or on returning to its
+    // origin, which a wrapping axis can.
+    private static int LongestRay(CompiledTopology topology, int dx, int dz, int dy) {
+        var longest = 0;
+
+        for (var origin = 0; (origin < topology.CellCount); origin++) {
+            var length = 0;
+            var cell = origin;
+
+            while (
+                (length < (topology.CellCount - 1)) &&
+                topology.TryOffset(
+                    cell: cell,
+                    dx: dx,
+                    dy: dy,
+                    dz: dz,
+                    result: out cell
+                ) &&
+                (cell != origin)
+            ) {
+                length++;
+            }
+
+            longest = Math.Max(val1: longest, val2: length);
+        }
+
+        return longest;
+    }
+    // Compiles a relocate's move patterns: offsets along the board's lattice axes, each pattern's steps resolved to its
+    // range or, for a slide, to the longest ray its offsets hold on this board.
+    private static bool TryCompileMoves(WorldDefinition definition, WorldSearchRow row, int shapeIndex, WorldSearchShape.Relocate relocate, CompiledTopology topology, WorldStateRow tokens, out SearchMovePlan[]? moves, out string reason) {
+        var authored = relocate.Moves!;
+
+        moves = null;
+
+        if (!topology.HasTranslations) {
+            reason = $"search '{row.Name}' shape[{shapeIndex}] relocate moves step lattice offsets, and a {topology.Kind} board has no translations";
+
+            return false;
+        }
+        if (authored.Count is (< 1 or > SearchCapacity.MaxMovePatterns)) {
+            reason = $"search '{row.Name}' shape[{shapeIndex}] relocate declares {authored.Count} moves; the count must lie in 1..{SearchCapacity.MaxMovePatterns}";
+
+            return false;
+        }
+
+        var namesCodes = false;
+
+        foreach (var move in authored) {
+            namesCodes |= (move.Codes is { Count: > 0 });
+        }
+
+        if (namesCodes) {
+            if (
+                (relocate.Codes is null) ||
+                (WorldDefinitionRows.FindStateRow(
+                    rows: definition.State,
+                    name: relocate.Codes
+                ) is not { IsKeyed: true, Kind: CellKind.Int } codesRow) ||
+                ((codesRow.Cells?.Count ?? 0) != (tokens.Cells?.Count ?? 0))
+            ) {
+                reason = $"search '{row.Name}' shape[{shapeIndex}] relocate moves name codes, so 'codes' must be an integer row keyed like '{row.Tokens}'";
+
+                return false;
+            }
+        }
+
+        var layered = (topology.Kind == TopologyKind.Box);
+        var compiled = new SearchMovePlan[authored.Count];
+
+        for (var index = 0; (index < authored.Count); index++) {
+            var move = authored[index];
+
+            if (move.Offsets is not { Count: > 0 and <= SearchCapacity.MaxMoveOffsets }) {
+                reason = $"search '{row.Name}' shape[{shapeIndex}] moves[{index}] declares {(move.Offsets?.Count ?? 0)} offsets; the count must lie in 1..{SearchCapacity.MaxMoveOffsets}";
+
+                return false;
+            }
+            if (move.Range < 0) {
+                reason = $"search '{row.Name}' shape[{shapeIndex}] moves[{index}] range {move.Range} must be 0 (to the edge) or at least 1";
+
+                return false;
+            }
+
+            var offsets = new int[(move.Offsets.Count * 3)];
+            var longest = 0;
+
+            for (var offset = 0; (offset < move.Offsets.Count); offset++) {
+                var step = move.Offsets[offset];
+
+                if (
+                    (step is null) ||
+                    (step.Count != (layered ? 3 : 2)) ||
+                    step.All(predicate: static axis => (axis == 0))
+                ) {
+                    reason = $"search '{row.Name}' shape[{shapeIndex}] moves[{index}] offset[{offset}] must be {(layered ? "[dx, dz, dy]" : "[dx, dz]")} along the board's axes and not all zero";
+
+                    return false;
+                }
+
+                offsets[(offset * 3)] = step[0];
+                offsets[((offset * 3) + 1)] = step[1];
+                offsets[((offset * 3) + 2)] = (layered ? step[2] : 0);
+                longest = Math.Max(
+                    val1: longest,
+                    val2: LongestRay(
+                        dx: step[0],
+                        dy: offsets[((offset * 3) + 2)],
+                        dz: step[1],
+                        topology: topology
+                    )
+                );
+            }
+
+            compiled[index] = new SearchMovePlan(
+                AnyTurn: (move.Turn is null),
+                Codes: [.. (move.Codes ?? [])],
+                Offsets: offsets,
+                Steps: Math.Max(
+                    val1: 1,
+                    val2: ((move.Range == 0)
+                        ? longest
+                        : Math.Min(val1: move.Range, val2: Math.Max(val1: 1, val2: longest)))
+                ),
+                Turn: (move.Turn ?? 0L)
+            );
+        }
+
+        moves = compiled;
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Compiles a job's authored shapes against its board topology and tokens row.</summary>
     /// <param name="definition">The world the shapes' rows resolve against.</param>
     /// <param name="row">The job.</param>
@@ -387,15 +538,44 @@ public static class WorldSearchCompilation {
                     );
 
                     break;
-                case WorldSearchShape.Relocate relocate:
-                    compiled[index] = new SearchShapePlan(
-                        Kind: SearchShapeKind.Relocate,
-                        Displace: relocate.Displace,
-                        Directions: [],
-                        CompanionIndex: -1
-                    );
+                case WorldSearchShape.Relocate relocate: {
+                        SearchMovePlan[]? moves = null;
 
-                    break;
+                        if (
+                            (relocate.Moves is not null) &&
+                            !TryCompileMoves(
+                                definition: definition,
+                                moves: out moves,
+                                reason: out reason,
+                                relocate: relocate,
+                                shapeIndex: index,
+                                row: row,
+                                tokens: tokens,
+                                topology: topology!
+                            )
+                        ) {
+                            return false;
+                        }
+                        if (
+                            (relocate.Codes is not null) &&
+                            (relocate.Moves is null)
+                        ) {
+                            reason = $"search '{row.Name}' shape[{index}] relocate names codes '{relocate.Codes}' and no moves to read them";
+
+                            return false;
+                        }
+
+                        compiled[index] = new SearchShapePlan(
+                            Kind: SearchShapeKind.Relocate,
+                            Displace: relocate.Displace,
+                            Directions: [],
+                            CompanionIndex: -1,
+                            Codes: relocate.Codes,
+                            Moves: moves
+                        );
+
+                        break;
+                    }
                 case WorldSearchShape.Drop:
                     compiled[index] = new SearchShapePlan(
                         Kind: SearchShapeKind.Drop,

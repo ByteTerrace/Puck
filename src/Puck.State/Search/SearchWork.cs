@@ -94,7 +94,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         }
 
         // A resolution scans the tokens for an occupant at most twice a hop, and a chained jump also scans the
-        // cells it has already visited.
+        // cells it has already visited; a relocate's move patterns walk their rays instead.
         var inspect = BinaryIntegerFunctions.AddSaturating(
             left: 2L,
             right: BinaryIntegerFunctions.MultiplySaturating(
@@ -102,6 +102,13 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
                 right: ((2L * tokens) + hops)
             )
         );
+
+        foreach (var shape in shapes) {
+            inspect = Math.Max(
+                val1: inspect,
+                val2: shape.MoveInspect(tokens: tokens)
+            );
+        }
         // Applying writes a handful of cells and scans the tokens once for a capture.
         var apply = (8L + tokens);
         var candidate = BinaryIntegerFunctions.AddSaturating(

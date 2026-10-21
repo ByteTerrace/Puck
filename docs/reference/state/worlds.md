@@ -404,9 +404,12 @@ Here's how the opponent plays:
    hasn't reached the move-count or repetition draw limit.
 2. `chess-ai-revision` bumps `aiRevision` whenever the settled position
    changes.
-3. The `chessAI` job searches one ply. Its judge is the game's own legality
-   rules; `chess-ai-evaluate` scores material, central occupation, and pawn
-   progress only when `search(ply) > 0`.
+3. The `chessAI` job searches one ply. Its one shape is a `relocate` with
+   `moves` (`chessMoves`): each piece kind's steps, jumps and slides for the
+   side to move, so the job judges only the squares a piece could reach, a few
+   dozen from the opening rather than all 2,048 token and cell pairs. Its judge
+   is the game's own legality rules; `chess-ai-evaluate` scores material,
+   central occupation, and pawn progress only when `search(ply) > 0`.
 4. `chess-ai-request` accepts the answer only when `aiBest[revision]` equals
    `aiRevision`, then the apply rules move the physical pieces with `poseCell`.
    Castling moves both pieces, en passant removes the right pawn, captured

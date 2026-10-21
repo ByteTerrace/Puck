@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -22,6 +23,10 @@ public static class SearchCapacity {
     /// tree job its own node pool, so this multiplies <see cref="TranspositionEntries"/> and
     /// <see cref="TreeNodes"/>.</summary>
     public const int MaxJobs = 16;
+    /// <summary>The most move patterns one <c>relocate</c> shape declares; resolving a candidate tests each.</summary>
+    public const int MaxMovePatterns = 64;
+    /// <summary>The most offsets one move pattern steps along; resolving a candidate may walk each ray.</summary>
+    public const int MaxMoveOffsets = 32;
     /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves. A jump chain may
     /// enumerate no more candidates per token than this, which is what bounds how long a chain may be.</summary>
     public const int MaxNodesPerTick = 4_096;
@@ -62,6 +67,32 @@ public enum SearchShapeKind : byte {
     /// <summary>The walked token, at one end of its ordered zone, moves onto another of the job's zones.</summary>
     Transfer,
 }
+/// <summary>One compiled move pattern a <see cref="SearchShapeKind.Relocate"/> shape's token may take: lattice offsets
+/// it steps along, up to <see cref="Steps"/> times each, stopping at the first occupied cell (which it still reaches).
+/// A relocation whose target no applicable pattern reaches is no candidate, so the judge never runs for it. The
+/// pattern only narrows what is tried; the judge still decides what is legal.</summary>
+/// <param name="Codes">The token codes the pattern applies to, read from the shape's codes row; empty applies it to
+/// every token.</param>
+/// <param name="AnyTurn">Whether the pattern applies on every turn; otherwise only while the job's turn slot reads
+/// <paramref name="Turn"/>.</param>
+/// <param name="Turn">The turn value the pattern applies on when <paramref name="AnyTurn"/> is false.</param>
+/// <param name="Offsets">The lattice offsets, three per offset in <c>CompiledTopology.TryOffset</c>'s (dx, dz, dy)
+/// order.</param>
+/// <param name="Steps">How many times one offset repeats along its ray, at least 1: a leaper's 1, or a slider's longest
+/// ray on the board.</param>
+public sealed record SearchMovePlan(long[] Codes, bool AnyTurn, long Turn, int[] Offsets, int Steps) {
+    /// <summary>Gets how many offsets the pattern steps along.</summary>
+    public int OffsetCount => (Offsets.Length / 3);
+
+    /// <summary>Returns whether the pattern applies to a token's code on a turn.</summary>
+    /// <param name="code">The token's code.</param>
+    /// <param name="turn">The job's turn slot's value.</param>
+    /// <returns><see langword="true"/> when the turn matches and the codes are empty or name <paramref name="code"/>.</returns>
+    public bool AppliesTo(long code, long turn) => (
+        (AnyTurn || (turn == Turn)) &&
+        ((Codes.Length == 0) || (Array.IndexOf(array: Codes, value: code) >= 0))
+    );
+}
 /// <summary>One compiled candidate shape a search job enumerates, ahead of token and target/direction in the walk's
 /// fixed order. <see cref="Directions"/> is populated for <see cref="SearchShapeKind.Jump"/> alone — the resolved
 /// direction ordinals its authored shape names. <see cref="CompanionIndex"/> is populated for
@@ -79,7 +110,60 @@ public enum SearchShapeKind : byte {
 /// is the section's original single hop; past 1, one candidate is a whole chain of 1..<paramref name="MaxHops"/>
 /// hops, each over an occupied cell onto an empty one never repeating a cell of the chain (including the token's
 /// own starting cell), and none of the chain's intermediate cells are evicted.</param>
-public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int CompanionIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1) {
+/// <param name="Moves">The move patterns a <see cref="SearchShapeKind.Relocate"/> narrows its targets to, or
+/// <see langword="null"/> to try every other cell. A pattern naming codes reads them from <paramref name="Codes"/>.</param>
+public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int CompanionIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1, SearchMovePlan[]? Moves = null) {
+    /// <summary>Returns the most work units resolving one candidate against <see cref="Moves"/> costs: one unit per
+    /// pattern to test it applies, then, for the costliest code, every applicable pattern's every step, each a lattice
+    /// offset and a scan of the tokens for an occupant. Zero for a shape with no patterns.</summary>
+    /// <param name="tokens">The most tokens the job walks.</param>
+    /// <returns>The work units.</returns>
+    public long MoveInspect(int tokens) {
+        if (Moves is not { Length: > 0 } moves) {
+            return 0L;
+        }
+
+        long Walk(SearchMovePlan move) => BinaryIntegerFunctions.MultiplySaturating(
+            left: BinaryIntegerFunctions.MultiplySaturating(
+                left: ((long)move.OffsetCount),
+                right: ((long)move.Steps)
+            ),
+            right: (1L + tokens)
+        );
+
+        // A code no pattern names walks the code-free patterns alone; a named code walks those and its own.
+        var unnamed = 0L;
+
+        foreach (var move in moves) {
+            if (move.Codes.Length == 0) {
+                unnamed = BinaryIntegerFunctions.AddSaturating(left: unnamed, right: Walk(move: move));
+            }
+        }
+
+        var costliest = unnamed;
+
+        foreach (var named in moves) {
+            foreach (var code in named.Codes) {
+                var cost = unnamed;
+
+                foreach (var move in moves) {
+                    if (
+                        (move.Codes.Length != 0) &&
+                        (Array.IndexOf(array: move.Codes, value: code) >= 0)
+                    ) {
+                        cost = BinaryIntegerFunctions.AddSaturating(left: cost, right: Walk(move: move));
+                    }
+                }
+
+                costliest = Math.Max(val1: costliest, val2: cost);
+            }
+        }
+
+        return BinaryIntegerFunctions.AddSaturating(
+            left: (2L + moves.Length),
+            right: costliest
+        );
+    }
     // A base-(directions + 1) count, saturating at int.MaxValue rather than throwing — validation keeps a real
     // document's product far under this ceiling; the saturated value only ever reaches a caller as an early refusal.
     private static int ChainCandidateCount(int directions, int maxHops) {

@@ -1020,6 +1020,22 @@ bindingOverlays [
   }
 ]
 
+// Where each piece could move, as (column, row) steps on the `chessBoard` grid: the search tries only these cells and
+// the judging rules still decide every move. A pawn steps, double-steps and takes (en passant included) forward, the
+// king steps and castles two columns, and the bishop, rook and queen slide to the edge or the first piece. Each side's
+// patterns apply only on its own turn, so the side not to move offers no candidate.
+let orthogonalSteps = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+let diagonalSteps = [[1, 1], [1, -1], [-1, 1], [-1, -1]]
+let knightSteps = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]
+let kingSteps = concat(orthogonalSteps, diagonalSteps, [[2, 0], [-2, 0]])
+let chessMoves = concat(
+  map([1, -1], sign => { codes [sign], turn: (1 - sign) / 2, offsets [[0, sign], [0, 2 * sign], [1, sign], [-1, sign]] }),
+  map([1, -1], sign => { codes [2 * sign], turn: (1 - sign) / 2, offsets: knightSteps }),
+  map([1, -1], sign => { codes [3 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: diagonalSteps, range: 0 }),
+  map([1, -1], sign => { codes [4 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: orthogonalSteps, range: 0 }),
+  map([1, -1], sign => { codes [6 * sign], turn: (1 - sign) / 2, offsets: kingSteps })
+)
+
 search {
   jobs [
     {
@@ -1032,6 +1048,9 @@ search {
       revision: aiRevision
       depth: 1
       best: aiBest
+      shapes [
+        relocate(displace: true, codes: pieceCode, moves: chessMoves)
+      ]
       // The score is from the side that just moved. One ply, automatic queen
       // promotion, material first, then central occupation and pawn progress.
       "score": (2 * turn - 1) * ai[evaluation]

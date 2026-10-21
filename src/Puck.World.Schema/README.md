@@ -2994,6 +2994,24 @@ the walked token onto any other cell, evicting what stood there, with its code
 in `codes` changed to each offered value in turn—one candidate per (cell,
 code); the judge decides where a code may change.
 
+`relocate` with `moves` tries only the cells a token's move patterns reach
+instead of every other cell. A pattern (`WorldSearchMove`) lists `offsets`
+along the topology's own axes (`[dx, dz]` on a grid or ring, `[dq, dr]` on a
+hex, `[dx, dz, dy]` on a box), each stepped up to `range` times (1, the
+default, for a leaper; 0 to slide to the edge), a ray ending on the first cell
+a token stands on, which it still reaches. `codes` limits a pattern to tokens
+whose code in the shape's own `codes` row (an integer row keyed by the
+tokens) is one of them, and `turn` to the turn slot's value; absent, a pattern
+applies to every token or on every turn. A token no pattern applies to offers
+no candidate. The patterns only narrow what the judge runs on, which decides
+every move as before: a pattern that reaches more than the rules allow costs
+judge runs, one that reaches less hides legal moves. Resolving a candidate
+against the patterns is priced as an inspection (`SearchShapePlan.MoveInspect`),
+far below a judge run. A graph or tiling has no translations and refuses
+`moves`. The debug world's chess opponent authors one pattern set per piece
+kind and side, so a one-ply reply judges a few dozen candidates where every
+token on every cell was 2,048.
+
 A job over piles names `zones` instead of `board`: ordered zones (`keysOf`
 rows with `ordered`) over the token domain `tokens` names, whose ordinals are
 the job's cells—a token's cell is the zone it stands in, `legal` masks and
