@@ -18,7 +18,8 @@ public enum SourceFocusRoute : byte {
 /// or <see cref="InputSources.Keyboard.ControlRight"/> with <see cref="InputSources.Keyboard.AltLeft"/> or
 /// <see cref="InputSources.Keyboard.AltRight"/> held and <see cref="InputSources.Keyboard.Escape"/> pressed, returns
 /// focus to the game while a source has it, and that Escape reaches nobody; while the game has focus the chord means
-/// nothing, and its Escape is the game's. A key's release goes wherever its press went, so neither
+/// nothing, and its Escape is the game's, unless the host claims it (<see cref="ClaimsChord"/>). Either way a fired chord
+/// is reported once to <see cref="TakeChord"/>. A key's release goes wherever its press went, so neither
 /// side is left holding a key after focus moves. Pointer events are routed by the mapping a hit lands on, never by
 /// focus, so this routes only key and text events; every other kind goes to the game.</summary>
 /// <remarks>Window-pump-thread only. The route is a pure function of the event sequence and the presses reported to
@@ -27,12 +28,19 @@ public sealed class SourceFocus {
     private readonly Dictionary<(KeyCode Key, char Character), SourceFocusRoute> m_pressedTo = [];
     private readonly HeldDigitalInputState m_held = new();
 
+    // Whether the reserved chord fired since the host last took it.
+    private bool m_chord;
+
     /// <summary>Gets the source that has keyboard focus, or <see langword="null"/> when the game has it.</summary>
     public SourceHandle? Focused { get; private set; }
+    /// <summary>Gets or sets whether the host claims the reserved chord while the game has focus, as it does while a seat
+    /// frames a window it may open: the chord then fires and its Escape reaches nobody, for the host to answer through
+    /// <see cref="TakeChord"/>. Defaults to <see langword="false"/>.</summary>
+    public bool ClaimsChord { get; set; }
 
-    // The chord only returns focus, so with none to return it is no chord and the game keeps its Escape.
+    // The chord returns focus, or answers the host's claim; with neither it is no chord and the game keeps its Escape.
     private bool IsChord(in WindowInputEvent inputEvent) => (
-        Focused.HasValue &&
+        (Focused.HasValue || ClaimsChord) &&
         (inputEvent.Key == KeyCode.Escape) &&
         (inputEvent.Phase == CommandPhase.Started) &&
         (m_held.IsHeld(source: InputSources.Keyboard.ControlLeft) || m_held.IsHeld(source: InputSources.Keyboard.ControlRight)) &&
@@ -63,6 +71,15 @@ public sealed class SourceFocus {
     public void ReturnToGame() {
         Focused = null;
     }
+    /// <summary>Returns whether the reserved chord fired since the last call, and forgets it.</summary>
+    /// <returns><see langword="true"/> once for each chord routed since the last call.</returns>
+    public bool TakeChord() {
+        var fired = m_chord;
+
+        m_chord = false;
+
+        return fired;
+    }
     /// <summary>Routes one window input event.</summary>
     /// <param name="inputEvent">The event, in the window's order.</param>
     /// <returns>Where the event goes.</returns>
@@ -90,6 +107,7 @@ public sealed class SourceFocus {
 
                 if (chord) {
                     Focused = null;
+                    m_chord = true;
                 }
 
                 m_held.Observe(

@@ -515,6 +515,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         windowCursor.ShowsSystemCursor = cursorPolicy.ShowsSystemCursor;
                         windowCursor.LocksPointer = cursorPolicy.LocksPointer;
+
+                        if (cursorPolicy.TryTakeWarp(
+                            x: out var warpX,
+                            y: out var warpY
+                        )) {
+                            _ = windowCursor.WarpPointer(
+                                x: warpX,
+                                y: warpY
+                            );
+                        }
                     }
 
                     // Reassert after the whole raw batch: a release in this frame has already removed its control,

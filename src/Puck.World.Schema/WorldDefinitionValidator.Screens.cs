@@ -552,7 +552,7 @@ public static partial class WorldDefinitionValidator {
     // permanent no-op. The engage channel's press also leaves the screen it engaged, so the route's kit may not play
     // it as a pad button. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
     // bar.
-    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
+    private static void ValidateRoute(WorldScreenRoute route, WorldScreenSource? source, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
         RequireNonNegative(
             value: route.EngageRadius,
             name: $"{path}.engageRadius",
@@ -633,6 +633,44 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.display"
             );
         }
+        if (route.PadPointer is { } padPointer) {
+            ValidatePadPointer(
+                engageable: route.Engageable,
+                errors: errors,
+                padPointer: padPointer,
+                path: $"{path}.padPointer",
+                source: source
+            );
+        }
+    }
+    // A pad drives the pointer only over a window a seat engaged on the screen frames, so the feel belongs to an
+    // engageable screen showing a window capture, and each speed is a finite rate in its own range.
+    private static void ValidatePadPointer(WorldScreenPadPointer padPointer, bool engageable, WorldScreenSource? source, string path, List<string> errors) {
+        if (!engageable) {
+            errors.Add(item: $"{path} is authored but engageable is false: only a seat engaged on the screen drives its pointer.");
+        }
+        if (!WorldImageProducerSettings.IsWindowCapture(source: source)) {
+            errors.Add(item: $"{path} is authored but the screen shows no window capture: a pad drives the pointer only over a window the local user opens.");
+        }
+        if (!(float.IsFinite(f: padPointer.Speed) && (padPointer.Speed > 0f))) {
+            errors.Add(item: $"{path}.speed must be a positive number of picture heights per second.");
+        }
+        if (!(float.IsFinite(f: padPointer.Curve) && (padPointer.Curve >= 1f))) {
+            errors.Add(item: $"{path}.curve must be at least 1.");
+        }
+        if (!(float.IsFinite(f: padPointer.Boost) && (padPointer.Boost >= 1f))) {
+            errors.Add(item: $"{path}.boost must be at least 1.");
+        }
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.rampSeconds",
+            value: padPointer.RampSeconds
+        );
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.scrollSpeed",
+            value: padPointer.ScrollSpeed
+        );
     }
     // How an engaged seat's framed view of the screen is matted: only an engageable screen is ever seen that way, and
     // its fill is a colour.

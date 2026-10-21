@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Input;
 
@@ -12,10 +13,12 @@ namespace Puck.World.Client;
 /// capture shows, and the <see cref="SourcePassthroughRouter"/> the window pump offers every raw event to
 /// (<see cref="IWindowInputFilter"/>). Two acts of the local user add a source, and nothing a world document declares
 /// reaches either: the <c>source.passthrough open</c> verb, which the host's own console alone may run, and a physical
-/// pointer press on the glass of a window capture's screen a local seat engaged and frames in the world the host booted
-/// (<see cref="WorldViewGraphHost.ShowsFramed"/>), which the window pump alone delivers, so no binding, script,
-/// <c>player.signal</c>, peer, addon or schedule makes it. Engaging the screen, by any principal, only shows the window;
-/// the press is what opens it, and the source closes once the seat no longer frames the screen.
+/// press on the glass of a window capture's screen a local seat engaged and frames in the world the host booted
+/// (<see cref="WorldViewGraphHost.ShowsFramed"/>): a pointer press the window pump delivers, or a local pad's bound
+/// press (<see cref="PadButton"/>), so no script, <c>player.signal</c>, peer, addon or schedule makes it. Engaging the
+/// screen, by any principal, only shows the window; the press is what opens it, and the source closes once the seat no
+/// longer frames the screen. The reserved chord, Control+Alt+Escape, leaves: it returns the keyboard to the game, and a
+/// seat framing a window closes it and leaves the engagement (<see cref="IWorldPassthroughSeats.Leave"/>).
 /// </summary>
 /// <remarks>
 /// <para>A source stays open, its grant held, until the local user closes it or it is really removed: before each event
@@ -28,12 +31,16 @@ namespace Puck.World.Client;
 /// takes its focus and held input away (<see cref="SourcePassthroughRouter.Route"/>), so a window the local user cannot
 /// see never receives input. Once the same instance's pane is published again a click on it reaches the window again;
 /// a pane unshown only between two events is never seen unshown, and keeps its focus as it keeps its grant.</para>
-/// <para>Window-pump-thread only: the console's immediate verbs and the pump's events run there.</para>
+/// <para>Window-pump-thread only: the console's immediate verbs, the pump's events and the seats' bound pad verbs run
+/// there.</para>
 /// </remarks>
-public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthroughWindows {
+public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthroughWindows {
+    private readonly WorldPerceptionAnchor m_anchor;
     private readonly IWorldPassthroughWindows m_windows;
     private readonly WorldViewGraphHost m_graphs;
     private readonly SortedDictionary<string, Opened> m_opened = new(comparer: StringComparer.Ordinal);
+    private readonly IWorldPassthroughSeats m_seats;
+    private readonly TimeProvider m_time;
     private readonly WorldSeatViewports m_viewports;
 
     // An opened source: the handle its pane's mapping names it by, the window the local user opened it on, and whether
@@ -47,13 +54,22 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     /// <param name="windows">Finds the window each source instance's capture shows.</param>
     /// <param name="graphs">The render graph host whose published panes the router reads.</param>
     /// <param name="viewports">The viewports whose client extent scales a pointer position into display pixels.</param>
-    public WorldSourcePassthrough(IWorldPassthroughWindows windows, WorldViewGraphHost graphs, WorldSeatViewports viewports) {
+    /// <param name="anchor">The perception anchor naming the screen each local seat is captured on.</param>
+    /// <param name="seats">The local seats' pointer feel and leaving.</param>
+    /// <param name="time">The clock a pad's pointer integrates over.</param>
+    public WorldSourcePassthrough(IWorldPassthroughWindows windows, WorldViewGraphHost graphs, WorldSeatViewports viewports, WorldPerceptionAnchor anchor, IWorldPassthroughSeats seats, TimeProvider time) {
         ArgumentNullException.ThrowIfNull(argument: windows);
         ArgumentNullException.ThrowIfNull(argument: graphs);
         ArgumentNullException.ThrowIfNull(argument: viewports);
+        ArgumentNullException.ThrowIfNull(argument: anchor);
+        ArgumentNullException.ThrowIfNull(argument: seats);
+        ArgumentNullException.ThrowIfNull(argument: time);
 
+        m_anchor = anchor;
         m_windows = windows;
         m_graphs = graphs;
+        m_seats = seats;
+        m_time = time;
         m_viewports = viewports;
         Router = new SourcePassthroughRouter(windows: this);
     }
@@ -61,13 +77,14 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
     /// <summary>Gets the router that hosts the keyboard focus.</summary>
     public SourcePassthroughRouter Router { get; }
     /// <summary>Gets whether the pointer belongs to a passthrough source's window rather than the game
-    /// (<see cref="SourcePassthroughRouter.HoldsPointer"/>), read against the panes the display published last, so a pane
-    /// hidden or moved under a resting pointer gives the pointer back without waiting for it to move.</summary>
+    /// (<see cref="SourcePassthroughRouter.HoldsPointer"/>), or lies on the framed picture of a window a local seat may
+    /// open, read against the panes the display published last, so a pane hidden or moved under a resting pointer gives
+    /// the pointer back without waiting for it to move.</summary>
     public bool HoldsPointer {
         get {
             PublishPanes();
 
-            return Router.HoldsPointer;
+            return (Router.HoldsPointer || PointerOnFramedWindow());
         }
     }
 
@@ -166,12 +183,14 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
 
         // Revoked while the window still resolves, so the releases reach it.
         Router.Revoke(source: opened.Source);
+        ReleasePadKeys(source: opened.Source);
         _ = m_opened.Remove(key: instance);
         _ = m_graphs.ClosePassthrough(instance: instance);
 
         return true;
     }
-    /// <summary>Describes the opened sources and where the keyboard is, the <c>source.passthrough</c> read-back.</summary>
+    /// <summary>Describes the opened sources, where the keyboard is and the pad driving the pointer, the
+    /// <c>source.passthrough</c> read-back.</summary>
     /// <returns>One line.</returns>
     public string Describe() {
         CloseStale();
@@ -184,7 +203,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
         ));
 
         if (m_opened.Count == 0) {
-            return builder.Append(value: "; none opened").ToString();
+            _ = builder.Append(value: "; none opened");
         }
 
         foreach (var (instance, opened) in m_opened) {
@@ -204,6 +223,8 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
             }
         }
 
+        DescribePad(builder: builder);
+
         return builder.ToString();
     }
     /// <inheritdoc/>
@@ -222,6 +243,7 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
                     : inputEvent.Vector);
 
                 m_pointer = display;
+                NotePointer(display: display);
 
                 return Router.Route(inputEvent: inputEvent with {
                     Vector = display,
@@ -234,6 +256,18 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
                 OpenEngagedUnderPointer();
 
                 break;
+            case WindowInputKind.Key:
+                // While a seat frames a window it may open, the reserved chord is the host's whoever has the keyboard:
+                // it leaves the engagement.
+                Router.Focus.ClaimsChord = FramesWindow();
+
+                var consumed = Router.Route(inputEvent: in inputEvent);
+
+                if (Router.Focus.TakeChord()) {
+                    LeaveFramed();
+                }
+
+                return consumed;
         }
 
         return Router.Route(inputEvent: in inputEvent);
@@ -246,9 +280,39 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
             _ = Close(instance: stale);
         }
     }
+    // Whether any local seat frames a window it may open.
+    private bool FramesWindow() {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (TryFramedWindow(
+                instance: out _,
+                region: out _,
+                screen: out _,
+                slot: slot
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // The chord's leaving: every local seat framing a window closes it and leaves its engagement.
+    private void LeaveFramed() {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (TryFramedWindow(
+                instance: out var instance,
+                region: out _,
+                screen: out _,
+                slot: slot
+            )) {
+                _ = Close(instance: instance);
+                ResetPad(slot: slot);
+                m_seats.Leave(slot: slot);
+            }
+        }
+    }
     // The local user's own press on the framed glass of an engaged window capture's screen opens that window as a
     // passthrough source before the press is routed, so the press itself reaches the window and gives it the keyboard.
-    // Only the window pump calls Intercept, so only a physical press gets here.
+    // Only the window pump's events and a local pad's bound press get here.
     private void OpenEngagedUnderPointer() {
         if (
             (m_pointer is not { } point) ||
@@ -275,6 +339,60 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
         m_graphs.OpenPassthrough(instance: instance);
         PublishPanes();
     }
+    // Whether the pointer lies on the framed picture of a window a local seat may open.
+    private bool PointerOnFramedWindow() {
+        if (m_pointer is not { } point) {
+            return false;
+        }
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (
+                TryFramedWindow(
+                    instance: out _,
+                    region: out var region,
+                    screen: out _,
+                    slot: slot
+                ) &&
+                Picture(region: region).Contains(point: point)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // The rect of the display a framed picture fills, in display pixels.
+    private PictureRect Picture(NormalizedRect region) => new(
+        Height: (region.Height * m_graphs.DisplayHeight),
+        Width: (region.Width * m_graphs.DisplayWidth),
+        X: (region.X * m_graphs.DisplayWidth),
+        Y: (region.Y * m_graphs.DisplayHeight)
+    );
+    // The screen a local seat is captured on, when a published pane frames it and its capture shows a window: the
+    // window the seat may open, the source instance it shows and the rect its picture fills.
+    private bool TryFramedWindow(int slot, [NotNullWhen(returnValue: true)] out string? instance, out NormalizedRect region, out int screen) {
+        screen = m_anchor.EngagedScreen(slot: slot);
+
+        if (
+            (screen >= 0) &&
+            m_graphs.TryFramedScreen(
+                instance: out instance,
+                region: out region,
+                screen: screen
+            ) &&
+            (m_windows.PassthroughWindowOf(
+                fault: out _,
+                instance: instance
+            ) is not null)
+        ) {
+            return true;
+        }
+
+        instance = null;
+        region = default;
+
+        return false;
+    }
     /// <inheritdoc/>
     public bool TryGet(SourceHandle source, [NotNullWhen(returnValue: true)] out ISourcePassthroughWindow? window) {
         if (
@@ -292,5 +410,33 @@ public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthro
         window = null;
 
         return false;
+    }
+
+    // A framed picture's rect in display pixels; a point on its right or bottom edge lies outside it. A clamped point
+    // stays half a pixel inside the far edges, so its fixed-point hit (SourcePanes) still lands on the picture.
+    private readonly record struct PictureRect(float X, float Y, float Width, float Height) {
+        public Vector2 Centre => new(
+            x: (X + (Width / 2f)),
+            y: (Y + (Height / 2f))
+        );
+
+        public Vector2 Clamp(Vector2 point) => new(
+            x: Math.Clamp(
+                max: MathF.Max(x: X, y: ((X + Width) - 0.5f)),
+                min: X,
+                value: point.X
+            ),
+            y: Math.Clamp(
+                max: MathF.Max(x: Y, y: ((Y + Height) - 0.5f)),
+                min: Y,
+                value: point.Y
+            )
+        );
+        public bool Contains(Vector2 point) => (
+            (point.X >= X) &&
+            (point.Y >= Y) &&
+            (point.X < (X + Width)) &&
+            (point.Y < (Y + Height))
+        );
     }
 }

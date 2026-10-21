@@ -131,6 +131,9 @@ public sealed partial class Win32PointerTests {
         Assert.False(condition: cursor.LocksPointer);
         cursor.LocksPointer = false;
         Assert.False(condition: cursor.LocksPointer);
+
+        // A pad's warp moves the cursor only for the foreground window.
+        Assert.False(condition: cursor.WarpPointer(x: 10, y: 10));
     }
 
     private static INativeWindow Create(ServiceProvider services) => services.GetServices<INativeWindowBackend>()

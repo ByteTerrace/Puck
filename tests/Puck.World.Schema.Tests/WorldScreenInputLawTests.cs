@@ -103,6 +103,61 @@ public sealed class WorldScreenInputLawTests {
             );
         }
     }
+    // A pad's pointer feel belongs to an engageable screen showing a window capture, and each rate lies in its range;
+    // each refusal names its member.
+    [Fact]
+    public void AScreensPadPointerRefusesByNameWhatNoPadCanDrive() {
+        var window = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.CaptureId,
+            settings: new WorldCaptureSettings(
+                Profile: new WorldFeedProfile(Height: 240, RefreshRateHz: 30, Width: 320),
+                WindowTitle: "Claude"
+            )
+        );
+        var feel = new WorldScreenPadPointer(
+            Boost: 3f,
+            Curve: 2f,
+            RampSeconds: 0.6f,
+            ScrollSpeed: 12f,
+            Speed: 0.5f
+        );
+        WorldScreen Driven(WorldScreenPadPointer padPointer, bool engageable = true, WorldScreenSource? source = null) => (Screen(input: null) with {
+            Route = new WorldScreenRoute(
+                EngageRadius: 3f,
+                Engageable: engageable,
+                PadPointer: padPointer
+            ),
+            Source = (source ?? window),
+        });
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: new WorldDefinition(ScreensRaw: [Driven(padPointer: feel)]),
+                reason: out var accepted
+            ),
+            userMessage: accepted
+        );
+        Assert.True(condition: WorldImageProducerSettings.IsWindowCapture(source: window));
+
+        foreach (var (padPointer, engageable, source, refusal) in new (WorldScreenPadPointer, bool, WorldScreenSource?, string)[] {
+            (feel, false, null, "screens[0].route.padPointer is authored but engageable is false"),
+            (feel, true, new WorldScreenSource.None(), "screens[0].route.padPointer is authored but the screen shows no window capture"),
+            ((feel with { Speed = 0f }), true, null, "screens[0].route.padPointer.speed must be a positive number"),
+            ((feel with { Curve = 0.5f }), true, null, "screens[0].route.padPointer.curve must be at least 1"),
+            ((feel with { Boost = float.NaN }), true, null, "screens[0].route.padPointer.boost must be at least 1"),
+            ((feel with { RampSeconds = -1f }), true, null, "screens[0].route.padPointer.rampSeconds"),
+            ((feel with { ScrollSpeed = -1f }), true, null, "screens[0].route.padPointer.scrollSpeed"),
+        }) {
+            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: new WorldDefinition(ScreensRaw: [Driven(engageable: engageable, padPointer: padPointer, source: source)]),
+                reason: out var reason
+            ));
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: refusal
+            );
+        }
+    }
     [Fact]
     public void ASimulationScreenMapsARayToItsSourcePixelFromTheRowAlone() {
         var mapping = WorldScreenMappings.Of(

@@ -1829,6 +1829,7 @@ public static partial class WorldDefinitionValidator {
 
                 ValidateRoute(
                     route: screen.Route,
+                    source: screen.Source,
                     path: $"{path}.route",
                     channelNames: allChannelNames,
                     padKits: padKits,
