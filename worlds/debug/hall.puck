@@ -201,10 +201,10 @@ prototypes {
       // The cassette a window's blind rolls into, under the band over its head, part of the wall so it bakes with it.
       for (opening, n) in hallOpenings {
         for depth in ((opening.face == "south") ? [[12.05, 12.28]] : ((opening.face == "north") ? [[39.72, 39.95]] : [])) {
-          hallBox(label: $"cassette-{n}", x0: opening.a0, x1: opening.a1, y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.3), z0: depth[0], z1: depth[1], slot: hallTrim)
+          hallBox(label: $"cassette-{n}", x0: opening.a0, x1: opening.a1, y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: depth[0], z1: depth[1], slot: hallTrim)
         }
         for depth in ((opening.face == "east") ? [[69.72, 69.95]] : []) {
-          hallBox(label: $"cassette-{n}", x0: depth[0], x1: depth[1], y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.3), z0: opening.a0, z1: opening.a1, slot: hallTrim)
+          hallBox(label: $"cassette-{n}", x0: depth[0], x1: depth[1], y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: opening.a0, z1: opening.a1, slot: hallTrim)
         }
       }
     }
