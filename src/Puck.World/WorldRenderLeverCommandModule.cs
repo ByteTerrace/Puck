@@ -341,18 +341,27 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.debug-view",
             description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
                 separator: '|',
                 value: DebugViewModes.Names
-            )}]. Depth is the primary-march-only performance probe; off restores final shading.",
+            )}|next]. next steps to the following view, after the last back to off, so one key cycles them. Depth is the primary-march-only performance probe; off restores final shading. Bindable, so a binding row or an authored command (the debug world's gallery.view) may call it.",
             handler: (_, args) => {
                 if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
                 }
 
                 if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
+                }
+
+                if (
+                    (args.Count == 1) &&
+                    string.Equals(a: args[0].ToString(), b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ) {
+                    node.DebugMode = ((node.DebugMode + 1) % DebugViewModes.Count);
+
                     return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
                 }
 

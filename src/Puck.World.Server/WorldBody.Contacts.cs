@@ -223,6 +223,31 @@ public sealed partial class WorldBody {
         }
     }
 
+    // Carries a body that stood on an attached solid last tick along with it: the field reports how far the platform's
+    // carrier moved between its last two refreshes, and the body moves by the same before its own step, so a rising
+    // platform lifts it without a push and a falling one keeps it standing rather than dropping it a tick at a time.
+    // Only a grounded locomotion body rides; a rigid or carried body has its own contact path.
+    internal void RideAttachedSupport(WorldColliderSet field) {
+        if (
+            !m_grounded ||
+            (m_collider is null) ||
+            IsRigid ||
+            (m_carriedByIndex >= 0) ||
+            m_sweepRefusedThisTick ||
+            !field.TryRideDisplacement(
+                displacement: out var displacement,
+                orientation: in m_orientation,
+                position: m_position,
+                volumes: ScaledColliderVolumes()
+            )
+        ) {
+            return;
+        }
+
+        WakeUp();
+        m_position += displacement;
+    }
+
     // One body's swept contact solve, bound to its pose and volumes: the ordinary step and every step-up move run
     // through it, so an entity-aware field resolves each of them against the other bodies too.
     private readonly ref struct BodyContactStep(IContactField field, int entityIndex, FixedQuaternion orientation, FixedVector3 up, ReadOnlySpan<FixedBodyColliderVolume> volumes) : IFixedContactStep {

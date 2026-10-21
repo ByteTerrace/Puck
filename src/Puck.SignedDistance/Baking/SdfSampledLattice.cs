@@ -349,12 +349,13 @@ public sealed class SdfSampledLattice {
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
     /// <paramref name="regions"/>.
     /// </summary>
-    /// <param name="factor">The fine cells along each axis of a coarse cell, at least two.</param>
+    /// <param name="factor">The fine cells along each axis of a coarse cell, at least two; fewer when that many would
+    /// measure more fine samples than the refinement's budget (<see cref="Refinement"/> reports the split taken).</param>
     /// <param name="regions">The boxes, in the lattice's frame, whose surface is contoured at the fine spacing wherever
     /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
-    /// their answers; empty when no cell needs refining or the refinement would measure too many, and the lattice then
-    /// contours at its own spacing.</returns>
+    /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
+    /// lattice then contours at its own spacing.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
     public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
@@ -663,38 +664,52 @@ public sealed class SdfSampledLattice {
             refinedCount += (cell ? 1 : 0);
         }
 
-        // The fine samples of every measured cell, its faces included, that are not coarse samples.
-        var fineX = ((cellsX * factor) + 1);
-        var fineY = ((cellsY * factor) + 1);
+        // The fine samples of every measured cell, its faces included, that are not coarse samples. A refinement that would
+        // measure more than MaxFineSamples splits each cell into fewer fine cells rather than none: a sheet thinner than
+        // the coarse cell is caught by any refinement and lost by the coarse contour.
         var keys = new List<int>();
         var slots = new Dictionary<int, int>();
 
-        for (var z = 0; (z < cellsZ); z++) {
-            for (var y = 0; (y < cellsY); y++) {
-                for (var x = 0; (x < cellsX); x++) {
-                    if (!measured[CellIndex(x: x, y: y, z: z)]) {
-                        continue;
-                    }
-                    for (var fz = (z * factor); (fz <= ((z + 1) * factor)); fz++) {
-                        for (var fy = (y * factor); (fy <= ((y + 1) * factor)); fy++) {
-                            for (var fx = (x * factor); (fx <= ((x + 1) * factor)); fx++) {
-                                if (((fx % factor) == 0) && ((fy % factor) == 0) && ((fz % factor) == 0)) {
-                                    continue;
-                                }
+        while (!FineKeys(split: factor)) {
+            if (--factor < 2) {
+                return [];
+            }
+        }
 
-                                var key = (fx + (fineX * (fy + (fineY * fz))));
+        bool FineKeys(int split) {
+            var fineX = ((cellsX * split) + 1);
+            var fineY = ((cellsY * split) + 1);
 
-                                if (slots.TryAdd(key: key, value: keys.Count)) {
-                                    keys.Add(item: key);
+            keys.Clear();
+            slots.Clear();
+            for (var z = 0; (z < cellsZ); z++) {
+                for (var y = 0; (y < cellsY); y++) {
+                    for (var x = 0; (x < cellsX); x++) {
+                        if (!measured[CellIndex(x: x, y: y, z: z)]) {
+                            continue;
+                        }
+                        for (var fz = (z * split); (fz <= ((z + 1) * split)); fz++) {
+                            for (var fy = (y * split); (fy <= ((y + 1) * split)); fy++) {
+                                for (var fx = (x * split); (fx <= ((x + 1) * split)); fx++) {
+                                    if (((fx % split) == 0) && ((fy % split) == 0) && ((fz % split) == 0)) {
+                                        continue;
+                                    }
+
+                                    var key = (fx + (fineX * (fy + (fineY * fz))));
+
+                                    if (slots.TryAdd(key: key, value: keys.Count)) {
+                                        keys.Add(item: key);
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (keys.Count > MaxFineSamples) {
-                        return [];
+                        if (keys.Count > MaxFineSamples) {
+                            return false;
+                        }
                     }
                 }
             }
+            return true;
         }
 
         m_factor = factor;

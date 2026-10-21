@@ -20,6 +20,8 @@ public static class WorldPlacementStamper {
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
     private const float PlacementBoundMargin = 0.4f;
+    // How much longer than thick a shape is before the bake contours it at its half thickness (ShapeDetail).
+    private const float ThinRatio = 8f;
     // Probe instances are spaced far apart so the program's segment-merge pass can never collapse consecutive probe
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
     private const float ProbeSpread = 100f;
@@ -436,6 +438,18 @@ public static class WorldPlacementStamper {
 
                 if (extent > 0f) { detail = MathF.Min(x: detail, y: (extent / 32f)); }
             }
+
+            // A plate, a slab or a strip: its bound measures its length, but its thickness is the feature. A lattice sized
+            // by the bound steps clean over a sheet thinner than its cell, and the sheet bakes to nothing, so a shape far
+            // thinner than it is long is contoured no coarser than its half thickness.
+            var lifted = (shape.Lift ?? SdfLift.Extrude);
+            var halfX = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitX);
+            var halfY = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitY);
+            var halfZ = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitZ);
+            var thinnest = MathF.Min(x: halfX, y: MathF.Min(x: halfY, y: halfZ));
+            var longest = MathF.Max(x: halfX, y: MathF.Max(x: halfY, y: halfZ));
+
+            detail = (((thinnest > 0f) && (longest > (ThinRatio * thinnest))) ? MathF.Min(x: detail, y: thinnest) : detail);
 
             return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
         }

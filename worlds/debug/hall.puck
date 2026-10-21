@@ -1,0 +1,716 @@
+// The gallery hall: the building the shape gallery (shapes.puck) stands in. Four storeys on the open ground at +X/+Z,
+// clear of everything nearer the origin, with the entrance in the south wall facing the spawn:
+//
+//   x 10 .. 70, z 12 .. 40   the footprint; walls 0.3 m thick, a window band on the south, north and east faces
+//   level k                   its floor's top at y = 4.5k + 0.05, k = 0 .. 3; a flat roof at 18.05 with three skylights
+//   x 10 .. 14, z 35 .. 40   the stairs: a switchback of two eight-step flights and a half landing per storey
+//   x 14 .. 18, z 36 .. 40   the lift shaft, its door facing south onto each level's landing
+//   x 10 .. 20, z 12 .. 35   the lobby on level 0 (the map board, the entrance) and the landing on each level above
+//   x 20 .. 70                the exhibition halls, the gallery's rows running along +X (shapes.md lists them)
+//
+// Every piece of the shell is a box: walls with door and window openings and floors with stair and shaft holes are
+// unions of boxes, never a subtraction, because the analytic contact provider collides a carved shape as its whole
+// bounding box. The shell, floors, stairs and shaft are solid, so the Moth walks the floors and climbs the stairs (each
+// riser 0.25 m, under her 0.3 m step height) and the chase camera's clearance keeps the eye inside the rooms. The
+// ceiling light strips are emissive and not solid. The debug world imports this file whole, before chess.puck so the
+// lift car's body takes the highest population slot (40) and the chess pieces keep theirs; debug.puck raises the
+// population to 41. shapes.md says how to get around and what each level shows.
+//
+// Creation shapes are authored in a frame turned 180 degrees about up from the world's, so a shape at author
+// position (x, y, z) in a placement at the origin with no yaw stands at world (-x, y, -z). `hallBox` takes world
+// bounds and writes the author-frame row, so every number below is a world coordinate.
+
+import "shapes"
+
+let storey = galleryStorey
+let hallTop = 18.05
+let parapet = 18.6
+
+// The palette every shell piece shares: cream walls, warm grey floors and stairs, charcoal trim, the light strips'
+// warm white, and the signs' cream boards and charcoal letters.
+let hallWall = 0
+let hallFloor = 1
+let hallTrim = 2
+let hallLight = 3
+let hallBoard = 4
+let hallPalette = [
+  { color: "#E6E0D2", roughness: 0.85, specular: 0.04 }
+  { color: "#8F8B84", roughness: 0.7, specular: 0.08 }
+  { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
+  { color: "#FFF1DC", roughness: 0.5, emissive: 4 }
+  { color: "#F2EEE4", roughness: 0.6 }
+]
+
+// One box given its world bounds.
+template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+// The window bands: below level 0's sills, between each level's window heads and the next level's sills, and the
+// parapet above level 3's heads. Windows run from 0.9 m to 3.3 m over each floor.
+let upperBands = [[3.3, 5.4], [7.8, 9.9], [12.3, 14.4], [16.8, parapet]]
+let bands = concat([[0, 0.9]], upperBands)
+// The south and north faces' windows: ten 3 m openings from x = 21, a 2 m pier between each.
+let longPiers = map(range(0, 9), i => 24 + (5 * i))
+// The east face's windows: five 3 m openings from z = 14.5.
+let eastPiers = [[12.3, 14.5], [17.5, 19.5], [22.5, 24.5], [27.5, 29.5], [32.5, 34.5], [37.5, 39.7]]
+
+// The stairs: flight A climbs +Z at x 10.3 .. 12.1 from z = 34.5 to the half landing at 37.7 .. 39.7, and flight B
+// climbs -Z at x 12.3 .. 14.1 back to the next level's floor. Each tread is 0.32 m, each riser 0.25 m: eight risers to
+// the landing, its own, eight more and the step onto the floor make the storey's eighteen.
+let stairStart = 34.5
+let tread = 0.4
+let riser = 0.25
+let landingSouth = 37.7
+
+// The z of each viewing aisle's ceiling strip on levels 0, 1 and 2 (level 3's hang under the roof's south and north
+// spans, beside its skylights).
+let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6, 30.6]]
+
+// The ceiling light strips under a ceiling at `top`: one over each viewing aisle and two over the landing, 6 cm deep and
+// sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own: a group of thin strips
+// alone narrows its bake box to the strips its coarse samples land near and drops the rest (mesh-bake.md), while the
+// slab holds the box open over all of them.
+template hallStrips(top, aisles) {
+  for z in aisles {
+    hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+  }
+  for z in [18, 26] {
+    hallBox(label: $"landing-light-{z}", x0: 11.5, x1: 19, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
+  }
+}
+
+// The lift. Its car is a population body (`lift-car`, kit `lift`) whose look draws the cab, carrying an attached solid
+// platform (`lift-platform`) the Moth stands on. The car moves only by the rules below: `liftAt` is its height in
+// sixteenths of a metre, `liftTarget` where it is going, and every tick `lift-ride` poses the car at cell `liftAt` of
+// the `liftShaft` box topology, a column of 1/16 m layers, so the car climbs exactly 1/16 m a tick (1.875 m/s at 30 Hz)
+// and stops exactly at each floor (level k is cell 72k). A call (`liftCall`, written by a pad or `gallery.lift`) names
+// a level. The car's body root rides 2.35 m over its floor, clear of the platform it carries, so the car's own
+// collider never meets its own platform.
+let liftBody = 40
+let liftRoot = 2.35
+let liftCells = 72
+let liftX = 15.9
+let liftZ = 38.05
+// A pad stepped on calls the car: one on each landing before the door, and four in the car along its back wall, one
+// per level. A pad is a box of world x, y and z bounds a body's position must fall inside.
+let liftPads = map(range(0, 4), k => { level: k, x0: 15.2, x1: 16.6, z0: 35.2, z1: 36, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
+let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15.15 + (0.7 * k)), z0: 38.9, z1: 39.55 })
+
+// The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
+// stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
+// and the stop's own rule stands body 0 at the exhibit's spawn point, facing it.
+let galleryOrder = reduce(galleryRows, [], (names, row) => concat(names, row.names))
+let galleryLast = (length(galleryOrder) - 1)
+
+prototypes {
+  // The outer walls, full height, with the entrance in the south face at x 14 .. 18.
+  prototype "hall-shell" {
+    document {
+      name: "hall-shell"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      // South face: the lobby piers either side of the entrance, then a pier between each window.
+      hallBox(label: "south-pier-west", x0: 10, x1: 14, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      hallBox(label: "south-pier-door", x0: 18, x1: 21, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      for x in longPiers {
+        hallBox(label: $"south-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      }
+      hallBox(label: "south-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      hallBox(label: "south-sill", x0: 21, x1: 69, y0: 0, y1: 0.9, z0: 12, z1: 12.3, slot: hallWall)
+      for (band, index) in upperBands {
+        hallBox(label: $"south-band-{index}", x0: 14, x1: 69, y0: band[0], y1: band[1], z0: 12, z1: 12.3, slot: hallWall)
+      }
+      // North face: solid behind the stairs and the shaft, windows along the halls.
+      hallBox(label: "north-core", x0: 10, x1: 21, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+      for x in longPiers {
+        hallBox(label: $"north-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+      }
+      hallBox(label: "north-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+      for (band, index) in bands {
+        hallBox(label: $"north-band-{index}", x0: 21, x1: 69, y0: band[0], y1: band[1], z0: 39.7, z1: 40, slot: hallWall)
+      }
+      // East face.
+      for (pier, index) in eastPiers {
+        hallBox(label: $"east-pier-{index}", x0: 69.7, x1: 70, y0: 0, y1: parapet, z0: pier[0], z1: pier[1], slot: hallWall)
+      }
+      for (band, index) in bands {
+        hallBox(label: $"east-band-{index}", x0: 69.7, x1: 70, y0: band[0], y1: band[1], z0: 14.5, z1: 37.5, slot: hallWall)
+      }
+      // West face, solid.
+      hallBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
+    }
+  }
+
+  // The floors, each level its own prototype so each bakes as its own flat group: a group spanning every level is
+  // sampled by its height, and a lattice that coarse steps clean over a 0.3 m slab (mesh-bake.md). Level 0's finish
+  // over the ground, levels 1 to 3 as 0.3 m slabs holed for the stairs and the shaft carrying the light strips of the
+  // level below, and the roof with three skylights over level 3's hall and its strips.
+  prototype "hall-floor-0" {
+    document {
+      name: "hall-floor-0"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      hallBox(label: "ground-south", x0: 10.3, x1: 69.7, y0: 0, y1: 0.05, z0: 12.3, z1: 36.1, slot: hallFloor)
+      hallBox(label: "ground-north", x0: 17.7, x1: 69.7, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
+      hallBox(label: "ground-stairs", x0: 10.3, x1: 14.1, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
+    }
+  }
+  for k in range(1, 3) {
+    prototype $"hall-floor-{k}" {
+      document {
+        name: $"hall-floor-{k}"
+        schema: "puck.creation.v1"
+        palette: hallPalette
+        hallBox(label: $"slab-{k}-south", x0: 10.3, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: 12.3, z1: stairStart, slot: hallFloor)
+        hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
+        hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
+        hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
+      }
+    }
+  }
+  // The roof, open over level 3's hall in three 10 m by 16 m skylights.
+  prototype "hall-roof" {
+    document {
+      name: "hall-roof"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      hallBox(label: "roof-south", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 12.3, z1: 18, slot: hallFloor)
+      hallBox(label: "roof-north", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 34, z1: 39.7, slot: hallFloor)
+      hallBox(label: "roof-west", x0: 10.3, x1: 24, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+      hallBox(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+      hallBox(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+      hallBox(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+      hallStrips(top: 17.75, aisles: [15, 37])
+    }
+  }
+
+  // The stairs from level 0 to level 3, a divider between each storey's flights, and a rail round level 3's well.
+  prototype "hall-stairs" {
+    document {
+      name: "hall-stairs"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      for k in range(0, 3) {
+        for i in range(1, 8) {
+          hallBox(label: $"flight-a-{k}-{i}", x0: 10.3, x1: 12.1, y0: ((storey * k) + 0.05), y1: (((storey * k) + 0.05) + (riser * i)), z0: (stairStart + (tread * (i - 1))), z1: (stairStart + (tread * i)), slot: hallFloor)
+        }
+        hallBox(label: $"landing-{k}", x0: 10.3, x1: 14.1, y0: ((storey * k) + 2), y1: ((storey * k) + 2.3), z0: landingSouth, z1: 39.7, slot: hallFloor)
+        for j in range(1, 8) {
+          hallBox(label: $"flight-b-{k}-{j}", x0: 12.3, x1: 14.1, y0: (((storey * k) + 1.85) + (riser * j)), y1: (((storey * k) + 2.3) + (riser * j)), z0: (landingSouth - (tread * j)), z1: (landingSouth - (tread * (j - 1))), slot: hallFloor)
+        }
+        hallBox(label: $"divider-{k}", x0: 12.1, x1: 12.3, y0: ((storey * k) + 0.05), y1: ((storey * (k + 1)) + 0.05), z0: stairStart, z1: landingSouth, slot: hallTrim)
+      }
+      // Level 3's floor is holed over the whole stairwell, as every level's is, so the Moth (2.06 m tall) keeps her
+      // headroom on the last landing; a rail stands round the well where no flight arrives.
+      hallBox(label: "rail-3-divider", x0: 12.1, x1: 12.3, y0: 13.55, y1: 14.55, z0: stairStart, z1: landingSouth, slot: hallTrim)
+      hallBox(label: "rail-3-south", x0: 10.3, x1: 12.3, y0: 13.55, y1: 14.55, z0: (stairStart - 0.1), z1: stairStart, slot: hallTrim)
+    }
+  }
+
+  // The lift shaft: side walls and a door wall full height, a 1.8 m by 2.6 m door onto each level.
+  prototype "hall-shaft" {
+    document {
+      name: "hall-shaft"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      hallBox(label: "shaft-west", x0: 14.1, x1: 14.4, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
+      hallBox(label: "shaft-east", x0: 17.4, x1: 17.7, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
+      hallBox(label: "shaft-jamb-west", x0: 14.4, x1: 15, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
+      hallBox(label: "shaft-jamb-east", x0: 16.8, x1: 17.4, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
+      for k in range(0, 4) {
+        hallBox(label: $"shaft-lintel-{k}", x0: 15, x1: 16.8, y0: ((storey * k) + 2.65), y1: ((k == 3) ? hallTop : ((storey * (k + 1)) + 0.05)), z0: 36.1, z1: 36.4, slot: hallTrim)
+      }
+    }
+  }
+
+  // The car's platform: what the Moth stands on, attached solid to the car's body.
+  prototype "lift-platform" {
+    document {
+      name: "lift-platform"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      shape Box "floor" {
+        material: hallTrim
+        position [0, 0, 0]
+        scale [1.4, 0.05, 1.55]
+      }
+    }
+  }
+
+  // The cab the car's body draws, round its body root: side walls and a back wall, a ceiling with a light panel, and a
+  // pad on the floor for each level with its number on the wall above. Author frame: the back wall stands at world +Z,
+  // so at author -Z, and the pads run from world -X (level 0) to +X, so from author +X.
+  prototype "lift-car" {
+    document {
+      name: "lift-car"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      shape Box "back" {
+        material: hallWall
+        position [0, (1.3 - liftRoot), -1.5]
+        scale [1.4, 1.25, 0.04]
+      }
+      shape Box "side-west" {
+        material: hallWall
+        position [1.36, (1.3 - liftRoot), 0]
+        scale [0.04, 1.25, 1.54]
+      }
+      shape Box "side-east" {
+        material: hallWall
+        position [-1.36, (1.3 - liftRoot), 0]
+        scale [0.04, 1.25, 1.54]
+      }
+      shape Box "ceiling" {
+        material: hallTrim
+        position [0, (2.57 - liftRoot), 0]
+        scale [1.4, 0.03, 1.55]
+      }
+      shape Box "lamp" {
+        material: hallLight
+        position [0, (2.535 - liftRoot), 0]
+        scale [0.5, 0.01, 0.5]
+      }
+      for pad in carPads {
+        shape Box $"pad-{pad.level}" {
+          material: hallLight
+          position [(liftX - ((pad.x0 + pad.x1) / 2)), (0.06 - liftRoot), (liftZ - ((pad.z0 + pad.z1) / 2))]
+          scale [0.28, 0.01, 0.3]
+        }
+      }
+      textRuns: map(carPads, pad => { text: $"{pad.level}", position [(liftX - ((pad.x0 + pad.x1) / 2)), (1.2 - liftRoot), -1.455], rotation [0, 0, 0, 1], emHeight: 0.16, depth: 0.006, mode: "emboss", material: hallTrim, align: "center" })
+    }
+  }
+
+  // Each landing's call pad on the floor before the lift door, and the board over the door naming the level.
+  for level in galleryLevels {
+    prototype $"lift-landing-{level.level}" {
+      document {
+        name: $"lift-landing-{level.level}"
+        schema: "puck.creation.v1"
+        palette: hallPalette
+        shape Box "pad" {
+          material: hallLight
+          position [0, 0.006, 0]
+          scale [0.7, 0.006, 0.4]
+        }
+        shape Box "board" {
+          material: hallBoard
+          position [0, 3.25, -0.43]
+          scale [1.1, 0.3, 0.02]
+        }
+        textRuns [
+          { text: "CALL", position [0, 0.013, 0], rotation [-0.707107, 0, 0, 0.707107], emHeight: 0.18, depth: 0.004, mode: "emboss", material: hallTrim, align: "center" }
+          { text: level.title, position [0, 3.33, -0.41], rotation [0, 0, 0, 1], emHeight: 0.11, depth: 0.004, mode: "emboss", material: hallTrim, align: "center", maxWidth: 2.1 }
+          { text: level.what, position [0, 3.13, -0.41], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.003, mode: "emboss", material: hallTrim, align: "center", maxWidth: 2.1 }
+        ]
+      }
+    }
+  }
+}
+
+placements {
+  placement "hall-shell" {
+    prototype: "hall-shell"
+    position [0, 0, 0]
+    solid
+  }
+  for k in range(0, 4) {
+    placement $"hall-floor-{k}" {
+      prototype: $"hall-floor-{k}"
+      position [0, 0, 0]
+      solid
+    }
+  }
+  placement "hall-roof" {
+    prototype: "hall-roof"
+    position [0, 0, 0]
+    solid
+  }
+  placement "hall-stairs" {
+    prototype: "hall-stairs"
+    position [0, 0, 0]
+    solid
+  }
+  placement "hall-shaft" {
+    prototype: "hall-shaft"
+    position [0, 0, 0]
+    solid
+  }
+
+  // The car: one body, posed every tick by `lift-ride`, starting on level 0.
+  placement "lift-car" {
+    prototype: "lift-car"
+    position [liftX, liftRoot, liftZ]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "lift"
+      look: "lift-car"
+      source: "Idle"
+    }
+  }
+  placement "lift-platform" {
+    prototype: "lift-platform"
+    position [liftX, 0, liftZ]
+    attach {
+      bodyIndex: liftBody
+      localOffset [0, (0 - liftRoot), 0]
+    }
+    solid
+  }
+
+  for level in galleryLevels {
+    placement $"lift-landing-{level.level}" {
+      prototype: $"lift-landing-{level.level}"
+      position [liftX, galleryFloor[level.level], 35.65]
+    }
+  }
+}
+
+// A spawn on each level's landing, before the lift door and facing it.
+// The hall's lights. The Moth basis's key and fill stay (a lights list replaces its basis's whole), and three warm
+// points light the inside: one over the lobby, one in the stairwell, and one riding the lift car's body under its
+// ceiling. A point light never occludes and is never occluded, so each is kept small and local; the rooms' light is
+// the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the occlusion.
+render {
+  lighting {
+    lights [
+      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
+      directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
+      point(name: "hall-lobby", position: [15, 3.4, 22], radius: 4, color: "#FFE9CC", weight: 0.9)
+      point(name: "hall-stairs", position: [12.2, 7.6, 37], radius: 3, color: "#FFE9CC", weight: 0.7)
+      point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], radius: 1.6, color: "#FFF4E6", weight: 1.2)
+    ]
+  }
+}
+
+spawnPoints: map(galleryLevels, level => { id: $"gallery-level-{level.level}", position [liftX, galleryFloor[level.level], 34], yawDegrees: 180 })
+
+// The car's kit: a 10 cm sphere that touches nothing in the shaft, held by nothing (no gravity), so it stands wherever
+// `lift-ride` last posed it.
+kits {
+  rows [
+    {
+      name: "lift"
+      bodyMotionProgram: "walk"
+      collider: sphere(radius: 0.1)
+      motion {
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "held"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+    }
+  ]
+}
+
+looks {
+  rows [
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "lift-car"
+      scale: 1
+      source: creation(prototypeId: `lift-car`)
+    }
+  ]
+}
+
+state {
+  // The shaft: one 3 m column of 1/16 m layers from the ground to level 3, the car's root riding liftRoot over each.
+  lattices [
+    box(name: "liftShaft", origin: [(liftX - 1.5), 0, (liftZ - 1.5)], cellSize: 3, width: 1, depth: 1, layers: ((3 * liftCells) + 1), layerHeight: 0.0625)
+  ]
+
+  world {
+    slot liftAt = 0 bounds(0..(3 * liftCells))
+    slot liftTarget = 0 bounds(0..(3 * liftCells))
+    // The level a pad or gallery.lift last called, until lift-call turns it into a target; -1 while none is pending.
+    slot liftCall = -1 bounds(-1..3)
+    slot galleryStop = -1 bounds(-1..galleryLast)
+    slot galleryStep = 0 bounds(-1..1)
+
+    // The gallery wheel's sector labels and icons, by sector id (icons rows in controls.puck).
+    table galleryWheelLabels {
+      next = "Next"
+      prev = "Previous"
+      flag = "Flag"
+      view = "View"
+      slice = "Slice"
+      entrance = "Entrance"
+      cancel = "Cancel"
+    }
+
+    table galleryWheelIcons {
+      next = "act.next"
+      prev = "act.prev"
+      flag = "act.flag"
+      view = "act.view"
+      slice = "act.slice"
+      entrance = "act.respawn"
+    }
+  }
+}
+
+rule "lift-call" {
+  when liftCall >= 0
+  mode: Level
+  liftTarget = liftCall * liftCells
+  liftCall = -1
+}
+
+rule "lift-rise" {
+  when liftTarget > liftAt
+  mode: Level
+  liftAt += 1
+}
+
+rule "lift-fall" {
+  when liftTarget < liftAt
+  mode: Level
+  liftAt = liftAt - 1
+}
+
+rule "lift-ride" {
+  when liftAt >= 0
+  mode: Level
+  poseCell(key: `placement:lift-car`, topology: liftShaft, expression: liftAt, offset: [0, liftRoot, 0], glide: true)
+}
+
+// Stepping onto a landing's pad calls the car to that level; stepping onto a pad in the car sends it to the pad's.
+for pad in liftPads {
+  rule $"lift-pad-{pad.level}" {
+    when bodyPosition(each, x) > pad.x0 and bodyPosition(each, x) < pad.x1 and bodyPosition(each, z) > pad.z0 and bodyPosition(each, z) < pad.z1 and bodyPosition(each, y) > pad.y0 and bodyPosition(each, y) < pad.y1
+    mode: Edge
+    forEach: $bodies
+    liftCall = pad.level
+  }
+}
+
+for pad in carPads {
+  rule $"lift-car-pad-{pad.level}" {
+    when bodyPosition(each, x) > pad.x0 and bodyPosition(each, x) < pad.x1 and bodyPosition(each, z) > pad.z0 and bodyPosition(each, z) < pad.z1
+    mode: Edge
+    forEach: $bodies
+    liftCall = pad.level
+  }
+}
+
+commands [
+  {
+    name: "gallery.lift"
+    help: "Calls the gallery hall's lift car to a level (0 to 3), as its pads do; ride it by standing in the car."
+    parameters [
+      { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
+    ]
+    lines [
+      "world.state.cell.set liftCall $value {level}"
+    ]
+  }
+  {
+    name: "gallery.level"
+    help: "Stands a body on a level's landing in the gallery hall (0 to 3), before the lift door."
+    parameters [
+      { name: "level", kind: Choice, values ["0", "1", "2", "3"], default: "0" }
+      { name: "body", kind: Body, default: "0" }
+    ]
+    lines [
+      "body.pose spawn:gallery-level-{level} {body}"
+      "view.override camera auto"
+      "view.override layout play"
+    ]
+  }
+]
+
+rule "gallery-next" {
+  when galleryStep == 1
+  mode: Level
+  galleryStop = (galleryStop + 1) % (galleryLast + 1)
+  galleryStep = 0
+}
+
+rule "gallery-prev" {
+  when galleryStep == -1 and galleryStop > 0
+  mode: Level
+  galleryStop = galleryStop - 1
+  galleryStep = 0
+}
+
+rule "gallery-prev-wrap" {
+  when galleryStep == -1 and galleryStop <= 0
+  mode: Level
+  galleryStop = galleryLast
+  galleryStep = 0
+}
+
+for (name, index) in galleryOrder {
+  rule $"gallery-stop-{index}" {
+    when galleryStop == index
+    mode: Edge
+    pose(key: 0, spawnPoint: name)
+  }
+}
+
+commands [
+  {
+    name: "gallery.next"
+    help: "Stands body 0 at the next exhibit of the tour, in walking order (level by level, row by row); after the last it wraps to the first."
+    lines [
+      "world.state.cell.set galleryStep $value 1"
+    ]
+  }
+  {
+    name: "gallery.prev"
+    help: "Stands body 0 at the previous exhibit of the tour; before the first it wraps to the last."
+    lines [
+      "world.state.cell.set galleryStep $value -1"
+    ]
+  }
+]
+
+// The gallery's keys, on the debug world's own resting page: = steps the tour on, - steps it back, G flags the
+// exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. Holding the right shoulder or Q
+// opens the gallery wheel, aimed with the right stick or the mouse and committed on release, as the left shoulder and
+// Tab open the play wheel: its ring holds every gallery action, so a pad reaches them all. The garden shares the
+// Moth's base page and has no gallery, so these live here.
+bindingOverlays [
+  {
+    id: "gallery-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord ["keyboard.q"]
+          group: "play"
+          page {
+            id: "gallery-wheel-keys"
+            inherits: "base"
+            label: "Gallery"
+            entries [
+              {
+                command: "player.wheel.select"
+                sources ["mouse.motion"]
+              }
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["keyboard.q"]
+              }
+            ]
+          }
+        }
+        {
+          chord ["gamepad.rightShoulder"]
+          group: "play"
+          page {
+            id: "gallery-wheel-pad"
+            inherits: "base"
+            label: "Gallery"
+            entries [
+              {
+                command: "player.wheel.select"
+                sources ["gamepad.rightStick"]
+              }
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["gamepad.rightShoulder"]
+              }
+            ]
+          }
+        }
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              {
+                command: "gallery.next"
+                id: "galleryNext"
+                label: "Next exhibit"
+                sources ["keyboard.equals"]
+              }
+              {
+                command: "gallery.prev"
+                id: "galleryPrev"
+                label: "Previous exhibit"
+                sources ["keyboard.minus"]
+              }
+              {
+                command: "gallery.flag"
+                id: "galleryFlag"
+                label: "Flag exhibit"
+                sources ["keyboard.g"]
+              }
+              {
+                command: "gallery.view"
+                id: "galleryView"
+                label: "Debug view"
+                sources ["keyboard.v"]
+              }
+              {
+                command: "gallery.slice"
+                id: "gallerySlice"
+                label: "Slice exhibit"
+                sources ["keyboard.b"]
+              }
+            ]
+          }
+        }
+      ]
+      wheels [
+        {
+          id: "gallery"
+          group: "play"
+          holdPages ["gallery-wheel-keys", "gallery-wheel-pad"]
+          labelRow: "state.galleryWheelLabels"
+          iconRow: "state.galleryWheelIcons"
+          style {
+            placement: ViewportCenter
+          }
+          rings [
+            {
+              id: "gallery-acts"
+              label: "Gallery"
+              entries [
+                { id: "next", command: "gallery.next", sources: null }
+                { id: "prev", command: "gallery.prev", sources: null }
+                { id: "flag", command: "gallery.flag", sources: null }
+                { id: "view", command: "gallery.view", sources: null }
+                { id: "slice", command: "gallery.slice", sources: null }
+                { id: "entrance", command: "gallery.go", sources: null }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

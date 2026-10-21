@@ -776,9 +776,11 @@ public static class SdfSolidGeometry {
             Center: Vector3.Zero,
             HalfExtents: new Vector3(value: 1.0001f)
         ),
+            // The box's faces sit at its half-extents and its fillet is inset from them, so the bound is the box itself:
+            // the analytic contact provider collides a box as exactly this extent times its scale.
             SdfSolidPrimitive.Box => new(
             Center: Vector3.Zero,
-            HalfExtents: (BoxHalfExtents + new Vector3(value: BoxRound))
+            HalfExtents: BoxHalfExtents
         ),
             SdfSolidPrimitive.Torus => new(
             Center: Vector3.Zero,

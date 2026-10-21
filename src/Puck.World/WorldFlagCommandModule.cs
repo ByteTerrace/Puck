@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -23,9 +22,31 @@ namespace Puck.World;
 /// The capture arms the way <c>world.screenshot</c> does and the same stderr <c>[capture]</c> line says when the
 /// PNG exists; headless, or while another capture is pending, the record is still written and the echo says no
 /// capture was armed.</remarks>
-internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient client, WorldCaptureScheduler captureScheduler, Func<string> packageDirectory, WorldSeatViewports? viewports = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient client, WorldCaptureScheduler captureScheduler, Func<string> packageDirectory, WorldSeatViewports? viewports = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     /// <summary>The folder under the package the records and captures land in.</summary>
     public const string FolderName = "flags";
+    /// <summary>The exhibit token that names the spawn point nearest the flagging seat's body, so a key bound to
+    /// <c>world.flag near</c> flags whatever exhibit the player stands at (every gallery exhibit has a spawn point
+    /// before it, named after it).</summary>
+    public const string NearToken = "near";
+
+    // The id of the declared spawn point nearest the body's presented position, or null when the world declares none.
+    private string? NearestSpawnPoint(int body) {
+        var position = client.Position(index: body);
+        string? nearest = null;
+        var best = float.PositiveInfinity;
+
+        foreach (var point in client.Definition.SpawnPoints) {
+            var distance = Vector3.DistanceSquared(value1: point.Position, value2: position);
+
+            if (distance < best) {
+                best = distance;
+                nearest = point.Id;
+            }
+        }
+
+        return nearest;
+    }
 
     private static bool IsExhibitToken(ReadOnlySpan<char> token) {
         if (token.IsEmpty || (token.Length > 96)) { return false; }
@@ -54,7 +75,23 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
             return CommandResult.Error(output: $"[world.flag: exhibit '{args[0].ToString()}' is not a file-safe token (letters, digits, '-', '_', '.')]");
         }
 
+        var slot = ((principal.Kind == PrincipalKind.Seat)
+            ? principal.Index
+            : context.Slot
+        );
         var exhibit = args[0].ToString();
+
+        if (string.Equals(a: exhibit, b: NearToken, comparisonType: StringComparison.Ordinal)) {
+            if (NearestSpawnPoint(body: slot) is not { } nearest) {
+                return CommandResult.Error(output: "[world.flag: 'near' names the spawn point nearest the seat's body, and the world declares none]");
+            }
+            if (!IsExhibitToken(token: nearest)) {
+                return CommandResult.Error(output: $"[world.flag: the nearest spawn point '{nearest}' is not a file-safe token]");
+            }
+
+            exhibit = nearest;
+        }
+
         var note = string.Empty;
 
         for (var index = 1; (index < args.Count); index++) {
@@ -64,10 +101,6 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
             );
         }
 
-        var slot = ((principal.Kind == PrincipalKind.Seat)
-            ? principal.Index
-            : context.Slot
-        );
         var pose = "[world.flag: no pose answer]";
 
         link.Query(
@@ -101,18 +134,10 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
         }
 
         // The capture is decided before the record is written so the record says whether a PNG is coming.
-        string? captureRefusal = null;
-        ICaptureRequestTarget? render = null;
-
-        if (renderProbe is null) {
-            captureRefusal = "no renderer to capture (headless)";
-        } else if (renderProbe.Root is not { } root) {
-            captureRefusal = "the renderer is not built yet";
-        } else if (root.PendingCapturePath is { } outstanding) {
-            captureRefusal = $"a capture of {outstanding} is still pending";
-        } else {
-            render = root;
-        }
+        var captureRefusal = ((renderProbe is null)
+            ? "no renderer to capture (headless)"
+            : CaptureRefusal(probe: renderProbe)
+        );
 
         try {
             using var stream = new FileStream(
@@ -176,43 +201,20 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
             } else {
                 writer.WriteNull(propertyName: "camera");
             }
-            if (render is null) {
-                writer.WriteNull(propertyName: "capture");
-                writer.WriteString(
-                    propertyName: "captureRefused",
-                    value: captureRefusal
-                );
-            } else {
-                writer.WriteString(
-                    propertyName: "capture",
-                    value: Path.GetFileName(path: capturePath)
-                );
-            }
+            WriteCapture(
+                capturePath: capturePath,
+                refusal: captureRefusal,
+                writer: writer
+            );
             writer.WriteEndObject();
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException)) {
             return CommandResult.Error(output: $"[world.flag: could not write {recordPath} ({exception.Message})]");
         }
 
-        var captureWord = $"no capture armed ({captureRefusal})";
-
-        if (render is { } target) {
-            var request = new FrameCaptureRequest(path: capturePath);
-
-            _ = request.Completion.ContinueWith(
-                continuationAction: static (completed, state) => {
-                    if (completed.Result.Error is { } error) {
-                        Console.Error.WriteLine(value: $"[capture] refused {state}: {error.Message}");
-                    }
-                },
-                scheduler: TaskScheduler.Default,
-                state: capturePath
-            );
-            captureScheduler.ArmUnscheduled(
-                request: request,
-                target: target
-            );
-            captureWord = $"capture pending {capturePath}";
-        }
+        var captureWord = ((captureRefusal is null)
+            ? Arm(capturePath: capturePath, probe: renderProbe!)
+            : $"no capture armed ({captureRefusal})"
+        );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
@@ -225,7 +227,7 @@ internal sealed class WorldFlagCommandModule(IServerLink link, WorldClient clien
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.flag",
-            description: "Flags an exhibit that looks wrong: world.flag <exhibit> [note…]. Writes <package>/flags/<exhibit>.json beside the booted document (exhibit, note, tick, the flagging seat, its authoritative pose as body.where reads it, and its render camera) and arms a one-shot capture of the next composed frame to <package>/flags/<exhibit>.png, announced on stderr as world.screenshot's is. The exhibit is a file-safe token (letters, digits, '-', '_', '.'); a caller never names a path. A flag of the same exhibit overwrites the earlier one. Host console or local seat only (the folder is this machine's and a peer has no seat camera here); headless, or while another capture is pending, the record is still written and the echo says no capture was armed. Bindable, so a binding row or an authored command may call it.",
+            description: "Flags an exhibit that looks wrong: world.flag <exhibit|near> [note…]; near names the spawn point nearest the flagging seat's body. Writes <package>/flags/<exhibit>.json beside the booted document (exhibit, note, tick, the flagging seat, its authoritative pose as body.where reads it, and its render camera) and arms a one-shot capture of the next composed frame to <package>/flags/<exhibit>.png, announced on stderr as world.screenshot's is. The exhibit is a file-safe token (letters, digits, '-', '_', '.'); a caller never names a path. A flag of the same exhibit overwrites the earlier one. Host console or local seat only (the folder is this machine's and a peer has no seat camera here); headless, or while another capture is pending, the record is still written and the echo says no capture was armed. Bindable, so a binding row or an authored command may call it.",
             handler: (context, args) => Flag(
                 args: in args,
                 context: context

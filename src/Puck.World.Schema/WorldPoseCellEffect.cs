@@ -8,7 +8,8 @@ namespace Puck.World;
 /// <param name="topology">The topology name.</param>
 /// <param name="expression">The live cell ordinal.</param>
 /// <param name="offset">The displacement from its centre.</param>
-public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset) : WorldFactEffect(describe: $"poseCell {topology}") {
+/// <param name="glide">Whether the body moves there as continuous motion rather than a teleport.</param>
+public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false) : WorldFactEffect(describe: $"poseCell {topology}") {
     /// <summary>Gets the addressed body.</summary>
     public WorldBodyRef Body { get; } = body;
     /// <summary>Gets the topology name.</summary>
@@ -17,6 +18,9 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     public CompiledExpressionToken[] Expression { get; } = expression;
     /// <summary>Gets the displacement from the cell centre.</summary>
     public FixedVector3 Offset { get; } = offset;
+    /// <summary>Gets whether the body moves to the cell as continuous motion, which a client interpolates, rather than
+    /// a teleport.</summary>
+    public bool Glide { get; } = glide;
 
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;

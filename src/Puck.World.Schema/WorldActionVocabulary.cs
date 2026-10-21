@@ -154,7 +154,11 @@ public static class WorldEffect {
     /// <param name="Topology">The declared topology.</param>
     /// <param name="Expression">The integer cell ordinal evaluated when the effect fires.</param>
     /// <param name="Offset">The displacement from the cell centre, in world units.</param>
-    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset) : ActionEffect;
+    /// <param name="Glide">Whether the body moves there as continuous motion, which a client interpolates and which
+    /// keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them.
+    /// For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.</param>
+    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         StateChannelRef Key,

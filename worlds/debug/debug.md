@@ -107,7 +107,8 @@ case, `stage` when omitted:
 | `chess` | (-6, 0, -7.5), Black's side of the table | -Z, across the board |
 | `loop` | (-20, 0, -15), short of the floor glass | -Z; walk ahead to drop in |
 | `screen` | (8, 0, -3), in front of the wall screen | -Z, toward the screen |
-| `gallery` | (14, 0, 9), the shape gallery's near corner | +Z, up its rows |
+| `gallery` | (16, 0, 9), outside the gallery hall's entrance | +Z, through the door |
+| `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
 
 The chase camera keeps its world heading when a body is posed, so a place
@@ -141,7 +142,10 @@ at the power-of-two share of the screen its glass covers, as clear glass
 sampled linearly (the frames author `filter: linear`), without shadows. The
 axis lines meet two metres to the spawn's +X side and run along +X and +Z, and
 the reference cubes and the test room stand behind the spawn on +Z and -X, all
-out of the frames' way.
+out of the frames' way. The gallery hall ([hall.puck](hall.puck), four storeys
+holding the shape gallery) stands on the open ground at x 10 to 70, z 12 to 40,
+its entrance in the south wall facing the spawn; [shapes.md](shapes.md) says how
+to get round it.
 
 ## Where a crossing lands
 

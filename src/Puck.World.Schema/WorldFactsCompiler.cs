@@ -406,7 +406,7 @@ public static partial class WorldFactsCompiler {
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
 
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            FixedVector3.FromVector3(value: effect.Offset));
+            FixedVector3.FromVector3(value: effect.Offset), effect.Glide);
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;
