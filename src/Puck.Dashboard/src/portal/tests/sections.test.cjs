@@ -1,14 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const fs = require('node:fs');
-const ts = require('typescript');
-const file = require.resolve('../src/shell/sections.ts');
-const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-const result = { exports: {} };
-new Function('module', 'exports', compiled)(result, result.exports);
-const { sectionFromLocation, sectionPath } = result.exports;
+require('./support/register.cjs');
+const { sectionFromLocation, sectionPath } = require('../src/shell/sections.ts');
 
 test('docs and Puck subdomains open their website sections directly', () => {
   assert.equal(sectionFromLocation({ hostname: 'docs.byteterrace.com', pathname: '/' }), 'docs');
