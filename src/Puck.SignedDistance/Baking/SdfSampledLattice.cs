@@ -257,6 +257,8 @@ public sealed class SdfSampledLattice {
     // How much less one diagonal's triangles must turn from their corners' normals than the other's for a quad to split
     // along it (SplitsAlongFirstDiagonal): below it, the two splits of a quad flat to within its normals' noise tie.
     private const double TurnTie = 1.0e-3;
+    // A triangle whose height is under this share of its longest edge is a line to a split (SplitsAlongFirstDiagonal).
+    private const double DegenerateSplit = 0.02;
 
     private readonly Vector3 m_origin;
     private readonly Vector3 m_cell;
@@ -1456,6 +1458,16 @@ public sealed class SdfSampledLattice {
             Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
             Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
         );
+        // A split whose triangle is a line (three vertices on one crease, as a diagonal crease through three of the four
+        // cells around a lattice edge places them) loses to the other: that triangle's facing is rounding noise, and the
+        // other split's two triangles both have area.
+        var thinFirst = Math.Min(val1: Thinness(a: v0, b: v1, c: v2), val2: Thinness(a: v0, b: v2, c: v3));
+        var thinSecond = Math.Min(val1: Thinness(a: v0, b: v1, c: v3), val2: Thinness(a: v1, b: v2, c: v3));
+
+        if ((thinFirst < DegenerateSplit) != (thinSecond < DegenerateSplit)) {
+            return (thinFirst >= DegenerateSplit);
+        }
+
         var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
         var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
 
@@ -1497,6 +1509,12 @@ public sealed class SdfSampledLattice {
         return turn;
     }
     private static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    // Twice triangle (a, b, c)'s area over its longest edge squared: its height as a share of that edge, zero for a line.
+    private static double Thinness(Vector3 a, Vector3 b, Vector3 c) {
+        var longest = Math.Max(val1: DistanceSquared(a: a, b: b), val2: Math.Max(val1: DistanceSquared(a: b, b: c), val2: DistanceSquared(a: c, b: a)));
+
+        return ((longest > 0.0) ? (((double)Vector3.Cross(vector1: (b - a), vector2: (c - a)).Length()) / longest) : 0.0);
+    }
     // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
     private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
         var ux = (((double)b.X) - a.X);

@@ -678,24 +678,15 @@ internal static class SdfDualContouring {
         (double X, double Y, double Z)? inside = null;
         var (handOff, beside) = (false, false);
 
+        // A convex crease past the cell, curved or straight, is the neighbour's that holds it, as Place keeps a cell's: the
+        // piece's vertex stays inside the cell beside it. The mean-biased point past the cell sits a few hundredths of a
+        // cell off the crease the neighbour's vertex lies on, a sliver strip between two rows of crease vertices.
         if ((past > 0.0) && (past <= grid.FeatureReach) && (faceA >= 0) && ConvexCrease(faceA: faceA, faceB: faceB, planes: local, point: (mx, my, mz)) &&
             cell.Solve(bias: MeanBias, x: out var sx, y: out var sy, z: out var sz)) {
-            var sResidual = 0.0;
+            var (ix, iy, iz) = cell.Inside(x: sx, y: sy, z: sz, planes: local);
 
-            for (var plane = 0; (plane < local.Length); plane += 4) {
-                var distance = ((((local[plane] * sx) + (local[(plane + 1)] * sy)) + (local[(plane + 2)] * sz)) - local[(plane + 3)]);
-
-                sResidual += (distance * distance);
-            }
-
-            var sPast = (Math.Max(val1: Math.Abs(value: (sx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (sy - 0.5)), val2: Math.Abs(value: (sz - 0.5)))) - 0.5);
-            // A straight crease's planes meet the mean-biased point too, which keeps to the crease past the cell, as Place's
-            // does; a curved crease's do not, and the neighbour holds it.
-            var straight = ((sResidual <= ((tolerance * tolerance) * (local.Length / 4))) && (sPast <= grid.FeatureReach));
-            var (ix, iy, iz) = (straight ? (sx, sy, sz) : cell.Inside(x: sx, y: sy, z: sz, planes: local));
-
-            beside = !straight;
-            handOff = (beside && !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz)));
+            beside = true;
+            handOff = !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz));
             if (handOff) {
                 (ix, iy, iz) = OwnSide(crease: (x, y, z), faceA: faceA, faceB: faceB, held: (ix, iy, iz), mean: (mx, my, mz), planes: local);
             }
@@ -1188,15 +1179,14 @@ internal static class SdfDualContouring {
             // (FeatureReach) can tell a point every plane passes through from planes that merely meet. A point that two of
             // its planes reach turned by more than the crease angle is a crease or corner of the surface (`feature`). The
             // point is taken inside the cell, or within FeatureResidual of it, as near as the planes are known to meet. A
-            // curved convex crease up to FeatureReach past the cell, whose planes the mean-biased point does not meet, is
-            // the neighbour's that holds it (`beyond`, HandOff), and this cell's vertex stays inside the cell
-            // (CellSolve.Inside, BesideCrease): one taken past its cell lands beside the neighbour's and folds the quads
-            // they share into teeth. A crease within TouchedCrease of the cell that the point inside it already lies on
-            // stays this cell's: handed over, it would drag the neighbour's vertex along the crease and leave the two a
-            // sliver apart. A straight one, whose planes the mean-biased point meets too, keeps that point past the cell
-            // below. A curved face's
-            // crossings that turn more (a tube a cell or two across) do not all pass through one point, and none of this
-            // applies.
+            // convex crease up to FeatureReach past the cell, curved or straight, is the neighbour's that holds it
+            // (`beyond`, HandOff), and this cell's vertex stays inside the cell (CellSolve.Inside, BesideCrease): one
+            // taken past its cell lands beside the neighbour's and folds the quads they share into teeth, and one taken
+            // at the mean-biased point past the cell sits a few hundredths of a cell off the crease the neighbour's lies
+            // on, a sliver strip between two rows of crease vertices. A crease within TouchedCrease of the cell that the
+            // point inside it already lies on stays this cell's: handed over, it would drag the neighbour's vertex along
+            // the crease and leave the two a sliver apart. A curved face's crossings that turn more (a tube a cell or two
+            // across) do not all pass through one point, and none of this applies.
             if ((grid.FeatureReach > 0.0) && cell.Solve(bias: FeatureBias, x: out var fx, y: out var fy, z: out var fz) &&
                 Meets(x: fx, y: fy, z: fz, planes: cellPlanes)) {
                 var (faceA, faceB) = Faces(planes: cellPlanes);
@@ -1207,8 +1197,7 @@ internal static class SdfDualContouring {
                 if ((past <= 0.0) || (feature && (past <= FeatureResidual))) {
                     result = (fx, fy, fz);
                     placed = true;
-                } else if (feature && (past <= grid.FeatureReach) && ConvexCrease(faceA: faceA, faceB: faceB, planes: cellPlanes, point: mean) &&
-                    !Meets(x: sx, y: sy, z: sz, planes: cellPlanes)) {
+                } else if (feature && (past <= grid.FeatureReach) && ConvexCrease(faceA: faceA, faceB: faceB, planes: cellPlanes, point: mean)) {
                     beside = true;
                     result = BesideCrease(crease: (fx, fy, fz), faceA: faceA, faceB: faceB, held: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), mean: mean, ownFace: out ownFace, planes: cellPlanes);
                     if ((ownFace < 0) || (past > TouchedCrease)) {
