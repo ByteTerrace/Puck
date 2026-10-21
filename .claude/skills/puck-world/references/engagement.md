@@ -32,6 +32,7 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Replay visibility
 - Machines: server-authoritative
 - Read-backs
+- The device frame — a device's controls are the seat's own
 - Observation delivery and session query disclosure
 - Verifying
 
@@ -618,7 +619,31 @@ breakdown; the own-body member is listed like any other, so its ABSENCE (capture
 is legible rather than inferred. `screen.state` ends its engagement segment with
 `gun=off` or `gun=(<x>, <y>)`, the tick's merged aim as source fractions
 (`WorldEngagement.PointerOn`), the same numbers `body.channels` prints for the
-hit.
+hit, then `pad=off` (no application reaches the screen) or
+`pad=<buttons>/stick(<x>, <y>)` (`WorldEngagement.PadOn`): the merged pad the
+machine receives this tick, its buttons as `MachineButtons` names joined by `+`
+(`none` for none) and its left stick with +X right and +Y up, which every
+host (`BrickPad`, `AdvancedPad`, `HgdPad`) reads as the d-pad. It is the
+engine-neutral way to see what a device is pressed with; `screen.peek <screen>
+0xC280` shows the brick's own joypad byte only under a forged cartridge (a local
+folder default is not one).
+
+## The device frame — a device's controls are the seat's own
+
+The client rotates the movement pair into world axes before it reaches the wire
+(`WorldClient.ComposeMoveFrame`), which is right for a body and wrong for a
+device: a camera looking +Z would turn the stick's right into the pad's left.
+So a seat whose authority holds it captured on a device composes the pair raw:
+`WorldAuthorityEndpoint.DrivesDevice(body)`, answered for a local instance by
+`WorldEngagement.DrivesDevice` (the set omits its own body, names no other body,
+and names a screen the document declares or a tabletop placement). The rows and
+the stick then sum unrotated and no facing is written, so a screen's pad and a
+board's rules (`chess.puck` turns the seat's ahead and right by `board(side, …)`)
+read the keys as pressed. A mirrored set, a possession and a portal face (a
+screen with no row) keep camera-relative movement. A remote authority's endpoint
+carries no such read, so a seat engaged on a remote world still composes
+camera-relative. `ControlApplicationLawTests.OnlyACapturedDeviceSetDrivesADevice`
+holds the predicate.
 
 ## Verifying
 

@@ -484,6 +484,42 @@ public sealed partial class WorldEngagement {
 
         m_holderScratch.Clear();
     }
+    /// <summary>Whether body <paramref name="bodyIndex"/>'s participant is captured on a device: its set omits its own
+    /// body, names no other body, and names a screen the live document declares or a tabletop placement. A device's
+    /// controls are the seat's own, never camera- or world-relative, so the client composes the movement pair raw for
+    /// such a seat (<c>WorldClient.ComposeMoveFrame</c>) and the screen's pad or the board's rules read the stick and
+    /// keys as pressed. A mirrored set still walks its avatar, a possession drives a body and a portal face (a screen
+    /// with no row of its own) forwards to a body beyond its glass, so each of those keeps its camera-relative
+    /// movement.</summary>
+    /// <param name="bodyIndex">The 0-based body index the seat's submission drives.</param>
+    /// <returns><see langword="true"/> when that body's participant drives a device this tick.</returns>
+    public bool DrivesDevice(int bodyIndex) {
+        if (Body(index: bodyIndex) is null) {
+            return false;
+        }
+
+        var applications = m_grants.Applications(principal: PrincipalOf(index: bodyIndex));
+        var device = false;
+
+        IndexRows();
+
+        for (var slot = 0; (slot < applications.Count); slot++) {
+            var target = applications[slot].Target;
+
+            switch (target.Kind) {
+                case GrantSubjectKind.Body:
+                    return false;
+                case GrantSubjectKind.Screen:
+                    device |= m_screenRows.ContainsKey(key: target.Value);
+                    break;
+                case GrantSubjectKind.Placement:
+                    device = true;
+                    break;
+            }
+        }
+
+        return device;
+    }
     /// <summary>Folds every applied body's channel-masked intent onto its targets for this tick — a screen member
     /// merges into <see cref="m_screenPads"/> (the multiplayer-cabinet OR-merge,
     /// <see cref="MachinePadState.Merge"/>), its light gun aimed where the body's pointer ray maps on a
@@ -632,6 +668,17 @@ public sealed partial class WorldEngagement {
             entityIndex: entityIndex,
             targetPrincipal: targetPrincipal
         );
+    /// <summary>Returns this tick's merged pad for <paramref name="screenIndex"/>, the image <see cref="FoldTick"/>
+    /// hands the screen's machine — the <c>screen.state</c> read-back of what the machine receives.</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <returns>The merged pad, or <see langword="null"/> when no application reaches the screen this tick.</returns>
+    public MachinePadState? PadOn(int screenIndex) => (m_screenPads.TryGetValue(
+        key: screenIndex,
+        value: out var pad
+    )
+        ? pad
+        : null
+    );
     /// <summary>Returns where this tick's merged pad aims <paramref name="screenIndex"/>'s light gun — the
     /// <c>screen.state</c> read-back of <see cref="FoldTick"/>'s aim.</summary>
     /// <param name="screenIndex">The engine screen index.</param>

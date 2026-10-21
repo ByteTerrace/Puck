@@ -189,9 +189,13 @@ reaches the machine.
 
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
 jump is A, flight is B, the Moth's `start` channel is start and her `select`
-channel is select. On a brick, each
-control lands in the joypad byte a forged cartridge copies to `0xC280` each
-frame (`screen.peek <screen> 0xC280`):
+channel is select. The controls are the seat's own whichever way the camera
+faces: right is right on the device, never turned by the room. `screen.state
+<screen>` prints the pad each device receives (`pad=<buttons>/stick(<x>, <y>)`,
+the stick's +X right and +Y up), and on a brick running a forged cartridge each
+control also lands in the joypad byte the cartridge copies to `0xC280` each
+frame (`screen.peek <screen> 0xC280`; a local folder default is not forged and
+leaves it alone):
 
 | Control (`player.signal` source) | Keyboard | Machine button | Byte |
 |---|---|---|---|
