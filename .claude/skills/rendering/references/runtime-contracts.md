@@ -153,7 +153,13 @@ image `ProduceFrame` hands the display, through that instance's node
 (`ShaderPipelineRenderNode.TryReadPresented`). The readback waits for the GPU,
 so the image cannot change under it. A frame on which `ReasonOf` names a reason
 or the output is tainted is skipped, never read, and the burst's presentation
-indices show the gap. It counts as pending (`PendingCapturePath`) until its
+indices show the gap. A temporal view's history that read external content
+stays tainted for as long as it keeps blending, and a presented capture has no
+held frame to converge over, so on each frame it is armed and still taking
+frames the runtime asks every package of every instance the capture reads to
+discard such history (`IRenderGraphPackageFactory.DiscardTaintedHistory`, §5)
+and skips the renders the package says the history needs to converge again
+(one `SdfTemporalSamples.Period`), so the burst reads the steady image. It counts as pending (`PendingCapturePath`) until its
 last PNG is written, so the capture gate fills, capture frames re-render
 tainted instances and `world.wait captures` fences the files, but not as
 holding (`HoldsPresentation`), so the presenter does not pin interpolation and
@@ -224,7 +230,9 @@ retries a frame.
 **Rule.** Temporal history (accumulated samples, reprojected frames) resets when
 its previous samples are wrong for this view: a cut, a binding change, an
 output extent or reconstruction ceiling change, an enable or debug toggle, a pose the view did
-not render, or a view shown again after it went unseen. A gap the view's
+not render, a view shown again after it went unseen, or samples holding external
+content the capture gate did not fill when a capture must read the view (a
+settled capture's convergence and a presented capture's discard, §3). A gap the view's
 cadence scheduled (a refresh divisor, a standing consumer, a budget skip) is
 continuity and never resets history.
 
@@ -250,9 +258,17 @@ recording writer and commits its cursor at submission; its recovery restores
 the existing access tracker on failure. `IRenderGraphPackageRecorder.Submitted`
 commits the temporal sample metadata, and `SdfResolveRecorder` caches history
 descriptors by their bound handles as well as their slot and tables.
+`SdfWorldPasses` marks an instance's history tainted when a views render read
+an unfilled external source or tainted history (`SubmittedTaint`), and
+`DiscardTaintedHistory` resets only such history: a settled capture's
+`BeginConvergence` and a presented capture's frames call it, and clean history
+keeps its samples. The window shows the reset as one period of reconvergence
+(a single-sample image refining over eight frames) of a view that had an
+external screen in it, while that screen shows its capture fill.
 
 **Laws.** `SdfWorldPassesLawTests.Temporal`, the runtime's convergence laws,
-and `RenderGraphSchedulerLawTests.History`.
+`RenderGraphRuntimeLawTests.RetainedCapture` and
+`RenderGraphSchedulerLawTests.History`.
 
 **Verification boundary.** CPU laws hold scheduling, cursor recovery and
 submission callbacks on a fake device. Nothing automated holds the backend

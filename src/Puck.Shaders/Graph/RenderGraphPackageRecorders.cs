@@ -273,6 +273,15 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance whose next output is being prepared or whose recording just submitted.</param>
     /// <returns>Whether retained source state or history contributes external content.</returns>
     bool TaintedOf(string instance) => false;
+    /// <summary>Discards retained history that holds unfilled external pixels (<see cref="TaintedOf"/>), so the
+    /// instance's next render, over filled sources, is clean. The runtime calls it, on the frame thread before any
+    /// instance renders, for each instance a presented capture reads (<see cref="Abstractions.Presentation.FrameCaptureMode.Presented"/>),
+    /// which holds no frame to converge over and so cannot otherwise outlast history that blends its old content in. A
+    /// factory whose history is clean, or that keeps none, does nothing.</summary>
+    /// <param name="instance">The instance whose history is discarded.</param>
+    /// <returns>The renders the instance needs after the discard before its output is the steady image it would have
+    /// shown, which the capture skips; zero when nothing was discarded.</returns>
+    int DiscardTaintedHistory(string instance) => 0;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }

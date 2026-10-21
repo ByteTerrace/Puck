@@ -437,7 +437,11 @@ Pick by question: a settled capture for how a still looks; a presented burst
 presented capture keeps the external-content guarantee the same way a settled
 one does: while any capture is armed, the capture gate fills every external
 source, so the display itself shows the fills during a burst, and a frame whose
-image still read unfilled external content is skipped, never read.
+image still read unfilled external content is skipped, never read. Under
+`world.temporal on`, a view whose history held an external screen's pixels has
+that history discarded on the burst's first frame, and the burst skips the
+eight renders it takes to converge again, so the first PNG is the steady image;
+the window shows that one reconvergence.
 
 Host integrations arm captures through `TextCommandSession.InvokeAsync` when
 they must follow the session's queued edits and waits. Await the returned

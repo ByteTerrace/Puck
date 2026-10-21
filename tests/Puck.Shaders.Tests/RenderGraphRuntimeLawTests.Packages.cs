@@ -471,6 +471,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool Unchanged { get; set; }
 
         public bool TaintedOf(string instance) => RetainedTainted;
+        // The renders a discarded history needs to converge again, and how many times it was discarded.
+        public int RefillFrames { get; set; } = 3;
+        public int Discards { get; private set; }
+
+        public int DiscardTaintedHistory(string instance) {
+            if (!RetainedTainted) {
+                return 0;
+            }
+
+            RetainedTainted = false;
+            Discards++;
+
+            return RefillFrames;
+        }
 
         // The unread frames each cadence question and each recording carried, in order.
         public List<long> AskedUnread { get; } = [];

@@ -932,6 +932,11 @@ Before rendering, retained package taint prevents forwarding a capture. After a
 successful submission, the new output carries that submitted package state and
 its acquired-input taint. A clean render that replaces tainted history counts
 as the first clean sample; the previous output's taint does not delay it again.
+A presented capture forwards nowhere and holds nothing, so on each frame it
+still takes frames for, the runtime asks the packages of every instance it
+reads to discard history holding unfilled external pixels
+(`DiscardTaintedHistory`) and skips the renders they report the history needs
+to converge again.
 
 ### The default root graph
 

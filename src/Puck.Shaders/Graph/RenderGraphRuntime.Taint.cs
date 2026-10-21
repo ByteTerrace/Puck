@@ -133,6 +133,7 @@ public sealed partial class RenderGraphRuntime {
             }
 
             m_visited[index] = true;
+            DiscardPresentedTaint(index: index);
 
             var instance = m_set.Instances[index];
 

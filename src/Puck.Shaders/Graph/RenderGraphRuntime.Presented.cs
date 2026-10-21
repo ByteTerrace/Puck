@@ -14,6 +14,8 @@ namespace Puck.Shaders;
 // other, so the gate fills external content and a capture frame renders every tainted instance again.
 public sealed partial class RenderGraphRuntime {
     private FrameCaptureRequest? m_presented;
+    // The presentations a presented capture still skips while the history it had discarded converges again.
+    private int m_presentedWarmup;
 
     /// <summary>Gets whether a settled capture (<see cref="FrameCaptureMode.Settled"/>) is armed on the runtime or
     /// forwarded and not yet served: the capture that holds presentation, and that a host pins its presented state to
@@ -37,8 +39,27 @@ public sealed partial class RenderGraphRuntime {
         }
 
         m_presented = request;
+        m_presentedWarmup = 0;
         m_captureInstance = index;
         m_captureFollowsRoot = followsRoot;
+    }
+    // On a frame a presented capture still takes frames for, before anything renders: discards an instance's retained
+    // history that holds unfilled external pixels (IRenderGraphPackageFactory.DiscardTaintedHistory), which would
+    // otherwise keep every output it reaches tainted for as long as the capture is armed, and skips the presentations
+    // the history needs to converge again, so the burst reads the steady image rather than its reconvergence.
+    private void DiscardPresentedTaint(int index) {
+        if ((m_presented is not { Claimed: false }) || (m_graphs[index] is not { } graph)) {
+            return;
+        }
+
+        var name = m_set.Instances[index].Name;
+        var passes = graph.Pipeline.Plan.Passes;
+
+        for (var position = 0; (position < passes.Count); position++) {
+            if ((passes[position].Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory)) {
+                m_presentedWarmup = Math.Max(val1: m_presentedWarmup, val2: factory.DiscardTaintedHistory(instance: name));
+            }
+        }
     }
     // Refuses the presented capture still armed, if any.
     private void RefusePresented(Exception error) {
@@ -67,6 +88,11 @@ public sealed partial class RenderGraphRuntime {
         // Skipped where a settled capture would wait, and where the shown image, which may stand for another instance's,
         // read external content the gate did not fill.
         if ((ReasonOf(index: index) is not null) || (LatestOf(index: index) is not { Tainted: false } output)) {
+            return;
+        }
+        if (m_presentedWarmup > 0) {
+            m_presentedWarmup--;
+
             return;
         }
 
