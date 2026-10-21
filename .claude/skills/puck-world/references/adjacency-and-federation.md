@@ -503,9 +503,17 @@ and intent streams; silo activations own their configured peer lifetime.
 
 One application stream carries the whole conversation: the federation wire key
 (`WorldFederationCodec.WireKey`, distinct from the interactive peer key), then
-`Challenge`/`Authenticate`/`Authenticated` (the destination namespace), then framed requests in order,
+`Challenge`/`Authenticate`/`Authenticated` (reciprocal proofs and the destination namespace), then framed requests in order,
 request-then-response, until `Observe` or `IntentStream` takes the connection
 over and streams on it. There is no second hello and no correlation id.
+
+Both nonce-bound proofs also bind the ordered peer transport-key hashes and
+their direction. The destination proof binds its advertised namespace, and an
+unpinned client requires the verified subject to equal that namespace. An Entra
+client with an explicit remote transport-key pin checks that pin before sending
+its bearer credential; this pin replaces the destination attestation proof.
+Verifier-only servers have no implicit pin. See the
+[server transport contract](../../../../src/Puck.World.Server/README.md#federation-transport-worldfederationcodeccs).
 
 Refusals are named (`WorldFederationRefusal`) and every refusal frame's text
 opens with the name, so a peer and `WorldPeerHost.FederationRefusals` count the

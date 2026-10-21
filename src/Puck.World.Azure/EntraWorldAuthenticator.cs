@@ -124,7 +124,9 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
     }
 
     /// <inheritdoc/>
-    public bool AcceptsRemoteIdentity(string keyHash) => ((m_credential is null) || string.Equals(
+    public bool HasRemoteIdentityPin => (m_credential is not null);
+    /// <inheritdoc/>
+    public bool AcceptsRemoteIdentity(string keyHash) => ((m_credential is not null) && string.Equals(
         a: m_remoteKey,
         b: keyHash,
         comparisonType: StringComparison.Ordinal

@@ -13,6 +13,36 @@ namespace Puck.World.Server.Tests;
 public sealed class AdmissionArrivalLawTests {
     private const string SourceAuthority = "machine-a/plaza";
 
+    /// <summary>Remote arithmetic is checked before a reservation can consume capacity or a commit can admit a
+    /// traveler. The exact wire-decoded shapes formerly overflowed, the epoch after admitting a peer.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void HostileReservationArithmetic_RefusesWithoutConsumingCapacity(bool exhaustedEpoch) {
+        using var fixture = Fixtures.FreshServer(definition: Document(admission: [Arrivals(domain: SourceAuthority)]));
+        var request = Request(transferId: 17, identity: null);
+        request = (exhaustedEpoch
+            ? request with {
+                Members = [request.Members[0] with {
+                    Mobility = request.Members[0].Mobility!.Value with { Epoch = ulong.MaxValue },
+                }],
+            }
+            : request with { SourceRateHz = 1, DeadlineSourceTick = ulong.MaxValue });
+
+        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(
+            body: WorldFederationCodec.EncodeReservation(request: request),
+            request: out var decoded,
+            failure: out var failure
+        ), userMessage: failure.ToString());
+        var refused = fixture.Server.ReserveTransfer(request: decoded!);
+
+        Assert.False(condition: refused.Accepted);
+        Assert.Contains(expectedSubstring: (exhaustedEpoch ? "epoch cannot advance" : "destination tick range"), actualString: refused.Reason);
+        Assert.Equal(expected: WorldTransferStatus.Missing, actual: fixture.Server.TransferStatus(sourceAuthority: SourceAuthority, transferId: 17));
+        Assert.False(condition: fixture.Server.Population.IsAdmittedPeer(bodyIndex: WorldBodiesLimits.LocalSeatCount));
+        Assert.Equal(expected: WorldBodiesLimits.LocalSeatCount, actual: Land(fixture: fixture, transferId: 18));
+    }
+
     private static WorldAdmissionEntry Arrivals(string domain, bool drive = true, bool control = true, ushort budget = 64) {
         var grants = new List<WorldAdmissionGrant> { new(
             Capability: WorldCapability.Observe,

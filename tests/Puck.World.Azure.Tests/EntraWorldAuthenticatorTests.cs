@@ -40,6 +40,10 @@ public sealed class EntraWorldAuthenticatorTests {
             credential: credential
         );
 
+        Assert.True(condition: client.HasRemoteIdentityPin);
+        var server = new EntraWorldAuthenticator(Settings, false);
+        Assert.False(condition: server.HasRemoteIdentityPin);
+        Assert.False(condition: server.AcceptsRemoteIdentity(keyHash: new string(c: 'a', count: 64)));
         Assert.True(condition: client.AcceptsRemoteIdentity(keyHash: new string(
             c: 'a',
             count: 64
