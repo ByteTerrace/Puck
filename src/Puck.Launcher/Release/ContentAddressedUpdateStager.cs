@@ -80,6 +80,14 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             path3: manifest.Version
         );
 
+        // A previous attempt can stop after writing files but before UpdateService persists an install intent.
+        // A later signed manifest for this version may omit some of those files. Its payload is the complete
+        // file set, so rebuild the inactive directory instead of inheriting undeclared executable content.
+        // The caller holds the install lease and has excluded the current version before entering staging.
+        if (Directory.Exists(path: versionDirectory)) {
+            Directory.Delete(path: versionDirectory, recursive: true);
+        }
+
         foreach (var file in payload.Files) {
             if (
                 !ContentPin.TryParse(

@@ -25,7 +25,10 @@ public sealed record UpdateStageResult(bool Staged, string? StagedPath, int File
 /// <see cref="IUpdateApplier"/>: staging never changes the stub's current-version pointer.
 /// </summary>
 public interface IUpdateStager {
-    /// <summary>Stages <paramref name="rid"/>'s payload from <paramref name="manifest"/>.</summary>
+    /// <summary>Stages <paramref name="rid"/>'s complete payload from <paramref name="manifest"/>, replacing any
+    /// earlier staging directory for that version. The caller must hold the install-root update lease and exclude
+    /// the current version; <see cref="UpdateService"/> enforces both before staging. Install-root ownership must
+    /// exclude untrusted writers, including reparse points or links introduced beneath its version directories.</summary>
     /// <param name="manifest">The verified manifest to stage a payload from.</param>
     /// <param name="rid">The .NET runtime identifier to stage.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

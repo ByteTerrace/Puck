@@ -97,6 +97,33 @@ public sealed class UpdateInstallTransactionTests : IDisposable {
     }
 
     [Fact]
+    public async Task InterruptedStage_ReplacementManifestCannotInheritFilesItDoesNotDeclare() {
+        var first = Manifest();
+        first = m_fixture.Sign(document: first with {
+            Signature = null,
+            Payloads = [first.Payloads[0] with { Files = [first.Payloads[0].Files[0], first.Payloads[0].Files[0] with { Path = "obsolete.dll" }] }],
+        }, notBefore: ReleaseChainFixture.Epoch, notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        Publish(manifest: first);
+        var stager = new ContentAddressedUpdateStager(source: new DirectoryReleaseSource(root: Feed),
+            cache: new ContentAddressedStore(root: Path.Combine(path1: Install, path2: "cache")), cacheRoot: Install);
+        var interrupted = await Service(stager: new InterruptedStager(inner: stager))
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: interrupted.Applied);
+        Assert.False(condition: File.Exists(path: Intent));
+        var obsolete = Path.Combine(Install, "versions", "1.0.1", "obsolete.dll");
+        Assert.True(condition: File.Exists(path: obsolete));
+
+        // Both releases are genuinely signed for this channel. No local attacker writes the install tree:
+        // interruption precedes the intent, then a new signed sequence replaces the same unpublished version.
+        Publish(manifest: Manifest(sequence: 2));
+        var replacement = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: replacement.Applied, userMessage: replacement.Detail);
+        Assert.Equal(expected: "1.0.1", actual: File.ReadAllText(path: Current));
+        Assert.False(condition: File.Exists(path: obsolete));
+        Assert.Equal(expected: Payload, actual: File.ReadAllBytes(path: PayloadPath));
+    }
+
+    [Fact]
     public async Task Recovery_RefusesCorruptActiveContentWithoutRestagingIt() {
         Publish(manifest: Manifest());
         Assert.False(condition: (await Service(applier: new InterruptedApplier(boundary: "after-pointer"))
@@ -238,6 +265,14 @@ public sealed class UpdateInstallTransactionTests : IDisposable {
     private sealed class RefusingStager : IUpdateStager {
         public Task<UpdateStageResult> StageAsync(ReleaseManifest manifest, string rid, CancellationToken cancellationToken) =>
             throw new InvalidOperationException(message: "staging must not run on this path");
+    }
+
+    private sealed class InterruptedStager(IUpdateStager inner) : IUpdateStager {
+        public async Task<UpdateStageResult> StageAsync(ReleaseManifest manifest, string rid, CancellationToken cancellationToken) {
+            var result = await inner.StageAsync(manifest: manifest, rid: rid, cancellationToken: cancellationToken);
+            Assert.True(condition: result.Staged, userMessage: result.RefusalReason);
+            throw new IOException(message: "injected interruption after staging and before install intent");
+        }
     }
 
     private sealed class BlockingStager : IUpdateStager, IDisposable {

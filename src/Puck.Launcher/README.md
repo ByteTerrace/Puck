@@ -93,6 +93,11 @@ version to start and handles the health-based rollback decision. The
 [release guide](../../docs/development/ci.md) owns the shared publishing
 workflow and its environment requirements.
 
+Staging rebuilds the inactive version directory from the manifest's complete
+file set, so a retry cannot inherit files omitted by a replacement manifest.
+Cached objects are still reused and rehashed. Direct stager callers hold the
+install lease and exclude the current version, as `UpdateService` does.
+
 `UpdateService` holds the install root's persistent `update.lock` lease across
 verification, staging and activation. Rollout exclusion and staging failure
 do not consume a sequence. Before activation it writes `install-intent.json`
