@@ -451,6 +451,11 @@ public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float 
 /// crisp, as an emulator or a pixel-art source wants; <c>Linear</c> blends between source pixels, as a camera or a
 /// desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted
 /// from the wire when <c>Nearest</c>.</param>
+/// <param name="Luminance">The display's peak luminance, in nits: a white picture shows at it, and the light the
+/// picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld's unlit panel far
+/// less, a desktop monitor about 250. In <c>(0, SdfScreenEmission.MaxLuminance]</c>; absent is
+/// <c>SdfScreenEmission.DefaultLuminance</c>. A screen whose source is a window onto another world shows that world's
+/// own luminance whatever this says.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -464,5 +469,6 @@ public sealed record WorldScreen(
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null
 );

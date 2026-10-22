@@ -87,6 +87,15 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             bool ripples = (isOpening && (worldScreenRipple(screenIndex).state.x > 0.0));
 
             reactivity = (ripples ? 1.0 : (isOpening ? 0.0 : (reactivity * picture)));
+            // A picture value of one shows at the screen's luminance in nits. An opening's image is the luminance
+            // beyond it raised by the view beyond's exposure to the window share (SDF_WINDOW_ADAPTATION, the composite of
+            // every window view), so this view applies the rest of its own exposure to it: the window shows the world
+            // beyond at an exposure between its own and this view's. The view's screen fidelity eases the scale to the
+            // value that leaves the composite's exposure as the picture itself, so a framed screen shows its source
+            // exactly.
+            float scale = (isOpening ? pow(max(passGroup.exposure, 1.0e-12), -SDF_WINDOW_ADAPTATION) : opening.state.z);
+
+            color *= lerp(scale, (1.0 / max(passGroup.exposure, 1.0e-12)), saturate(passGroup.screenFidelity));
         }
     }
 #endif
@@ -104,9 +113,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
-            // from a faint sun tint. The whole sentinel range is tested: a screen-instance id is SDF_SCREEN_MATERIAL + 1 +
-            // screenIndex and never indexes the material table.
-            color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
+            // from a faint sun tint, display-referred: the composite's exposure leaves it as this color. The whole
+            // sentinel range is tested: a screen-instance id is SDF_SCREEN_MATERIAL + 1 + screenIndex and never indexes
+            // the material table.
+            color = ((ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse))) / max(passGroup.exposure, 1.0e-12));
         } else {
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
@@ -138,6 +148,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float ambientOcclusion = s.ambient;
             ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
 
+            // The irradiance volume is the indirect light, gathered once about the surface: its enabled sky source
+            // replaces the unoccluded harmonic ambient (disabling that source retains the authored ambient look), its
+            // probes occlude the traced point and spot lights and the reflected environment. Direct lights and
+            // atmosphere remain independent.
+            bool meshIndirect = sdfMeshIrradianceEnabled();
+            bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
+            SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
+
             // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
             // material shade lights by, and its rim and specular terms and its attenuation of reflected light follow the
             // shade.
@@ -148,12 +166,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
+            shadeSurface.probed = meshIndirect;
+            shadeSurface.probes = probes;
 
-            // The irradiance volume is the indirect light. Its enabled sky source replaces the unoccluded
-            // harmonic ambient; disabling that source retains the authored ambient look. Reflections, direct lights and
-            // atmosphere remain independent.
-            bool meshIndirect = sdfMeshIrradianceEnabled();
-            bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
@@ -176,28 +191,37 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 attenuation *= response.attenuation;
             }
 
-            color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0);
+            color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
 
             if (meshIndirect) {
-                color += sdfMeshIndirect(surfacePoint, normal) * shadeMaterial.albedo
+                color += sdfMeshIndirect(probes, normal) * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
                     * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                         * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             }
-            // Authored fill is the indirect-off look. It never adds a second approximation while the volume is on.
+            // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface. It never
+            // adds a second approximation while the volume is on.
             if (!meshIndirect) {
-                color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+                color += ((shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance()) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
             }
 
-            // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion.
-            {
+            // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
+            // sky about the mirror direction, blurred toward its irradiance as the lobe widens with roughness, under the
+            // lobe's directional albedo (sdfMaterialEnvironmentBrdf, which a rough dielectric keeps near its f0 at
+            // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; with the
+            // irradiance volume on, only as far as the volume sees the sky open that way, and the surroundings' light
+            // where not.
+            if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
-                float3 fresnel = (f0 + ((max(float3(1.0, 1.0, 1.0) - shadeMaterial.roughness, f0) - f0) * pow((1.0 - nDotV), 5.0)));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
+                float3 environment = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
 
-                color += ((worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness) * fresnel) * ambientOcclusion);
+                if (meshIndirect) {
+                    environment = sdfMeshReflection(probes, reflectDirection, environment);
+                }
+                color += ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);
             }
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
@@ -208,17 +232,18 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
             color = selfEmission + (color - selfEmission) * attenuation;
 
-            // The stylized curvature terms (cavity darkening, ridge light, ink outline).
+            // The stylized curvature terms (cavity darkening, ridge light, ink outline), display-referred: they apply to
+            // the color the view's exposure shows, so an ink line reads as its color at every exposure.
             if (curvatureShading) {
-                color = applyCurvatureShading(color, s.curvature);
+                color = (applyCurvatureShading((color * passGroup.exposure), s.curvature) / max(passGroup.exposure, 1.0e-12));
             }
         }
     }
 
     if (useFinalShading) {
         // The editor grid tints the lit color before the composite's distance fog, so a far grid still recedes. It reads
-        // the geometric normal.
-        color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
+        // the geometric normal, and tints the color the view's exposure shows.
+        color = (sdfApplyGrid((color * passGroup.exposure), surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t)) / max(passGroup.exposure, 1.0e-12));
     }
 
     return color;

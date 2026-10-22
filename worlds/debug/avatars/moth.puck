@@ -2294,7 +2294,7 @@ prototypes {
           color: "#2ED6EC"
           roughness: 0.25
           specular: 0.04
-          emissive: 1.5
+          emissive: 2250
           coat: 0
         }
         {
@@ -2341,7 +2341,7 @@ prototypes {
           color: "#FFF8EF"
           roughness: 0.2
           specular: 0.04
-          emissive: 0.8
+          emissive: 1200
           coat: 0
         }
         // The left shoulder stack, in each slab's own frame: an ivory band along the upper slab's lower edge, and the
@@ -2558,7 +2558,7 @@ prototypes {
           color: "#D8FDFF"
           roughness: 0.2
           specular: 0.04
-          emissive: 3
+          emissive: 4500
           emissiveLane: 2
           coat: 0
         }
@@ -2566,7 +2566,7 @@ prototypes {
           color: "#1F9BAE"
           roughness: 0.25
           specular: 0.04
-          emissive: 2.4
+          emissive: 3600
           emissiveLane: 2
           coat: 0
         }
@@ -2622,14 +2622,14 @@ prototypes {
           color: "#1F9BAE"
           roughness: 0.25
           specular: 0.04
-          emissive: 0.7
+          emissive: 1050
           coat: 0
         }
         {
           color: "#D8FDFF"
           roughness: 0.2
           specular: 0.04
-          emissive: 1.3
+          emissive: 1950
           coat: 0
         }
         {
@@ -7196,7 +7196,7 @@ prototypes {
           speed: 1.5
           seed: 31
           steps: 40
-          intensity: 60
+          intensity: 90000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -7235,7 +7235,7 @@ prototypes {
           speed: 1.5
           seed: 39
           steps: 40
-          intensity: 60
+          intensity: 90000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -7275,7 +7275,7 @@ prototypes {
           speed: 2.5
           seed: 53
           steps: 32
-          intensity: 220
+          intensity: 330000
           extinction: 1.2
           pulseAmplitude: 0.06
           pulseFrequency: 18
@@ -7314,7 +7314,7 @@ prototypes {
           speed: 2.5
           seed: 59
           steps: 32
-          intensity: 220
+          intensity: 330000
           extinction: 1.2
           pulseAmplitude: 0.06
           pulseFrequency: 18
@@ -7417,10 +7417,24 @@ render {
       inkLow: 30
       rim: 0.02
     }
+    // The sun, a clear midday's 100,000 lux. The sky fills the shadows: its luminance (each layer's, by default a
+    // white surface's under this sun) reaches every surface the irradiance volume finds open to it.
     lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
-      directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
+      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
     ]
+  }
+  // The camera adapts like an eye: it meters the light about each view's camera and eases there over three quarters of
+  // a second, from a sunlit day (about EV 14) down to a dim room (EV 7), where a 150-nit screen shows its picture as
+  // bright as a display does and a room lit only by it stays dark. It exposes two and a half stops over the meter's
+  // middle grey, the pale, bright look the world was drawn for, and adapts halfway to each surface's own surroundings,
+  // so a room beside its sunlit windows reads as the eye sees it rather than as a photograph's dark interior.
+  exposure {
+    mode: Auto
+    minimum: 7
+    maximum: 16
+    compensation: 2.5
+    adaptation: 0.75
+    local: 0.5
   }
   renderScale: 1
   shadowLights: 1

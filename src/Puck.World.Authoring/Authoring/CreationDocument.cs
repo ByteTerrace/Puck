@@ -7,7 +7,8 @@ namespace Puck.World.Authoring;
 
 /// <summary>One palette entry on the wire (mirrors <see cref="SdfMaterial"/> with document-doctrine nullability).</summary>
 /// <param name="Color">The base color as <c>#RRGGBB</c> (see <see cref="HexColor"/>).</param>
-/// <param name="Emissive">The emissive strength (null = 0 — optional members are nullable and normalized at load).</param>
+/// <param name="Emissive">The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and
+/// normalized at load).</param>
 /// <param name="Specular">The specular strength (null = the material default).</param>
 /// <param name="Roughness">The GGX roughness in [0, 1] (null = <see cref="SdfMaterial.DefaultRoughness"/>) — see
 /// <see cref="SdfMaterial"/> for the roughness-floor formula. A document still spelling <c>shininess</c> is an

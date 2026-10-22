@@ -1,5 +1,3 @@
-using System.Numerics;
-using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.SignedDistance;
 
@@ -9,9 +7,6 @@ namespace Puck.World.Client;
 /// <remarks>A session may advance this on its delivery thread. The lock protects the bounded candidate and slot
 /// storage; no state mirror is retained or read outside the delivery callback.</remarks>
 public sealed class WorldShadowSelection {
-    // The Rec. 709 luma weights, red and blue; green takes the rest.
-    private static readonly (double Kr, double Kb) Rec709Luma = ImageSourceConversion.Coefficients(matrix: ImageYuvMatrix.Bt709);
-
     private readonly Lock m_gate = new();
     private readonly WorldShadowAllocator m_allocator = new();
     private readonly WorldShadowCandidate[] m_candidates = new WorldShadowCandidate[SdfLights.MaxLights];
@@ -68,10 +63,8 @@ public sealed class WorldShadowSelection {
             m_count = 0;
             for (var index = 0; (index < lights.Count); index++) {
                 if (lights[index] is not WorldRenderLight.Directional { Shadow: WorldShadowMode.Always or WorldShadowMode.Auto } light) { continue; }
-                var color = ((light.Color is { } authoredColor) ? mirror.Color(authoredColor, Vector4.One, delivered: true) : Vector4.One);
-                var weight = ((light.Weight is { } authoredWeight) ? mirror.Scalar(authoredWeight, SdfLights.DefaultSunWeight, delivered: true) : SdfLights.DefaultSunWeight);
-                // The light table consumes this same RGB and weight; double intermediates keep finite floats in range.
-                var luminance = ((((((double)color.X) * Rec709Luma.Kr) + (((double)color.Y) * ((1.0 - Rec709Luma.Kr) - Rec709Luma.Kb))) + (((double)color.Z) * Rec709Luma.Kb)) * weight);
+                // The light table scales the light's colour to unit luminance, so its luminance is its illuminance.
+                var luminance = (double)((light.Illuminance is { } lux) ? mirror.Scalar(lux, SdfLights.DefaultSunIlluminance, delivered: true) : SdfLights.DefaultSunIlluminance);
 
                 m_candidates[m_count++] = new WorldShadowCandidate(light.Name!, index, index, light.Shadow.Value,
                     (double.IsFinite(d: luminance) ? Math.Max(val1: 0, val2: luminance) : 0));

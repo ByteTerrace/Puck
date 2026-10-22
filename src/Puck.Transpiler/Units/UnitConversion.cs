@@ -19,6 +19,16 @@ public enum UnitDimension {
     Hertz,
     /// <summary>A 0..1 fraction: <c>%</c>/<c>pct</c> divides by 100.</summary>
     Fraction,
+    /// <summary>Illuminance in lux: <c>lx</c> passes through.</summary>
+    Lux,
+    /// <summary>Luminous power in lumens: <c>lm</c> passes through.</summary>
+    Lumens,
+    /// <summary>Luminous intensity in candela: <c>cd</c> passes through.</summary>
+    Candela,
+    /// <summary>Luminance in nits (candela per square metre): <c>nit</c> or <c>nits</c> passes through.</summary>
+    Nits,
+    /// <summary>Colour temperature in kelvin: <c>K</c> passes through.</summary>
+    Kelvin,
 }
 /// <summary>What each <see cref="UnitDimension"/>'s suffixes are spelled and what they convert to — the one place
 /// the language knows that a millisecond is a thousandth of a second. Kept apart from any field-name table so a
@@ -31,6 +41,11 @@ public static class UnitConversion {
     private static readonly string[] MetersUnits = ["m", "cm", "mm"];
     private static readonly string[] RadiansUnits = ["deg", "rad"];
     private static readonly string[] SecondsUnits = ["s", "ms", "min", "h"];
+    private static readonly string[] LuxUnits = ["lx"];
+    private static readonly string[] LumensUnits = ["lm"];
+    private static readonly string[] CandelaUnits = ["cd"];
+    private static readonly string[] NitsUnits = ["nit", "nits"];
+    private static readonly string[] KelvinUnits = ["K"];
 
     /// <summary>Returns the unit spellings <paramref name="dimension"/> accepts, for a diagnostic message.</summary>
     /// <param name="dimension">The dimension to describe.</param>
@@ -42,8 +57,22 @@ public static class UnitConversion {
         UnitDimension.Meters => MetersUnits,
         UnitDimension.Hertz => HertzUnits,
         UnitDimension.Fraction => FractionUnits,
+        UnitDimension.Lux => LuxUnits,
+        UnitDimension.Lumens => LumensUnits,
+        UnitDimension.Candela => CandelaUnits,
+        UnitDimension.Nits => NitsUnits,
+        UnitDimension.Kelvin => KelvinUnits,
         _ => [],
     };
+    // A photometric dimension's one unit, which its native value is written in: the suffix only names it.
+    private static bool IsPhotometricUnit(UnitDimension dimension, string lowerUnit) => ((dimension, lowerUnit) switch {
+        (UnitDimension.Lux, "lx") => true,
+        (UnitDimension.Lumens, "lm") => true,
+        (UnitDimension.Candela, "cd") => true,
+        (UnitDimension.Nits, "nit" or "nits") => true,
+        (UnitDimension.Kelvin, "k") => true,
+        _ => false,
+    });
     /// <summary>Converts an exact number carrying a unit suffix into <paramref name="dimension"/>'s native unit,
     /// when the unit's scale is a power of ten and the conversion is therefore exact.</summary>
     /// <param name="dimension">The dimension governing the value.</param>
@@ -87,7 +116,7 @@ public static class UnitConversion {
             (UnitDimension.Meters, "mm") => 1000m,
             (UnitDimension.Hertz, "hz") => 1m,
             (UnitDimension.Fraction, "%" or "pct") => 100m,
-            _ => null,
+            _ => (IsPhotometricUnit(dimension: dimension, lowerUnit: unit.ToLowerInvariant()) ? 1m : null),
         });
 
         if (divisor is not { } scale) {
@@ -193,6 +222,14 @@ public static class UnitConversion {
             case UnitDimension.Fraction:
                 if (lowerUnit is "%" or "pct") {
                     converted = (numericValue / 100.0);
+
+                    return true;
+                }
+                break;
+
+            default:
+                if (IsPhotometricUnit(dimension: dimension, lowerUnit: lowerUnit)) {
+                    converted = numericValue;
 
                     return true;
                 }

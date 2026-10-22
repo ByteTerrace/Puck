@@ -288,8 +288,12 @@ public static class WorldLightingText {
             value: Describe(color: directional.Color)
         )
                 .Field(
-            key: "weight",
-            value: Describe(value: directional.Weight)
+            key: "temperature",
+            value: Describe(value: directional.Temperature)
+        )
+                .Field(
+            key: "illuminance",
+            value: Describe(value: directional.Illuminance)
         )
                 .Field(
             key: "angularRadius",
@@ -309,8 +313,8 @@ public static class WorldLightingText {
             value: Describe(color: rim.Color)
         )
                 .Field(
-            key: "weight",
-            value: Describe(value: rim.Weight)
+            key: "luminance",
+            value: Describe(value: rim.Luminance)
         )
                 .Field(
             key: "power",
@@ -347,21 +351,27 @@ public static class WorldLightingText {
             value: Describe(vector: point.Position)
         )
                 .Field(
-            key: "radius",
-            value: Describe(value: point.Radius)
-        )
-                .Field(
             key: "color",
             value: Describe(color: point.Color)
         )
-                .Field(
-            key: "weight",
-            value: Describe(value: point.Weight)
-        )
+                .Field(key: "temperature", value: Describe(value: point.Temperature))
+                .Field(key: "intensity", value: Describe(value: point.Intensity))
+                .Field(key: "power", value: Describe(value: point.Power))
                 .Field(
             key: "anchor",
             value: DescribeLightAnchor(anchor: point.Anchor)
         ),
+            WorldRenderLight.Spot spot => echo
+                .Field(key: "type", value: "spot")
+                .Field(key: "position", value: Describe(vector: spot.Position))
+                .Field(key: "direction", value: Describe(direction: spot.Direction, change: "lighting-visible"))
+                .Field(key: "angle", value: Describe(value: spot.Angle, change: "lighting-visible"))
+                .Field(key: "innerAngle", value: Describe(value: spot.InnerAngle, change: "lighting-visible"))
+                .Field(key: "color", value: Describe(color: spot.Color))
+                .Field(key: "temperature", value: Describe(value: spot.Temperature))
+                .Field(key: "intensity", value: Describe(value: spot.Intensity))
+                .Field(key: "power", value: Describe(value: spot.Power))
+                .Field(key: "anchor", value: DescribeLightAnchor(anchor: spot.Anchor)),
             _ => echo.Field(
             key: "type",
             value: "unknown"
@@ -469,6 +479,7 @@ public static class WorldLightingText {
         echo = AppendSky(echo: echo.Segment(), sky: definition.Render.Sky, atmosphere: definition.Render.Atmosphere);
         var environment = definition.Render.Environment;
         var indirect = definition.Render.Indirect;
+        var exposure = WorldRenderExposure.Resolve(exposure: definition.Render.Exposure);
 
         echo = echo.Segment().Head(head: "indirect")
             .Field(key: "tier", value: (indirect?.Tier ?? SdfIndirectTier.Medium).ToString().ToLowerInvariant())
@@ -493,6 +504,15 @@ public static class WorldLightingText {
             key: "mode",
             value: (definition.Render.Tonemap ?? WorldTonemap.None).ToString()
         )
+            .Segment()
+            .Head(head: "exposure")
+            .Field(key: "mode", value: exposure.Mode.ToString().ToLowerInvariant())
+            .Field(key: "ev100", value: exposure.Ev100.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "minimum", value: exposure.Minimum.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "maximum", value: exposure.Maximum.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "compensation", value: exposure.Compensation.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "adaptation", value: exposure.Adaptation.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "local", value: exposure.Local.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Segment()
             .Head(head: "keys")
             .Field(

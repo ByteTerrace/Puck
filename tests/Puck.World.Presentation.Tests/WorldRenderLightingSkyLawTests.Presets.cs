@@ -66,7 +66,8 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: StackOf(sky: polarNight),
             expected: [(SdfSkyLayerKind.Gradient, "air"), (SdfSkyLayerKind.Stars, "stars"), (SdfSkyLayerKind.Aurora, "curtains")]
         );
-        Assert.Equal(expected: 2f, actual: polarNight.Parameters<SdfSkyAurora>(index: 2).Intensity);
+        // The curtains at the preset's night-sky luminance, two nits.
+        Assert.Equal(expected: 4f, actual: polarNight.Parameters<SdfSkyAurora>(index: 2).Intensity);
 
         var overcast = PresetSky(call: "overcast(cover: 0.7)");
 

@@ -119,12 +119,14 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     if ((p.viewMode != 0) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {
         coverage = 1.0;
 
-        return viewColor;
+        // A debug view passes the composite as it is: a mode that keeps the final shading shows it exposed.
+        return (worldFinalShadingMode(p.viewMode) ? min((viewColor * passGroup.exposure), SDF_LUMINANCE_CEILING) : viewColor);
     }
 
     // The view's screen fidelity clears the atmosphere's hold on what the view shows, so a framed screen's pixels leave
     // as the glass shaded them (SdfViewSnapshot.ScreenFidelity); the composite clears the in-scatter by the same share.
-    return (viewColor * (s.hit ? lerp(sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t), 1.0, saturate(passGroup.screenFidelity)) : 1.0));
+    // The luminance is held within the half-float range the lit image stores.
+    return min((viewColor * (s.hit ? lerp(sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t), 1.0, saturate(passGroup.screenFidelity)) : 1.0)), SDF_LUMINANCE_CEILING);
 }
 
 #endif

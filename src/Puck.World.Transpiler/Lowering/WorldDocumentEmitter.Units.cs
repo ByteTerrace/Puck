@@ -19,6 +19,21 @@ public static class WorldDocumentEmitterUnits {
     // as a bare property elsewhere, so a bare name must never reach the radians conversion.
     private static readonly HashSet<string> RadiansCallArguments = new(comparer: StringComparer.Ordinal) {
         "orbit.pitch", "orbit.yaw", "sunDisc.radius", "clouds.curl", "aurora.base", "aurora.height", "aurora.fold",
+        "spot.angle", "spot.innerAngle",
+    };
+    // The lights' photometric quantities, each a field whose number is in its one unit. `power` and `intensity` name
+    // other quantities elsewhere (a rim's exponent, a sun disc's brightness), so only a point's and a spot's qualify.
+    private static readonly Dictionary<string, UnitDimension> PhotometricCallArguments = new(comparer: StringComparer.Ordinal) {
+        ["point.power"] = UnitDimension.Lumens,
+        ["spot.power"] = UnitDimension.Lumens,
+        ["point.intensity"] = UnitDimension.Candela,
+        ["spot.intensity"] = UnitDimension.Candela,
+    };
+    private static readonly Dictionary<string, UnitDimension> PhotometricFields = new(comparer: StringComparer.Ordinal) {
+        ["illuminance"] = UnitDimension.Lux,
+        ["luminance"] = UnitDimension.Nits,
+        ["emissive"] = UnitDimension.Nits,
+        ["temperature"] = UnitDimension.Kelvin,
     };
     // An angle a light or the sky keeps in radians under a name that does not say so, written in degrees.
     private static readonly HashSet<string> RadiansFields = new(comparer: StringComparer.Ordinal) {
@@ -45,8 +60,15 @@ public static class WorldDocumentEmitterUnits {
         if (RadiansCallArguments.Contains(item: fieldKey)) {
             return UnitDimension.Radians;
         }
+        if (PhotometricCallArguments.TryGetValue(key: fieldKey, value: out var photometric)) {
+            return photometric;
+        }
 
         var bare = QualifiedName.Parse(text: fieldKey).Last;
+
+        if (PhotometricFields.TryGetValue(key: bare, value: out var quantity)) {
+            return quantity;
+        }
 
         if (
             DegreesNativeFields.Contains(item: bare) ||

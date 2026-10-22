@@ -143,6 +143,8 @@ public readonly record struct WorldQualityPreset(
 /// below <see cref="WorldSkyTier.High"/> each kind draws its reduced form.</param>
 /// <param name="Indirect">The world's diffuse indirect-light tier, sources and application.</param>
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
+/// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
+/// tonemap. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -165,7 +167,8 @@ public sealed record WorldRenderDefaults(
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
     WorldSkyTier SkyQuality = WorldSkyTier.High,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
-    float SkyFieldScale = 1f
+    float SkyFieldScale = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
     /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view
@@ -193,6 +196,69 @@ public sealed record WorldRenderDefaults(
             QualityTier.High => HighRaw,
             _ => null,
         });
+    }
+}
+/// <summary>How a camera exposes: the luminance <c>1.2 · 2^EV100</c> displays as white (before the tonemap), so each stop
+/// up halves the image's brightness. A manual exposure holds <paramref name="Ev100"/>; an automatic one reads a reflected-
+/// light meter about each view's camera (the irradiance volume's light about it and the point lights' at it), aims for
+/// that reading less <paramref name="Compensation"/> within <paramref name="Minimum"/> and <paramref name="Maximum"/>,
+/// and eases toward it over <paramref name="Adaptation"/> seconds of presentation time. Presentation only: nothing in
+/// simulation state reads it. The darkest exposure a world takes also sizes each point and spot light's range.</summary>
+/// <param name="Mode">Manual or automatic. Absent is manual.</param>
+/// <param name="Ev100">The manual exposure value at ISO 100, in <c>[−6, 20]</c>: about 15 for a sunlit day, 7 for a lit
+/// room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is
+/// <c>SdfExposure.DefaultEv100</c>, or with automatic exposure the middle of its bounds.</param>
+/// <param name="Minimum">The lowest <c>EV100</c> an automatic exposure adapts to: the darkest scene it brightens. In
+/// <c>[−6, 20]</c>; absent is −6.</param>
+/// <param name="Maximum">The highest <c>EV100</c> an automatic exposure adapts to, at or above
+/// <paramref name="Minimum"/>. In <c>[−6, 20]</c>; absent is 20.</param>
+/// <param name="Compensation">The stops an automatic exposure brightens the metered image by, in <c>[−10, 10]</c>.
+/// Absent is zero.</param>
+/// <param name="Adaptation">The time constant an automatic exposure eases toward its meter with, in seconds, in
+/// <c>[0, 60]</c>; zero follows the meter at once. Absent is <c>SdfExposure.DefaultAdaptation</c>.</param>
+/// <param name="Local">The share of the local adaptation, in <c>[0, 1]</c>: how far each surface's exposure moves from
+/// the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a
+/// dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts
+/// across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the
+/// irradiance volume on.</param>
+public sealed record WorldRenderExposure(
+    SdfExposureMode Mode = SdfExposureMode.Manual,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Ev100 = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Minimum = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Maximum = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Compensation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null
+) {
+    /// <summary>The lowest an exposure's compensation admits, in stops.</summary>
+    public const float MinCompensation = -10f;
+    /// <summary>The highest an exposure's compensation admits, in stops.</summary>
+    public const float MaxCompensation = 10f;
+    /// <summary>The longest an exposure's adaptation admits, in seconds.</summary>
+    public const float MaxAdaptation = 60f;
+
+    /// <summary>Returns the exposure a frame renders with: an absent section's manual default, or this section with
+    /// every absent value at its default.</summary>
+    /// <param name="exposure">The authored section, or <see langword="null"/>.</param>
+    /// <returns>The exposure.</returns>
+    public static SdfExposure Resolve(WorldRenderExposure? exposure) {
+        if (exposure is null) {
+            return SdfExposure.Default;
+        }
+
+        var automatic = (exposure.Mode == SdfExposureMode.Auto);
+        var minimum = (exposure.Minimum ?? (automatic ? SdfPhotometry.MinimumEv100 : (exposure.Ev100 ?? SdfExposure.DefaultEv100)));
+        var maximum = (exposure.Maximum ?? (automatic ? SdfPhotometry.MaximumEv100 : (exposure.Ev100 ?? SdfExposure.DefaultEv100)));
+
+        return new SdfExposure(
+            Adaptation: (exposure.Adaptation ?? SdfExposure.DefaultAdaptation),
+            Compensation: (exposure.Compensation ?? 0f),
+            Ev100: (exposure.Ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
+            Local: (automatic ? (exposure.Local ?? 0f) : 0f),
+            Maximum: maximum,
+            Minimum: minimum,
+            Mode: exposure.Mode
+        );
     }
 }
 /// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
@@ -230,7 +296,8 @@ public sealed record WorldRenderIndirectApply(
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be
 /// keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing lights by
 /// name.</summary>
-/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in authored order. Shadow-capable directionals
+/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in authored order; each view shades only those
+/// that can reach what it shows (<c>SdfLightSelection</c>). Shadow-capable directionals
 /// compete for the quality row's shadow slots by mode and tick-resolved luminance.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
@@ -268,6 +335,7 @@ public sealed record WorldRenderLightingKey(
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
 [JsonDerivedType(typeof(WorldRenderLight.Rim), typeDiscriminator: "rim")]
 [JsonDerivedType(typeof(WorldRenderLight.Point), typeDiscriminator: "point")]
+[JsonDerivedType(typeof(WorldRenderLight.Spot), typeDiscriminator: "spot")]
 [JsonDerivedType(typeof(WorldRenderLight.Occluder), typeDiscriminator: "occluder")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderLight {
@@ -284,11 +352,13 @@ public abstract record WorldRenderLight {
     [JsonIgnore]
     public abstract string? LightName { get; }
 
-    /// <summary>A Lambert directional light.</summary>
+    /// <summary>A Lambert directional light, such as the sun.</summary>
     /// <param name="Direction">The direction from a lit surface toward the light, any nonzero length (normalized
     /// host-side before upload). Absent is the pinned sun direction.</param>
-    /// <param name="Color">The light's colour.</param>
-    /// <param name="Weight">The diffuse weight. Absent is the pinned sun weight.</param>
+    /// <param name="Color">The light's colour, scaled to unit luminance so the light gives exactly its illuminance.
+    /// Refused beside <paramref name="Temperature"/>. Absent is white, or the temperature's.</param>
+    /// <param name="Illuminance">The illuminance on a surface facing the light, in lux: a clear midday sun gives about
+    /// 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun's.</param>
     /// <param name="AngularRadius">The light's angular radius, in <c>[0, atan 0.3]</c> radians: the penumbra
     /// half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned
     /// penumbra.</param>
@@ -296,56 +366,110 @@ public abstract record WorldRenderLight {
     /// A directional without a presented shadow slot is scaled by ambient occlusion instead.</param>
     /// <param name="Name">The unique identity a section key and the shadow allocator address. Required when
     /// <paramref name="Shadow"/> is <see cref="WorldShadowMode.Always"/> or <see cref="WorldShadowMode.Auto"/>.</param>
+    /// <param name="Temperature">The light's colour as a black body's at this temperature, in kelvin, in
+    /// <c>[1000, 40000]</c>: noon sunlight about 5,500, a sunset about 3,000. Refused beside
+    /// <paramref name="Color"/>.</param>
     public sealed record Directional(
         BindableDirection? Direction = null,
         BindableColor? Color = null,
-        BindableScalar? Weight = null,
+        BindableScalar? Illuminance = null,
         BindableAngle? AngularRadius = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShadowMode? Shadow = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
         public override string? LightName => Name;
     }
-    /// <summary>A view-dependent silhouette brighten: <c>weight · color · pow(1 − saturate(dot(normal,
+    /// <summary>A view-dependent silhouette brighten: <c>luminance · color · pow(1 − saturate(dot(normal,
     /// −rayDirection)), power)</c>, added after the material shade.</summary>
     /// <param name="Color">The rim's colour.</param>
-    /// <param name="Weight">The strength. Absent is zero, which adds nothing.</param>
+    /// <param name="Luminance">The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds
+    /// nothing.</param>
     /// <param name="Power">The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the
     /// engine default.</param>
     /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
     public sealed record Rim(
         BindableColor? Color = null,
-        BindableScalar? Weight = null,
+        BindableScalar? Luminance = null,
         BindableScalar? Power = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
         public override string? LightName => Name;
     }
-    /// <summary>A point light with inverse-square falloff and a soft core:
-    /// <c>intensity = weight / (1 + (distance / radius)^2)</c>. No shadow march in v1 — a point light never occludes
-    /// and is never occluded.</summary>
+    /// <summary>A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse
+    /// square of the distance under a window that ends it smoothly and exactly at its range, the distance past which
+    /// its light would show below <c>SdfPhotometry.RangeThreshold</c> of display white at the world's brightest
+    /// exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static
+    /// meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only
+    /// where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An
+    /// anchored light moves with its anchor, lights through every wall and bounces nothing.</summary>
     /// <param name="Position">The world-space position for a static (unanchored) light. Absent is the world origin.
     /// An offset in the anchor frame when an anchor is authored.</param>
-    /// <param name="Radius">The falloff radius. Absent is the engine default.</param>
     /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
-    /// <param name="Color">The light's colour.</param>
-    /// <param name="Weight">The strength. Absent is the engine default.</param>
+    /// <param name="Color">The light's colour, scaled to unit luminance. Refused beside
+    /// <paramref name="Temperature"/>.</param>
+    /// <param name="Intensity">The luminous intensity, in candela. Refused beside <paramref name="Power"/>; absent with
+    /// it is the engine default.</param>
     /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
+    /// <param name="Power">The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb
+    /// gives about 800. Refused beside <paramref name="Intensity"/>.</param>
+    /// <param name="Temperature">The light's colour as a black body's, in kelvin, in <c>[1000, 40000]</c>: a warm
+    /// bulb about 2,700. Refused beside <paramref name="Color"/>.</param>
     public sealed record Point(
         BindableVector3? Position = null,
-        BindableScalar? Radius = null,
         WorldAnchor? Anchor = null,
         BindableColor? Color = null,
-        BindableScalar? Weight = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+        BindableScalar? Intensity = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Power = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
         public override string? LightName => Name;
     }
+    /// <summary>A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full
+    /// strength inside the inner angle and smoothly to none at the outer, with the point light's windowed falloff,
+    /// range, and tracing and occlusion by the irradiance volume while unanchored.</summary>
+    /// <param name="Position">The world-space position, or the offset in the anchor's frame.</param>
+    /// <param name="Direction">The direction the light shines along, any nonzero length; in the anchor's frame when an
+    /// anchor is authored. Absent is straight down.</param>
+    /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
+    /// <param name="Angle">The cone's outer half angle, in <c>(0, π/2]</c> radians. Absent is 45 degrees.</param>
+    /// <param name="InnerAngle">The half angle inside which the light is at full strength, in <c>[0, Angle]</c>
+    /// radians. Absent is three quarters of <paramref name="Angle"/>.</param>
+    /// <param name="Color">The light's colour, scaled to unit luminance. Refused beside
+    /// <paramref name="Temperature"/>.</param>
+    /// <param name="Intensity">The luminous intensity along the aim, in candela. Refused beside
+    /// <paramref name="Power"/>; absent with it is the engine default.</param>
+    /// <param name="Power">The luminous power, in lumens, emitted alike across the outer cone. Refused beside
+    /// <paramref name="Intensity"/>.</param>
+    /// <param name="Temperature">The light's colour as a black body's, in kelvin, in <c>[1000, 40000]</c>. Refused
+    /// beside <paramref name="Color"/>.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
+    public sealed record Spot(
+        BindableVector3? Position = null,
+        BindableDirection? Direction = null,
+        WorldAnchor? Anchor = null,
+        BindableAngle? Angle = null,
+        BindableAngle? InnerAngle = null,
+        BindableColor? Color = null,
+        BindableScalar? Intensity = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Power = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <summary>The cone's outer half angle a spot that authors none takes, in radians: 45 degrees.</summary>
+        public const float DefaultAngle = (MathF.PI / 4f);
+        /// <summary>The share of the outer half angle a spot that authors no inner angle is at full strength within.</summary>
+        public const float DefaultInnerShare = 0.75f;
+
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
     /// <summary>A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement
-    /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light
+    /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table's
     /// capacity.</summary>
     /// <param name="Position">The world-space position, or the offset in the anchor's frame.</param>
     /// <param name="Radius">The field's radius, positive.</param>
@@ -468,6 +592,13 @@ public abstract record WorldRenderSkyLayer {
     /// <summary>Gets where the layer draws. Absent is everywhere.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldRenderSkyMask? Mask { get; init; }
+    /// <summary>Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer
+    /// carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's,
+    /// a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a
+    /// clear sky's horizon about 7,000, a night sky well under one. Absent is <c>SdfSky.DefaultLuminance</c>, a clear
+    /// day's sky beside the pinned sun.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BindableScalar? Luminance { get; init; }
     /// <summary>Gets the layer's own transform about the sky frame. Absent is none.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldRenderSkyTransform? Transform { get; init; }
@@ -767,10 +898,13 @@ public sealed record WorldRenderAtmosphere(
 /// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour the fog in-scatters. Absent is the sky in the
 /// pixel's direction, so a distant surface fades into the horizon behind it.</param>
 /// <param name="Height">The height fog's profile. Absent is a fog alike at every height.</param>
+/// <param name="Luminance">The luminance, in nits, an authored <paramref name="Color"/> of one in-scatters at. Absent is
+/// <c>SdfSky.DefaultLuminance</c>; a fog that reads the sky takes the sky's own.</param>
 public sealed record WorldRenderFog(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Density = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAirHeight? Height = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAirHeight? Height = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Luminance = null
 );
 /// <summary>An air kind's height profile: its density falls by a factor of e over each <paramref name="Falloff"/> world
 /// units above <paramref name="Base"/>, and rises as much below it, so a ray's optical depth through it has a closed
@@ -804,10 +938,13 @@ public sealed record WorldRenderHaze(
 /// <c>SdfAtmosphere.DefaultMediumExtinction</c>.</param>
 /// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour the medium in-scatters, which a deep view through
 /// it reaches. Absent is <c>SdfAtmosphere.DefaultMediumColor</c>.</param>
+/// <param name="Luminance">The luminance, in nits, a <paramref name="Color"/> of one in-scatters at. Absent is
+/// <c>SdfSky.DefaultLuminance</c>.</param>
 public sealed record WorldRenderMedium(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Surface = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Extinction = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Luminance = null
 );
 /// <summary>The tonemap the root graph applies to the frame before the HUD — see
 /// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>

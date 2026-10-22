@@ -6,8 +6,10 @@ namespace Puck.SignedDistance;
 /// words, its paints in the program's paint table (see <see cref="SdfProgram"/>).</summary>
 /// <param name="Albedo">The linear-RGB base color; every component must be finite and non-negative when admitted to
 /// a builder or program. Also the metallic reflectance tint — see <see cref="Metal"/>.</param>
-/// <param name="Emissive">The self-illumination strength: <c>albedo * emissive</c> adds to the shaded color, so an
-/// emissive surface glows through shadow and ambient falloff. Must be finite and non-negative; 0 = none.</param>
+/// <param name="Emissive">The self-illumination, a luminance in nits (candela per square metre) the albedo tints:
+/// <c>albedo * emissive</c> adds to the shaded luminance, so a white emissive surface shows exactly it and glows through
+/// shadow and ambient falloff (an LED indicator about 300, a lit diffuser about 2,500). Must be finite and
+/// non-negative; 0 = none.</param>
 /// <param name="Specular">The finite, non-negative dielectric reflectance at normal incidence (GGX <c>f0</c> before
 /// the <see cref="Metal"/> mix). The GGX term is skipped entirely when both <paramref name="Specular"/> and
 /// <see cref="Metal"/> are zero, so a plain lambert material pays no specular cost.</param>

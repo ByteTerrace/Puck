@@ -88,9 +88,11 @@ public sealed partial class WorldEnvironmentResolve {
 
                 m_shadowQueued[index] = queued with { Incoming = FrameLight(authored, queued.Incoming) };
             }
+            // A positional light's flag says whether it is static (SdfLight.IsTraced), not whether a slot marches it.
             for (var index = 0; (index < lights.Count); index++) {
                 var light = lights[index];
 
+                if (light.Kind != SdfLightKind.Directional) { continue; }
                 lights.Set(index: index, light: light with { Shadows = (selected[index] ? 1u : 0u) });
             }
             m_shadowReportDefinition = m_definition;

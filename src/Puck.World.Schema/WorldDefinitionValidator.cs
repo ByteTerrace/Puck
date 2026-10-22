@@ -839,6 +839,7 @@ public static partial class WorldDefinitionValidator {
             farDistance: definition.Render.FarDistance,
             errors: errors
         );
+        ValidateExposure(exposure: definition.Render.Exposure, errors: errors);
         ValidateRenderResolution(definition: definition, errors: errors);
 
         ValidateTimeline(
@@ -1815,6 +1816,9 @@ public static partial class WorldDefinitionValidator {
                 }
                 if (!Enum.IsDefined(value: screen.Filter)) {
                     errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
+                }
+                if ((screen.Luminance is { } luminance) && (!float.IsFinite(f: luminance) || (luminance <= 0f) || (luminance > SdfScreenEmission.MaxLuminance))) {
+                    errors.Add(item: $"{path}.luminance {luminance} is not a display's peak luminance; a screen shows a white picture at a luminance in (0, {SdfScreenEmission.MaxLuminance}] nits.");
                 }
 
                 // The declared source and each magazine entry cross the same source gate (a magazine entry could

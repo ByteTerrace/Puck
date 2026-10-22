@@ -31,7 +31,7 @@ public sealed class KeyedSectionValidationLawTests {
                 ? definition.Render with {
                     Lighting = definition.Render.Lighting! with {
                         Keys = [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> {
-                        ["sun"] = new WorldRenderLight.Directional(Weight: 0.5f),
+                        ["sun"] = new WorldRenderLight.Directional(Illuminance: 0.5f),
                     })],
                     },
                 }
