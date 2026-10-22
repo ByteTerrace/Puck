@@ -322,22 +322,30 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.cull",
-            description: "Toggles the raster passes' cull of mesh draws live (no rebuild): world.cull [on|off|status]. On, each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere, so world.counters gpu measures what the cull saves (draws, vertices, fragments). The image is the same either way. Ships ON.",
+            description: "Selects how much of the mesh draws the raster passes skip, live (no rebuild): world.cull [occlusion|frustum|off|status] (on is occlusion). occlusion, the default, draws each view's mesh pass in two phases, what the previous frame found visible and then what the GPU finds newly visible against the first phase's depth, on top of the box cull; frustum keeps the box cull alone: each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere. world.counters gpu measures what each level saves (draws, vertices, fragments); the image is the same at every level. A device without counted indirect draws keeps frustum under occlusion.",
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.cull: {(settings.Cull ? "on" : "off")}]");
+                CommandResult Echo() => new(Output: $"[world.cull: {settings.Cull.ToString().ToLowerInvariant()}]");
 
                 if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
                     return Echo();
                 }
-                if (ParseOnOff(token: args[0]) is not { } state) {
-                    return CommandResult.Error(output: $"[world.cull: unknown '{args.Tail(start: 0)}' — on|off|status]");
+
+                var level = ((args.Count != 1) ? ((SdfMeshCullLevel?)null) : args[0] switch {
+                    "on" or "occlusion" => SdfMeshCullLevel.Occlusion,
+                    "frustum" => SdfMeshCullLevel.Frustum,
+                    "off" => SdfMeshCullLevel.Off,
+                    _ => ((SdfMeshCullLevel?)null),
+                });
+
+                if (level is not { } selected) {
+                    return CommandResult.Error(output: $"[world.cull: unknown '{args.Tail(start: 0)}' — occlusion|frustum|off|status]");
                 }
 
                 return SubmitLever(
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Cull,
-                    a: (state ? 1.0 : 0.0),
+                    a: ((double)selected),
                     formatEcho: Echo
                 );
             }

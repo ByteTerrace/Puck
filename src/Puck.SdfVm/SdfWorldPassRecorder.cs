@@ -14,7 +14,10 @@ namespace Puck.SdfVm;
 // ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes into its pass
 // block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into
 // its target through the mesh pipeline and each shadow cascade into its depth alone through the shadow pipeline, each
-// with a set of its own per frame slot binding its pass block. A recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
+// with a set of its own per frame slot binding its pass block. A recorder records no barrier on the graph's resources:
+// the planner's are the instance's, and the node's orders the work counters. The one exception is the mesh part's
+// occlusion (SdfMeshOcclusion), which orders its own buffers and moves the mesh target between its two phases, leaving it
+// in its attachment layout as the planner expects.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => ((m_part == SdfWorldPackage.Parts.Views) ? m_view.Residency.SkyDetails.Labels : []);
@@ -78,8 +81,22 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private const int MeshSetVisibility = 3;
     private const int MeshSetGlassSums = 4;
     private const int MeshSetBuffers = 5;
+    private const int MeshSetOcclusionBuffers = 5;
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
+    // The mesh part's occlusion (SdfMeshOcclusion): its state, the render pass its second phase draws in, loading what
+    // the first drew, a framebuffer over each instance of the target and depth for it, and per mesh set the occlusion's
+    // buffers and the target view the set binds.
+    private readonly SdfMeshOcclusion? m_occlusion;
+    private readonly IGpuRenderPass? m_lateRenderPass;
+    private readonly IGpuFramebuffer[] m_lateFramebuffers = [];
+    private readonly IGpuBuffer?[][] m_meshSetOcclusion = [];
+    private readonly nint[] m_meshSetTargets = [];
+    // The occlusion kernel's sets, one beside each mesh set through the kernel's compute layout, binding what the mesh
+    // set binds and the occlusion's buffers and target.
+    private readonly nint[] m_occlusionSets = [];
+    private readonly IGpuBuffer?[][] m_occlusionSetBuffers = [];
+    private readonly nint[] m_occlusionSetTargets = [];
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
     private readonly bool[] m_targetsWritten = [];
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
@@ -154,8 +171,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var sizes = default(GpuDescriptorPoolSizes);
         var sets = (slots * SdfWorldTables.FrameRingSize);
 
+        var occludes = (m_part == SdfWorldPackage.Parts.Mesh);
+
         for (var set = 0; (set < sets); set++) {
             sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
+
+            if (occludes) {
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
+            }
         }
 
         m_meshPool = bindings.CreatePool(
@@ -169,11 +192,39 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         try {
             m_meshSets = new nint[sets];
             m_meshSetBuffers = new IGpuBuffer?[sets][];
+            m_meshSetOcclusion = new IGpuBuffer?[sets][];
+            m_meshSetTargets = new nint[sets];
+            m_occlusionSets = (occludes ? new nint[sets] : []);
+            m_occlusionSetBuffers = (occludes ? new IGpuBuffer?[sets][] : []);
+            m_occlusionSetTargets = (occludes ? new nint[sets] : []);
 
             for (var set = 0; (set < sets); set++) {
                 var slot = (set / SdfWorldTables.FrameRingSize);
 
                 m_meshSetBuffers[set] = new IGpuBuffer?[MeshSetBuffers];
+                m_meshSetOcclusion[set] = new IGpuBuffer?[MeshSetOcclusionBuffers];
+
+                if (occludes) {
+                    m_occlusionSetBuffers[set] = new IGpuBuffer?[MeshSetBuffers + MeshSetOcclusionBuffers];
+                    m_occlusionSets[set] = bindings.AllocateSet(
+                        descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
+                        name: new GpuObjectName(
+                            detail: "occlusion group",
+                            index: set,
+                            owner: context.Instance,
+                            part: context.Pass
+                        ),
+                        poolHandle: m_meshPool
+                    );
+                    bindings.WriteConstantBuffer(
+                        arrayElement: 0,
+                        binding: 0,
+                        bufferHandle: groups.PassBlocks[slot].BufferHandle,
+                        bufferSize: groups.PassBlocks[slot].SizeBytes,
+                        descriptorSetHandle: m_occlusionSets[set]
+                    );
+                }
+
                 m_meshSets[set] = bindings.AllocateSet(
                     descriptorSetLayoutHandle: tables.MeshPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
                     name: new GpuObjectName(
@@ -210,10 +261,33 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                         renderPass: tables.MeshRenderPass
                     ));
             }
+
+            if (m_part == SdfWorldPackage.Parts.Mesh) {
+                m_lateRenderPass = context.Services.RenderPassFactory.Create(
+                    description: SdfMeshRasterPass.LateRenderPass,
+                    name: new GpuObjectName(detail: "occlusion", owner: context.Instance, part: context.Pass)
+                );
+                m_lateFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
+
+                for (var index = 0; (index < m_lateFramebuffers.Length); index++) {
+                    m_lateFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
+                        colors: [m_meshTargets[index]],
+                        depth: groups.OutputImages[1][index],
+                        renderPass: m_lateRenderPass
+                    );
+                }
+
+                m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots);
+            }
         } catch {
             foreach (var framebuffer in m_framebuffers) {
                 framebuffer?.Dispose();
             }
+            foreach (var framebuffer in m_lateFramebuffers) {
+                framebuffer?.Dispose();
+            }
+
+            m_lateRenderPass?.Dispose();
 
             bindings.DestroyPool(poolHandle: m_meshPool);
 
@@ -244,6 +318,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         foreach (var framebuffer in m_framebuffers) {
             framebuffer.Dispose();
         }
+        foreach (var framebuffer in m_lateFramebuffers) {
+            framebuffer.Dispose();
+        }
+
+        m_lateRenderPass?.Dispose();
+        m_occlusion?.Dispose();
 
         if (m_meshPool != 0) {
             m_context.Services.Bindings.DestroyPool(poolHandle: m_meshPool);
@@ -410,7 +490,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (IsMesh) {
             RecordMesh(
                 cascadeTexels: cascades.Texels,
-                cull: (frame.DrawUnseen
+                occlude: (frame.MeshCull == SdfMeshCullLevel.Occlusion),
+                cull: ((frame.MeshCull == SdfMeshCullLevel.Off)
                     ? SdfMeshCull.None
                     : (IsShadowCascade
                         ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[m_part switch {
@@ -603,7 +684,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // a set never rewrites what it binds once written.
     private static int MeshSetOf(int slot, SdfWorldTables tables) =>
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull) {
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, bool occlude) {
         var draws = tables.MeshDraws;
         var count = ((draws is null) ? 0u : tables.MeshDrawCount);
         var slot = recording.Slot;
@@ -614,6 +695,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var set = m_meshSets[meshSet];
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
+        var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
+        // The mesh part occludes when the frame asks and the device records counted indirect draws; any other part, and
+        // a device that cannot, keeps the cull by box.
+        var occlusion = ((occlude && (count > 0) && recorder.CanDrawIndirectCount) ? m_occlusion : null);
 
         for (var index = 0; (index < m_meshTargets.Count); index++) {
             if (ReferenceEquals(
@@ -621,6 +706,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 objB: target
             )) {
                 framebuffer = m_framebuffers[index];
+                lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[index] : null);
                 m_targetsWritten[index] = true;
             }
         }
@@ -650,19 +736,43 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 member: SdfWorldPackage.GlassSumsWritten,
                 set: set
             );
+
+            // The raster pipelines read none of the occlusion's members; the mesh set binds the tables' dummy and filler at
+            // them, and the occlusion kernel's own set binds the occlusion's.
+            SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
+
+            if (occlusion is not null) {
+                var occlusionSet = m_occlusionSets[meshSet];
+                var bound = m_occlusionSetBuffers[meshSet];
+
+                occlusion.Stage(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, draws: draws!, height: recording.Height, slot: slot, width: recording.Width);
+                tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
+                tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
+                tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
+                tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+                occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[meshSet], first: MeshSetBuffers, set: occlusionSet, tables: tables, target: target.ImageViewHandle);
+                occlusion.RecordEarly(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: occlusionSet);
+            }
         }
-        // A cascade covers its whole depth, whatever the view's render extent.
+
+        var area = new GpuPixelRect(
+            // A cascade covers its whole depth, whatever the view's render extent.
+            Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
+            Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
+            X: 0,
+            Y: 0
+        );
+
         recorder.BeginRenderPass(
-            area: new GpuPixelRect(
-                Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
-                Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
-                X: 0,
-                Y: 0
-            ),
+            area: area,
             commandBufferHandle: commandBuffer,
             framebuffer: framebuffer
         );
-        if (count > 0) {
+        if (occlusion is not null) {
+            // The first phase: what the previous frame found visible, and every draw no host box bounds.
+            BindMesh(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
+            occlusion.RecordDraws(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder);
+        } else if (count > 0) {
             RecordMeshDraws(
                 boxes: tables.MeshDrawBoxes,
                 commandBuffer: commandBuffer,
@@ -675,10 +785,23 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             );
         }
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
+
+        if ((occlusion is not null) && (occlusion.CandidateCount > 0)) {
+            // The second phase: what the test found visible that the first phase did not draw, over the first's target
+            // and depth.
+            occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[meshSet], target: target.ImageHandle);
+            recorder.BeginRenderPass(
+                area: area,
+                commandBufferHandle: commandBuffer,
+                framebuffer: lateFramebuffer!
+            );
+            BindMesh(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
+            occlusion.RecordDraws(commandBuffer: commandBuffer, phase: 1, pipeline: pipeline, recorder: recorder);
+            recorder.EndRenderPass(commandBufferHandle: commandBuffer);
+        }
     }
-    // Binds a pipeline and the pass set, then draws every draw of the part's kind the pass's cull keeps: the glass pass
-    // the glass draws, every other raster part the opaque ones, each pushed by its index in the staged list.
-    private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, in SdfMeshCull cull, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
+    // Binds a raster part's pipeline and its mesh set.
+    private static void BindMesh(IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBuffer,
@@ -691,33 +814,43 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             group: ((uint)ShaderInterfaceGroup.Pass),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
+    }
+    // Draws one staged draw from the host, pushed by its index in the staged list.
+    private void RecordMeshDraw(uint draw, IReadOnlyList<SdfMeshDraw> draws, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer) {
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: m_meshPushedIndex,
+            value: SdfKernelInterfaces.MeshPushedIndex(
+                draw: draw,
+                view: 0u
+            )
+        );
+        recorder.PushConstants(
+            bindPoint: GpuBindPoint.Graphics,
+            commandBufferHandle: commandBuffer,
+            data: m_meshPushedIndex,
+            offset: 0,
+            pipelineLayoutHandle: pipeline.LayoutHandle,
+            stageFlags: SdfWorldTables.PipelineLayouts.MeshStages
+        );
+        recorder.Draw(
+            commandBufferHandle: commandBuffer,
+            parameters: new GpuDrawParameters(
+                instanceCount: 1,
+                vertexCount: ((uint)draws[((int)draw)].Mesh.Indices.Length)
+            )
+        );
+    }
+    // Binds a pipeline and the pass set, then draws every draw of the part's kind the pass's cull keeps: the glass pass
+    // the glass draws, every other raster part the opaque ones, each pushed by its index in the staged list.
+    private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, in SdfMeshCull cull, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
+        BindMesh(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
 
         for (var draw = 0u; (draw < count); draw++) {
             if ((draws[((int)draw)].Glass != IsGlass) || !cull.Keeps(box: in boxes[((int)draw)])) {
                 continue;
             }
-            BinaryPrimitives.WriteUInt32LittleEndian(
-                destination: m_meshPushedIndex,
-                value: SdfKernelInterfaces.MeshPushedIndex(
-                    draw: draw,
-                    view: 0u
-                )
-            );
-            recorder.PushConstants(
-                bindPoint: GpuBindPoint.Graphics,
-                commandBufferHandle: commandBuffer,
-                data: m_meshPushedIndex,
-                offset: 0,
-                pipelineLayoutHandle: pipeline.LayoutHandle,
-                stageFlags: GpuShaderStage.Vertex | GpuShaderStage.Fragment
-            );
-            recorder.Draw(
-                commandBufferHandle: commandBuffer,
-                parameters: new GpuDrawParameters(
-                    instanceCount: 1,
-                    vertexCount: ((uint)draws[((int)draw)].Mesh.Indices.Length)
-                )
-            );
+
+            RecordMeshDraw(commandBuffer: commandBuffer, draw: draw, draws: draws, pipeline: pipeline, recorder: recorder);
         }
     }
     // Writes the slot's counter buffer into its pass set when it is not the one the set binds, compared by the buffer

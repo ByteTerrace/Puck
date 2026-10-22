@@ -1,4 +1,5 @@
 using Puck.Launcher;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 
@@ -94,7 +95,7 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: Cull,
-            setter: lever => settings.Cull = Flag(lever: lever)
+            setter: lever => settings.Cull = ((SdfMeshCullLevel)((int)lever.A))
         );
         sink.Register(
             name: Indirect,

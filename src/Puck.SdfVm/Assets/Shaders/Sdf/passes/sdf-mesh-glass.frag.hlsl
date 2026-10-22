@@ -11,6 +11,7 @@
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
+#include "../frame/sdf-mesh-raster.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-glass.hlsli"
 
@@ -19,11 +20,11 @@ struct GlassFragment {
     float depth : SV_Depth;
 };
 
-GlassFragment PSMain(MeshVertex input) {
+GlassFragment PSMain(MeshRasterVertex input) {
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);
     float t = length(input.world - view.position.xyz);
-    uint record = sdfMeshRecord(pushedIndex.index & SdfMeshDrawMask);
+    uint record = sdfMeshRecord(input.draw);
     uint first = (3u * input.triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
     bool front = (dot(cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a)), (input.world - view.position.xyz)) < 0.0);
@@ -43,7 +44,7 @@ GlassFragment PSMain(MeshVertex input) {
 
     GlassFragment fragment;
 
-    fragment.target = float4(t, float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
+    fragment.target = float4(t, float(input.draw + 1u), float(input.triangleIndex), 0.0);
     fragment.depth = ((front && counts) ? input.position.z : 0.0);
 
     return fragment;

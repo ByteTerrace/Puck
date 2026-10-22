@@ -231,7 +231,7 @@ public sealed partial class SdfWorldTables {
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].Quality.SkyFieldFraction));
-        hash.Add(value: (frame.DrawUnseen ? 1UL : 0UL));
+        hash.Add(value: ((ulong)frame.MeshCull));
         AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;
