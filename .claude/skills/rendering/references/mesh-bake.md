@@ -259,6 +259,19 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
+- **One region holds every resident mesh, up to
+  `SdfWorldTables.MostMeshRegionBytes` (2 GiB).** It grows to twice its need,
+  so it reads full long before it is; `world.budget` prints the bytes the
+  staged draws use beside the bytes held and that ceiling. The debug world uses
+  about 1.4 GB of it, and a frame that needs more than the ceiling throws.
+- **A jump in planned groups is usually a population change.** Every pooled
+  body adds one dynamic group a slot, so a body that starts wearing a large
+  creation multiplies `groups=` and `dynamic=` in the `[sdf.mesh-bake] start`
+  line. A `state.body` register selector whose case names the register's
+  initial value selects every body: the suit selector once dressed every chess
+  piece and the board cursor as the Moth, and the debug world planned 7,322
+  groups, 6,880 dynamic, in place of about 1,286 and 844. The validator refuses
+  such a case (`WorldDefinitionValidator.ValidateRowSelector`); `body.rig <n>` names the creation a body wears.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
   field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample
   counts five), and a longer frame takes a share for each whole 60 Hz frame it
@@ -350,18 +363,20 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   its value is the key a cache of the store is saved under.
 - **The store keeps whole sets.** Each identity's entries are one set, in a
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
-  world's meshes fill about 1.26 GB in about 1,150 entries under one identity
-  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, six
+  world's meshes fill about 1.42 GB in about 1,180 entries under one identity
+  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, five
   such sets), shared by every World and worktree on the machine, a set at a
   time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
   recently used first, never its own. A set a World is baking or loading is
   never cut short by another lane's writes, so concurrent lanes on different
-  identities keep each other's complete sets until six newer ones displace
+  identities keep each other's complete sets until five newer ones displace
   them, and a set larger than the cap alone keeps its most recently used
   entries. An entry left directly in the directory is a set of its own and ages
   out first. A boot that bakes nothing shows `done … loaded=N` with
-  `dispatches=0`.
+  `dispatches=0`. A program that arrives while groups are pending and takes
+  every group from the library reports the started bake `done` at once
+  (`SdfMeshPathBake.Restart`), since no landing follows to report it.
 
 ## Shadows and indirect light
 

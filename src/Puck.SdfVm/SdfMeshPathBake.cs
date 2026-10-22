@@ -671,6 +671,9 @@ public sealed partial class SdfMeshPathBake {
                 Library.Disk?.Record(identity: Identity);
             }
         }
+        // A program that takes every group from the library lands nothing, so the started bake whose pending groups it
+        // dropped reports here or never.
+        if (m_clock.IsRunning) { Finish(); }
         // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
         // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
         if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {

@@ -52,6 +52,9 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the words the mesh region's draw records and meshes take for the draws the latest frame staged; zero
     /// before a frame draws a mesh.</summary>
     public int MeshRegionWords => m_meshArena.Words;
+    /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion"/> counts its bytes in an
+    /// <see cref="int"/>): the baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
+    public const ulong MostMeshRegionBytes = (((ulong)int.MaxValue / sizeof(uint)) * sizeof(uint));
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
     /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
@@ -197,15 +200,13 @@ public sealed partial class SdfWorldTables {
     // staged again, and the old buffer is disposed once that upload completes (Retire). The region keeps its reserved
     // copy sets, so growing takes no descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
-        const ulong MostBytes = (((ulong)int.MaxValue / sizeof(uint)) * sizeof(uint));
-
         var current = ((ulong)m_meshRegion.ByteCount);
 
         if (bytes <= current) {
             return;
         }
 
-        var grown = ((bytes <= MostBytes) ? Math.Min(val1: ((((2UL * bytes) + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)), val2: MostBytes) : throw new InvalidOperationException(message: $"The baked meshes need {bytes} bytes of mesh region, past the {MostBytes} one region holds."));
+        var grown = ((bytes <= MostMeshRegionBytes) ? Math.Min(val1: ((((2UL * bytes) + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)), val2: MostMeshRegionBytes) : throw new InvalidOperationException(message: $"The baked meshes need {bytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds."));
 
         Retire(replaced: m_meshRegion.Grow(byteCount: checked((int)grown)));
         m_seedMeshHistory = true;

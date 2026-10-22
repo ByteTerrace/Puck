@@ -375,8 +375,8 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
   looked at. A boot bakes the groups the mesh store does not hold (the whole
-  debug world, 1,265 groups and 39 M triangles, takes about four minutes on an
-  RTX 4070, longer on a slower card; a reboot of an unchanged world loads them
+  debug world, about 1,275 groups, 845 of them dynamic, and 44 M triangles,
+  takes several minutes on an RTX 4070, longer on a slower card; a reboot of an unchanged world loads them
   in seconds instead, and a boot with an empty `--cache-dir` bakes all of
   them) and then traces the
   irradiance volume (about 2 s): a script that captures the finished image
