@@ -146,7 +146,7 @@ Puck.World extends the rule compiler the way any host does (see
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyPosition:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
   `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
   [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
@@ -162,7 +162,12 @@ Puck.World extends the rule compiler the way any host does (see
   for a reference resolving to no live body; any other axis is refused with
   `WorldRuleRefusal.BodyPositionMalformed`. A gate over it with a `pose`
   effect recovers a body that falls out of the world, as the debug world's
-  `fall-respawn` rule does for every live body through `forEach: $bodies`. Its key family answers `$pair:`. Its effect arms cover body motion and
+  `fall-respawn` rule does for every live body through `forEach: $bodies`.
+  `engaged(each, 0)` reads `1` while the body's participant holds a control
+  application onto screen 0, captured or mirrored, and `0` otherwise or for no
+  live body; a screen index the document declares no screen at is refused with
+  `WorldRuleRefusal.EngagedMalformed`. The debug world's `brick-pick-up` rule
+  reads it to have the Moth pick up the brick she plays. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and

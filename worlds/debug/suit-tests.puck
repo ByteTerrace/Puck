@@ -217,6 +217,57 @@ test "the first seat's press leaves the second seat in her suit" {
   }
 }
 
+// The Humble Gaming Brick (devices.puck): standing a metre in front of it, the context button engages it. Out of the
+// suit she picks it up, so her pilotHold cell raises her look's hold pose and the brick's placement shows nothing on
+// its rest; the same button puts it back. In the suit she plays it where it stands.
+test "out of the suit, engaging the brick picks it up" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.pose 7.6 0.05 29.4 90 0 0
+    ticks 5
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    engaged(body, 0, 0) == 1
+    pilotHold[0] == 1
+  }
+}
+
+test "leaving the brick puts it back" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.pose 7.6 0.05 29.4 90 0 0
+    ticks 5
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    engaged(body, 0, 0) == 0
+    pilotHold[0] == 0
+  }
+}
+
+test "in the suit, she plays the brick where it stands" {
+  when {
+    ticks 30
+    seat1: body.pose 7.6 0.05 29.4 90 0 0
+    ticks 5
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    engaged(body, 0, 0) == 1
+    pilotHold[0] == 0
+  }
+}
+
 test "a press from each seat takes off both suits" {
   when {
     ticks 30

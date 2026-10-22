@@ -127,6 +127,8 @@ public enum WorldRuleRefusal : byte {
     BodyStateUnwritable,
     [Refusal(door: "world.rule.compile", condition: "a '$bodyPosition:' channel does not spell '$bodyPosition:<bodyRef>:<axis>' with an axis of x, y or z", kind: RefusalKind.Verdict)]
     BodyPositionMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$engaged:' channel does not spell '$engaged:<bodyRef>:<screen>' with the index of a screen the document declares", kind: RefusalKind.Verdict)]
+    EngagedMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel names a fact that is not a cell name, or the channel does not spell '$identity:<bodyRef>:<fact>'", kind: RefusalKind.Verdict)]
     IdentityFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document declaring no 'identity' lane row in state.world", kind: RefusalKind.Verdict)]

@@ -11049,6 +11049,25 @@ export type WorldScreen = {
    * The display's peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld's unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world's own luminance whatever this says.
    */
   luminance?: number | null;
+  /**
+   * The body that carries the screen's picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.
+   */
+  carry?: WorldScreenCarry | null;
+};
+
+export type WorldScreenCarry = {
+  /**
+   * The look row whose wearer carries the picture; a creation look.
+   */
+  look: string;
+  /**
+   * The look's Poses frame that holds while the body carries it.
+   */
+  pose: string;
+  /**
+   * The name of the ungrouped box in the look's creation that shows the picture.
+   */
+  shape: string;
 };
 
 export type WorldScreenDisplay = {

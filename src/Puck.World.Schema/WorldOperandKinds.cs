@@ -124,6 +124,23 @@ public sealed class BodyPositionOperand : WorldOperandFact {
     /// <summary>Gets the compiled body reference.</summary>
     public CompiledBodyRef Body { get; }
 }
+/// <summary>Whether a body's participant holds a control application onto a declared screen
+/// (<see cref="WorldRuleFacts.EngagedPrefix"/>): <c>1</c> while it does, <c>0</c> otherwise or for a reference
+/// resolving to no live body.</summary>
+public sealed class EngagedOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="EngagedOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="screen">The declared screen's index.</param>
+    public EngagedOperand(CompiledBodyRef body, int screen) : base(CellKind.Int) {
+        Body = body;
+        Screen = screen;
+    }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the declared screen's index.</summary>
+    public int Screen { get; }
+}
 /// <summary>One of a body's action-state slots (<see cref="WorldRuleFacts.BodyStatePrefix"/>), answered as
 /// <see cref="WorldBodyStateReads.Presented"/> defines; a reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyStateOperand : WorldOperandFact {

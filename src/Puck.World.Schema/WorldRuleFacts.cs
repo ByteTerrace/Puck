@@ -71,6 +71,14 @@ public static class WorldRuleFacts {
     /// <see cref="MachinePrefix"/>/<see cref="RegionPrefix"/>, deliberately: those measure "how much", where zero is
     /// a correct neutral count, while a spatial gate's neutral-for-absence value must never read as "close").</summary>
     public const string DistancePrefix = "$distance:";
+    /// <summary>The prefix; <c>$engaged:&lt;bodyRef&gt;:&lt;screen&gt;</c> (<c>engaged(each, 0)</c> in <c>.puck</c>) reads
+    /// <c>1</c> while the named body's participant holds a control application onto the declared screen
+    /// <c>screen</c>, captured or mirrored, and <c>0</c> otherwise; a reference resolving to no live body reads
+    /// <c>0</c>. Rules read the application set the tick's engage and leave probes left, so a rule sees an engagement
+    /// on the tick it lands. A screen index the document declares no screen at is refused by name
+    /// (<see cref="WorldRuleRefusal.EngagedMalformed"/>). A tabletop's engagement reads through
+    /// <c>$board:engaged:</c>.</summary>
+    public const string EngagedPrefix = "$engaged:";
     /// <summary>The prefix; <c>$fact:&lt;bodyRef&gt;:&lt;fact&gt;</c> reads <c>1</c> while the named body's live
     /// <c>BodyFacts</c> bit holds (<c>Grounded</c>, <c>Airborne</c>, <c>Rising</c>, <c>Falling</c>, …) and <c>0</c>
     /// otherwise; a reference resolving to no live body reads <c>0</c>.</summary>

@@ -258,6 +258,35 @@
           "null"
         ],
         "default": null
+      },
+      "carry": {
+        "description": "The body that carries the screen\u0027s picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "look": {
+            "description": "The look row whose wearer carries the picture; a creation look.",
+            "type": "string"
+          },
+          "pose": {
+            "description": "The look\u0027s Poses frame that holds while the body carries it.",
+            "type": "string"
+          },
+          "shape": {
+            "description": "The name of the ungrouped box in the look\u0027s creation that shows the picture.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "look",
+          "pose",
+          "shape"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldScreenCarry"
       }
     },
     "required": [

@@ -112,6 +112,45 @@ public sealed class SdfPackedContractLawTests {
         )
             .Build();
     }
+    /// <summary>A surface declared with no slab of its own admits a shape elsewhere naming its sentinel, as a body's box
+    /// carrying the screen does, and refuses a degenerate face as the slab does.</summary>
+    [Fact]
+    public void ASurfaceDeclaredWithoutASlabAdmitsAShapeNamingIt_ControlADegenerateFaceIsRefused() {
+        var program = NewBuilder()
+            .ScreenSurface(
+            halfHeight: 0.02f,
+            halfWidth: 0.022f,
+            screenIndex: 3,
+            worldOrigin: Vector3.Zero,
+            worldRight: Vector3.UnitX,
+            worldUp: Vector3.UnitY
+        )
+            .Sphere(
+            material: ((SdfProgramBuilder.ScreenMaterialId + 1) + 3),
+            radius: 1f
+        )
+            .Build();
+
+        Assert.Equal(
+            expected: 3,
+            actual: Assert.Single(collection: program.ScreenSurfaces).ScreenIndex
+        );
+
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().ScreenSurface(
+            halfHeight: 0f,
+            halfWidth: 0.022f,
+            screenIndex: 3,
+            worldOrigin: Vector3.Zero,
+            worldRight: Vector3.UnitX,
+            worldUp: Vector3.UnitY
+        ));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "half-height",
+            comparisonType: StringComparison.Ordinal
+        );
+    }
     /// <summary>An indexed screen sentinel decodes to a direct screenSurfaces/decal index in the shader, so the builder
     /// admits one only for an index a declared surface occupies.</summary>
     [Fact]

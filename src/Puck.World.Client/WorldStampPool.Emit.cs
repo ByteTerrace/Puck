@@ -195,7 +195,7 @@ public sealed partial class WorldStampPool {
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs. Engraved text and its host shapes share one scoped instance so engraving cannot consume
     // another placement's accumulator; embossed text is an instance of its own.
-    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
         // The isolation's hidden shapes emit nothing, and with them the paints they carry, the creation's mesh and its
@@ -326,7 +326,9 @@ public sealed partial class WorldStampPool {
     
                 var slot = ((rootSlot + 1) + index);
                 var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
-                var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
+                var material = (((screenMaterials is { } carried) && (carried[index] >= 0))
+                    ? carried[index]
+                    : paletteIds[((placed?.Material ?? 0) % paletteIds.Length)]);
                 var panelMaterial = ((placed?.Panel is { } placedPanel)
                     ? paletteIds[(placedPanel.Material % paletteIds.Length)]
                     : 0);

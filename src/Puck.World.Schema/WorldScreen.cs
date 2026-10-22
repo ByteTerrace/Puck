@@ -420,6 +420,16 @@ public sealed record WorldScreenDisplay(
 /// <param name="ScrollSpeed">The wheel's speed at full deflection of the scrolling stick, in wheel notches per second,
 /// its deflection raised to <paramref name="Curve"/> too. Non-negative; 0 scrolls nothing.</param>
 public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float Boost = 1f, float RampSeconds = 0f, float ScrollSpeed = 0f);
+/// <summary>A body that holds a screen's device carries its picture: while a body wearing <see cref="Look"/> holds that
+/// look's <see cref="Pose"/> frame, the screen's own slab is not drawn and its source shows on the face of the look's
+/// box <see cref="Shape"/>, riding the body's hands every frame, and a seat engaged on the screen frames the picture
+/// there. The box's face is its front (author <c>-Z</c>, the side a body holding it looks at) and its half-extents are
+/// the picture's. Presentation only: the simulation's screen row, its engage radius and its pointer mapping keep the
+/// authored frame.</summary>
+/// <param name="Look">The look row whose wearer carries the picture; a creation look.</param>
+/// <param name="Pose">The look's <see cref="WorldLookMotion.Poses"/> frame that holds while the body carries it.</param>
+/// <param name="Shape">The name of the ungrouped box in the look's creation that shows the picture.</param>
+public sealed record WorldScreenCarry(string Look, string Pose, string Shape);
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
@@ -456,6 +466,9 @@ public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float 
 /// less, a desktop monitor about 250. In <c>(0, SdfScreenEmission.MaxLuminance]</c>; absent is
 /// <c>SdfScreenEmission.DefaultLuminance</c>. A screen whose source is a window onto another world shows that world's
 /// own luminance whatever this says.</param>
+/// <param name="Carry">The body that carries the screen's picture while it holds the device (see
+/// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. Omitted from
+/// the wire when null.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -470,5 +483,6 @@ public sealed record WorldScreen(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null
 );

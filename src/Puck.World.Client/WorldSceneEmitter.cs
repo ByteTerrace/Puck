@@ -122,6 +122,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_bakedColorRevision;
     // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
     private int m_censusRevision;
+    // The screens a body carried at the last revision watch, one bit per screen index, and the counter that moves when
+    // the set does: a carried screen draws no slab of its own, so picking it up or putting it down rebuilds the program.
+    private uint m_carriedScreens;
+    private int m_carriedRevision;
 
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
@@ -188,6 +192,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // reserved band), so emitting them back-to-back cannot double-declare a screen index.
         WorldStaticSceneEmit.Emit(
             builder: builder,
+            carried: ((probeWorstCase || placementProbe) ? null : CarriedRow),
             derivedFaces: derivedFaces,
             screens: screens
         );
@@ -250,7 +255,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             maxPlacementScale: maxPlacementScale,
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
             picks: ((!probeWorstCase && !placementProbe) ? m_picks : null),
-            textCatalog: m_text.Catalog
+            textCatalog: m_text.Catalog,
+            screens: screens
         );
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions in
@@ -771,8 +777,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
     /// (<see cref="WorldBakedColors.TryTakeMove"/>), then a counter that moves when a
     /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), the continuum's pinned
-    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), and the operator's shape isolation
-    /// (<see cref="WorldShapeIsolation.Revision"/>).
+    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), the operator's shape isolation
+    /// (<see cref="WorldShapeIsolation.Revision"/>), and a counter that moves when the set of screens a body carries
+    /// moves (<see cref="WorldStampPool.TryCarriedScreen"/>).
     /// <para>
     /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
@@ -799,7 +806,47 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 2)] = m_censusRevision;
         destination[(WorldClient.RevisionComponentCount + 3)] = m_continuum.PresentationRevision;
         destination[(WorldClient.RevisionComponentCount + 4)] = m_animator.Isolation.Revision;
+
+        var carried = CarriedScreens();
+
+        if (carried != m_carriedScreens) {
+            m_carriedScreens = carried;
+            m_carriedRevision++;
+        }
+
+        destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
     }
+    // The screens a body carries this frame, one bit per screen index (WorldStampPool.TryCarriedScreen).
+    private uint CarriedScreens() {
+        var carried = 0u;
+
+        foreach (var screen in m_client.Definition.Screens) {
+            if (
+                (screen.Carry is not null) &&
+                (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces) &&
+                m_animator.TryCarriedScreen(
+                    carried: out _,
+                    client: m_client,
+                    screen: screen
+                )
+            ) {
+                carried |= (1u << screen.Index);
+            }
+        }
+
+        return carried;
+    }
+    // A screen the latest revision found carried, at the frame its carrier holds it now; null for any other, which draws
+    // its own slab.
+    private WorldScreen? CarriedRow(WorldScreen screen) => (((((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces) &&
+        ((m_carriedScreens & (1u << screen.Index)) != 0u) &&
+        m_animator.TryCarriedScreen(
+            carried: out var held,
+            client: m_client,
+            screen: screen
+        ))
+        ? held
+        : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
     /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
@@ -872,7 +919,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 6);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

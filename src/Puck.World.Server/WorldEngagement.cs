@@ -484,6 +484,26 @@ public sealed partial class WorldEngagement {
 
         m_holderScratch.Clear();
     }
+    /// <summary>Returns whether body <paramref name="bodyIndex"/>'s participant holds a control application onto
+    /// <paramref name="target"/>, captured or mirrored — the read a rule's <c>$engaged:</c> channel answers.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    /// <param name="target">The application target.</param>
+    /// <returns><see langword="true"/> when the body is live and its participant's set names the target.</returns>
+    public bool Applies(int bodyIndex, GrantSubject target) {
+        if (Body(index: bodyIndex) is null) {
+            return false;
+        }
+
+        var applications = m_grants.Applications(principal: PrincipalOf(index: bodyIndex));
+
+        for (var slot = 0; (slot < applications.Count); slot++) {
+            if (applications[slot].Target == target) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Whether body <paramref name="bodyIndex"/>'s participant is captured on a device: its set omits its own
     /// body, names no other body, and names a screen the live document declares or a tabletop placement. A device's
     /// controls are the seat's own, never camera- or world-relative, so the client composes the movement pair raw for

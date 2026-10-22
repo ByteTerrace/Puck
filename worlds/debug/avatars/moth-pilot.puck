@@ -13,9 +13,11 @@
 
 import "moth-head"
 
-// What an importer binds: the creation its look wears, and the cell its look's hold pose reads.
+// What an importer binds: the creation its look wears, and the cell its look's hold pose reads, which the importer's
+// rules write.
 exports {
   reads [$"moth-pilot", pilotHold]
+  actions [pilotHold]
 }
 
 let pilotHeadScale = 0.68
@@ -91,7 +93,7 @@ let collarKnit = 14 // the undersuit's high collar
 let strap = 15 // the harness's front straps, with their ochre buckles painted
 let brickGlass = 16 // the Humble Gaming Brick's see-through atomic-orange shell, the devices' own glass
 let sleeve = 17 // the undersuit's sleeves, with the lavender shoulder patches painted
-let brickLens = 18 // the brick's dark screen lens, its picture painted
+let brickLens = 18 // the brick's dark screen lens and its picture's box
 let brickKeys = 19 // the d-pad and the speaker's slots
 let brickButtons = 20 // the smoked A and B buttons
 let brickRubber = 21 // select and start
@@ -588,6 +590,7 @@ prototypes {
             { id: 247, position [0, 1.17584, 0.33165], rotation [0.183, -0.183, 0.68299, 0.68299] }
             { id: 248, position [0, 1.16199, 0.32365], rotation [0.183, -0.183, 0.68299, 0.68299] }
             { id: 249, position [0, 1.23267, 0.34321], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 257, position [0, 1.23297, 0.34269], rotation [0.2588, 0, 0, 0.9659] }
             { id: 250, position [0.0335, 1.24479, 0.35021], rotation [0.2588, 0, 0, 0.9659] }
             { id: 251, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
             { id: 252, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
@@ -758,17 +761,9 @@ prototypes {
             { parent: "upperArm-right", type: "Box", position [-0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
           ]
         }
-        // The brick's opaque parts, after its gallery copy: the lens with a dim picture painted on it, the keys, buttons,
-        // rubber, board, processor, cartridge, cells and power light.
-        {
-          color: "#17181C"
-          specular: 0.05
-          roughness: 0.08
-          coat: 0.6
-          paints [
-            { parent: "brickLens", type: "Box", position [0, 0.001, -0.002], scale [0.022, 0.0195, 0.003], color: "#2F3A2C" }
-          ]
-        }
+        // The brick's opaque parts, after its device: the lens, the keys, buttons, rubber, board, processor, cartridge,
+        // cells and power light.
+        { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
         { color: "#2A2624", roughness: 0.4, specular: 0.04 }
         { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
         { color: "#5E5E64", roughness: 0.75 }
@@ -1152,6 +1147,17 @@ prototypes {
           kind: "RoundedRectangle"
           cornerRadius: 0.16
         }
+      }
+
+      // The screen's picture on the lens, the device's own glass: 160 by 144 pixels at 0.275 mm, 44 by 39.6 mm, its face
+      // 1 mm proud of the lens. While she holds the brick its screen row's `carry` names this box, so it shows the live
+      // game (devices.puck).
+      shape Box "brickPicture" {
+        id: 257
+        position [0, 1.201, -0.0195]
+        scale [0.022, 0.0198, 0.001]
+        material: brickLens
+        parent: "handheld"
       }
 
       shape Sphere "brickLed" {
