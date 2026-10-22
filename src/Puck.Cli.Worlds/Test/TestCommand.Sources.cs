@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler.Lowering;
 using Puck.World;
 
 namespace Puck.Cli.Test;
@@ -72,6 +73,7 @@ public static partial class TestCommand {
                 }
                 written[name] = source;
                 if (!TryStageTestWorld(
+                    foreign: [],
                     generatedDirectory: directory,
                     name: name,
                     path: out var staged,
@@ -118,6 +120,7 @@ public static partial class TestCommand {
             }
 
             if (!TryStageTestWorld(
+                foreign: world.Foreign,
                 generatedDirectory: directory,
                 name: world.Name,
                 path: out var path,
@@ -140,6 +143,7 @@ public static partial class TestCommand {
             }
 
             generated.Add(item: new TestWorld(
+                Foreign: world.Foreign,
                 Name: world.Name,
                 Path: path
             ));
@@ -250,7 +254,11 @@ public static partial class TestCommand {
     // reach from the directory that world was authored in, composed beside them. A crossing onto a sibling lands in a
     // world staged here, and a sibling's way back naming the test world's id resolves to the test world's own file, so
     // the crossing returns to the instance the leg booted rather than starting a second one.
-    private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, string sourceDirectory, string generatedDirectory, out string path, out string? reason) {
+    //
+    // `foreign` are the test's expectations about sibling documents: each is lowered into the document of its name as
+    // that document is reached, so the verdict is judged in the world a crossing starts. A document no reference
+    // reaches has nothing to carry the verdict, and the staging is refused by name.
+    private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, IReadOnlyList<WorldTestForeign> foreign, string sourceDirectory, string generatedDirectory, out string path, out string? reason) {
         var catalog = CliWorldVocabulary.EnsureInstalled();
         var directory = Path.Combine(
             path1: generatedDirectory,
@@ -300,12 +308,19 @@ public static partial class TestCommand {
         var reached = new HashSet<string>(collection: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], comparer: DocumentName.Comparer);
         var pending = new Queue<(string Name, JsonObject World, string SourceDirectory)>(collection: siblings.Select(selector: sibling => (sibling.Name, (JsonObject)JsonNode.Parse(utf8Json: sibling.Json)!, sourceDirectory)));
 
-        Reach(
+        var judged = new HashSet<string>(comparer: DocumentName.Comparer);
+
+        if (!Reach(
+            foreign: foreign,
+            judged: judged,
             pending: pending,
             reached: reached,
+            reason: out reason,
             sourceDirectory: sourceDirectory,
             staged: path
-        );
+        )) {
+            return false;
+        }
 
         while (pending.TryDequeue(result: out var next)) {
             if (!WorldStaging.TryWrite(
@@ -322,13 +337,26 @@ public static partial class TestCommand {
                 return false;
             }
 
-            Reach(
+            if (!Reach(
+                foreign: foreign,
+                judged: judged,
                 pending: pending,
                 reached: reached,
+                reason: out reason,
                 sourceDirectory: next.SourceDirectory,
                 staged: siblingPath
-            );
+            )) {
+                return false;
+            }
         }
+
+        if (foreign.FirstOrDefault(predicate: expectation => !judged.Contains(item: expectation.Document)) is { } unreached) {
+            reason = $"the test expects verdicts from the document '{unreached.Document}', which no reference of the world reaches from {sourceDirectory}, so there is no document to carry them";
+
+            return false;
+        }
+
+        reason = null;
 
         return true;
     }
@@ -336,8 +364,11 @@ public static partial class TestCommand {
     // directory the world was authored in: its .puck source compiled, as the run-time resolver prefers it, else its JSON
     // document. A name nothing there answers as one document (no file, a source that does not compile or declares
     // several worlds, a file that is not a JSON object) stays unstaged, and the crossing reaching for it is refused by
-    // name at run time, as it would be beside the source.
-    private static void Reach(string staged, string sourceDirectory, HashSet<string> reached, Queue<(string Name, JsonObject World, string SourceDirectory)> pending) {
+    // name at run time, as it would be beside the source. A document the test expects verdicts from carries them when
+    // it is queued, and is noted in `judged`.
+    private static bool Reach(string staged, string sourceDirectory, HashSet<string> reached, Queue<(string Name, JsonObject World, string SourceDirectory)> pending, IReadOnlyList<WorldTestForeign> foreign, HashSet<string> judged, out string? reason) {
+        reason = null;
+
         foreach (var reference in ((ReadObject(path: staged)?["references"] as JsonArray) ?? []).OfType<JsonObject>()) {
             if (
                 (reference["document"]?.GetValue<string>() is not { } document) ||
@@ -365,9 +396,21 @@ public static partial class TestCommand {
             );
 
             if (found is not null) {
+                foreach (var expectation in foreign.Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal))) {
+                    if (!expectation.TryApply(reason: out var applyReason, world: found)) {
+                        reason = applyReason;
+
+                        return false;
+                    }
+
+                    _ = judged.Add(item: document);
+                }
+
                 pending.Enqueue(item: (document, found, sourceDirectory));
             }
         }
+
+        return true;
     }
     private static JsonObject? ReadObject(string path) => ParseObject(bytes: File.ReadAllBytes(path: path));
     // A document's bytes as a JSON object, or null when they are not one.

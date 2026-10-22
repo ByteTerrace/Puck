@@ -41,6 +41,95 @@ public sealed class TestCommandLawTests {
             expectedSubstring: "is neither a world document, a .puck source, nor a directory"
         );
     }
+    /// <summary>An expectation addressed to a sibling document is judged by the instance a crossing starts: a run that
+    /// started none fails the claim by name, and a document no reference of the world reaches has nothing to carry it,
+    /// which is a usage error.</summary>
+    [Fact]
+    public void AnExpectationAboutASiblingNoCrossingStartedFailsByName() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-sibling-");
+
+        directory.WriteText(name: "worlds/home.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "home"
+
+            references [
+              { document: "away", name: "away" }
+            ]
+
+            state {
+              world {
+                table probe { "0" = 1 }
+              }
+            }
+
+            test "nobody crosses" {
+              expect {
+                probe[0] == 1
+                away {
+                  probe[0] == 1
+                }
+              }
+            }
+
+            """);
+        directory.WriteText(name: "worlds/lost.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "lost"
+
+            state {
+              world {
+                table probe { "0" = 1 }
+              }
+            }
+
+            test "nothing reaches it" {
+              expect {
+                nowhere {
+                  probe[0] == 1
+                }
+              }
+            }
+            """);
+        directory.WriteText(name: "worlds/away.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "away"
+
+            state {
+              world {
+                table probe { "0" = 1 }
+              }
+            }
+            """);
+
+        var (notCrossed, notCrossedOutput) = RunTest(directory.PathOf(name: "worlds/home.puck"));
+
+        Assert.Equal(
+            actual: notCrossed,
+            expected: 1
+        );
+        Assert.Contains(
+            actualString: notCrossedOutput,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "away/expect$2: fail"
+        );
+        Assert.Contains(
+            actualString: notCrossedOutput,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "started no instance of 'away'"
+        );
+
+        var (unreached, unreachedOutput) = RunTest(directory.PathOf(name: "worlds/lost.puck"));
+
+        Assert.Equal(
+            actual: unreached,
+            expected: 2
+        );
+        Assert.Contains(
+            actualString: unreachedOutput,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "expects verdicts from the document 'nowhere', which no reference of the world reaches"
+        );
+    }
     /// <summary>A test world stands where the document it tests stands: staged as the file its documentId names, beside
     /// every document its references reach, and every document those reach, so a door onto a sibling crosses and the
     /// sibling's way back names the test world's own file. A name nothing beside it answers as one document stays

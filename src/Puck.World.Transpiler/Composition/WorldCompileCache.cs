@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using Puck.Assets;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -18,7 +19,9 @@ public sealed record WorldCompiledWorld(string Name, bool Entry, byte[] Json);
 /// <param name="Json">The generated world's canonical document, UTF-8.</param>
 /// <param name="Siblings">The other worlds of the composition the test boots beside it, in order; their
 /// <see cref="WorldCompiledWorld.Entry"/> is <see langword="false"/>.</param>
-public sealed record WorldCompiledTest(string Name, string Test, string? Subject, byte[] Json, IReadOnlyList<WorldCompiledWorld> Siblings);
+/// <param name="Foreign">The expectations the test addresses to sibling documents, which are lowered into those
+/// documents once they are composed.</param>
+public sealed record WorldCompiledTest(string Name, string Test, string? Subject, byte[] Json, IReadOnlyList<WorldCompiledWorld> Siblings, IReadOnlyList<WorldTestForeign> Foreign);
 /// <summary>What one successful compile of a <c>.puck</c> world source produced, and every file fact it rests on.</summary>
 /// <param name="Document">The one document the source lowers to, UTF-8, exactly the bytes
 /// <c>WorldCompilation.RequireJson().ToJsonString()</c> encodes; <see langword="null"/> when the source declares
@@ -49,6 +52,7 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
             Schema: compilation.Document?.Schema,
             Tests: [
                 .. compilation.TestWorlds.Select(selector: static test => new WorldCompiledTest(
+                    Foreign: test.Foreign,
                     Json: Encoding.UTF8.GetBytes(s: test.Json.ToJsonString()),
                     Name: test.Name,
                     Siblings: [
@@ -393,7 +397,8 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
                         ? reader.ReadString()
                         : null),
                     Json: reader.ReadBytes(count: reader.ReadInt32()),
-                    Siblings: ReadWorlds(reader: reader)
+                    Siblings: ReadWorlds(reader: reader),
+                    Foreign: WorldTestForeign.FromJson(json: reader.ReadString())
                 );
             }
 
@@ -444,6 +449,7 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
                 worlds: test.Siblings,
                 writer: writer
             );
+            writer.Write(value: WorldTestForeign.ToJson(expectations: test.Foreign));
         }
     });
     // The order every field is written in is the order it is read back in; a world is its entry flag, its name and

@@ -1787,7 +1787,12 @@ Each generated world is staged in a directory of its own, under the file name it
 it from the directory each was authored in. A door onto a sibling document
 crosses into it, and the sibling's way back naming the test world's id returns
 to the instance the run booted ([crossing into another
-document](../authoring/testing-a-world.md#crossing-into-another-document)).
+document](../authoring/testing-a-world.md#crossing-into-another-document)). The
+run also exports every instance a crossing starts whose document carries a verdict
+row, and a block named for a sibling document in a test's `expect`
+(`garden { … }`) lowers into that document's copy, so the verdict is reported
+under the document's name (`garden/expect$1`) and fails when no crossing started
+it.
 
 This verb is the only door that runs a module's tests. `puck compile` lowers and
 does not boot, so a module whose tests fail still compiles. A source that emits

@@ -47,8 +47,10 @@ every `world name = module(arguments)`, restated there under that instantiation'
 instance, once per distinct instantiation. A block with no `with` clause at the root of a source that emits
 worlds by name is the composed run: one document per world, carried as `WorldTestWorld.Json` for the first
 declared one and `WorldTestWorld.Siblings` for the rest, with that first document's `schedule.instances` arming
-them and its `references` rows repointed at the generated file names. Booting them is `puck test`'s, not this
-assembly's. The CLI writes each declared world
+them and its `references` rows repointed at the generated file names. In a test about one world, a block named
+for a sibling document in `expect` (`garden { … }`) is not lowered into that world: `WorldTestWorld.Foreign`
+carries each such line as a `WorldTestForeign`, which `puck test` lowers into the sibling document once it has
+composed it (`TryApply`). Booting them is `puck test`'s, not this assembly's. The CLI writes each declared world
 beside the source, or into the directory named by `--output`. `WorldDocumentEmitter`'s lowering is internal to this assembly, so
 `puck compile`, `puck lint`, `puck embed`, the language server, the game's boot path, the basis composer and every test harness run the
 same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and

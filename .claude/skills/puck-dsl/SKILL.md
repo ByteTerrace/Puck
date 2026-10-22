@@ -86,6 +86,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `x = x - …`. A call-form gate where only comparisons are legal is
   **PUCK038**. Cartridge rules admit `if`, `repeat`, `break`, `key(...)` gates
   and compound assignment.
+- **A `test`'s `expect` reads one world, or names the document it reads.** A line
+  reads the booted world; a block named for a sibling document the world
+  references (`garden { bodyState(body, 0, size) == 0.25 }`) is judged in the
+  instance a crossing starts there, passes on any tick the claim holds, and fails
+  when nothing crossed. An absent body reads every register as 0, so a claim of
+  `0` there also claims presence
+  ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
 - A `: Kind`/`as Kind` comparison-kind suffix binds only to the one comparison
   it follows; wrap it in parentheses beside `and`/`or`.
 

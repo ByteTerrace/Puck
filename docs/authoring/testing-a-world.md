@@ -174,14 +174,47 @@ own file, so the body comes home to the instance the run booted. A test of the
 debug world declares `documentId: "debug"` for that reason: under another id, the
 way back would start a second debug world and leave the booted one's body empty.
 
-The run exports the booted world, so an expectation reads the traveller once she
-is home, not while she stands in the sibling. A claim that she left at all needs a
-witness the booted world can latch: a live body's register reads as its value,
-and an absent body's as `0`, so a rule gated on a register the body always holds
-above zero latches the tick she was gone (`worlds/debug/suit-tests.puck` and
-`worlds/debug/wonderland-tests.puck` carry one, `away`). A step after the
-crossing lands in whichever world the seat is in, so a pose in the sibling's
-coordinates stands a body that never left far from any door.
+An expectation outside any block reads the booted world, so it reads the traveller
+once she is home. One in a block named for the sibling document is judged in that
+document, in the instance the crossing starts:
+
+```puck
+expect {
+  bodyState(body, 0, suit) == 1
+  garden {
+    bodyState(body, 0, size) == 1 and bodyState(body, 0, suit) == 0
+  }
+}
+```
+
+The block names a document the world reaches through its `references` (a name no
+reference reaches is a usage error). Its lines lower into that document's staged
+copy, each as a verdict row `expect$<line>` (the line counted in the whole
+`expect` block) with a rule gated on the claim itself, and the run exports every
+instance it started whose document carries a verdict row, reporting each under the
+document's name (`garden/expect$1`).
+
+A traveller is in a sibling for a while, so a sibling's claim is not decided at the
+last tick: it passes when it held on any tick the instance ran, and reports the
+last tick it held on. A claim that never held reports `never evaluated`, and a
+claim about a document the run never started fails by name, so a verdict about the
+garden fails when the crossing does not happen. Two things follow from reading a
+body that may not be there yet:
+
+- An absent body's register reads `0`, so a claim that a register is `0` holds
+  before she arrives. Say she is present as well (`size == 1 and suit == 0`, with a
+  register she always holds above zero), and settle a refusal on what she brings
+  home, where the booted world reads her again.
+- The instance must outlive her visit to be exported. A destination whose
+  `durability` is `persisted` is retained when it empties (the garden's is); one
+  that is reaped on emptying leaves nothing to read.
+
+A step after the crossing lands in whichever world the seat is in, so a pose in the
+sibling's coordinates stands a body that never left far from any door. A claim that
+she left and came home needs a witness only where the booted world must tell her
+return from the pose she took beforehand: `worlds/debug/wonderland-tests.puck`
+latches `away`, a rule gated on a register she always holds above zero (an absent
+body reads `0`), for its `homeSmall` rule.
 
 ## The three blocks
 
@@ -339,9 +372,13 @@ Decompilation keeps those authored row names and sections. Generated
   expanded on its own, so the test's `given` and `expect` reach the module's own
   names and the arguments it was given, not the constants of the source the test
   sits in.
-- **A camera, or a body in a world the run did not boot.** `expect` reads what a
-  rule reads: state rows and a booted body's `bodyState` and `bodyPosition`. A
-  body standing in a sibling a crossing started is judged once it comes home.
+- **A camera.** `expect` reads what a rule reads: state rows and a body's
+  `bodyState` and `bodyPosition`, in the booted world or in a sibling document a
+  crossing starts ([crossing into another
+  document](#crossing-into-another-document)).
+- **A sibling's final state, or a sibling no crossing starts.** A sibling's claim
+  holds on any tick, not at the end, and a `given` or a step cannot address a
+  sibling document: it is reached through what crosses into it.
 - **A comparison of two expressions** folds no values into its report: a verdict
   row holds cells, so only the rows a gate compares are recorded beside it.
 
