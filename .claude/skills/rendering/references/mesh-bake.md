@@ -137,7 +137,30 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   plates (every hall light group then baked nothing), so the narrowing stands
   and thin trim joins the large solid it hangs from (`hallStrips` in each slab).
   The bake caps declared-detail refinement at eight cells per coarse axis.
-  A dynamic instance declares detail too: a pooled creation's embossed text is
+- **A body's round sections declare their spacing.** Every pooled instance
+  declares detail from its shapes' round sections (`WorldStampPool.BodyDetail`):
+  a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle
+  radius (a superellipsoid's tightened by its exponent), or an elliptic prism's
+  tightest bend (an eye socket's carved rim follows it), over three cells, so
+  each cell turns about 19 degrees, under the contour's 25-degree crease split.
+  At `SdfMeshPathBake.MinimumCell` (15 mm) any section under 4.5 cm turns past
+  it and shades as flat facets: the Moth's fingers, hair locks and braid did.
+  A flattened ellipsoid, a box, another prism or a cylinder declares nothing (an edge
+  bends along its length alone, and the contour keeps it as a crease), and
+  neither does a detail of 15 mm or more. A blend group takes its finest
+  member's detail over its whole surface, so a member finer than 3 mm (a lid, a
+  rivet) declares none rather than refining the plate or face it is grouped
+  with; a shape on an instance of its own goes to 2 mm. Static placements keep
+  `ShapeDetail` alone. `puck mesh audit --prototype <id> --cpu` prints each
+  group's triangles and cell before a boot.
+- **A pooled instance's detail spreads over its whole bound.** A dynamic group
+  refines the box its detailed instances' bounds cover
+  (`SdfMeshBakeGroup.DetailLow`, `OwnFinal`), never per member as a static
+  union does, so one thin member of a blend group refines every member's
+  surface. Pooled creations therefore take `BodyDetail`, not `ShapeDetail`,
+  whose plate and rounded-profile terms put the Moth's whole suit at 2 to 3 mm
+  and multiply her triangles about eighteenfold.
+  A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
   (`WorldStampPool.TextSlot`), bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that

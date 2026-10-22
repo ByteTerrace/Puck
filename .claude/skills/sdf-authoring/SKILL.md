@@ -220,7 +220,8 @@ fill, `weathering` for chips and scratches over a revealed `under` substrate,
 radial paint ramp of pupil, iris, limbus and sclera stops under a cornea, not a
 dark sphere), and `paints` for detail that is colour rather than form: stripes,
 trims, panel outlines, a mouth line. A paint is drawn crisp at the hit; relief
-finer than the bake's cell (5 mm refined, 15 mm on smooth parts) frays into
+finer than the bake's cell (5 mm refined, 15 mm on smooth parts, 2 to 15 mm on a
+body's round sections) frays into
 jagged steps, so never sculpt a millimetre-proud stripe. Painted metal and
 clearcoat read only against something to reflect: the world's sky `panel`
 highlights. Ranges, defaults and examples are in `references/surface.md`.

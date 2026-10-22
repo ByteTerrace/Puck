@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Text;
 using Puck.World.Authoring;
@@ -22,6 +23,73 @@ public sealed partial class WorldStampPool {
 
         return true;
     }
+    // A body's round section bakes at its radius over this many cells: each cell then turns about 19 degrees, under the
+    // contour's 25-degree crease split (SdfContour.SplitAtCreases), so a strand or a finger shades smooth. At the bake's
+    // own spacing (SdfMeshPathBake.MinimumCell) a section under 4.5 cm turns past it, and every vertex splits flat.
+    private const float CellsPerRadius = 3f;
+    // The finest spacing, in metres, a shape on an instance of its own declares: a finger or a rod, whose instance
+    // refines only its own surface. Past it (a lash, a catchlight) the part bakes through the bake's own refinement on
+    // its own small lattice. At the closest the chase and studio cameras come, about 0.4 m, a cell this size spans a
+    // pixel or two.
+    private const float OwnDetailFloor = 0.002f;
+    // The finest spacing, in metres, a member of a blend group declares. A group refines its whole surface toward its
+    // finest member's detail (SdfMeshBakeGroup.Detail), so a section thinner than this (a lid, a rivet, a cable) declares
+    // none rather than refining the plate, shell or face it is grouped with; a hair lock, a thumb or a strand of a braid
+    // declares its own.
+    private const float GroupDetailFloor = 0.003f;
+
+    // The spacing, in world units at `scale`, a body's shape asks of its bake: its round section's radius (RoundRadius)
+    // over CellsPerRadius; zero when that is finer than `floor` or no finer than the bake's own lattice already is
+    // (SdfMeshPathBake.MinimumCell).
+    private static float BodyDetail(ShapeDocument shape, float scale, float floor) {
+        var detail = (RoundRadius(shape: shape) * (scale / CellsPerRadius));
+
+        return (((detail >= floor) && (detail < SdfMeshPathBake.MinimumCell)) ? detail : 0f);
+    }
+    // The radius of a shape's round section, in creation units: a strand's (its thicker end's: a lock tapers to a tip
+    // that is a small part of it), a capsule's or a sphere's, or an ellipsoid's middle radius, tightened as a
+    // superellipsoid's exponent squares it off, or an elliptic prism's outline's tightest bend (EllipseBend). The middle
+    // radius is a finger's or a limb's girth, where its surface turns all the way round; a flattened ellipsoid (a plate,
+    // a pad) turns tightly only along its rim, an edge the contour keeps as a crease, as it does a box's, another prism's
+    // or a cylinder's: refining a shape's whole surface for an edge buys triangles on its broad faces and nothing on the
+    // edge.
+    private static float RoundRadius(ShapeDocument shape) {
+        var size = (shape.Scale ?? Vector3.One);
+        var middle = MathF.Max(x: MathF.Min(x: size.X, y: size.Y), y: MathF.Min(x: MathF.Max(x: size.X, y: size.Y), y: size.Z));
+
+        return shape.Type switch {
+            SdfSolidPrimitive.Sweep when (shape.Curve is { } curve) => (MathF.Max(x: curve.RadiusStart, y: curve.RadiusEnd) * size.X),
+            SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid => middle,
+            SdfSolidPrimitive.Superellipsoid => (middle * (SdfProgramBuilder.MinSuperellipsoidExponent / (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent))),
+            SdfSolidPrimitive.Prism when (shape.Profile is { Kind: SdfPrismProfileKind.Ellipse }) => EllipseBend(a: size.X, b: size.Y),
+            SdfSolidPrimitive.Capsule => size.X,
+            SdfSolidPrimitive.RoundCone => (0.5f * size.X),
+            SdfSolidPrimitive.Torus => (0.4f * size.X),
+            _ => 0f,
+        };
+    }
+    // An ellipse's tightest bend: its smaller radius squared over its larger, at the larger radius's ends. An elliptic
+    // prism's wall turns round it, and so does the crease it carves when it cuts (an eye socket in a face).
+    private static float EllipseBend(float a, float b) => ((MathF.Max(x: a, y: b) > 0f) ? ((MathF.Min(x: a, y: b) * MathF.Min(x: a, y: b)) / MathF.Max(x: a, y: b)) : 0f);
+    // The finest spacing the shown members of one instance ask of the bake (BodyDetail at GroupDetailFloor), starting from
+    // `detail`: a blend group's when `groupId` names one, else a coupled placement's opaque shapes (its glass ones bake
+    // apart, on instances of their own). Zero for none.
+    private static float SharedDetail(CreationDocument document, int? groupId, bool[]? hidden, float scale, float detail = 0f) {
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; ((index < shapes.Count) && (index < WorldPlacementPolicy.MaxAnimatedStampShapes)); index++) {
+            var shape = shapes[index];
+            var member = ((groupId is { } id) ? ((shape.Group ?? 0) == id) : !document.IsGlassShape(shape: shape));
+
+            if (!member || ((hidden is not null) && hidden[index])) { continue; }
+
+            var own = BodyDetail(floor: GroupDetailFloor, scale: scale, shape: shape);
+
+            detail = (((own > 0f) && ((detail <= 0f) || (own < detail))) ? own : detail);
+        }
+
+        return detail;
+    }
     // The text slot's offset from a registration's root slot: the first after its shapes'.
     private static int TextSlot(int shapeCount) => (1 + shapeCount);
     // Whether a blend group keeps any member the isolation does not hide; a wholly hidden group emits no instance.
@@ -39,8 +107,9 @@ public sealed partial class WorldStampPool {
         return false;
     }
     // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
-    // Groups with independent motion or followers retain the conservative creation-root bound.
-    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden) {
+    // Groups with independent motion or followers retain the conservative creation-root bound. The group's instance
+    // declares the finest spacing its members ask of the bake (SharedDetail); the probe's, with no document, none.
+    private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -51,7 +120,8 @@ public sealed partial class WorldStampPool {
             _ = builder.BeginInstanceDynamic(
             slot: boundSlot,
             boundOffset: Vector3.Zero,
-            boundRadius: boundRadius
+            boundRadius: boundRadius,
+            detail: ((document is null) ? 0f : SharedDetail(document: document, groupId: groupId, hidden: hidden, scale: placementScale))
         );
         }
 
@@ -221,8 +291,12 @@ public sealed partial class WorldStampPool {
         for (var round = 0; (round < 2); round++) {
             if (round == 1) {
                 if (!coupled) { break; }
-                _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin))
-                    .PushField(compose: SdfBlendOp.Union);
+                _ = builder.BeginInstanceDynamic(
+                    slot: rootSlot,
+                    boundOffset: Vector3.Zero,
+                    boundRadius: ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin),
+                    detail: SharedDetail(detail: WorldPlacementStamper.TextDetail(creation: document!, scale: placementScale), document: document!, groupId: null, hidden: hidden, scale: placementScale)
+                ).PushField(compose: SdfBlendOp.Union);
             }
 
             for (var index = 0; (index < WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
@@ -319,7 +393,8 @@ public sealed partial class WorldStampPool {
                     slot: slot,
                     boundOffset: Vector3.Zero,
                     boundRadius: boundRadius,
-                    active: active
+                    active: active,
+                    detail: ((probeWorstCase || (placed is null)) ? 0f : BodyDetail(floor: OwnDetailFloor, scale: placementScale, shape: placed))
                 );
                 }
                 EmitShape(
@@ -409,6 +484,7 @@ public sealed partial class WorldStampPool {
                 boundRadius: boundRadius,
                 boundSlot: boundSlot,
                 builder: builder,
+                document: (probeWorstCase ? null : document),
                 fromIndex: index,
                 groupId: groupId,
                 ownInstance: !coupled,

@@ -171,8 +171,10 @@ public sealed partial class SdfMeshPathBake {
     private const int RefineMinimum = 17;
     private const int FinalMinimum = 9;
     private const int MaxRefinements = 5;
-    // The finest spacing, in metres, of a final lattice along its longest axis.
-    private const float MinimumCell = 0.015f;
+    /// <summary>The finest spacing, in metres, of a final lattice along its longest axis: a part smaller than the lattice
+    /// would resolve bakes at this spacing unless an instance declares a finer detail (<see cref="SdfInstanceRange.Detail"/>).
+    /// A detail at or past it refines nothing the lattice does not already resolve.</summary>
+    public const float MinimumCell = 0.015f;
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
     // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
