@@ -330,6 +330,9 @@ public static partial class WorldDefinitionValidator {
             case WorldEffect.Pose:
                 errors.Add(item: $"{path} has no body-scope meaning — 'pose' teleports a body the world names, and is admissible only inside a world rule's own effects.");
                 break;
+            case WorldEffect.SetBodyState:
+                errors.Add(item: $"{path} has no body-scope meaning — 'setBodyState' writes a body the world names; a kit's action writes its own register with 'setState'.");
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown effect kind.");
                 break;

@@ -2216,45 +2216,19 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The shared sequence/row-view gate for kit and look assignment.
-    // A selector reads a body's own cell the way WorldPopulation.SyncBodyCells does: a keyed Int or Bool row whose keys
-    // are body indices inside the population, each read at its stored value (so no value-over-time trait), and every
-    // case's row declared in the table the assignment distributes.
+    // A selector reads a body's own register the way WorldPopulation.SyncBodySelections does: a state.body counter, whose
+    // value each case compares as a whole number, and every case's row declared in the table the assignment distributes.
     private static void ValidateRowSelector(WorldDefinition definition, WorldRowSelector select, string path, string rowNoun, HashSet<string> rowNames, List<string> errors) {
-        if (string.IsNullOrEmpty(value: select.State)) {
-            errors.Add(item: $"{path}.state is required.");
-        } else if (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: select.State
-        ) is not { } row) {
-            errors.Add(item: $"{path}.state names state row '{select.State}', which the document does not declare.");
-        } else if (
-            ((row.Kind != CellKind.Int) && (row.Kind != CellKind.Bool)) ||
-            !row.IsKeyed ||
-            (row.Field is not null)
-        ) {
-            errors.Add(item: $"{path}.state names state row '{select.State}', which must be a keyed Int or Bool row whose cells are keyed by body index.");
-        } else {
-            foreach (var cell in (row.Cells ?? [])) {
-                if (
-                    (cell.Advance is not null) ||
-                    (cell.Cycle is not null) ||
-                    (cell.Dynamics is not null)
-                ) {
-                    errors.Add(item: $"{path}.state names state row '{select.State}', whose cell '{cell.Key}' declares an advance/cycle/dynamics trait; a selector reads each cell's stored value.");
-                }
-                if (
-                    !int.TryParse(
-                    s: cell.Key,
-                    style: NumberStyles.Integer,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var bodyIndex
-                ) ||
-                    (bodyIndex < 0) ||
-                    (bodyIndex >= definition.Population.Capacity)
-                ) {
-                    errors.Add(item: $"{path}.state names state row '{select.State}', whose cell key '{cell.Key}' is not a 0-based body index inside 0..{(definition.Population.Capacity - 1)}.");
-                }
-            }
+        if (string.IsNullOrEmpty(value: select.BodyState)) {
+            errors.Add(item: $"{path}.bodyState is required.");
+        } else if (definition.BodyState.FirstOrDefault(predicate: slot => string.Equals(
+            a: slot.Name,
+            b: select.BodyState,
+            comparisonType: StringComparison.Ordinal
+        )) is not { } slot) {
+            errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', which state.body does not declare.");
+        } else if (slot.Kind != ActionStateKind.Counter) {
+            errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', a {slot.Kind}; a selector reads a Counter.");
         }
 
         if (select.Cases is not { Count: > 0 } cases) {

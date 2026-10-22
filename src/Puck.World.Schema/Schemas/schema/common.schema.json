@@ -8381,6 +8381,41 @@
       "additionalProperties": false,
       "title": "WorldEffectSetIdentityFact"
     },
+    "WorldEffectSetBodyState": {
+      "description": "Writes one state.body counter of a world-addressed body: the register a kit\u0027s own setState writes, in the arena\u0027s participant lane, settled through the register\u0027s envelope. The register is the body\u0027s, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.",
+      "properties": {
+        "$type": {
+          "const": "setBodyState"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "state": {
+          "description": "The state.body counter.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The literal value.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "A bounded fixed-point expression evaluated at fire time.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "state"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectSetBodyState"
+    },
     "ActionEffect": {
       "description": "An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns \u2014 every one addresses a state row and nothing else; a document project appends its own derived arms (a participant\u0027s kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.",
       "type": [
@@ -8480,6 +8515,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSetIdentityFact"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSetBodyState"
         }
       ],
       "title": "ActionEffect"
@@ -8519,14 +8557,14 @@
       "title": "ActionTrigger"
     },
     "WorldRowSelectorCase": {
-      "description": "One case of a WorldRowSelector: the row a body\u0027s cell value selects.",
+      "description": "One case of a WorldRowSelector: the row a body\u0027s register value selects.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "value": {
-          "description": "The cell value: an Int cell\u0027s integer, or 0 and 1 for a Bool cell.",
+          "description": "The register value, a whole number; a counter holding a fraction matches no case.",
           "type": "integer"
         },
         "row": {
@@ -8542,14 +8580,14 @@
       "title": "WorldRowSelectorCase"
     },
     "WorldRowSelector": {
-      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own cell of a keyed state.world row (the cell keyed by the body\u0027s 0-based index, the way bodies.scaleRow is) picks the row the case for its value names. A body with no cell, or a value no case names, keeps the row the assignment\u0027s sequence gives it. The cell is simulation state, so the choice follows it deterministically: a rule or a console write moves the row, a replay moves it at the same tick, and a saved world restores it with the cell. The look assignment\u0027s selector changes only what a body wears; the kit assignment\u0027s selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
+      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selector changes only what a body wears; the kit assignment\u0027s selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "state": {
-          "description": "The keyed state.world row of kind Int or Bool whose cells are keyed by body index.",
+        "bodyState": {
+          "description": "The state.body counter whose value selects.",
           "type": "string"
         },
         "cases": {
@@ -8561,7 +8599,7 @@
         }
       },
       "required": [
-        "state",
+        "bodyState",
         "cases"
       ],
       "additionalProperties": false,
@@ -8575,7 +8613,7 @@
       }
     },
     "WorldRowAssignment": {
-      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own cell of a state row maps to a row, and follows that cell as the simulation writes it.",
+      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.",
       "type": [
         "object",
         "null"

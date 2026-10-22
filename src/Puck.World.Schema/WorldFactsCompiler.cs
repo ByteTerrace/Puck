@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
@@ -393,6 +394,77 @@ public static partial class WorldFactsCompiler {
             key: address.Key,
             keyFrom: address.KeyFrom,
             laneOrdinal: laneOrdinal,
+            source: CompiledValueSource.FromExpression(expression: program)
+        );
+    }
+    internal static IRuleEffect ResolveBodyState(WorldEffect.SetBodyState effect, string ruleName, WorldFactsCompileContext context) {
+        const string Verb = "setBodyState";
+
+        var address = context.ResolveBodyAddress(
+            reference: effect.Key,
+            ruleName: ruleName,
+            verb: Verb
+        );
+        var bodyState = context.Definition.BodyState;
+        var slot = -1;
+
+        for (var index = 0; (index < bodyState.Count); index++) {
+            if (string.Equals(
+                a: bodyState[index].Name,
+                b: effect.State,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                slot = index;
+
+                break;
+            }
+        }
+
+        if (
+            (slot < 0) ||
+            (bodyState[slot].Kind != ActionStateKind.Counter)
+        ) {
+            throw new RuleException(
+                detail: $"'{Verb}' state '{effect.State}' names no Counter state.body declares",
+                refusal: WorldRuleRefusal.BodyStateUnwritable,
+                ruleName: ruleName
+            );
+        }
+        if ((effect.Value is not null) == (effect.Expression is not null)) {
+            throw new RuleException(
+                detail: $"'{Verb}' must name exactly one of 'value' or 'expression'",
+                refusal: RuleRefusal.EffectSourceAmbiguous,
+                ruleName: ruleName
+            );
+        }
+        if (effect.Value is { } literal) {
+            return new WorldBodyStateEffect(
+                describe: $"{Verb} body:{effect.Key}.{effect.State} = {literal.ToString(provider: CultureInfo.InvariantCulture)}",
+                key: address.Key,
+                keyFrom: address.KeyFrom,
+                slot: slot,
+                source: CompiledValueSource.Constant(rawValue: RuleCompiler.LiteralToRaw(
+                    kind: CellKind.Fixed,
+                    literal: literal,
+                    ruleName: ruleName,
+                    verb: Verb
+                ))
+            );
+        }
+
+        var program = RuleCompiler.CompileExpression(
+            context: context,
+            expression: effect.Expression,
+            kind: CellKind.Fixed,
+            ruleName: ruleName,
+            verb: Verb
+        );
+
+        return new WorldBodyStateEffect(
+            describe: $"{Verb} body:{effect.Key}.{effect.State} := expression[{program.Length}]",
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            slot: slot,
             source: CompiledValueSource.FromExpression(expression: program)
         );
     }

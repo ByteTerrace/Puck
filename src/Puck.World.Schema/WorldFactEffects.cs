@@ -269,6 +269,45 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
         return (1L + ((diameter * diameter) * diameter));
     }
 }
+/// <summary>Writes one <c>state.body</c> counter of a world-addressed body, in the arena's participant lane.</summary>
+/// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares nothing. A
+/// <c>bodyState</c> read is a fact rather than a row read, so the write declares no row either.</remarks>
+public sealed class WorldBodyStateEffect : WorldFactEffect {
+    /// <summary>Initializes a new instance of the <see cref="WorldBodyStateEffect"/> class.</summary>
+    /// <param name="key">The addressed body's literal key, or the invalid default.</param>
+    /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
+    /// <param name="slot">The register's slot in the world's action-state register file.</param>
+    /// <param name="source">The compiled value source, in raw <see cref="FixedQ4816"/> bits.</param>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    public WorldBodyStateEffect(CellKey key, CompiledCellRef? keyFrom, int slot, in CompiledValueSource source, string describe) : base(describe: describe) {
+        Key = key;
+        KeyFrom = keyFrom;
+        Slot = slot;
+        Source = source;
+    }
+
+    /// <summary>Gets the addressed body's literal key, or the invalid default.</summary>
+    public CellKey Key { get; }
+    /// <summary>Gets the addressed body's live indirection, or <see langword="null"/>.</summary>
+    public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets what firing needs: the lane cell it writes is an arena row the firing's scope rewinds.</summary>
+    public override EffectNeeds Needs => EffectNeeds.None;
+    /// <summary>Gets the register's slot in the world's action-state register file.</summary>
+    public int Slot { get; }
+    /// <summary>Gets the compiled value source.</summary>
+    public CompiledValueSource Source { get; }
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<CellAccess> into) {
+        Source.CollectReads(into: into);
+        CompiledCellRef.CollectReference(
+            into: into,
+            reference: KeyFrom
+        );
+    }
+    /// <inheritdoc/>
+    public override RuleWork Cost(IRuleCostContext context) => (1L + Source.Cost(context: context));
+}
 /// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the
 /// identity's persisted row together.</summary>
 /// <remarks>The lane cell is an arena row, so this arm is rewound by the firing's own scope and declares

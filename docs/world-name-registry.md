@@ -613,6 +613,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -902,6 +920,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1191,6 +1227,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1233,7 +1287,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].collider[fromCreation].prototypeId` | Prototype | Names | Read | `WorldCollider.FromCreation.PrototypeId` |
-| `kits.assignment.select.state` | State | Names | Read | `WorldRowSelector.State` |
 | `bindingOverlays[].document.wheels[].labelRow` | State | Binding | Binding | `BindingWheelDefinition.LabelRow` |
 | `bindingOverlays[].document.wheels[].iconRow` | State | Binding | Binding | `BindingWheelDefinition.IconRow` |
 | `bindingOverlays[].bindingBar.iconRow` | State | Binding | Binding | `WorldBindingBarAuthoring.IconRow` |
@@ -1315,7 +1368,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
-| `looks.assignment.select.state` | State | Names | Read | `WorldRowSelector.State` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -1709,6 +1761,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `rules[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `rules[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -2016,6 +2086,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].decision.options[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].decision.options[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -2346,6 +2434,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].locals[].expression` | State | Expression | Read | `RuleLocal.Expression` |
 | `rules[].locals[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].locals[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -2618,6 +2724,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
 | `navigation.domains[].parent` | Placement | Names | Read | `WorldNavigationDomain.Parent` |
@@ -2842,6 +2966,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onPress.effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
@@ -2874,6 +2999,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onRelease.effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
@@ -2906,9 +3032,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onFact[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].tether.modeState` | `WorldTether.ModeState` | a per-body slot name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
+| `kits.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
 | `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `addons[].name` | `WorldAddonRow.Name` | an addon name |
 | `bindingOverlays[].id` | `WorldBindingOverlay.Id` | a binding overlay id |
@@ -2960,6 +3088,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.quality[].name` | `WorldViewQuality.Name` | a render view instance name or the default selector * |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
+| `looks.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
 | `looks.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
@@ -3045,6 +3174,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].name` | `WorldDecisionOption.Name` | an option name is local to its decision |
 | `rules[].decision.options[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
@@ -3078,6 +3208,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].decision.options[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.interrupt[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.onNoChoice[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
@@ -3111,6 +3242,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].decision.onNoChoice[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].locals[].name` | `RuleLocal.Name` | a local's name is local to its rule, read as $local:<name> |
 | `rules[].poolForEach.binding` | `RulePoolIteration.Binding` | a lexical instance binding |
 | `identity.name` | `WorldIdentityDefinition.Name` | an identity display name |
@@ -3157,6 +3289,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `interactions.interactions[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `generators[].generator.start` | `StateGenerator.Start` | a context key is local to its generator |
 | `generators[].generator.contexts[].key` | `GeneratorContext.Key` | a context key is local to its generator |
 | `generators[].generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |

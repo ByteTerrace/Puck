@@ -1217,6 +1217,9 @@ public sealed partial class WorldTransferEscrow {
                 verticalVelocity: member.VerticalVelocity,
                 yawRadians: member.YawRadians
             );
+            // The carried registers are the body's own state, so a kit or look one selects is the body's before it
+            // first advances here.
+            m_server.Population.SyncBodySelections(definition: m_server.Definition);
         }
 
         m_borderAdmissions[slot] = border;

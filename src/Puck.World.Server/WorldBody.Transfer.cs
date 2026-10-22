@@ -285,10 +285,16 @@ public sealed partial class WorldBody {
                     : unchecked((long)register.TimerTicks)
                 );
 
+                m_actionStateRequested[slot] = carried;
+                m_actionStateLastWriter[slot] = "arrival";
+                m_actionStateLastReason[slot] = "carried across the crossing";
+
                 if (
                     (definition.Envelope is { } envelope) &&
                     !envelope.Contains(value: carried)
                 ) {
+                    m_actionStateLastReason[slot] = "carried across the crossing; settled by this world's envelope";
+
                     if (envelope.Values is null) {
                         carried = Math.Clamp(
                             max: envelope.Maximum,

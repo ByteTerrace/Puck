@@ -25,7 +25,7 @@ public static class WorldSpawnPointDefaults {
 /// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
 /// kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is
 /// presentation-only (it selects the appearance row). A <see cref="Select"/> overrides the sequence for each body whose
-/// own cell of a state row maps to a row, and follows that cell as the simulation writes it.</summary>
+/// own <c>state.body</c> register maps to a row, and follows that register as the simulation writes it.</summary>
 /// <param name="Sequence">The sequence that selects a row.</param>
 /// <param name="Rows">An authored row-name view whose entries may be literals or Text state-cell references, or empty
 /// to select from every declared row in declaration order.</param>
