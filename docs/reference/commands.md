@@ -665,7 +665,12 @@ refused by name when it runs in a host without it (`[world.slice: not
 available in this host — another boot shape (a rendered World) registers
 it]`), so a headless boot (`puck test`, CI) admits a document whose commands
 reach a rendered World's verbs. A verb no shape registers stays refused at
-validation. Where no World runs (`puck compile --validate`, the silo's
+validation. A binding row or wheel sector gets the same treatment: against a live
+registry a command only another shape registers is judged by the catalog's facts
+(bindable, accepts `text`, value kind) and the headless boot drops that entry from
+the seat's composition with a narrated line; where no World runs the catalog
+answers alone, so a typo'd or unbindable command in a binding document is refused
+by `puck compile --validate`. Where no World runs (`puck compile --validate`, the silo's
 admission), the catalog stands in for the registry and refuses the same
 things. Names, parameters, defaults and templates are checked everywhere. The
 catalog is generated: after adding, renaming or changing the bindability or

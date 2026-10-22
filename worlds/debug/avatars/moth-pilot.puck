@@ -11,7 +11,6 @@
 // hip. While `pilotHold` holds 1 for her body, the `hold` driver bends her arms in front of her and the `hold` frame
 // seats the handheld (75 x 133 x 27.5 mm) in her hands.
 
-schema: "puck.world.definition.v1"
 import "moth-head"
 
 // What an importer binds: the creation its look wears, and the cell its look's hold pose reads.

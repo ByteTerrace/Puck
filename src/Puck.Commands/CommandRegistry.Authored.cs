@@ -70,6 +70,20 @@ public sealed partial class CommandRegistry {
     public void UseVerbCatalog(Func<string, CommandMetadata?>? catalog) {
         m_verbCatalog = catalog;
     }
+    /// <summary>Returns the facts a binding document is judged by for a verb: this registry's own when it registers the
+    /// verb or an alias, else the wired catalog's (<see cref="UseVerbCatalog"/>) for a verb only another boot shape
+    /// registers. A document therefore validates the same in every shape, and a binding to a verb this host lacks
+    /// stays inert here rather than refusing the boot.</summary>
+    /// <param name="name">The verb or alias name.</param>
+    /// <returns>The verb's facts, or <see langword="null"/> when neither this registry nor the catalog holds it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public CommandMetadata? MetadataForDocument(string name) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        return (TryGetMetadata(metadata: out var metadata, name: name)
+            ? metadata
+            : m_verbCatalog?.Invoke(arg: name));
+    }
     /// <summary>Whether <paramref name="name"/> names an authored command this registry currently answers.</summary>
     /// <param name="name">The command name.</param>
     /// <returns><see langword="true"/> when the name is authored.</returns>

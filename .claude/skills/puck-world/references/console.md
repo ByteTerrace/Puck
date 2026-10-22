@@ -362,7 +362,11 @@ authored only (`bindingBar.*`, see [documents.md](documents.md)).
 
 ## Screenshots
 
-`world.screenshot <path.png>` (`WorldUiCommandModule`): Immediate; requests
+`world.screenshot [<path.png>]` (`WorldUiCommandModule`): Immediate; Bindable. With no argument it writes
+`screenshots/puck-<local date and time>.png` under the run's state root (`--state-dir`; numbered past a file of the
+same second), and that is the only form a binding, an authored command or any seat may run, since a document never
+chooses where a file lands: a path, `crossing` and `presented` are the operator's (a non-console principal is refused
+by name). The Debug page's Capture plate is that bind. Requests
 capture on the render host's OUTERMOST decorator, so it lands on the next
 COMPOSED frame — world plus overlay, what the player actually sees (the
 overlay node reads back its own render target; if the overlay drew nothing
@@ -459,7 +463,8 @@ a capture to `<package>/flags/<exhibit>.png` through the same
 a file-safe token and the folder is the package's own, so no argument names a
 path; host console or local seat only; headless or with a capture already
 pending, the record is written and the echo says no capture was armed. An
-authored command may call it (`world.screenshot` is Unbindable, so it may not).
+authored command may call it (`world.screenshot` is Bindable, but only its no-argument form runs for a seat, and no
+argument of `world.flag` names a path).
 
 ### `world.sdf.dump` — the packed program
 

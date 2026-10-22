@@ -317,6 +317,7 @@ internal sealed class WorldOverlayFeed {
 
             var modifierCount = (authoring.Modifiers
                 ? BindingBarSeatComposer.ComposeModifiers(
+                    declaredOnly: authoring.DeclaredModifiersOnly,
                     destination: m_modifiers[viewIndex],
                     resolveBadge: m_resolveBadge,
                     text: barText,
@@ -325,6 +326,7 @@ internal sealed class WorldOverlayFeed {
                 : 0
             );
             var hintCount = BindingBarSeatComposer.ComposeHints(
+                declaredOnly: authoring.DeclaredModifiersOnly,
                 destination: m_hints[viewIndex],
                 members: m_hintMembers[viewIndex],
                 modifiers: authoring.Modifiers,

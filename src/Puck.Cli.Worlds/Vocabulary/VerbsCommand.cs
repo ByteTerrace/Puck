@@ -30,11 +30,12 @@ public static class VerbsCommand {
         return [.. json.RootElement.EnumerateArray()
             .Where(predicate: static verb => !(verb.TryGetProperty(propertyName: "authored", value: out var authored) && authored.GetBoolean()))
             .Select(selector: static verb => new CommandMetadata(
+                AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
                 Audience: ((verb.GetProperty(propertyName: "audience").GetString() == "operator") ? CommandAudience.Operator : CommandAudience.Anyone),
                 Bindability: (verb.GetProperty(propertyName: "bindable").GetBoolean() ? CommandBindability.Bindable : CommandBindability.Unbindable),
                 Name: verb.GetProperty(propertyName: "name").GetString()!,
                 Routing: CommandRouting.Immediate,
-                ValueKind: CommandValueKind.Digital
+                ValueKind: Enum.Parse<CommandValueKind>(ignoreCase: true, value: verb.GetProperty(propertyName: "valueKind").GetString()!)
             ))];
     }
     // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.

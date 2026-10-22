@@ -47,6 +47,7 @@ public sealed class WorldRatesLeverLawTests {
     }
     [InlineData("on", SdfUpdateRates.All)]
     [InlineData("off", SdfUpdateRates.None)]
+    [InlineData("toggle", SdfUpdateRates.None)]
     [InlineData("bodies off", (SdfUpdateRates.Views | SdfUpdateRates.Screens | SdfUpdateRates.ShadowFar))]
     [InlineData("views off", (SdfUpdateRates.Bodies | SdfUpdateRates.Screens | SdfUpdateRates.ShadowFar))]
     [InlineData("screens off", (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.ShadowFar))]
@@ -77,7 +78,7 @@ public sealed class WorldRatesLeverLawTests {
         var result = registry.Submit(line: line);
 
         Assert.True(condition: result.IsError);
-        Assert.Contains(expectedSubstring: "status|on|off|bodies|views|screens|shadow-far on|off]", actualString: result.Output);
+        Assert.Contains(expectedSubstring: "status|on|off|toggle|bodies|views|screens|shadow-far on|off]", actualString: result.Output);
         Assert.Empty(collection: levers);
     }
 }
