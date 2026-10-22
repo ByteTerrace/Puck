@@ -23,8 +23,10 @@ public readonly partial record struct FixedQ4816 {
     public const long CosPolyC2Q60 = 48038396025285291L;
 
     // round(sin(i·π/128)·2^60), i = 0..64. Cosine reads the same table at 64 − i.
-    // scalar.trigonometry-constants checks every entry against a Machin-derived interval series.
-    public static ReadOnlySpan<long> SinCosTableQ60 => [
+    // scalar.trigonometry-constants checks every entry against a Machin-derived interval series. A static array behind
+    // the span, as FixedQ4816.cs's tables say why.
+    public static ReadOnlySpan<long> SinCosTableQ60 => SinCosTableQ60Entries;
+    private static readonly long[] SinCosTableQ60Entries = [
         0L, 28294110113536504L, 56571176913125535L, 84814167351074653L,
         113006068906017470L, 141129899830620387L, 169168719380752196L, 197105638019954891L,
         224923827593068887L, 252606531462884448L, 280137074603713366L, 307498873645800920L,

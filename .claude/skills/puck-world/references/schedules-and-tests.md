@@ -124,6 +124,13 @@ with a `<world> { … }` block inside `given`/`when`/`expect` saying which world
 each line is about, the composition's `entry world` carrying the schedule that
 arms the rest (a composition without one is PUCK104), and a far world's verdict rule gated one tick earlier — an instance
 armed at boot counts from its own zero. A `test` inside a `module` body runs at
-every instantiation of that module, once per distinct one. `puck test` takes
+every instantiation of that module, once per distinct one. `puck test` stages
+each test world in a directory of its own (`TestCommand.TryStageTestWorld`),
+named by its `documentId`, with every document its `references` reach composed
+beside it, so a door onto a sibling (the debug world's garden painting) crosses,
+and the sibling's way back, naming the test world's id, returns to the booted
+instance; a test world under another id would come home to a second world.
+Verdicts read the booted world, so a crossing scenario latches a witness there
+(`away` in `worlds/debug/suit-tests.puck`). `puck test` takes
 the `.puck` source directly and runs the worlds its tests generated — see
 [Testing a world](../../../../docs/authoring/testing-a-world.md).

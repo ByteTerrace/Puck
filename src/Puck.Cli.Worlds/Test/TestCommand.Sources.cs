@@ -23,7 +23,7 @@ public static partial class TestCommand {
     // stem can name the same world. `written` holds every world this run generated and the source it came from:
     // the second claim on a name is refused, since writing it would replace the first source's world and run the
     // second one's twice.
-    private static bool TryGenerateWorlds(string source, string directory, bool sweeping, Dictionary<string, string> written, out IReadOnlyList<string> worlds, out string? skipped, out string? reason) {
+    private static bool TryGenerateWorlds(string source, string directory, bool sweeping, Dictionary<string, string> written, out IReadOnlyList<TestWorld> worlds, out string? skipped, out string? reason) {
         worlds = [];
         reason = null;
         skipped = null;
@@ -71,12 +71,12 @@ public static partial class TestCommand {
                     return false;
                 }
                 written[name] = source;
-                if (!WorldStaging.TryWrite(
-                    catalog: CliWorldVocabulary.EnsureInstalled(),
-                    directory: directory,
+                if (!TryStageTestWorld(
+                    generatedDirectory: directory,
                     name: name,
                     path: out var staged,
                     reason: out var composeReason,
+                    siblings: [],
                     sourceDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: source)) ?? "."),
                     world: authored
                 )) {
@@ -84,7 +84,7 @@ public static partial class TestCommand {
                     return false;
                 }
                 Console.WriteLine(value: $"test: {name} <- {source} (authored schedule and verdicts)");
-                worlds = [staged];
+                worlds = [new TestWorld(Name: name, Path: staged)];
                 return true;
             }
             if (!sweeping) {
@@ -99,51 +99,50 @@ public static partial class TestCommand {
         }
 
         var sourceDirectory = (Path.GetDirectoryName(path: Path.GetFullPath(path: source)) ?? ".");
-        var generated = new List<string>(capacity: compiled.Tests.Count);
+        var generated = new List<TestWorld>(capacity: compiled.Tests.Count);
 
         foreach (var world in compiled.Tests) {
             // A test over a composition is several documents: the one the run boots with, plus one per world its
             // schedule arms. Every one is written; only the boot document is a world this verb runs.
-            foreach (var document in ((IReadOnlyList<(string Name, byte[] Json)>)[
-                (world.Name, world.Json),
-                .. world.Siblings.Select(selector: static sibling => (sibling.Name, sibling.Json)),
-            ])) {
+            foreach (var name in ((IEnumerable<string>)[world.Name, .. world.Siblings.Select(selector: static sibling => sibling.Name)])) {
                 if (written.TryGetValue(
-                    key: document.Name,
+                    key: name,
                     value: out var owner
                 )) {
-                    reason = $"{source} and {owner} both generate the test world '{document.Name}' — a generated world is named for its source's file name and its test's name, so two sources run together need different file names or different test names.";
+                    reason = $"{source} and {owner} both generate the test world '{name}' — a generated world is named for its source's file name and its test's name, so two sources run together need different file names or different test names.";
 
                     return false;
                 }
 
-                written[document.Name] = source;
-
-                // Test worlds are temporary JSON documents, staged flattened so the executable boots the exact
-                // composed source without depending on the temporary file's location.
-                if (!WorldStaging.TryWrite(
-                    catalog: CliWorldVocabulary.EnsureInstalled(),
-                    directory: directory,
-                    name: document.Name,
-                    path: out var path,
-                    reason: out var composeReason,
-                    sourceDirectory: sourceDirectory,
-                    world: ((JsonObject)JsonNode.Parse(utf8Json: document.Json)!)
-                )) {
-                    reason = $"{source} test \"{world.Test}\" does not compose: {composeReason}";
-
-                    return false;
-                }
-
-                if (document.Name == world.Name) {
-                    Console.WriteLine(value: $"test: {world.Name} <- {source} test \"{world.Test}\"{((world.Subject is { } subject)
-                        ? $" with {subject}"
-                        : string.Empty)}");
-                    generated.Add(item: path);
-                } else {
-                    Console.WriteLine(value: $"test: {document.Name} <- {source} test \"{world.Test}\" (armed beside {world.Name})");
-                }
+                written[name] = source;
             }
+
+            if (!TryStageTestWorld(
+                generatedDirectory: directory,
+                name: world.Name,
+                path: out var path,
+                reason: out var composeReason,
+                siblings: [.. world.Siblings.Select(selector: static sibling => (sibling.Name, sibling.Json))],
+                sourceDirectory: sourceDirectory,
+                world: ((JsonObject)JsonNode.Parse(utf8Json: world.Json)!)
+            )) {
+                reason = $"{source} test \"{world.Test}\" does not compose: {composeReason}";
+
+                return false;
+            }
+
+            Console.WriteLine(value: $"test: {world.Name} <- {source} test \"{world.Test}\"{((world.Subject is { } subject)
+                ? $" with {subject}"
+                : string.Empty)}");
+
+            foreach (var sibling in world.Siblings) {
+                Console.WriteLine(value: $"test: {sibling.Name} <- {source} test \"{world.Test}\" (armed beside {world.Name})");
+            }
+
+            generated.Add(item: new TestWorld(
+                Name: world.Name,
+                Path: path
+            ));
         }
 
         worlds = generated;
@@ -152,7 +151,7 @@ public static partial class TestCommand {
     }
     // Every world a path names: a document runs as it stands, a `.puck` source contributes its generated tests or
     // authored scheduled verdict document, and a directory recursively skips worlds carrying neither.
-    private static bool TryCollectWorlds(string path, string generatedDirectory, out IReadOnlyList<string> worlds, out string? reason) {
+    private static bool TryCollectWorlds(string path, string generatedDirectory, out IReadOnlyList<TestWorld> worlds, out string? reason) {
         worlds = [];
         reason = null;
 
@@ -160,7 +159,7 @@ public static partial class TestCommand {
 
         if (File.Exists(path: rooted)) {
             if (!WorldDocumentName.IsSourceFile(path: rooted)) {
-                worlds = [rooted];
+                worlds = [TestWorld.ForDocument(path: rooted)];
 
                 return true;
             }
@@ -198,13 +197,13 @@ public static partial class TestCommand {
             return false;
         }
 
-        var collected = new List<string>();
+        var collected = new List<TestWorld>();
         var skips = new List<string>();
         var written = new Dictionary<string, string>(comparer: DocumentName.Comparer);
 
         foreach (var document in carriers.Where(predicate: static carrier => !carrier.IsSource).Select(selector: static carrier => carrier.Path)) {
             if (DeclaresSchedule(document: document)) {
-                collected.Add(item: document);
+                collected.Add(item: TestWorld.ForDocument(path: document));
             } else {
                 skips.Add(item: $"test: skipped {document} — it declares no schedule section.");
             }
@@ -245,5 +244,138 @@ public static partial class TestCommand {
         worlds = collected;
 
         return true;
+    }
+    // Stages one test world into a directory of its own, as the documents it tests stand beside each other: the world
+    // as the file its documentId names, each world its schedule arms, and every document a staged world's references
+    // reach from the directory that world was authored in, composed beside them. A crossing onto a sibling lands in a
+    // world staged here, and a sibling's way back naming the test world's id resolves to the test world's own file, so
+    // the crossing returns to the instance the leg booted rather than starting a second one.
+    private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, string sourceDirectory, string generatedDirectory, out string path, out string? reason) {
+        var catalog = CliWorldVocabulary.EnsureInstalled();
+        var directory = Path.Combine(
+            path1: generatedDirectory,
+            path2: name
+        );
+
+        path = string.Empty;
+
+        // A kept run directory staged before holds this world's last staging, which this one replaces whole.
+        if (Directory.Exists(path: directory)) {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
+        }
+
+        // Test worlds are temporary JSON documents, staged flattened so the executable boots the exact composed source
+        // without depending on the temporary file's location.
+        if (!WorldStaging.TryWrite(
+            catalog: catalog,
+            directory: directory,
+            name: name,
+            path: out var staged,
+            reason: out reason,
+            sourceDirectory: sourceDirectory,
+            world: world
+        )) {
+            return false;
+        }
+
+        // A documentId that cannot name a file stays under the generated name, and the boot refuses it by name.
+        var ownId = ((ReadObject(path: staged)?["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _)
+            ? documentId
+            : name
+        );
+
+        path = Path.Combine(
+            path1: directory,
+            path2: WorldDocumentName.DocumentFile(name: ownId)
+        );
+        File.Move(
+            destFileName: path,
+            overwrite: true,
+            sourceFileName: staged
+        );
+
+        var reached = new HashSet<string>(collection: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], comparer: DocumentName.Comparer);
+        var pending = new Queue<(string Name, JsonObject World, string SourceDirectory)>(collection: siblings.Select(selector: sibling => (sibling.Name, (JsonObject)JsonNode.Parse(utf8Json: sibling.Json)!, sourceDirectory)));
+
+        Reach(
+            pending: pending,
+            reached: reached,
+            sourceDirectory: sourceDirectory,
+            staged: path
+        );
+
+        while (pending.TryDequeue(result: out var next)) {
+            if (!WorldStaging.TryWrite(
+                catalog: catalog,
+                directory: directory,
+                name: next.Name,
+                path: out var siblingPath,
+                reason: out var siblingReason,
+                sourceDirectory: next.SourceDirectory,
+                world: next.World
+            )) {
+                reason = $"the document '{next.Name}' beside it does not compose: {siblingReason}";
+
+                return false;
+            }
+
+            Reach(
+                pending: pending,
+                reached: reached,
+                sourceDirectory: next.SourceDirectory,
+                staged: siblingPath
+            );
+        }
+
+        return true;
+    }
+    // Queues every document a staged world's references name that is not staged yet and that stands beside the
+    // directory the world was authored in: its .puck source compiled, as the run-time resolver prefers it, else its JSON
+    // document. A name nothing there answers as one document (no file, a source that does not compile or declares
+    // several worlds, a file that is not a JSON object) stays unstaged, and the crossing reaching for it is refused by
+    // name at run time, as it would be beside the source.
+    private static void Reach(string staged, string sourceDirectory, HashSet<string> reached, Queue<(string Name, JsonObject World, string SourceDirectory)> pending) {
+        foreach (var reference in ((ReadObject(path: staged)?["references"] as JsonArray) ?? []).OfType<JsonObject>()) {
+            if (
+                (reference["document"]?.GetValue<string>() is not { } document) ||
+                !WorldDocumentName.TryValidate(name: document, reason: out _) ||
+                !reached.Add(item: document)
+            ) {
+                continue;
+            }
+
+            var source = Path.GetFullPath(path: Path.Combine(
+                path1: sourceDirectory,
+                path2: WorldDocumentName.SourceFile(name: document)
+            ));
+            var json = Path.GetFullPath(path: Path.Combine(
+                path1: sourceDirectory,
+                path2: WorldDocumentName.DocumentFile(name: document)
+            ));
+            var found = (File.Exists(path: source)
+                ? ((WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out _, path: source) && compiled!.EmitsDocument && (compiled.Document is { } bytes))
+                    ? ParseObject(bytes: bytes)
+                    : null)
+                : (File.Exists(path: json)
+                    ? ReadObject(path: json)
+                    : null)
+            );
+
+            if (found is not null) {
+                pending.Enqueue(item: (document, found, sourceDirectory));
+            }
+        }
+    }
+    private static JsonObject? ReadObject(string path) => ParseObject(bytes: File.ReadAllBytes(path: path));
+    // A document's bytes as a JSON object, or null when they are not one.
+    private static JsonObject? ParseObject(byte[] bytes) {
+        try {
+            return (JsonNode.Parse(utf8Json: bytes) as JsonObject);
+        } catch (JsonException) {
+            return null;
+        }
     }
 }
