@@ -161,7 +161,7 @@ numbered files under a directory.
 
 `OverlayCompositor` alpha-blends the document's overlay rows onto the copied
 CPU frame after capture, at zero cost when a document has no overlay rows.
-Text overlays render through `BitmapFont`, a compact embedded 8×8 monospace
+Text overlays render through `BitmapFont` (in `Puck.Assets`), a compact embedded 8×8 monospace
 ASCII glyph set rendered at integer scale so overlay text stays crisp with no
 filtering blur—a self-contained path with no cross-project font
 dependency. `Rgba32` parses and carries the document's `#RRGGBBAA` /
@@ -178,7 +178,7 @@ boundary) and the compositor (to blend them).
 | Muxing | `MatroskaMuxer`, `EbmlWriter`, `MatroskaIds` | The hand-rolled deterministic Matroska/WebM writer. |
 | Audio | `OpusAudioLane`, `AudioLaneSource`, `OpusStreamEncoder`, `OpusHead`, `LinearResampler`, `FloatRing`, `IAudioPacketSink` | Resampling, mixing, and Opus encoding for the audio lane. |
 | Capture | `CaptureSink`, `ICaptureFrameObserver`, `FrameSlotQueue`, `Av1TemporalDelimiterFilter` | The default sink, frame observation, and the render/encode handoff. |
-| Overlay | `OverlayCompositor`, `BitmapFont`, `Rgba32` | Capture-only compositing of text, rectangles, and timecodes. |
+| Overlay | `OverlayCompositor`, `Rgba32` (and `BitmapFont`, in `Puck.Assets`) | Capture-only compositing of text, rectangles, and timecodes. |
 
 ## Verification
 

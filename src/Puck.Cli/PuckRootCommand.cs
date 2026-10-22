@@ -23,6 +23,7 @@ using Puck.Cli.Landing;
 using Puck.Cli.Laws;
 using Puck.Cli.Locks;
 using Puck.Cli.Mcp;
+using Puck.Cli.Motion;
 using Puck.Cli.NuGet;
 using Puck.Cli.Official;
 using Puck.Cli.Packaging;
@@ -52,6 +53,7 @@ public static class PuckRootCommand {
     public static GateComposition Gate { get; } = new(
         GpuVerbGrammars: new Dictionary<string, Func<Command>>(comparer: StringComparer.Ordinal) {
             ["counters"] = CountersCommand.Create,
+            ["motion"] = MotionCommand.Create,
             ["parity"] = ParityCommand.Create,
         },
         SchemaSourceTypes: SchemaCommand.SourceTypesOf
@@ -90,6 +92,7 @@ public static class PuckRootCommand {
             LawsCommand.Create(),
             LocksCommand.Create(),
             McpCommand.Create(),
+            MotionCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),
             PackagesCommand.Create(),

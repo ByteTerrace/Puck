@@ -27,3 +27,8 @@ src/Puck.DirectX/DirectXPipelineLayout.Device.
 # The Vulkan logical device's native creation: vkCreateDevice with the chosen queues, extensions and feature chain, and the
 # command table resolved on the device it returns. VulkanDeviceChainCleanupLawTests drives the chain over a recording driver.
 src/Puck.Vulkan/Apis/VulkanNativeLogicalDeviceApi.cs
+# puck motion's World run: the verb's build, boot and drive of a windowed World, which needs a GPU and a window. MotionLawTests and
+# MotionCollectorLawTests cover the scenario file, the plan, the transcript, the collector, the sheets and the reports.
+src/Puck.Cli.Runs/Motion/MotionCommand.Device.
+src/Puck.Cli.Runs/Motion/MotionRun.Device.
+src/Puck.Cli.Runs/Motion/MotionWorldProcess.Device.

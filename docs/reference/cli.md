@@ -114,6 +114,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
+| [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
@@ -2131,6 +2132,123 @@ deterministic count or pass state differs, and 2 for a build, leg or reading
 refusal, including a missing GPU device or shader tool. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
+
+---
+
+## `puck motion`—tick-pinned motion stills and contact sheets
+
+`puck motion` is the one command for judging how the Moth moves. It boots the
+debug world's real `Puck.World` (windowed, always with `--devices none`, with a
+state directory of its own that the run removes), waits for the bakes, turns
+`world.lockstep` on, selects the scenario file's layout (the debug world's
+`motion` layout in `studio.puck`: four cameras riding body 0, `profile`,
+`front`, `feet` and a world-axes `turn` camera), and runs each scenario from a
+reset body on exact ticks with `world.at` and settled `world.screenshot … slots`
+stills. It is GPU work: take the GPU lease and run nothing else on the GPU
+beside it. One World runs every selected scenario; the default set is 24
+scenarios and runs in about four minutes.
+
+```text
+puck motion                                 # every scenario of worlds/debug/motion.scenarios.json
+puck motion --scenario walk-stop            # one (repeat or list several)
+puck motion --list                          # names, forms, still counts and notes; boots nothing
+puck motion --reproduce                     # everything twice in fresh Worlds, compared per still
+puck motion --output <dir>                  # keep the output somewhere named
+```
+
+Without `--output` the run writes to a kept run directory under the temporary
+root, which a run six hours later removes, and prints it; pass `--output` for a directory that stays. The ticks come from the scenario file
+and one start tick, the first multiple of 300 past the tick the World was ready
+at, never from how long the World took to boot, so two Worlds pin every step
+and still to the same ticks.
+
+Per scenario the output directory holds `<name>/raw/t<offset>-<camera>.png`, one
+PNG per camera per still, named by the still's tick offset; `<name>/sheet.png`,
+every camera with the frames left to right in bands of `--columns` (default 6)
+at `--cell-width` (default 480) pixels, each cell labelled with its camera, its
+offset from the scenario's tick 0 and its absolute tick; and
+`<name>/sheet-<camera>.png`, one camera's frames. `manifest.json`
+(`puck.motion.manifest.v1`) lists per scenario its steps, the form body 0 was
+observed to wear at tick 0, its sheets and, per still, the tick, the capture
+hash, the pose hash, the `body.where 0` read at that tick (position, velocity,
+facts) and the camera files. The composed four-up frame the World writes beside
+the slot files is `raw/t<offset>.png` and is kept. The World's transcripts are
+`stdout.log` and `stderr.log`.
+
+### The scenario file
+
+`worlds/debug/motion.scenarios.json` is strict JSON
+(`puck.motion.scenarios.v1`); a member the format does not name is refused. A
+scenario is added by editing it.
+
+```json
+{
+  "schema": "puck.motion.scenarios.v1",
+  "layout": "motion",
+  "settle": 45,
+  "pose": [0, 0, 0, 0],
+  "scenarios": [
+    {
+      "name": "run-stop",
+      "note": "What the scenario shows.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 2" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 2" }
+      ],
+      "capture": [{ "from": 51, "to": 90, "step": 3 }]
+    }
+  ]
+}
+```
+
+| Member | Meaning |
+|---|---|
+| `layout` | The `views` layout every still is captured through. Default `motion`. |
+| `settle`, `tail`, `pose` | File-level defaults of the scenario members below. |
+| `name` | Lowercase words joined by hyphens; the scenario's folder. |
+| `note` | What the scenario shows and what to look for; printed by `--list` and kept in the manifest. |
+| `form` | `suited` (the 2.06 m Moth) or `pilot` (out of the suit). The run presses the suit channel before the scenario when the form differs from the form the previous scenario ended in. A step that presses the suit (`body.press suit …`) flips the form the scenario ends in. |
+| `pose` / `spawn` | `[x, y, z, yawDegrees]` or a `spawnPoints` id (`spawn` replaces `pose`). Default `[0, 0, 0, 0]`, the stage. |
+| `settle` | Ticks body 0 stands still after the reset and before tick 0, at least 8. Default 45. |
+| `steps` | `{ "at": <tick>, "run": "<console line>" }`, pinned `at` ticks after tick 0: `body.fly`, `body.press`, `player.signal`, `body.pose`, any verb `world.at` admits. `world.at`, `world.wait`, `quit` and `world.screenshot` are refused; the verb owns them. A step at a tick runs before the still of that tick, and a `body.*` step applies in the tick after it, so a still at the step's own tick shows the state before it. |
+| `capture` | The ticks to capture, counted from tick 0: whole numbers and `{ "from", "to", "step" }` ranges. |
+| `tail` | Ticks the scenario runs past its last step or capture before the next scenario resets. Default 0. |
+
+Each scenario starts with `body.stop 0`, a `body.pose`, `view.reseed 0` and the
+suit press if needed, so it does not depend on the one before it, with three
+exceptions the scenario must handle itself: flight mode (a scenario that
+switches it on, `body.press flight 1 0.2`, switches it off again before it
+ends), the form it ends in (a suit press in its steps is counted), and a
+`body.fly` or `body.press` whose seconds outlast the scenario, which the next
+reset cancels. The run reads `body.rig 0` at tick 0 and reports a body that
+wears the wrong creation as a problem, and every pinned line the World refuses
+is a problem.
+
+### Reproducing
+
+`--reproduce` runs the whole plan twice, in two fresh Worlds pinned to the same
+ticks (`run-a` and `run-b`, each with its own sheets and manifest), prints one
+line per still and writes `reproduce.json`:
+
+```text
+scenario   t+  tick  pose  hash  px differ  max   mean
+walk-start  0   495  same  same          0    0  0.000
+```
+
+`pose` compares the tick-free pose hash, which proves the motion itself
+repeated; `hash` compares the capture-scope hash, which folds the tick and
+clocks and so agrees across fresh Worlds pinned to the same absolute ticks.
+`px differ`, `max` and `mean` are the pixels that differ between the two runs'
+camera files, summed over the cameras, the largest channel difference and the
+mean channel difference. A pose hash that differs fails the run (exit 1);
+pixel differences are reported and never fail it, since silhouette edges in
+mid-motion stills are not yet byte-identical
+([tick-exact capture](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture)).
+
+Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a
+body in the wrong form or a pose hash that differs, 2 a refusal (a scenario file
+that does not parse, a build, or a World that did not complete).
 
 ---
 

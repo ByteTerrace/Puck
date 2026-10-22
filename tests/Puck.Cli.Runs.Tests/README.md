@@ -11,6 +11,11 @@ profile or the verdict worlds (`DeterminismLawTests`, most of `ParityBindingRefe
 laws of the canary, determinism-attestation and release-profile classes) live in
 `experimental/tests/Puck.Cli.Runs.Tests/` beside those files.
 
+`MotionLawTests`, `MotionCollectorLawTests` and `MotionCommandLawTests` hold `puck motion`'s CPU parts: the scenario
+file's strict parse and the shipped file's validity, the plan's ticks and the order of its lines, the sheet layout, the
+transcript parsers, what the collector makes of a World's lines (each failure named) and the manifest and reproduce
+reports. The verb's World run is GPU-only (`build/CoverageGpuOnly.txt`).
+
 `WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact over small git checkouts of their own,
 with a counting builder in place of `dotnet build`. Two resolutions of an unchanged tree build once, and concurrent
 resolutions of one source state share one build. A one-byte uncommitted change under the World's closure produces a

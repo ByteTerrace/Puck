@@ -1,0 +1,251 @@
+{
+  "schema": "puck.motion.scenarios.v1",
+  "layout": "motion",
+  "settle": 45,
+  "pose": [0, 0, 0, 0],
+  "scenarios": [
+    {
+      "name": "walk-start",
+      "note": "Suited. Forward pressed at tick 0 from standing: the first steps and the lean into the walk.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 3" }
+      ],
+      "capture": [0, 2, 4, 6, 8, 10, 12, 15, 18, 21, 24, 30]
+    },
+    {
+      "name": "walk-steady",
+      "note": "Suited. Forward held; the stills start at tick 60, past the start-up, and span one stride a few ticks apart.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 4" }
+      ],
+      "capture": [{ "from": 60, "to": 93, "step": 3 }]
+    },
+    {
+      "name": "walk-stop",
+      "note": "Suited. Forward released at tick 60 after two seconds of walking: the last steps, the planted feet and the settle to standing.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 2" }
+      ],
+      "capture": [{ "from": 51, "to": 90, "step": 3 }]
+    },
+    {
+      "name": "run-start",
+      "note": "Suited. Run and forward pressed at tick 0 from standing.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 3" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 3" }
+      ],
+      "capture": [0, 2, 4, 6, 8, 10, 12, 15, 18, 21, 24, 30]
+    },
+    {
+      "name": "run-steady",
+      "note": "Suited. Run held; the stills start at tick 60 and span one stride two ticks apart.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 4" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 4" }
+      ],
+      "capture": [{ "from": 60, "to": 84, "step": 2 }]
+    },
+    {
+      "name": "run-stop",
+      "note": "Suited. Run and forward released together at tick 60: the braking steps and the settle to standing.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 2" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 2" }
+      ],
+      "capture": [{ "from": 51, "to": 90, "step": 3 }]
+    },
+    {
+      "name": "turn-in-place",
+      "note": "Suited. Turn pressed with no forward; the world-axes camera shows the body turning against a fixed frame.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.fly 0 0 0 1 0 0 1.5" }
+      ],
+      "capture": [{ "from": 0, "to": 60, "step": 4 }]
+    },
+    {
+      "name": "walk-turn",
+      "note": "Suited. Forward and turn together: the gait bends into the curve.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 1 0 0 3" }
+      ],
+      "capture": [{ "from": 30, "to": 87, "step": 3 }]
+    },
+    {
+      "name": "jump",
+      "note": "Suited. A held jump from standing: crouch and takeoff, the apex and the landing.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press jump 1 0.6" }
+      ],
+      "capture": [{ "from": 0, "to": 36, "step": 2 }]
+    },
+    {
+      "name": "jump-double",
+      "note": "Suited. A second jump pressed in the air spends the last jump and fires the boot jets.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press jump 1 0.5" },
+        { "at": 14, "run": "body.press jump 1 0.3" }
+      ],
+      "capture": [{ "from": 0, "to": 60, "step": 3 }]
+    },
+    {
+      "name": "run-jump",
+      "note": "Suited. A jump pressed at tick 45 in the middle of a run.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 4" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 4" },
+        { "at": 45, "run": "body.press jump 1 0.5" }
+      ],
+      "capture": [{ "from": 39, "to": 87, "step": 3 }]
+    },
+    {
+      "name": "flight-takeoff",
+      "note": "Suited. Flight mode switched on and rise held from standing: the lift-off and the pose changing to flight.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press flight 1 0.2" },
+        { "at": 10, "run": "body.fly 0 0 1 0 0 0 2" },
+        { "at": 100, "run": "body.press flight 1 0.2" }
+      ],
+      "tail": 60,
+      "capture": [{ "from": 0, "to": 72, "step": 4 }]
+    },
+    {
+      "name": "flight-hover",
+      "note": "Suited. Rise released at tick 60 after a climb: the hover, the exhaust and the idle sway.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press flight 1 0.2" },
+        { "at": 10, "run": "body.fly 0 0 1 0 0 0 1.5" },
+        { "at": 130, "run": "body.press flight 1 0.2" }
+      ],
+      "tail": 60,
+      "capture": [{ "from": 60, "to": 108, "step": 4 }]
+    },
+    {
+      "name": "flight-cruise",
+      "note": "Suited. Forward in flight after a climb: the body pitched into the cruise, the legs trailing.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press flight 1 0.2" },
+        { "at": 10, "run": "body.fly 0 0 1 0 0 0 1.2" },
+        { "at": 60, "run": "body.fly 1 0 0 0 0 0 2" },
+        { "at": 180, "run": "body.press flight 1 0.2" }
+      ],
+      "tail": 60,
+      "capture": [{ "from": 54, "to": 114, "step": 4 }]
+    },
+    {
+      "name": "flight-descent",
+      "note": "Suited. Descend held from a hover: the drop out of the hover pose and the legs reaching for the ground.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press flight 1 0.2" },
+        { "at": 10, "run": "body.fly 0 0 1 0 0 0 1.5" },
+        { "at": 70, "run": "body.fly 0 0 -1 0 0 0 1.2" },
+        { "at": 160, "run": "body.press flight 1 0.2" }
+      ],
+      "tail": 60,
+      "capture": [{ "from": 66, "to": 114, "step": 4 }]
+    },
+    {
+      "name": "flight-landing",
+      "note": "Suited. The touchdown of a descent and the settle on the ground in flight mode.",
+      "form": "suited",
+      "steps": [
+        { "at": 0, "run": "body.press flight 1 0.2" },
+        { "at": 10, "run": "body.fly 0 0 1 0 0 0 1" },
+        { "at": 50, "run": "body.fly 0 0 -1 0 0 0 1.5" },
+        { "at": 150, "run": "body.press flight 1 0.2" }
+      ],
+      "tail": 30,
+      "capture": [{ "from": 66, "to": 114, "step": 4 }]
+    },
+    {
+      "name": "pilot-walk-start",
+      "note": "Pilot (out of the suit). Forward pressed at tick 0 from standing.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 3" }
+      ],
+      "capture": [0, 2, 4, 6, 8, 10, 12, 15, 18, 21, 24, 30]
+    },
+    {
+      "name": "pilot-walk-steady",
+      "note": "Pilot. Forward held; the stills start at tick 60 and span one stride a few ticks apart.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 4" }
+      ],
+      "capture": [{ "from": 60, "to": 93, "step": 3 }]
+    },
+    {
+      "name": "pilot-walk-stop",
+      "note": "Pilot. Forward released at tick 60 after two seconds of walking.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 2" }
+      ],
+      "capture": [{ "from": 51, "to": 90, "step": 3 }]
+    },
+    {
+      "name": "pilot-run-start",
+      "note": "Pilot. Run and forward pressed at tick 0 from standing.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 3" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 3" }
+      ],
+      "capture": [0, 2, 4, 6, 8, 10, 12, 15, 18, 21, 24, 30]
+    },
+    {
+      "name": "pilot-run-steady",
+      "note": "Pilot. Run held; the stills start at tick 60 and span one stride two ticks apart.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 4" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 4" }
+      ],
+      "capture": [{ "from": 60, "to": 84, "step": 2 }]
+    },
+    {
+      "name": "pilot-run-stop",
+      "note": "Pilot. Run and forward released together at tick 60.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.press run 1 2" },
+        { "at": 0, "run": "body.fly 1 0 0 0 0 0 2" }
+      ],
+      "capture": [{ "from": 51, "to": 90, "step": 3 }]
+    },
+    {
+      "name": "pilot-turn-in-place",
+      "note": "Pilot. Turn pressed with no forward.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.fly 0 0 0 1 0 0 1.5" }
+      ],
+      "capture": [{ "from": 0, "to": 60, "step": 4 }]
+    },
+    {
+      "name": "pilot-jump",
+      "note": "Pilot. The one jump she has: takeoff, apex and landing.",
+      "form": "pilot",
+      "steps": [
+        { "at": 0, "run": "body.press jump 1 0.6" }
+      ],
+      "capture": [{ "from": 0, "to": 36, "step": 2 }]
+    }
+  ]
+}

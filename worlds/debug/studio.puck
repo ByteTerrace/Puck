@@ -36,7 +36,7 @@ let studioCameras = map(studioShots, shot => {
 // The motion bench: four cameras that ride body 0 wherever she goes, for judging how she moves. Each eye sits at
 // `eye` in her own axes (forward -Z, right +X) and aims at `aim` above her feet, so the profile stays a profile through
 // a walk, a run or a stop. `motion-turn` keeps world axes, so a turn in place shows against a fixed frame.
-// view.override layout motion.
+// view.override layout motion. `puck motion` runs the scenarios of motion.scenarios.json through it on exact ticks.
 let motionShots = [
   { name: "motion-profile", eye [-5.2, 1.1, 0], aim [0, 1.0, 0], fov: 0.62, worldAxes: false }
   { name: "motion-front", eye [0.9, 1.3, -5.2], aim [0, 1.0, 0], fov: 0.62, worldAxes: false }
