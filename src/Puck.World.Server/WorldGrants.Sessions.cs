@@ -7,8 +7,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldGrants {
     // The live unembodied sessions this world admitted, by ordinal, and the epoch each ordinal last carried. The epochs
     // outlive the sessions, so a reused ordinal's next session carries a later epoch and a principal naming a retired
-    // one never matches a live session again. A session is the screen observing through it: no checkpoint holds one
-    // (see Capture), and a rebuild ends every one (EndSessionsForRebuild).
+    // one never matches a live session again. A checkpoint carries each session as it stands (CaptureSessions); the
+    // screen observing through it is not state of this world, so a restore brings the session back unobserved and a
+    // rebuild ends every one (EndSessionsForRebuild).
     private readonly Dictionary<int, SessionEntry> m_sessions = new();
     private readonly Dictionary<int, int> m_sessionEpochs = new();
 
@@ -59,11 +60,57 @@ public sealed partial class WorldGrants {
 
         return minted;
     }
-    // Whether a grantee is a session, whose rows the checkpoint leaves out.
-    private static bool IsSessionGrantee(Grantee grantee) => (
-        grantee.TryGetPrincipal(principal: out var principal) &&
-        (principal.Kind == PrincipalKind.Session)
-    );
+    // Every admitted session as it stands, in ordinal order: what Restore re-admits.
+    private WorldSessionCheckpoint[] CaptureSessions() {
+        var sessions = new List<WorldSessionCheckpoint>(capacity: m_sessions.Count);
+
+        foreach (var entry in m_sessions.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => pair.Value)) {
+            sessions.Add(item: new WorldSessionCheckpoint(
+                BodyGeneration: entry.BodyGeneration,
+                BodyIndex: entry.BodyIndex,
+                Input: entry.Input,
+                ObserverEnded: entry.ObserverEnded,
+                Session: entry.Principal,
+                Templates: entry.Templates
+            ));
+        }
+
+        return [.. sessions];
+    }
+    // Replaces the session table with a checkpoint's: each session under its own principal, with the body it was
+    // embodied in and the input its viewer last forwarded. Its rows were restored with every other grantee's.
+    private void RestoreSessions(IReadOnlyList<WorldSessionCheckpoint> sessions) {
+        m_sessions.Clear();
+
+        foreach (var session in sessions) {
+            if (session.Session.Kind != PrincipalKind.Session) {
+                throw new InvalidOperationException(message: $"the checkpoint's session table names {session.Session.Describe()}, which is not a session principal");
+            }
+            if (!m_sessions.TryAdd(
+                key: session.Session.Index,
+                value: new SessionEntry(
+                    principal: session.Session,
+                    templates: session.Templates
+                ) {
+                    BodyGeneration = session.BodyGeneration,
+                    BodyIndex = session.BodyIndex,
+                    Input = session.Input,
+                    ObserverEnded = session.ObserverEnded,
+                }
+            )) {
+                throw new InvalidOperationException(message: $"the checkpoint's session table holds ordinal {session.Session.Index} twice");
+            }
+
+            m_sessionEpochs[session.Session.Index] = Math.Max(
+                val1: session.Session.Generation,
+                val2: m_sessionEpochs.GetValueOrDefault(key: session.Session.Index)
+            );
+            m_sessionOrdinalBound = Math.Max(
+                val1: m_sessionOrdinalBound,
+                val2: (session.Session.Index + 1)
+            );
+        }
+    }
 
     /// <summary>Determines whether a live session holds <c>observe all</c>, its whole-world view: what its observation
     /// is delivered while it does.</summary>

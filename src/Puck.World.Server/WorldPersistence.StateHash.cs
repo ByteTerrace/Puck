@@ -84,9 +84,12 @@ public sealed partial class WorldPersistence {
 
                 break;
             case WorldStateHashComponent.RuleLatch:
+                // Rule bindings are iteration keys: they fold by name, so a restored arena's intern order is no
+                // part of the hash.
                 Host.RuleHost.RuleGateHeld.AppendStateHash(
                     compiled: Host.RuleHost.Rules,
-                    hash: ref hash
+                    hash: ref hash,
+                    keyNames: Host.Arena.Keys.Names
                 );
 
                 break;

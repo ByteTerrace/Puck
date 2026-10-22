@@ -122,8 +122,8 @@ public sealed partial class WorldServer {
                 );
             }
 
-            // A provider can fault after changing hardware. Conservatively close the existing boot-only
-            // replay/checkpoint gate at the runtime barrier, including such failed applications.
+            // A provider can fault after changing hardware, so the live state leaves its boot image at the runtime
+            // barrier, failed applications included.
             AnyScreenOpEverApplied = true;
             var result = m_machines.TryCommitOperation(plan: plan);
 

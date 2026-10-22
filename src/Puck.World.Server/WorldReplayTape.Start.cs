@@ -18,20 +18,14 @@ public sealed partial class WorldReplayTape {
     private int m_startSkipIntents;
 
     // Captures the checkpoint a recording armed after the first step starts from, or names why the live state cannot
-    // be one: a mounted guest's memory and a live session's input are outside every checkpoint, and the capture
-    // itself refuses pumped guests, screen operations, a stepped machine without checkpoint support, a coupled link or
-    // rewind history, an engagement in flight, and an edit not yet applied.
+    // be one: a mounted guest's memory is outside every checkpoint, and the capture itself refuses pumped guests, a
+    // stepped machine without checkpoint support, a coupled link or rewind history, an engagement in flight, and an
+    // edit not yet applied. Live sessions, screen selectors and machine cores ride the checkpoint.
     internal bool TryCaptureStart(out WorldAuthorityCheckpoint? start, out string reason) {
         start = null;
 
         if (m_liveServer.Addons is { MountedCount: > 0 }) {
             reason = "addon guests are mounted, and a checkpoint cannot hold a guest's memory";
-
-            return false;
-        }
-
-        if (m_liveServer.GrantTable.LiveSessionPrincipals().Count != 0) {
-            reason = "a live session holds input and grants an authority checkpoint does not capture";
 
             return false;
         }

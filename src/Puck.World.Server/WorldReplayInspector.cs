@@ -142,6 +142,14 @@ public sealed class WorldReplayInspector {
         foreach (var receipt in recording.MountedAddons) {
             lines.Add(item: $"{Prefix}addon '{receipt.Name}' hash={receipt.Hash} fuel={receipt.Fuel}/tick]");
         }
+
+        if (recording.RecordedMachineDigests.Count == 0) {
+            lines.Add(item: $"{Prefix}machine cores none pinned]");
+        }
+
+        foreach (var digest in recording.RecordedMachineDigests) {
+            lines.Add(item: $"{Prefix}machine '{digest.Name}' core=0x{digest.Digest:X16} at the tape's end]");
+        }
     }
     // One entity's changed channels against its previous submission — appended as "p1 forward=1 strafe=-0.5" (seats)
     // or "body:7 turn=0.25" (everything else); nothing when the vector is unchanged. `previous` is advanced either way.
@@ -263,6 +271,9 @@ public sealed class WorldReplayInspector {
         var poses = new string[]?[recording.TickCount];
         var observed = new ulong[recording.TickCount];
         var observedCount = 0;
+        // The shadow's tick numbers continue the live world's: a boot-image tape starts them at 0, a checkpoint tape at
+        // the tick its checkpoint was taken after.
+        var firstTick = ((recording.StartTick ?? 0UL) + 1UL);
         WorldPopulation? shadow = null;
         var trace = recording.Drive(
             addonHostFactory: (definition, server) => {
@@ -275,7 +286,7 @@ public sealed class WorldReplayInspector {
                     ),
                     onResolved: tick => {
                         // ResolveReads receives context.Tick + 1 (the tick that just advanced, 1-based).
-                        var index = ((int)(tick - 1UL));
+                        var index = ((int)(tick - firstTick));
 
                         if (
                             (((uint)index) >= ((uint)poses.Length)) ||

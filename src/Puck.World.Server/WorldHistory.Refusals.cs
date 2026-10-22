@@ -39,14 +39,13 @@ public sealed partial class WorldHistory {
         if (m_server.AnyAddonEverPumped || (m_server.Addons is { MountedCount: > 0 })) {
             return "addon guest state cannot be restored by a history keyframe";
         }
-        if (m_server.AnyScreenOpEverApplied) {
-            return "screen or machine operations changed state outside the checkpoint inventory";
-        }
         if (m_server.AnyMachineEverPumped && (m_server.Machines is not IWorldMachineCheckpointHost)) {
             return "a stepped machine has no checkpoint support";
         }
+        // A keyframe carries a session, but its observer watches from another authority, whose view of the timeline
+        // the history does not rewind: the same rule that keeps a recorded session event out of a seek's span.
         if (m_server.GrantTable.LiveSessionPrincipals().Count != 0) {
-            return "live session input and grants are not captured by authority checkpoints";
+            return "a live session observes this world from another authority, whose view the history does not rewind";
         }
         return m_server.Persistence.ReplayTimelineResetRefusal();
     }
@@ -58,9 +57,6 @@ public sealed partial class WorldHistory {
     private string? RecordedEntryRefusal(WorldReplayEntry entry) {
         if (Unrewindable(entry: entry) is { } external) {
             return external;
-        }
-        if (entry is WorldReplayEntry.ScreenOp) {
-            return "a screen operation changes state outside the checkpoint inventory";
         }
         if ((entry is WorldReplayEntry.Mutation mutation) && ChangesAddons(mutation: mutation.Value)) {
             return "an addon edit requires guest state that history cannot restore";

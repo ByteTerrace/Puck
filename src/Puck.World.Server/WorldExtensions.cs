@@ -115,8 +115,13 @@ public sealed class WorldExtensions {
             throw new InvalidOperationException(message: "The extension belongs to a retired or replay authority timeline.");
         }
     }
-    /// <summary>Closes an extension replay, restoring ordinary live dispatch.</summary>
-    internal void CompleteReplay() => m_server.ExecuteAuthorityOperation(operation: () => m_replayActive = false);
+    /// <summary>Closes an extension replay and opens the live epoch again: the world is live once more, so a fresh
+    /// runtime admits and contributes. Every runtime admitted before the replay stays retired, since the timeline it
+    /// observed was replaced; its owner admits a new instance.</summary>
+    internal void CompleteReplay() => m_server.ExecuteAuthorityOperation(operation: () => {
+        m_replayActive = false;
+        m_suppressed = false;
+    });
     /// <summary>Drains every enqueued contribution through the ordinary admitted submission door — grants, budgets,
     /// validation and phase guards all still apply, and both mutation taps observe proposal and outcome.</summary>
     /// <remarks>Runs on the simulation pump, never on a provider thread.</remarks>
@@ -161,7 +166,8 @@ public sealed class WorldExtensions {
         ));
         return sequence;
     });
-    /// <summary>Enters an extension replay: live dispatch is suppressed until <see cref="CompleteReplay"/>.</summary>
+    /// <summary>Enters an extension replay: live dispatch is suppressed until <see cref="CompleteReplay"/>, and every
+    /// runtime admitted so far is retired with the timeline the replay replaces.</summary>
     internal void EnterReplay() => m_server.ExecuteAuthorityOperation(operation: () => {
         Suppress();
         m_replayActive = true;
@@ -183,10 +189,12 @@ public sealed class WorldExtensions {
             query: query
         );
     }
-    /// <summary>Explicitly opens a new live integration epoch after recovery or a fork. Old runtime instances stay
-    /// revoked. Only the trusted composition root may call this after choosing bindings and journal namespaces
-    /// appropriate to the restored world; replay never calls it automatically.</summary>
-    /// <exception cref="InvalidOperationException">An external call from the previous epoch is still in flight.</exception>
+    /// <summary>Explicitly opens a new live integration epoch after a host's own suppression (<see cref="Suppress"/>:
+    /// a recovery or an activation from a checkpoint). Old runtime instances stay revoked. The trusted composition
+    /// root calls this after choosing bindings and journal namespaces appropriate to the restored world; a replay
+    /// drive or history seek reopens the epoch itself when it completes (<see cref="CompleteReplay"/>).</summary>
+    /// <exception cref="InvalidOperationException">An external call from the previous epoch is still in flight, or a
+    /// replay is active.</exception>
     internal void StartEpoch() => m_server.ExecuteAuthorityOperation(operation: () => {
         if (m_replayActive) {
             throw new InvalidOperationException(message: "A live integration epoch cannot start while replay is active.");
@@ -194,8 +202,9 @@ public sealed class WorldExtensions {
         Suppress();
         m_suppressed = false;
     });
-    /// <summary>Revokes live external execution and contribution capabilities before a replay replaces this
-    /// timeline. Suppression lasts until the host explicitly opens a new live integration epoch.</summary>
+    /// <summary>Revokes live external execution and contribution capabilities before this timeline is replaced.
+    /// Suppression lasts until a new live integration epoch opens: <see cref="StartEpoch"/> for a host's own
+    /// suppression, <see cref="CompleteReplay"/> for a replay's.</summary>
     internal void Suppress() => m_server.ExecuteAuthorityOperation(operation: () => {
         if (m_externalOperationsInFlight != 0) {
             throw new InvalidOperationException(message: "An external operation is in flight; wait for dispatch to settle before replay.");

@@ -1321,6 +1321,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         machines: machines,
                         profiles: profiles
                     );
+                    // The checkpoint's sessions were observed from the activation that captured it; their screens
+                    // observe this one afresh.
+                    server.EndUnobservedSessions();
                 } else {
                     population = new WorldPopulation(definition: definition);
                     server = new WorldServer(

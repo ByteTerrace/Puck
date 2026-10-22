@@ -326,4 +326,69 @@ public sealed class BodySleepLawTests {
             userMessage: "the pending contact-field edge was rebased away during restore"
         );
     }
+    // The field can change again between the restore and the next step (an attached collider refreshing under a
+    // moving floor does so every tick), at either parity of the process-local version: the pending edge must still
+    // wake the body, so a tape driven twice restores the same continuation both times.
+    [Fact]
+    public void APendingContactFieldWakeSurvivesAFieldChangeBeforeTheNextStepAtEitherVersionParity() {
+        using var fixture = Fixtures.FreshServer(Document());
+        var population = fixture.Server.Population;
+
+        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+        fixture.Step();
+
+        var index = WorldBodiesLimits.LocalSeatCount;
+
+        Assert.True(condition: fixture.Server.Body(index: index)!.Asleep);
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        var capturedEntry = checkpoint!.Population.Entries.Single();
+        var pending = RoundTrip(checkpoint: checkpoint with {
+            Population = checkpoint.Population with {
+                Entries = [capturedEntry with { Residue = capturedEntry.Residue with { ContactFieldObservationCurrent = false } }],
+            },
+        });
+
+        var neighbours = new NoNeighbours();
+
+        for (var attempt = 0; (attempt < 2); attempt++) {
+            fixture.Server.RestoreCheckpoint(checkpoint: pending);
+
+            var versionAtRestore = population.ContactFieldVersion;
+            var sleptAt = fixture.Server.Body(index: index)!.AsleepSinceTick;
+
+            // One more field composition before the step moves the version by exactly one; the second attempt starts
+            // from the other parity, since the first attempt's own composition moved it once.
+            fixture.Server.Adjacencies = ((attempt == 0) ? neighbours : null);
+            Assert.Equal(expected: (versionAtRestore + 1UL), actual: population.ContactFieldVersion);
+            fixture.Step();
+
+            Assert.True(
+                condition: (fixture.Server.Body(index: index)!.AsleepSinceTick > sleptAt),
+                userMessage: $"attempt {attempt}: the pending contact-field edge did not wake the body when the version moved from {versionAtRestore} before the step"
+            );
+        }
+    }
+
+    private sealed class NoNeighbours : IWorldAdjacencySource {
+        public void BeginTick(ulong tick) { }
+        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
+        public WorldEntityAddress LocalEntityAddress(int index) => default;
+        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
+            neighbour = null;
+            return false;
+        }
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+            return false;
+        }
+    }
 }

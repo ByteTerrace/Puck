@@ -701,11 +701,14 @@ public sealed partial class WorldBody {
         );
         m_asleepSinceTick = residue.AsleepSinceTick;
         m_sleepIdleTicks = residue.SleepIdleTicks;
+        // A stale observation must stay stale against every version the next step can present. Versions only grow,
+        // so the version just below the current one is never seen again; flipping the low bit would equal the next
+        // version whenever the current one is even, and a sleeping body would then skip the wake the live run took.
         m_lastContactFieldVersion = ((contactFieldVersion is not { } currentVersion)
             ? residue.LastContactFieldVersion
             : (residue.ContactFieldObservationCurrent
                 ? currentVersion
-                : currentVersion ^ 1UL
+                : unchecked(currentVersion - 1UL)
             )
         );
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;

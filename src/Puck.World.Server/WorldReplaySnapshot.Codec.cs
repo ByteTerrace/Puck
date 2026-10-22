@@ -85,6 +85,28 @@ public sealed partial class WorldReplaySnapshot {
             reader: ref reader,
             what: "authoritative hash"
         );
+        // 4 = an empty row's count prefix; a real row is one digest per authoritative component.
+        var recordedComponentHashes = ReadTapeArray(
+            minimumBytesEach: 4,
+            readItem: static (ref WireReader r) => ReadTapeArray(
+                minimumBytesEach: sizeof(ulong),
+                readItem: static (ref WireReader r2) => r2.ReadUInt64(),
+                reader: ref r,
+                what: "component hash"
+            ),
+            reader: ref reader,
+            what: "component hash row"
+        );
+        // 10 = a one-character name's length prefix and byte plus the digest.
+        var recordedMachineDigests = ReadTapeArray(
+            minimumBytesEach: 10,
+            readItem: static (ref WireReader r) => new WorldReplayMachineDigest(
+                Name: r.ReadRequiredString(field: "machine digest name"),
+                Digest: r.ReadUInt64()
+            ),
+            reader: ref reader,
+            what: "machine digest"
+        );
         var definitionJson = reader.ReadBlock(
             field: "definition",
             maxBytes: WireLimits.MaxDocumentBytes
@@ -224,6 +246,15 @@ public sealed partial class WorldReplaySnapshot {
         if (recordedAuthoritativeHashes.Length != ticks.Length) {
             throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedAuthoritativeHashes.Length} recorded authoritative hashes for {ticks.Length} ticks.");
         }
+        if (
+            (recordedComponentHashes.Length != 0) &&
+            ((recordedComponentHashes.Length != ticks.Length) || recordedComponentHashes.Any(predicate: static row => (row.Length != WorldStateHashComposition.Authoritative.Count)))
+        ) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedComponentHashes.Length} per-component hash rows for {ticks.Length} ticks, or a row not {WorldStateHashComposition.Authoritative.Count} components wide.");
+        }
+        if (recordedMachineDigests.Select(selector: static digest => digest.Name).Distinct(comparer: StringComparer.Ordinal).Count() != recordedMachineDigests.Length) {
+            throw new InvalidDataException(message: "Corrupt .puckreplay recording: a machine is digested twice at the tape's end.");
+        }
 
         // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
         // tape holds is doctored or truncated after the header.
@@ -284,7 +315,9 @@ public sealed partial class WorldReplaySnapshot {
             MountedAddons = mountedAddons,
             PipelineSourceDirectory = pipelineSourceDirectory,
             RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
+            RecordedComponentHashes = recordedComponentHashes,
             RecordedHashes = recordedHashes,
+            RecordedMachineDigests = recordedMachineDigests,
             Seats = seats,
             SimulationRate = simulationRate,
             StartCheckpoint = startCheckpoint,
@@ -376,6 +409,26 @@ public sealed partial class WorldReplaySnapshot {
         writer.WriteArray(
             items: recording.RecordedAuthoritativeHashes,
             writeItem: static (w, hash) => w.WriteUInt64(value: hash)
+        );
+        if (
+            (recording.RecordedComponentHashes.Count != 0) &&
+            ((recording.RecordedComponentHashes.Count != recording.Ticks.Count) || recording.RecordedComponentHashes.Any(predicate: static row => (row.Length != WorldStateHashComposition.Authoritative.Count)))
+        ) {
+            throw new WorldReplayCodecException(message: $"a .puckreplay recording's per-component trace holds {recording.RecordedComponentHashes.Count} row(s) for {recording.Ticks.Count} tick(s), or a row of the wrong width — a host bug, not tape data.");
+        }
+        writer.WriteArray(
+            items: recording.RecordedComponentHashes,
+            writeItem: static (w, row) => w.WriteArray(
+                items: row,
+                writeItem: static (w2, hash) => w2.WriteUInt64(value: hash)
+            )
+        );
+        writer.WriteArray(
+            items: recording.RecordedMachineDigests,
+            writeItem: static (w, digest) => {
+                w.WriteString(value: digest.Name);
+                w.WriteUInt64(value: digest.Digest);
+            }
         );
         writer.WriteBlock(value: recording.DefinitionJson);
 

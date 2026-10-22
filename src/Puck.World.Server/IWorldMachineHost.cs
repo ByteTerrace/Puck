@@ -99,9 +99,9 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
     /// <summary>Gets a value indicating whether any booted machine has ever had a step/segment actually submitted to it — set the
     /// instant <see cref="Advance"/> steps a machine (individually or through a live cable link), never cleared. The
-    /// boot-anchored replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads (mirroring
-    /// <c>WorldAddonRuntime.AnyEverPumped</c>'s identical shape): offline replay reconstructs a machine's boot
-    /// image, never its accumulated core state once real ticks have run it.</summary>
+    /// replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads it: a tape's embedded definition
+    /// reconstructs a machine's boot image, never its accumulated core state, so a recording armed afterwards starts
+    /// from a checkpoint carrying the cores (<see cref="IWorldMachineCheckpointHost"/>).</summary>
     bool AnyEverPumped { get; }
     /// <summary>Gets every screen index currently carrying a booted machine — presentation's publish-loop enumeration.</summary>
     IEnumerable<int> MachineScreenIndices { get; }

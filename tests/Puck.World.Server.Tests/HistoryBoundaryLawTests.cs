@@ -148,13 +148,17 @@ public sealed class HistoryBoundaryLawTests {
                 return (accepted, refusal);
             }, TestContext.Current.CancellationToken);
             Assert.True(condition: contended.Wait(millisecondsTimeout: 30000, cancellationToken: TestContext.Current.CancellationToken));
-            server.NoteScreenOpApplied();
+            server.ApplyServerEvent(serverEvent: new WorldServerEvent.SessionAdmitted(
+                MintedGrants: [], Session: Principal.Session(epoch: 1, ordinal: 0), Templates: []
+            ));
         });
         var result = await seek!;
 
         server.AuthorityGateContended = null;
+        // The admission the seek found under the gate is both a live session and an open-tick entry the capture taped;
+        // the open tick's refusal comes first.
         Assert.False(condition: result.Accepted);
-        Assert.Contains(actualString: result.Refusal, expectedSubstring: "screen");
+        Assert.Contains(actualString: result.Refusal, expectedSubstring: "has not run yet");
         Assert.Equal(expected: before, actual: harness.Tick);
     }
     [Fact]
@@ -172,19 +176,39 @@ public sealed class HistoryBoundaryLawTests {
         harness.Step();
         Assert.Equal(actual: saves, expected: 6);
     }
+    // A screen's magazine selector is machine-host state the keyframe carries, so a seek behind a select op puts the
+    // selector back and the re-simulation that crosses the op moves it again.
     [Fact]
-    public void ASeekRefusesScreenOperationsAfterItsLastKeyframe() {
-        using var harness = new WorldHistoryHarness();
+    public void ASeekRestoresTheMagazineSelectorAScreenOperationMoved() {
+        var document = Fixtures.BuildDocument();
+        using var harness = new WorldHistoryHarness(definition: document with {
+            ScreensRaw = [.. document.Screens.Select(selector: static screen => screen with {
+                Magazine = new WorldScreenMagazine(Entries: [new WorldScreenSource.None(), new WorldScreenSource.None(), new WorldScreenSource.None()]),
+            })],
+        });
+        var server = harness.Fixture.Server;
+        var screen = document.Screens[0].Index;
 
         harness.Steps(count: 5);
-        harness.Fixture.Server.NoteScreenOpApplied();
         var before = harness.Tick;
 
-        Assert.False(condition: harness.History.TrySeek(
-            documentPath: null, refusal: out var refusal, report: out _, target: (before - 1UL)
-        ));
-        Assert.Contains(actualString: refusal, expectedSubstring: "screen");
-        Assert.Equal(expected: before, actual: harness.Tick);
+        _ = harness.Transport.SubmitEnvelope(
+            operationId: Guid.NewGuid(),
+            payload: new WorldSubmissionPayload.ScreenOp(Value: new WorldScreenOp.Select(Index: screen, Entry: 2)),
+            principal: Principal.Console
+        );
+        harness.Steps(count: 3);
+        Assert.True(condition: server.AnyScreenOpEverApplied);
+        Assert.True(condition: server.Machines.TryMagazine(index: screen, magazine: out _, selected: out var selected));
+        Assert.Equal(expected: 2, actual: selected);
+
+        _ = harness.SeekAndProve(target: before);
+        Assert.True(condition: server.Machines.TryMagazine(index: screen, magazine: out _, selected: out selected));
+        Assert.Equal(expected: 0, actual: selected);
+
+        _ = harness.SeekAndProve(target: (before + 3UL));
+        Assert.True(condition: server.Machines.TryMagazine(index: screen, magazine: out _, selected: out selected));
+        Assert.Equal(expected: 2, actual: selected);
     }
     [Fact]
     public void ASeekRefusesChangedReloadContentEvenWhenOnlyUnhashedStateChanged() {
