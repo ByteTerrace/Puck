@@ -184,8 +184,14 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
         // Revoked while the window still resolves, so the releases reach it.
         Router.Revoke(source: opened.Source);
         ReleasePadKeys(source: opened.Source);
+        ReleasePadDesktop(window: opened.Window);
         _ = m_opened.Remove(key: instance);
         _ = m_graphs.ClosePassthrough(instance: instance);
+
+        // A desktop may have brought another window forward: the keyboard comes back to the game.
+        if (opened.Window is ISourcePassthroughDesktop desktop) {
+            desktop.ReturnForeground();
+        }
 
         return true;
     }
@@ -213,6 +219,10 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
             _ = (window.TryDescribe(window: out var described)
                 ? builder.Append(provider: CultureInfo.InvariantCulture, handler: $" frame {described.FrameWidth}x{described.FrameHeight} client {described.Client.Width}x{described.Client.Height} at {described.Client.X},{described.Client.Y} scale {described.DpiScale:0.###}")
                 : builder.Append(value: " gone"));
+
+            if (window is ISourcePassthroughDesktop { ClaimsChord: true }) {
+                _ = builder.Append(value: " chord claimed");
+            }
 
             // Held, but routed nothing until its pane is published again.
             if (!m_graphs.TryGetPane(
@@ -295,7 +305,8 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
 
         return false;
     }
-    // The chord's leaving: every local seat framing a window closes it and leaves its engagement.
+    // The chord's leaving: every local seat framing a window closes it and leaves its engagement, and a desktop gives
+    // the keyboard back to the game whether or not a press opened it.
     private void LeaveFramed() {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (TryFramedWindow(
@@ -304,6 +315,13 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
                 screen: out _,
                 slot: slot
             )) {
+                if (m_windows.PassthroughWindowOf(
+                    fault: out _,
+                    instance: instance
+                ) is ISourcePassthroughDesktop desktop) {
+                    desktop.ReturnForeground();
+                }
+
                 _ = Close(instance: instance);
                 ResetPad(slot: slot);
                 m_seats.Leave(slot: slot);
@@ -334,6 +352,27 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
         m_opened[instance] = new Opened(
             Engaged: true,
             Source: pick.Source,
+            Window: window
+        );
+        m_graphs.OpenPassthrough(instance: instance);
+        PublishPanes();
+    }
+    // A local pad's press on a desktop its seat frames opens it, as a press on the picture would, wherever the cursor
+    // rests: the pad is the desktop's mouse.
+    private void OpenFramed(string instance, ISourcePassthroughWindow window) {
+        if (
+            m_opened.ContainsKey(key: instance) ||
+            !m_graphs.TryGetPane(
+                instance: instance,
+                mapping: out var mapping
+            )
+        ) {
+            return;
+        }
+
+        m_opened[instance] = new Opened(
+            Engaged: true,
+            Source: mapping.Source,
             Window: window
         );
         m_graphs.OpenPassthrough(instance: instance);

@@ -202,16 +202,14 @@ public static class WorldImageProducerSettings {
         settings: out camera,
         source: source
     );
-    /// <summary>Returns whether a screen source captures a desktop window, the one source a local user can open as a
-    /// passthrough source by engaging its screen.</summary>
+    /// <summary>Returns whether a screen source captures a desktop window or a whole monitor, the sources a local user
+    /// can open as a passthrough source by engaging its screen.</summary>
     /// <param name="source">The screen's source, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when <paramref name="source"/> is the capture producer in window mode.</returns>
-    public static bool IsWindowCapture(WorldScreenSource? source) => (
-        TryCapture(
-            capture: out var capture,
-            source: source
-        ) &&
-        (capture.MonitorIndex is null)
+    /// <returns><see langword="true"/> when <paramref name="source"/> is the capture producer with valid
+    /// settings.</returns>
+    public static bool IsPassthroughCapture(WorldScreenSource? source) => TryCapture(
+        capture: out _,
+        source: source
     );
     /// <summary>Reads a source as the capture producer's, when it is one whose settings bind.</summary>
     /// <param name="source">The source.</param>

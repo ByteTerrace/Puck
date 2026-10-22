@@ -1790,6 +1790,20 @@ window holds and returns the keyboard to the game. Delivery is Windows-only:
 the capture feed's `Win32PassthroughWindow` sends window messages to the
 captured window, described in
 [Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+
+**A captured monitor is the whole desktop.** A `capture` naming a
+`monitorIndex` opens the same way (its target's title is `Desktop`), but its
+feed's target is `Win32DesktopPassthrough`, which reaches Windows through the
+system's own input (`SendInput`), so the taskbar, Start and every window take
+it. A press on the picture is replayed at its release where the picture shows
+it (the cursor goes there, presses, drags, releases and comes back), a wheel
+turn likewise, a move reaches nothing, and the desktop takes no keyboard: keys
+go wherever Windows sends them. A press whose point shows the World's own
+window, mirrored in the picture, is sent nowhere. Over a framed desktop the pad
+is the desktop's mouse, moving the system cursor across the monitor, and the
+leaving chord is claimed system-wide; leaving brings the World's window to the
+front. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
+the worked case.
 A headless or offscreen boot has no window and no such verb.
 
 **A physical camera is an input device, seated like a gamepad, never named by

@@ -251,8 +251,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
         }
     }
     // The window one running instance captures, until the law stops the instance by clearing it.
-    private sealed class InstanceWindows(string name, PassthroughWindow window) : IWorldPassthroughWindows {
-        public PassthroughWindow? Window { get; set; } = window;
+    private sealed class InstanceWindows(string name, ISourcePassthroughWindow window) : IWorldPassthroughWindows {
+        public ISourcePassthroughWindow? Window { get; set; } = window;
 
         public ISourcePassthroughWindow? PassthroughWindowOf(string instance, out string? fault) {
             var running = (string.Equals(

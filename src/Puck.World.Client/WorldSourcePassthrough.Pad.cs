@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -10,7 +11,9 @@ namespace Puck.World.Client;
 // cursor: each frame's travel moves it (TakeWarp, which the window pump hands to the native window) and routes the new
 // position through the router at once, so a press in the same frame lands where the pointer went. Its presses take the
 // same door a physical press does: OpenEngagedUnderPointer, then the router. Its arrow keys reach only a window the local
-// user has opened.
+// user has opened. Over an engaged desktop the pad is the desktop's mouse instead (ISourcePassthroughDesktop): it moves
+// the system cursor across the whole monitor and presses, scrolls and types at it, whichever window is in front, and a
+// press on the host's own picture reaches the host as its mouse's press would.
 public sealed partial class WorldSourcePassthrough {
     // Wheel turns one Win32 wheel report divides a notch into; the pad's fractional turns are delivered in these steps.
     private const float WheelSteps = 120f;
@@ -18,7 +21,11 @@ public sealed partial class WorldSourcePassthrough {
 
     private readonly WorldPassthroughPad m_pad = new();
     private readonly HashSet<int> m_padButtons = [];
+    private readonly Dictionary<int, ISourcePassthroughDesktop> m_padDesktopButtons = [];
+    private readonly Dictionary<KeyCode, ISourcePassthroughDesktop> m_padDesktopKeys = [];
     private readonly Dictionary<KeyCode, Opened> m_padKeys = [];
+    // The desktop the reserved chord is claimed for while a local seat frames it.
+    private ISourcePassthroughDesktop? m_chordDesktop;
     private long? m_lastAdvance;
     // The pad's exact pointer, in display pixels, while the pointer is where the pad last put it.
     private Vector2? m_padPosition;
@@ -74,6 +81,100 @@ public sealed partial class WorldSourcePassthrough {
                 _ = m_padKeys.Remove(key: key);
             }
         }
+    }
+    // Releases every button and key a pad holds on a desktop, as closing its source releases a window's.
+    private void ReleasePadDesktop(ISourcePassthroughWindow window) {
+        foreach (var (button, held) in m_padDesktopButtons) {
+            if (ReferenceEquals(objA: held, objB: window)) {
+                held.PressPointer(
+                    button: button,
+                    pressed: false
+                );
+                _ = m_padDesktopButtons.Remove(key: button);
+            }
+        }
+        foreach (var (key, held) in m_padDesktopKeys) {
+            if (ReferenceEquals(objA: held, objB: window)) {
+                held.PressKey(
+                    key: key,
+                    pressed: false
+                );
+                _ = m_padDesktopKeys.Remove(key: key);
+            }
+        }
+    }
+    // The desktop a local seat frames, when its screen shows one.
+    private bool TryFramedDesktop(int slot, [NotNullWhen(returnValue: true)] out string? instance, [NotNullWhen(returnValue: true)] out ISourcePassthroughDesktop? desktop) {
+        if (
+            TryFramedWindow(
+                instance: out instance,
+                region: out _,
+                screen: out _,
+                slot: slot
+            ) &&
+            (m_windows.PassthroughWindowOf(
+                fault: out _,
+                instance: instance
+            ) is ISourcePassthroughDesktop framed)
+        ) {
+            desktop = framed;
+
+            return true;
+        }
+
+        instance = null;
+        desktop = null;
+
+        return false;
+    }
+    // Claims the reserved chord system-wide for the desktop a local seat frames, gives it back from one no seat frames,
+    // and leaves when the chord was pressed, whichever window had the keyboard.
+    private void ClaimChord() {
+        ISourcePassthroughDesktop? framed = null;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (TryFramedDesktop(
+                desktop: out var desktop,
+                instance: out _,
+                slot: slot
+            )) {
+                framed = desktop;
+
+                break;
+            }
+        }
+        if (!ReferenceEquals(
+            objA: framed,
+            objB: m_chordDesktop
+        )) {
+            if (m_chordDesktop is { } released) {
+                released.ClaimsChord = false;
+            }
+
+            m_chordDesktop = framed;
+        }
+        if (framed is null) {
+            return;
+        }
+
+        framed.ClaimsChord = true;
+
+        if (framed.TakeChord()) {
+            LeaveFramed();
+        }
+    }
+    // The wheel's whole steps the pad turned, in notches, the remainder carried to the next frame.
+    private Vector2 TakeWheel(Vector2 wheel) {
+        m_padWheel += wheel;
+
+        var steps = new Vector2(
+            x: MathF.Truncate(x: (m_padWheel.X * WheelSteps)),
+            y: MathF.Truncate(x: (m_padWheel.Y * WheelSteps))
+        );
+
+        m_padWheel -= (steps / WheelSteps);
+
+        return (steps / WheelSteps);
     }
     private void ResetPad(int slot) {
         if (m_pad.Slot == slot) {
@@ -154,6 +255,18 @@ public sealed partial class WorldSourcePassthrough {
         CloseStale();
 
         if (!pressed) {
+            if (m_padDesktopButtons.Remove(
+                key: button,
+                value: out var desktopHeld
+            )) {
+                desktopHeld.PressPointer(
+                    button: button,
+                    pressed: false
+                );
+
+                return true;
+            }
+
             return (
                 m_padButtons.Remove(item: button) &&
                 Router.Route(inputEvent: WindowInputEvent.PointerButton(
@@ -161,6 +274,23 @@ public sealed partial class WorldSourcePassthrough {
                     phase: CommandPhase.Completed
                 ))
             );
+        }
+        if (TryFramedDesktop(
+            desktop: out var desktop,
+            instance: out var desktopInstance,
+            slot: slot
+        )) {
+            OpenFramed(
+                instance: desktopInstance,
+                window: desktop
+            );
+            desktop.PressPointer(
+                button: button,
+                pressed: true
+            );
+            m_padDesktopButtons[button] = desktop;
+
+            return true;
         }
         if (!TryFramedWindow(
             instance: out _,
@@ -196,6 +326,17 @@ public sealed partial class WorldSourcePassthrough {
         CloseStale();
 
         if (!pressed) {
+            if (m_padDesktopKeys.Remove(
+                key: key,
+                value: out var desktopHeld
+            )) {
+                desktopHeld.PressKey(
+                    key: key,
+                    pressed: false
+                );
+
+                return true;
+            }
             if (!m_padKeys.Remove(
                 key: key,
                 value: out var held
@@ -204,6 +345,25 @@ public sealed partial class WorldSourcePassthrough {
             }
 
             held.Window.DeliverKey(inputEvent: WindowInputEvent.KeyUp(key: key));
+
+            return true;
+        }
+        if (TryFramedDesktop(
+            desktop: out var desktop,
+            instance: out _,
+            slot: slot
+        )) {
+            if (!m_padDesktopKeys.TryAdd(
+                key: key,
+                value: desktop
+            )) {
+                return false;
+            }
+
+            desktop.PressKey(
+                key: key,
+                pressed: true
+            );
 
             return true;
         }
@@ -232,8 +392,10 @@ public sealed partial class WorldSourcePassthrough {
     }
     /// <summary>Advances the pad over the frame's interval and returns the client point the cursor moves to: the pointer
     /// travels across the framed picture of the window its seat frames, clamped to the picture, and the wheel turns at
-    /// it in whole wheel steps, the remainder carried to the next frame. The window pump calls it once a frame, through
-    /// the cursor policy. A seat that no longer frames a window rests the pad.</summary>
+    /// it in whole wheel steps, the remainder carried to the next frame; over a desktop it moves the system cursor across
+    /// the desktop instead and returns no point. The window pump calls it once a frame, through the cursor policy, which
+    /// also closes the sources that are gone and claims the reserved chord for a desktop a local seat frames. A seat that
+    /// no longer frames a window rests the pad.</summary>
     /// <returns>The client point, or <see langword="null"/> when the cursor stays where it is.</returns>
     public (int X, int Y)? TakeWarp() {
         var now = m_time.GetTimestamp();
@@ -245,23 +407,36 @@ public sealed partial class WorldSourcePassthrough {
             : 0.0);
 
         m_lastAdvance = now;
+        CloseStale();
+        ClaimChord();
 
         var slot = m_pad.Slot;
 
         if (slot >= 0) {
-            CloseStale();
-
             if (TryFramedWindow(
-                instance: out _,
+                instance: out var instance,
                 region: out var region,
                 screen: out var screen,
                 slot: slot
             )) {
-                AdvancePad(
-                    feel: m_seats.PadPointerOf(screen: screen),
-                    picture: Picture(region: region),
-                    seconds: seconds
-                );
+                var feel = m_seats.PadPointerOf(screen: screen);
+
+                if (m_windows.PassthroughWindowOf(
+                    fault: out _,
+                    instance: instance
+                ) is ISourcePassthroughDesktop desktop) {
+                    AdvanceDesktopPad(
+                        desktop: desktop,
+                        feel: feel,
+                        seconds: seconds
+                    );
+                } else {
+                    AdvancePad(
+                        feel: feel,
+                        picture: Picture(region: region),
+                        seconds: seconds
+                    );
+                }
             } else {
                 ResetPad(slot: slot);
             }
@@ -289,17 +464,28 @@ public sealed partial class WorldSourcePassthrough {
             MovePadPointer(display: picture.Clamp(point: (from + (travel * picture.Height))));
         }
 
-        m_padWheel += wheel;
+        var notches = TakeWheel(wheel: wheel);
 
-        var steps = new Vector2(
-            x: MathF.Truncate(x: (m_padWheel.X * WheelSteps)),
-            y: MathF.Truncate(x: (m_padWheel.Y * WheelSteps))
+        if (notches != Vector2.Zero) {
+            PlacePadPointer(picture: picture);
+            _ = Router.Route(inputEvent: WindowInputEvent.PointerWheel(notches: notches));
+        }
+    }
+    // The pad over a desktop: the travel, in desktop heights, moves the system cursor, and the wheel turns at it.
+    private void AdvanceDesktopPad(ISourcePassthroughDesktop desktop, double seconds, WorldScreenPadPointer? feel) {
+        var (travel, wheel) = m_pad.Advance(
+            feel: feel,
+            seconds: seconds
         );
 
-        if (steps != Vector2.Zero) {
-            m_padWheel -= (steps / WheelSteps);
-            PlacePadPointer(picture: picture);
-            _ = Router.Route(inputEvent: WindowInputEvent.PointerWheel(notches: (steps / WheelSteps)));
+        if (travel != Vector2.Zero) {
+            desktop.MovePointer(distance: (travel * desktop.Height));
+        }
+
+        var notches = TakeWheel(wheel: wheel);
+
+        if (notches != Vector2.Zero) {
+            desktop.TurnWheel(notches: notches);
         }
     }
     private void DescribePad(StringBuilder builder) {

@@ -137,11 +137,11 @@ public sealed class WorldScreenInputLawTests {
             ),
             userMessage: accepted
         );
-        Assert.True(condition: WorldImageProducerSettings.IsWindowCapture(source: window));
+        Assert.True(condition: WorldImageProducerSettings.IsPassthroughCapture(source: window));
 
         foreach (var (padPointer, engageable, source, refusal) in new (WorldScreenPadPointer, bool, WorldScreenSource?, string)[] {
             (feel, false, null, "screens[0].route.padPointer is authored but engageable is false"),
-            (feel, true, new WorldScreenSource.None(), "screens[0].route.padPointer is authored but the screen shows no window capture"),
+            (feel, true, new WorldScreenSource.None(), "screens[0].route.padPointer is authored but the screen shows no capture"),
             ((feel with { Speed = 0f }), true, null, "screens[0].route.padPointer.speed must be a positive number"),
             ((feel with { Curve = 0.5f }), true, null, "screens[0].route.padPointer.curve must be at least 1"),
             ((feel with { Boost = float.NaN }), true, null, "screens[0].route.padPointer.boost must be at least 1"),

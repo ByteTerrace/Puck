@@ -342,28 +342,48 @@ cursor or the bar can step aside while engaged.
 - An engageable screen with no machine engages when it shows a producer
   (`WorldTick.ShowsEngageTarget`): its pad reaches nothing, and the framed
   picture shows its image.
-- A framed window capture is a passthrough candidate: the local user's
-  physical press on its picture opens it (`WorldSourcePassthrough`: a pointer
-  press only the window pump delivers, or a local pad's bound press,
-  `PadButton`), the press reaches the window and takes the keyboard, and the
-  source closes once the seat no longer frames the screen. A console
-  `body.engage`, an addon's or a scripted press engages without opening it
+- A framed capture (a window's, or a whole monitor's) is a passthrough
+  candidate: the local user's physical press on its picture opens it
+  (`WorldSourcePassthrough`: a pointer press only the window pump delivers, or
+  a local pad's bound press, `PadButton`), and the source closes once the seat
+  no longer frames the screen. A console `body.engage`, an addon's or a
+  scripted press engages without opening it
   ([decision](../../../../docs/decisions/rendering.md#the-frame-graph-and-nesting)).
   While the pointer rests on the candidate's picture the system arrow shows,
-  opened or not.
-- **One-step exit.** While a local seat frames a window capture, the reserved
-  chord Control+Alt+Escape is the host's whoever has the keyboard
+  opened or not. A window (`Win32PassthroughWindow`) hears its input as window
+  messages and takes the keyboard on a press. A monitor
+  (`ISourcePassthroughDesktop`, `Win32DesktopPassthrough`) is reached through
+  the system's own input (`SendInput`): a press on its picture is replayed at
+  its release at the desktop point the picture shows (move, press, drag,
+  release, move back, one batch), a wheel turn the same way, a move reaches
+  nothing, and it takes no keyboard (`SourcePassthroughRouter` returns focus
+  to the game), so keys go wherever Windows sends them. A replayed press whose
+  point shows a window of the host's own process is sent nowhere, so a click
+  on the World's mirror in the picture cannot repeat itself.
+- **One-step exit.** While a local seat frames a capture, the reserved chord
+  Control+Alt+Escape is the host's whoever has the keyboard
   (`SourceFocus.ClaimsChord`, answered through `TakeChord`): it returns the
   keyboard, closes the source (releasing what it and the pad hold) and leaves
   the seat's engagement through `IWorldPassthroughSeats.Leave` (the
   `DissolveControl` the context button's press makes, under the seat's acting
-  principal). The pad's X leaves through the context button, as at every
+  principal). Over a framed desktop another window may hold the keyboard, so
+  the chord is claimed system-wide (`ISourcePassthroughDesktop.ClaimsChord`, a
+  `RegisterHotKey` on a message-only window the pump thread pumps, claimed and
+  released per frame in `TakeWarp`), and leaving brings the World's window
+  back to the front (`ReturnForeground`: `SetForegroundWindow`, then an Alt
+  tap, then a click on its caption, which dismisses Start and the shell's
+  flyouts). The pad's X leaves through the context button, as at every
   device.
-- **The pad as a desktop pointer.** A seat captured on a window capture's
-  screen reads the `engagement` family's `passthrough` state
+- **The pad as a desktop pointer.** A seat captured on a capture's screen
+  reads the `engagement` family's `passthrough` state
   (`WorldSeatContextSync`, from the delivered screen row:
-  `WorldImageProducerSettings.IsWindowCapture`), so a context row gives it a
-  desktop page (the debug world's `desktop-pad` overlay in `desktop.puck`).
+  `WorldImageProducerSettings.IsPassthroughCapture`), so a context row gives it
+  a desktop page (the debug world's `desktop-pad` overlay in `desktop.puck`).
+  Over a framed desktop the pad is the desktop's mouse instead of a pointer on
+  the picture: the stick moves the system cursor across the monitor in
+  monitor heights (`ISourcePassthroughDesktop.MovePointer`, any window in
+  front), buttons, wheel and arrows are sent at it, and the first press opens
+  the source (`OpenFramed`).
   The page binds `source.passthrough.pointer` and `.scroll` (sticks),
   `.button.<left|right|middle|back|forward>` and `.arrow.<up|down|left|right>`
   (`WorldPassthroughPadCommandModule`, core-registered for vocabulary parity).
@@ -384,7 +404,8 @@ cursor or the bar can step aside while engaged.
   `world.screens` echoes `padPointer:…`. The context family is published by
   the windowed `WorldSimulation` only, so a headless boot never switches to
   the page. `WorldPassthroughPadLawTests`, `WorldPassthroughPadCommandModuleLawTests`,
-  `WorldViewPaneMappingLawTests.Engaged` and `WorldSeatContextSyncTabletopLawTests`
+  `WorldViewPaneMappingLawTests.Engaged`, `WorldViewPaneMappingLawTests.Desktop`,
+  `Win32DesktopPassthroughTests` and `WorldSeatContextSyncTabletopLawTests`
   hold it.
 
 Known limits: the matte cuts in when the ease settles and out when it starts

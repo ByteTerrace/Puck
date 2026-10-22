@@ -16,7 +16,7 @@ its `commands`, and declares the font the labels emboss in.
 lights, level boards, tour and keys. The lobby holds a games corner: the gaming
 devices stand in a row ([`devices.md`](devices.md)), and west of the entrance
 the chess table ([`chess.md`](chess.md)) and a desktop computer showing the
-Claude window ([`desktop.md`](desktop.md)). The east end of level 0 is the painting
+whole desktop ([`desktop.md`](desktop.md)). The east end of level 0 is the painting
 wing, five portal paintings behind a doorway ([`paintings.md`](paintings.md)).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque

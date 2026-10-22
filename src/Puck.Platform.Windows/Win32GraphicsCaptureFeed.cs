@@ -228,8 +228,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
     }
     /// <inheritdoc/>
-    /// <remarks>A window feed's window is created with the feed, over the handle it captures; a monitor feed has
-    /// none.</remarks>
+    /// <remarks>Created with the feed over the handle it captures: a window feed's window
+    /// (<see cref="Win32PassthroughWindow"/>), and a monitor feed's desktop (<see cref="Win32DesktopPassthrough"/>).</remarks>
     public ISourcePassthroughWindow? Window { get; }
     /// <inheritdoc/>
     public DisplayOutput Output => m_display.Output;
@@ -370,6 +370,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                 windowHandle: targetHandle
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
+        } else {
+            Window = new Win32DesktopPassthrough(
+                monitorHandle: targetHandle,
+                title: "Desktop"
+            );
         }
         allocatePixels ??= static length => GC.AllocateUninitializedArray<byte>(length: length);
         m_displayProbe = ((openOutputs is null)

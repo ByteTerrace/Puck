@@ -31,8 +31,10 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// (<see cref="NativeImageGpuCaptureTargets.SharedFenceHandle"/>), or by a CPU wait and why; pending while no
     /// targets are attached.</summary>
     SharedFenceOrder GpuFenceOrder { get; }
-    /// <summary>Gets the window this feed captures, as a passthrough input target, or <see langword="null"/> for a monitor
-    /// capture. Only a source the local user opened may send it input (<c>SourcePassthrough.IsPermitted</c>).</summary>
+    /// <summary>Gets what this feed captures as a passthrough input target: the window of a window capture, the whole
+    /// desktop of a monitor capture (an <see cref="ISourcePassthroughDesktop"/>), or <see langword="null"/> where the
+    /// platform reaches neither. Only a source the local user opened may send it input
+    /// (<c>SourcePassthrough.IsPermitted</c>).</summary>
     ISourcePassthroughWindow? Window { get; }
     /// <summary>Gets the live capture source height in pixels; it updates on window resize or monitor mode change and is
     /// the height the consumer should size its GPU targets to.</summary>
