@@ -150,7 +150,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         for (var projection = 1; (projection <= 7); projection++) {
             var slot = ((int)(rig.Node.FrameCounter % 3));
 
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection)), elevation: 1f, index: 1);
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
             rig.Render();
             Assert.Equal(expected: (projection + 1L), actual: rig.Engine.SkyEnvironmentRenders);
             Assert.False(condition: unread[slot], userMessage: $"Projection {projection} overwrote unread slot {slot}.");
@@ -194,7 +194,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         };
         // Visit every recording slot; each new pair's actual bytes enter the graph's account.
         for (var index = 1; (index <= 3); index++) {
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index)), elevation: 1f, index: 1);
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
             rig.Render();
             rig.Complete();
         }

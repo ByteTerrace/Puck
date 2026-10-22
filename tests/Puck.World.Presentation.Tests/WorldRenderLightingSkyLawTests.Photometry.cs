@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SignedDistance;
 using Puck.SdfVm;
+using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Presentation.Tests;
@@ -58,5 +59,22 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(expected: (down, downOffset), actual: (plain.SpotAxis, plain.SpotOffset));
         Assert.Equal(expected: SdfPhotometry.PositionalWeight(candela: 200f), actual: plain.Weight);
+    }
+    [Fact]
+    public void TheLightingReadBackEchoesASpotAndTheExposure() {
+        var definition = Fixtures.BuildDocument() with {
+            RenderRaw = BaseDefaults() with {
+                Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: 7f, Maximum: 16f, Compensation: 2.5f),
+                Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Spot(Name: "down", Angle: 0.6f, Power: 1500f, Temperature: 4000f)]),
+            },
+        };
+        var text = WorldLightingText.Describe(definition: definition);
+
+        Assert.Contains(expectedSubstring: "name=down type=spot", actualString: text);
+        Assert.Contains(expectedSubstring: "angle=0.6", actualString: text);
+        Assert.Contains(expectedSubstring: "power=1500", actualString: text);
+        Assert.Contains(expectedSubstring: "temperature=4000", actualString: text);
+        Assert.Contains(expectedSubstring: "exposure mode=auto", actualString: text);
+        Assert.Contains(expectedSubstring: "compensation=2.5", actualString: text);
     }
 }

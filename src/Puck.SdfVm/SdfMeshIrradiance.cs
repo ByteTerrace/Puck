@@ -67,6 +67,9 @@ public sealed class SdfMeshIrradiance {
     /// <summary>The weight every axis of the meter's reading takes besides its facing (<see cref="TryMeter"/>): the
     /// surround a center-weighted meter still reads.</summary>
     public const float MeterSurround = 0.05f;
+    // The meter's sky visibility over the mean open share of a probe's six axes: on open ground the up axis sees the
+    // whole sky, the four sideways axes half of it and the down axis none, a mean of one half.
+    private const float OpenGroundShare = 2f;
 
     private readonly Lock m_gate = new();
     private readonly ConcurrentDictionary<(int X, int Y, int Z), Probe> m_cache = new();
@@ -175,7 +178,8 @@ public sealed class SdfMeshIrradiance {
     /// <param name="luminance">The metered average luminance, in nits, when the method returns
     /// <see langword="true"/>.</param>
     /// <param name="skyVisibility">The share of the sky the probes about the camera see open, alike in every direction,
-    /// in [0, 1], when the method returns <see langword="true"/>: one in the open, near zero in a closed room.</param>
+    /// in [0, 1], when the method returns <see langword="true"/>: one on open ground, whose probes see the sky over the
+    /// upper half of their directions, near zero in a closed room.</param>
     /// <returns><see langword="false"/> while no traced probe of the current lighting lies about the camera.</returns>
     public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility) {
         luminance = 0f;
@@ -233,7 +237,7 @@ public sealed class SdfMeshIrradiance {
             }
 
             luminance = (sum / weights);
-            skyVisibility = Math.Clamp(value: (open / total), min: 0f, max: 1f);
+            skyVisibility = Math.Clamp(value: ((OpenGroundShare * open) / total), min: 0f, max: 1f);
 
             return true;
         }
