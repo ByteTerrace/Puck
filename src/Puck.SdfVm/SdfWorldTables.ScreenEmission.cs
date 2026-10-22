@@ -28,7 +28,7 @@ public sealed partial class SdfWorldTables {
 
         private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_mappings = new byte[(MaxScreenSurfaces * ScreenMappingByteLength)];
+        private readonly byte[] m_mappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
         private readonly bool[] m_tainted = new bool[MaxScreenSurfaces];
         private readonly bool[] m_renderedTainted = new bool[MaxScreenSurfaces];
 
@@ -73,7 +73,7 @@ public sealed partial class SdfWorldTables {
             var changed = false;
 
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
                 var different = ((m_sources[screen] != m_renderedSources[screen]) || (m_tainted[screen] != m_renderedTainted[screen]) ||
                     !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
                         .SequenceEqual(other: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
@@ -87,7 +87,7 @@ public sealed partial class SdfWorldTables {
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
                 m_renderedSources[screen] = m_sources[screen];
                 m_renderedTainted[screen] = m_tainted[screen];
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
 
                 m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset).CopyTo(destination: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset));
             }

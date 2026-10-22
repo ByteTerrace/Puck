@@ -866,6 +866,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 emits: sources.Emits(screen: screen),
                 screenIndex: screen
             );
+            tables.SetScreenRipple(
+                ripple: (sources.TryRippleOf(
+                    ripple: out var ripple,
+                    screen: screen
+                )
+                    ? ripple
+                    : null
+                ),
+                screenIndex: screen
+            );
         }
     }
     // A world load may replace (or remove) its immutable atlas without rebuilding the residency. Polling the reference is

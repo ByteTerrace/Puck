@@ -17,8 +17,9 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
 `debug.puck`, basis `avatars/moth`), is the only live world, with the
-garden (`garden.puck`) its portal frame opens onto; `debug.md` beside them is
-the portal demo and its inspection verbs. It boots on the Moth's seat chase
+garden (`garden.puck`) and the night field (`night.puck`) its painting wing's portals open onto
+(`paintings.puck`, in the gallery hall); `debug.md` and `paintings.md` beside them are the
+portal demo and its inspection verbs. It boots on the Moth's seat chase
 camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)

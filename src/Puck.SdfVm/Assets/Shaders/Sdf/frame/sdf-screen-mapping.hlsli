@@ -13,7 +13,26 @@ struct ScreenMappingData {
     float4 sampleClamp; // the crop inset by half a source pixel: left, top, right, bottom
     float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = emits light, w = drawn through the screen glass (0 for an opening)
 };
-static const uint WorldScreenMappingRows = 7u;
+// A screen's record is its ScreenMappingData rows, then its ScreenRippleData rows. KEEP IN SYNC with
+// SdfWorldTables.ScreenMappingStride and SdfScreenRipple.Rows.
+static const uint WorldScreenMappingDataRows = 7u;
+static const uint WorldScreenRippleRows = 5u;
+static const uint WorldScreenMappingRows = (WorldScreenMappingDataRows + WorldScreenRippleRows);
+// SdfWorldTables.SetScreenRipple writes the opening's ripple, indexed by screen slot.
+struct ScreenRippleData {
+    float4 state;       // x = 1 when the opening ripples, y = the ripple clock in seconds, wrapped at RippleClockPeriod
+    float4 contacts[4]; // per contact: xy = the surface UV it touched, z = its age in seconds, w = its strength (0 for none)
+};
+ScreenRippleData worldScreenRipple(uint screenIndex) {
+    uint row = ((screenIndex * WorldScreenMappingRows) + WorldScreenMappingDataRows);
+    ScreenRippleData data;
+    data.state = screenMappings[row];
+    data.contacts[0] = screenMappings[(row + 1u)];
+    data.contacts[1] = screenMappings[(row + 2u)];
+    data.contacts[2] = screenMappings[(row + 3u)];
+    data.contacts[3] = screenMappings[(row + 4u)];
+    return data;
+}
 ScreenMappingData worldScreenMapping(uint screenIndex) {
     uint row = (screenIndex * WorldScreenMappingRows);
     ScreenMappingData data;

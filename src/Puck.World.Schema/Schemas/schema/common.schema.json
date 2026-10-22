@@ -2343,6 +2343,11 @@
             "null"
           ],
           "default": null
+        },
+        "ripple": {
+          "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
