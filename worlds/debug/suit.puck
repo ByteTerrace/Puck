@@ -41,7 +41,8 @@ state {
 kits {
   // The sequence and rows are the inert default the basis leaves implied. Every body holds the register, born 1, so the
   // cases name only the suit-off value 0: a case naming 1 would select every body, a chess piece included. A body whose
-  // register holds no case's value keeps what it was given, the seat kit for a suited Moth.
+  // register holds no case's value keeps what it was given, the seat kit for a suited Moth. The debug world imports this
+  // file through noclip.puck, whose selector reads `form` (the suit register plus noclip) in place of this one.
   assignment {
     rows []
     sequence {

@@ -63,6 +63,7 @@ rule): the bar is the debug world's only on-screen UI.
 | R (hold) | Left trigger held, then North (hold) | Recenter the camera behind the body |
 | Z held, then O (hold) | Left trigger held, then RB (hold) | Free look: the right stick orbits the camera without turning her (`player.look.free`) |
 | T | Right trigger held, then South | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks, runs and jumps once, with no flight mode ([`suit.puck`](../suit.puck)). Keyboard equivalent on the Debug page: X held, then K |
+| P | Right trigger held, then left stick press | In the debug world, noclip: switch her collision off or on, anywhere ([`noclip.puck`](../noclip.puck)). With it off she passes through walls, floors, placements and other bodies and flies, in the suit or out of it: the movement keys and stick at 5 m/s, 10 running, rise (Space, Left Ctrl, M) and descend (C) climb and sink, and letting go hovers. Switching it back on collides again where she is; in the suit she is left hovering in flight mode, and out of it she falls. Keyboard equivalent on the Debug page: X held, then N |
 | Enter | Start | Start on an engaged device; the Moth ignores it |
 | Right Shift | Back | Select on an engaged device; the Moth ignores it |
 | 1 | | Native three-quarter inspection |
@@ -77,7 +78,7 @@ rule): the bar is the debug world's only on-screen UI.
 | Tab (hold) | LB (hold) | Open the play wheel |
 | Q (hold) | | In the debug world, open the gallery wheel |
 | Z (hold) | Left trigger (hold) | The View page of the bar: camera layouts, autorun and autofly, recenter, free look and the frame toggle |
-| X (hold) | Right trigger (hold) | The Debug page: inspection verbs, frame comparison, stop and the suit |
+| X (hold) | Right trigger (hold) | The Debug page: inspection verbs, noclip, frame comparison, stop and the suit |
 | Z then X (hold) | Left then right trigger | The Go page: the debug world's places (`debug.go`) |
 | X then Z (hold) | Right then left trigger | The Tour page: the gallery tour, its lights and motion, two paintings |
 | Backtick | | Show or hide the console |
@@ -109,7 +110,7 @@ too; Move's face buttons keep their own keys (F, Left Shift, Space, C, E).
 |---|---|---|
 | Move | nothing | forward, strafe right, back, strafe left; wheel (LB); run on/off; flight, run, jump, descend; interact; fly |
 | View | LT or Z | chase, three-quarter, front, rear; wide; autorun; recenter, jetpack alone, face, frame; free look; autofly |
-| Debug | RT or X | where, history on, console, capture; inspector on; inspector off; debug view, hold frame, suit, compare; clear hold; stop |
+| Debug | RT or X | where, history on, console, capture; inspector on/off; noclip; debug view, hold frame, suit, compare; clear hold; stop |
 | Go | LT then RT, Z then X | stage, gallery, portals, Wonderland; hero studio; devices; chess, computer, gallery levels 0 and 1; levels 2 and 3 on RB and R3 |
 | Tour | RT then LT, X then Z | next exhibit, flag, previous exhibit, quality; slice; update rates; lights off, lights on, motion off, motion on; garden painting; night painting |
 
