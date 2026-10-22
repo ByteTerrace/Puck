@@ -7410,7 +7410,7 @@ render {
     maximum: 16
     compensation: 2.5
     adaptation: 0.75
-    local: 0.5
+    "local": 0.5
   }
   renderScale: 1
   shadowLights: 1
