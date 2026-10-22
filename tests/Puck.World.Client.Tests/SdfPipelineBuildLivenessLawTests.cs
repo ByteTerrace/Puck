@@ -194,14 +194,15 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
-        // cache lists only the pass pipelines (the region copy, the mesh pass, the shadow cascades' pass and the glass
-        // pass), released after the set, the held creations can return: no canceled build starts another.
+        // cache lists only the pass pipelines (the region copy, the mesh pass, its occlusion kernel, the shadow cascades'
+        // pass and the glass pass), released after the set, the held creations can return: no canceled build starts
+        // another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 4)
+            step: () => (cache.Pipelines.SharedPipelines <= 5)
         );
         driver.Open();
         loss.Join();
@@ -333,11 +334,9 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             m_open.Dispose();
         }
         public void Enter(GpuComputePipelineDescription description) {
-            // The device's region-copy pipeline builds beside the set, so the driver lets it pass uncounted.
-            if (ReferenceEquals(
-                objA: description,
-                objB: GpuRegion.CopyPipeline
-            )) {
+            // The device's region-copy pipeline and the mesh pass's occlusion kernel build beside the set, so the driver
+            // lets them pass uncounted.
+            if (ReferenceEquals(objA: description, objB: GpuRegion.CopyPipeline) || ReferenceEquals(objA: description, objB: SdfMeshRasterPass.OcclusionDescription)) {
                 return;
             }
 
