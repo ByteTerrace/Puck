@@ -231,7 +231,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | `polar` about Y and about Z with an origin, mirrored, material stride | `shape-polar-fold`, `shape-polar-z`, `shape-polar-mirror`, `shape-polar-stride`, `motion-polar` |
 | `wallpaper` Pmm, P4M (bounded), P3M1, P6M (clipped), material stride | `shape-wallpaper-pmm`, `-p4m`, `-p3m1`, `-p6m`, `-stride` |
 | Folds riding a moving parent | `motion-mirror`, `motion-polar` |
-| Creation `noise` | `shape-noise` (it displaces the whole creation, plinth and label included) |
+| Creation `noise` | `shape-noise` and `shape-noise-subject` (noise displaces every shape and text run of the creation it sits in, so the lumpy sphere is its own creation placed over the plinth's, which stays clean) |
 | The other thirteen wallpaper groups | not exhibited: the program refuses every group whose walls are not all mirrors |
 | `jitter` (CellJitter: hashed displacement, tumble, material variants, a noise flavour), `logSphere` (LogSphere) | `shape-jitter`, `shape-jitter-tumble`, `shape-log-sphere`: render only, each clipped by an intersection inside the creation scope, since neither lattice has an edge |
 | Shape types Vesica, Star | not exhibited: no creation primitive lowers to them; they are builder-only |

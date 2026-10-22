@@ -25,6 +25,8 @@ public static partial class WorldSessionLevers {
     public const double BindingBarAuto = -1.0;
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
+    /// <summary>The raster passes' cull of mesh draws they cannot show (<c>world.cull</c>).</summary>
+    public const string Cull = "cull";
     /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -89,6 +91,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: CadenceGate,
             setter: lever => settings.CadenceGate = Flag(lever: lever)
+        );
+        sink.Register(
+            name: Cull,
+            setter: lever => settings.Cull = Flag(lever: lever)
         );
         sink.Register(
             name: Indirect,

@@ -119,15 +119,14 @@ bodies {
 }
 
 placements {
-  // Six derived face screens: the painting wing's six canvases (paintings.puck). The scale envelope reaches 1.5 for
-  // the device row's handhelds, shown at 1.5 times their real size (devices.puck).
+  // Six derived face screens: the painting wing's six canvases (paintings.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
     derivedFaceScreens: 6
-    maxPlacementScale: 1.5
+    maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
   }

@@ -164,9 +164,10 @@ bool sdfMeshBarycentric(float3 a, float3 b, float3 c, float3 p, out float3 weigh
 
     return true;
 }
-// A surface normal of a triangle whose face is `face`, turned to face a camera looking along `rayDirection`. The pass
-// culls nothing, so when the camera sees the triangle's back (an open mesh from behind, or a mirrored copy, whose matrix
-// reverses its winding) the normal is turned toward the camera. A normal that still leans away from the ray (an
+// A surface normal of a triangle whose face is `face`, turned to face a camera looking along `rayDirection`. The opaque
+// pass culls back faces (an authored mesh carries both windings), so the triangle it draws looks at the camera; when a
+// ray meets the triangle's back all the same (the glass and shadow passes cull nothing) the normal is turned toward the
+// camera. A normal that still leans away from the ray (an
 // interpolated or sampled normal tilted past a grazing ray) is clamped to face the camera, by removing the part of it
 // along the ray and a sliver more.
 float3 sdfMeshFaceCamera(float3 normal, float3 face, float3 rayDirection) {

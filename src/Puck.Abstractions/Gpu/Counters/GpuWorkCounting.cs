@@ -292,6 +292,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             parameters: in parameters
         );
         Tally(column: GpuWork.DrawsColumn);
+        Tally(amount: (((long)parameters.VertexCount) * parameters.InstanceCount), column: GpuWork.VerticesColumn);
     }
     public void DrawIndexed(nint commandBufferHandle, uint indexCount) {
         inner.DrawIndexed(
@@ -299,6 +300,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             indexCount: indexCount
         );
         Tally(column: GpuWork.DrawsColumn);
+        Tally(amount: indexCount, column: GpuWork.VerticesColumn);
     }
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         inner.Dispatch(

@@ -209,6 +209,7 @@
     { "name": "world.control", "bindable": false, "audience": "anyone" },
     { "name": "world.cost", "bindable": true, "audience": "anyone" },
     { "name": "world.counters", "bindable": false, "audience": "anyone" },
+    { "name": "world.cull", "bindable": false, "audience": "anyone" },
     { "name": "world.curves", "bindable": false, "audience": "anyone" },
     { "name": "world.debug-view", "bindable": true, "audience": "anyone" },
     { "name": "world.decisions", "bindable": false, "audience": "operator" },

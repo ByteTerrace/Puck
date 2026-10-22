@@ -39,6 +39,33 @@ material blending at smooth seams do not survive the bake: the mesh carries no
 curvature, a rasterized pixel is covered or not, and the bake point-samples a
 quad's winning material.
 
+## A raster pass draws only what it can show
+
+Every raster pass skips the mesh draws it cannot show any of, by a world box per
+draw tested on the host (`SdfMeshBox`, `SdfMeshCull`): a view's mesh and glass
+passes against the view's frustum before the frame's far distance, a shadow
+cascade against its light's box and, swept along the light, against the
+receivers the view shows. A skipped draw lies wholly outside what the pass's
+rasterizer keeps, or casts only where no visible receiver reads, so the cull
+changes no pixel and needs no authoring: every world gets it, and every nested
+view culls by its own camera, which for a portal window is the frustum fitted
+through its glass. On the debug world it removed 31% to 95% of a frame's
+triangles across eight indoor, outdoor and through-portal views
+([P20](../plans/rendering.md#p20--visibility-areas-and-residency)). The test
+is conservative where exactness would risk a pixel: a pixel margin past the
+temporal jitter, a thousandth of the near distance in front of the near plane,
+the shadow filter's reach around receivers, and no box at all for a skinned
+draw whose vertices the GPU places. Occlusion, levels of detail and residency
+build on the same per-draw box; authored areas are not assumed, because the
+debug world's levels are open plan and name no rooms. Hidden geometry is found
+by a depth-based occlusion test that needs no authoring, not by authored rooms.
+
+Anything that trades a visible change for cost, such as a level of detail, an
+unloaded residency ring or a culled small object, switches only beyond the
+distance at which the switch is barely perceptible (the owner's ruling). The
+switch distance is derived from the change's size on screen at the view's
+resolution, not fixed in metres.
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable
@@ -715,11 +742,11 @@ screen glass is exactly its picture (the owner's ruling).** A screen row's half
 extents are the source's pixels times the device's pixel pitch, the pitch
 carrying the pixel aspect (a 4:3 tube for a 256 by 240 console gives 8:7), and
 the bezel lies outside the glass. Because the camera alone sets how large the
-glass appears, no object is ever resized for a window. A device on display may
-be shown larger than life so it reads from the walking distance: the debug
-world's handhelds stand at 1.5 times their real size (the owner's ruling),
-modelled in their real millimetres and scaled whole by their placements, the
-pitch scaling with them, so the glass is still exactly the picture.
+glass appears, no object is ever resized for a window. Every device is shown at
+its real size (the owner's ruling), the pitch the real one, so the glass is
+exactly the picture. A small device reads by how it is displayed, never by
+being enlarged: the debug world stands its handhelds on low plinths near the
+walkway with an angled name placard, the way a museum shows a small object.
 
 **A screen lit by external content keeps lighting the room live (the owner's
 ruling), and captures complete anyway.** A desktop or camera screen's glow

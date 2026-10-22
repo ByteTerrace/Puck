@@ -83,6 +83,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
             try {
                 layout.PsoHandle = BuildPso(
+                    cull: description.Cull,
                     depthCompare: description.DepthCompare,
                     device: device,
                     library: deviceContext.PipelineLibrary,
@@ -130,6 +131,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         ),
     };
     private static nint BuildPso(
+        GpuCullMode cull,
         GpuDepthCompare? depthCompare,
         ID3D12Device* device,
         DirectXPipelineLibrary? library,
@@ -173,13 +175,18 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             RasterizerState = new D3D12_RASTERIZER_DESC {
                 AntialiasedLineEnable = false,
                 ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
-                CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE,
+                CullMode = ((cull == GpuCullMode.Back)
+                    ? D3D12_CULL_MODE.D3D12_CULL_MODE_BACK
+                    : D3D12_CULL_MODE.D3D12_CULL_MODE_NONE),
                 DepthBias = 0,
                 DepthBiasClamp = 0f,
                 DepthClipEnable = true,
                 FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID,
                 ForcedSampleCount = 0,
-                FrontCounterClockwise = false,
+                // A triangle wound counter-clockwise as it appears on the attachment is a front face, the sense of the
+                // baked meshes' outward winding (SdfDualContouring); Vulkan's FrontFaceCounterClockwise is this
+                // setting's other side, which its negative-height viewport keeps true to the image.
+                FrontCounterClockwise = true,
                 MultisampleEnable = false,
                 SlopeScaledDepthBias = 0f,
             },
@@ -210,10 +217,10 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
         if (library is not null) {
             // The fixed state this factory varies besides the stages and root signature: the render-target count and
-            // formats, the depth-stencil format, the depth test (-1 for none), and each vertex attribute's format,
-            // offset and semantic index.
+            // formats, the depth-stencil format, the depth test (-1 for none), the rasterizer's cull mode and front
+            // face, and each vertex attribute's format, offset and semantic index.
             var colorCount = renderPass.ColorFormats.Count;
-            var state = new byte[(sizeof(int) * ((3 + colorCount) + (3 * ((int)inputElementCount))))];
+            var state = new byte[(sizeof(int) * ((4 + colorCount) + (3 * ((int)inputElementCount))))];
             var words = MemoryMarshal.Cast<byte, int>(span: state.AsSpan());
 
             words[0] = colorCount;
@@ -226,11 +233,12 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             words[(2 + colorCount)] = ((depthCompare is { } test)
                 ? ((int)test)
                 : -1);
+            words[(3 + colorCount)] = ((((int)psoDesc.RasterizerState.CullMode) << 1) | (psoDesc.RasterizerState.FrontCounterClockwise ? 1 : 0));
 
             for (var index = 0; (index < inputElementCount); index++) {
-                words[((3 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
-                words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].AlignedByteOffset);
-                words[((5 + colorCount) + (3 * index))] = ((int)inputElements[index].SemanticIndex);
+                words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
+                words[((5 + colorCount) + (3 * index))] = ((int)inputElements[index].AlignedByteOffset);
+                words[((6 + colorCount) + (3 * index))] = ((int)inputElements[index].SemanticIndex);
             }
 
             return library.CreateGraphicsPipeline(

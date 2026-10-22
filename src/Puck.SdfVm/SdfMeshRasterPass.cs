@@ -98,9 +98,12 @@ public sealed class SdfMeshRasterPass {
         );
     }
 
-    /// <summary>Gets the pipeline's description: the mesh interface's layout, no vertex input and the reversed-Z depth
-    /// test.</summary>
+    /// <summary>Gets the pipeline's description: the mesh interface's layout, no vertex input, the reversed-Z depth test
+    /// and back faces culled, a face being back by the bake's winding (outward faces counter-clockwise on the target,
+    /// <see cref="GpuGraphicsPipelineDescription"/>). The shadow and glass pipelines cull nothing: a cascade's winding
+    /// follows the light, and a glass mesh's back faces carry its thickness.</summary>
     public static GpuGraphicsPipelineDescription Description { get; } = new(
+        Cull: GpuCullMode.Back,
         DepthCompare: GpuDepthCompare.Greater,
         Layout: SdfWorldTables.PipelineLayouts.Mesh,
         Name: ShaderStem,
@@ -110,11 +113,11 @@ public sealed class SdfMeshRasterPass {
         )
     );
 
-    /// <summary>Gets the shadow pipeline's description: the mesh pass's, named for the shadow stages.</summary>
-    public static GpuGraphicsPipelineDescription ShadowDescription { get; } = Description with { Name = ShadowShaderStem };
-    /// <summary>Gets the glass pipeline's description: the mesh pass's, named for the glass stage. It draws in the mesh
+    /// <summary>Gets the shadow pipeline's description: the mesh pass's without culling, named for the shadow stages.</summary>
+    public static GpuGraphicsPipelineDescription ShadowDescription { get; } = Description with { Cull = GpuCullMode.None, Name = ShadowShaderStem };
+    /// <summary>Gets the glass pipeline's description: the mesh pass's without culling, named for the glass stage. It draws in the mesh
     /// pass's render pass (<see cref="RenderPass"/>), into the glass target and the glass pass's own depth.</summary>
-    public static GpuGraphicsPipelineDescription GlassDescription { get; } = Description with { Name = GlassShaderStem };
+    public static GpuGraphicsPipelineDescription GlassDescription { get; } = Description with { Cull = GpuCullMode.None, Name = GlassShaderStem };
     /// <summary>Gets the render pass the pipeline draws in: the target (<see cref="SdfWorldPackage.MeshTargetFormat"/>)
     /// cleared and stored, left in its attachment layout, and the depth attachment
     /// (<see cref="SdfWorldPackage.MeshDepthAttachment"/>) cleared to its reversed-Z far plane and discarded.</summary>

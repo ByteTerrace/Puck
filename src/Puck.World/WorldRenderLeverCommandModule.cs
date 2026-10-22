@@ -321,6 +321,29 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.cull",
+            description: "Toggles the raster passes' cull of mesh draws live (no rebuild): world.cull [on|off|status]. On, each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere, so world.counters gpu measures what the cull saves (draws, vertices, fragments). The image is the same either way. Ships ON.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.cull: {(settings.Cull ? "on" : "off")}]");
+
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return Echo();
+                }
+                if (ParseOnOff(token: args[0]) is not { } state) {
+                    return CommandResult.Error(output: $"[world.cull: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Cull,
+                    a: (state ? 1.0 : 0.0),
+                    formatEcho: Echo
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.indirect",
             description: "Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: world.indirect [off|medium|high]. No argument reads the selected tier.",
             handler: (context, args) => {

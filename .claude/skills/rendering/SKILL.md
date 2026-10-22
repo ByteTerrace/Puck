@@ -62,6 +62,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   nothing; the window and the pattern's tile are a pair. `world.debug-view ao`
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
+- **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
+  applied in `SdfWorldPassRecorder.RecordMeshDraws`): a view's frustum, a
+  cascade's light box and the receivers it shadows. A box is the mesh's
+  position bounds through the draw's matrix and carry, so a draw whose vertex
+  stage moves vertices any other way (members' slots, a displacement) must have
+  no box (`SdfMeshBox.TryOf` returns false) or it vanishes while visible. A
+  missing object that `world.cull off` brings back is the cull's;
+  `gpu.vertices` in `world.counters gpu` counts what each pass draws.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
@@ -228,6 +236,14 @@ wrong. The contracts that bite most often:
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.
   A per-pixel field view would put a second interpreter copy in a pixel kernel.
+- **Winding is one contract across three places.** The bake winds outward
+  faces counter-clockwise (`SdfDualContouring`), both backends declare a
+  counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
+  pipeline factories), and the opaque mesh pass culls back faces
+  (`SdfMeshRasterPass.Description`; the shadow and glass pipelines cull
+  nothing). A mesh not from the bake is drawn in both windings
+  (`WorldPlacementStamper.MeshOf`). Probe facing with `SV_IsFrontFace` in the
+  mesh fragment stage and `world.debug-view depth`, on both backends.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes
