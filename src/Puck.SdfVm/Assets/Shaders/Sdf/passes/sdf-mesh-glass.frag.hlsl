@@ -5,7 +5,9 @@
 // travels through glass whatever order the faces rasterize in. A front face then writes the glass target as the mesh
 // pass writes its target (the ray parameter, the draw plus one, the triangle) through the pass's own reversed-Z depth, so
 // the nearest front face wins; a back face, or a face behind the opaque hit, writes the far plane's depth and fails the
-// test. Every fragment counts one texel.
+// test. Every fragment counts one texel. A face is a front face when its triangle's authored outward normal (the bake's
+// winding, which curvature also reads) faces the camera; the rasterizer's facing is not used, since its sense follows each
+// backend's winding and viewport conventions rather than the mesh.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
@@ -17,10 +19,14 @@ struct GlassFragment {
     float depth : SV_Depth;
 };
 
-GlassFragment PSMain(MeshVertex input, bool front : SV_IsFrontFace) {
+GlassFragment PSMain(MeshVertex input) {
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);
     float t = length(input.world - view.position.xyz);
+    uint record = sdfMeshRecord(pushedIndex.index & SdfMeshDrawMask);
+    uint first = (3u * input.triangleIndex);
+    float3 a = sdfMeshWorldPosition(record, first);
+    bool front = (dot(cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a)), (input.world - view.position.xyz)) < 0.0);
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
     bool counts = (t < opaque);

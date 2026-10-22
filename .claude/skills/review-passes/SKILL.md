@@ -56,7 +56,10 @@ overrides this skill and is written into it in that session.
   Set `--cwd` to the review worktree and use the model and effort the lead
   names, passing both `--model` and `--effort` on every launch: without them
   the job runs the local Codex configuration's default model and effort.
-  `--effort` takes `none`, `minimal`, `low`, `medium`, `high` or `xhigh`.
+  `--effort` takes `none`, `minimal`, `low`, `medium`, `high` or `xhigh`, but
+  Astra and Sol refuse `none` (and Sol `minimal`), so pass `low` through
+  `xhigh`. `max` is reachable only through `codex exec -c
+  model_reasoning_effort='"max"'`.
   Pass the brief with `--prompt-file <path>`, an absolute path because it
   resolves against `--cwd`, never as command-line prompt text. `task` has no
   `--help`: `task --help` is sent to the model as a prompt.

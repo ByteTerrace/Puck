@@ -226,13 +226,32 @@ World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
 the lead merges and reloads, or in a World of its own under a GPU grant, named
 by `world` on every call. Reads and captures of the live World are always
-allowed; a brief names the live mutations a lane may make.
+allowed; a brief names the live mutations a lane may make. The machine belongs
+to the agents (the owner's ruling): the lead boots a World for a check and stops
+it when the check ends, and it leaves one running for the owner only when the
+owner asks to play or pair in it.
 
 Codex lanes reach the same World: the repository's `.codex/config.toml` starts
 the same `puck` MCP launcher, so a companion `task` run in this checkout or a
-worktree of it can call `puck_worlds` and the rest. Both Astra and Sol accept
-`low` through `ultra` effort, but the companion passes only `none` through
-`xhigh`. The owner's own Codex Desktop thread holds a writer lock while it is
+worktree of it can call `puck_worlds` and the rest.
+
+| Codex model | Id | OpenAI's positioning | Effort | Price per 1M in / out |
+|---|---|---|---|---|
+| Astra | `gpt-6-astra` | Most capable, for the most demanding work | `low` to `max`; refuses `none` | $10 / $50 |
+| Sol | `gpt-6.1-sol` | Near-Astra for complex coding at lower cost | `low` to `max`, default `medium`; refuses `none` and `minimal` | $2 / $10 |
+
+Both have a 1,050,000-token context and 128,000 output tokens. The companion's
+`--effort` stops at `xhigh`; `max` needs `codex exec -c
+model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
+the effort). Prices are API list prices, a guide to relative cost; Codex draws
+on the plan's allowance. Effort is not capability across models: OpenAI's Codex
+guidance says Astra at `low` can outperform Sol at `high`, so a lane that needs
+Sol at `high` or above tries Astra at `low` or `medium` first. Raising effort
+never supplies a missing file, tool or permission; fix the brief first. Codex
+also offers GPT-5.6 Terra (everyday work, routine code changes) and GPT-5.6 Luna
+(fast, focused or repetitive edits), the scout tier of that family. Astra asks more questions when input
+could change the result and follows `AGENTS.md` and skills more literally, so an
+Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
