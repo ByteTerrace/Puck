@@ -327,7 +327,9 @@ check the flag: the owner may be holding the pad.
   `world.screenshot <path.png> presented 8`, which report each frame's changed
   pixels and luma change against the one before
   ([console](references/console.md#settled-stills-and-presented-bursts)).
-- **Capture motion on exact ticks.** Calls over MCP land wherever the World
+- **Capture motion on exact ticks.** `puck motion` does it for the Moth in one
+  command (scenario file `worlds/debug/motion.scenarios.json`, contact sheets,
+  `--reproduce`); the rest of this item is the procedure under it. Calls over MCP land wherever the World
   has stepped to, so a script whose inputs and stills must land on exact ticks
   is armed in one line with `world.at` and waited for with `world.wait until
   <tick>`; `world.lockstep on` makes a windowed World's presentation repeat

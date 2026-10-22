@@ -1,4 +1,4 @@
-namespace Puck.Recording.Overlay;
+namespace Puck.Assets;
 
 /// <summary>
 /// A compact embedded 8x8 monospace ASCII font (printable range U+0020..U+007E), rendered at integer scale so
@@ -7,7 +7,7 @@ namespace Puck.Recording.Overlay;
 /// glyph is eight row bytes; bit <c>i</c> (value <c>1 &lt;&lt; i</c>) of a row is the pixel in column <c>i</c>,
 /// counted from the left. The glyph data is the public-domain font8x8 basic set.
 /// </summary>
-internal static class BitmapFont {
+public static class BitmapFont {
     private const int FirstCodePoint = 0x20;
     private const int LastCodePoint = 0x7E;
 

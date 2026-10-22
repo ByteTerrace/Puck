@@ -178,6 +178,18 @@ Every part of the moth's motion is a driver, a swing or an effector in
 | Jump: legs tucked and arms open in the air, tighter rising and reaching for the ground falling | `air` (`verticalSpeed` through `body-air`, `Airborne`, `linear` swings with a phase offset, so the peak pose is amplitude × phase) | thighs, shins, boots, upper arms, forearms |
 | Landing give: a crouch that springs back past rest | `land` (`verticalSpeed` through the underdamped `body-land`, `Grounded`): still the fall's speed a beat after touchdown | pelvis pitch and drop, thighs, shins, boots, forearms |
 
+### Judging motion
+
+Judge a change to any driver, swing or effector above with `puck motion`, never
+with one-off captures: it runs the walk, run, stops, turns, jumps and flight
+(suited and out of the suit) on exact ticks through the `motion` layout's four
+cameras riding body 0, and writes a contact sheet per scenario and camera with
+every frame labelled by tick. Read `<scenario>/sheet.png` first, then the
+camera's own sheet for the part you changed; `puck motion --reproduce` shows
+that a repeat stills the same poses. Add a case by editing
+`worlds/debug/motion.scenarios.json`
+([the verb](../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+
 The root shape is the pelvis, so a swing on it carries the whole body; the
 upper body undoes part of it through the torso and helmet, and each thigh's
 stride swing sits between yaw swings that turn the stride plane without

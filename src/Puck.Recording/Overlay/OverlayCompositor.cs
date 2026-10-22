@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Abstractions.Gpu;
+using Puck.Assets;
 using Puck.Recording.Document;
 
 namespace Puck.Recording.Overlay;

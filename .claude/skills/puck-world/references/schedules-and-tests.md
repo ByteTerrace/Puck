@@ -13,6 +13,15 @@ hazards stay in the main [SKILL.md](../SKILL.md).
 
 ## Tick-exact debug capture
 
+**Start with `puck motion`.** It is this procedure as one command: it boots a
+World of its own, runs the scenarios of `worlds/debug/motion.scenarios.json`
+(walk, run, stops, turns, jumps, flight, suited and out of the suit) on exact
+ticks and writes the stills, labelled contact sheets and a manifest of tick,
+capture hash and pose hash per still; `--reproduce` runs it twice and compares
+([the verb](../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+Reach for the steps below only for a capture the scenario file cannot express,
+or against a World you are already running.
+
 The way an agent captures motion, over MCP or stdin. Each MCP call is a round
 trip during which the World keeps stepping, so separate calls never land a
 fixed number of ticks apart; pin everything that must land on a tick in one
