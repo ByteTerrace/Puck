@@ -241,10 +241,13 @@ wrong. The contracts that bite most often:
   not hold leaves a stale mesh drawing after an edit until the builder hashes
   it.
 - **Baked meshes persist across runs** (`SdfMeshStore`), keyed by geometry and
-  the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s
-  build, and the `PuckMeshBakeSource` files listed in `Puck.SdfVm.csproj`. A
-  new `Puck.SdfVm` file the bake's CPU code reads joins that list, or the World
-  keeps drawing meshes baked before the edit.
+  the bake's identity: the bake kernels' bytecode and the IL of every method
+  the bake's code reaches, across the `Puck` assemblies, read from the build
+  (`SdfMeshBakeClosure`). No list names the bake's files: code it calls is
+  covered, code it does not call is not, a checkout's path is not, and a miss
+  logs the part that changed (`[sdf.mesh-bake] miss …`). `puck mesh identity
+  --build <dir> --against <dir>` names the members that differ between two
+  builds before any boot.
 - **`puck mesh audit --world <file>` checks a bake without a GPU or a person
   looking**, against the CPU field; `--cpu` bakes offline so a contour or field
   change shows with no boot. Run it before calling a bake change done.
@@ -283,8 +286,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
   looked at. A boot bakes the groups the mesh store does not hold (the whole
-  debug world takes 15 to 20 s on an RTX 4070, longer on a slower card; a
-  reboot of an unchanged world loads them instead) and then traces the
+  debug world, 1,265 groups and 39 M triangles, takes about four minutes on an
+  RTX 4070, longer on a slower card; a reboot of an unchanged world loads them
+  in seconds instead, and a boot with an empty `--cache-dir` bakes all of
+  them) and then traces the
   irradiance volume (about 2 s): a script that captures the finished image
   waits on `world.wait 2400` or longer and checks for `[sdf.mesh-gi] done` in
   the log before the capture line.

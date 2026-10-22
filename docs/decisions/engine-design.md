@@ -214,7 +214,10 @@ Every such product is only a shortcut to a result the engine can always derive
 again:
 
 - Its identity is computed from its inputs, the code that derives it included,
-  at the moment it is needed. Nothing records an expected identity to compare
+  at the moment it is needed. The code is the code the derivation runs, read
+  from the build (for the mesh bake, the methods its call graph reaches and its
+  kernels' bytecode), never a whole assembly's or a checkout's identity, so an
+  edit elsewhere keeps the product. Nothing records an expected identity to compare
   against, so there is no step that accepts a new one: a change to the deriving
   code invalidates what it changes, and the cost is a derivation.
 - A missing, stale or corrupt product is derived again and counted, never

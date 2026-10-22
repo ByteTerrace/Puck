@@ -2,8 +2,9 @@
 
 Puck.DirectX provides the low-level Direct3D 12 graphics backend substrate:
 CsWin32 COM bindings, resource-barrier tracking, and the means to create a WARP software
-device (`IDirectXDeviceApi.CreateWarpDevice`), which only tests ask for: no production path
-falls back to it.
+device (`IDirectXDeviceApi.CreateWarpDevice`), which tests and a World run with
+`--software-gpu` (`GpuDeviceOptions.Software`, through `DirectXWarpDeviceApi`) ask for:
+no path falls back to it unasked.
 
 `DirectXGpuTimestampFactory` provides optional pass timestamp heaps. Queue
 frequency and heap creation use `DirectXCommandCalls` so device removal follows

@@ -112,7 +112,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
-| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
@@ -2946,6 +2946,19 @@ of one geometry. `--change` names the static group by text its label holds
 `--identity` and `--backend` name the store as for `mesh audit`. Exit codes: 0
 timed; 1 the world failed to load or no static group had a stored mesh; 2 a
 usage error.
+
+`puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
+<dir>] [--members]` prints the bake identity a build keys its stored meshes by
+(`SdfMeshBakeIdentity`): its value, the code the bake runs
+(`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
+mask and bake kernels' bytecode, read from the build's assemblies and kernels
+with no device. `--build` names the World build's directory (absent, this CLI's
+own); `--against <dir>` names another build and lists each code member that
+changed, was added or was removed between them, and whether each kernel
+differs, so an edit can be checked to keep or move the stored meshes before a
+boot; `--members` prints every member with its hash. The value is the key a
+saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
+could not be read; 2 a usage error.
 
 ## `puck schema`—world.def JSON Schema
 

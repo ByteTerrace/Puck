@@ -152,6 +152,7 @@ subdirectory there. Every cache among them is bounded:
 | `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
 | `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
 | `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) | 4096 files, 1 GiB |
+| `meshes` | The baked meshes every World and worktree shares, keyed by geometry and bake identity (`SdfMeshStore`) | 8 GiB, 64 recorded identities |
 | `corpora` | The conformance corpora the emulator batteries fetch | none: a fixed fetched set |
 
 Every bound follows one policy, `CacheRetention` in `Puck.Abstractions`: least
@@ -301,7 +302,8 @@ What the C# loop costs:
   a cold node compiles it once rather than once per operation.
 - **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
   in the `meshes` device cache), keyed by geometry and by the bake's own code
-  and kernels, so a reboot after an edit outside the bake loads every mesh
+  (the methods it reaches, `SdfMeshBakeClosure`) and kernels, so a reboot after
+  an edit outside what the bake runs loads every mesh
   (`[sdf.mesh-bake] done … dispatches=0 … loaded=N`) and a changed creation
   bakes its own groups alone.
 

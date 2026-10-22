@@ -95,7 +95,16 @@ qualification, on the head the owner names. A red check on the integration
 branch is the next piece of work, not a reason to stop landing.
 
 A brief that grants GPU legs carries a time box and what to do when a leg
-fails: rerun it once alone, then fix it or hand it back as open. Investigating
+fails: rerun it once alone, then fix it or hand it back as open. Several lanes
+granted the GPU share it through one lease on the lead machine: before booting
+a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/gpu-lease`
+(atomic: it fails while another lane holds the lease), writes its lane name and
+the time into `gpu-lease/holder`, and removes the directory as soon as its
+World stops. A lane that finds the lease taken does CPU work and tries again
+later, and never holds it longer than its batch of checks, at most 20 minutes.
+A lease older than an hour whose World is gone is stale and may be removed. The
+same rule gives `Puck.World.Tests` one run at a time (`.claude/heavy-lease`),
+since a run takes about 7 GB of the lead machine's 32 GB. Investigating
 a failure is a lane of its own, never the integrator's.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
