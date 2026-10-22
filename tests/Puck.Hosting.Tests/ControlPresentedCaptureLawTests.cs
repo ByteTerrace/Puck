@@ -70,6 +70,70 @@ public sealed class ControlPresentedCaptureLawTests {
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => abandoned);
         Assert.IsType<OperationCanceledException>(@object: (await armed.Completion).Error);
     }
+    // Stands in for the World's world.wait until: tick 999 is refused, any other holds the session until released.
+    private sealed class WaitUntil(Func<bool> released) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                bindability: CommandBindability.Unbindable,
+                description: "Holds until released.",
+                handler: (context, args) => {
+                    if (args.Is(index: 1, value: "999")) {
+                        return CommandResult.Error(output: "[world.wait: refused]");
+                    }
+
+                    context.TextSession!.HoldWhile(hold: () => !released(), released: _ => new CommandResult(Output: "[world.wait: released]"));
+
+                    return new CommandResult(Output: "[world.wait: holding]");
+                },
+                name: "world.wait"
+            );
+        }
+    }
+
+    [Fact]
+    public async Task APinnedStillArmsOnlyOnceItsTickHasCompletedAndAnswersWithItsStamp() {
+        var released = false;
+        var source = new TextCommandSource(new CommandRegistry([new WaitUntil(released: () => released)]));
+        FrameCaptureRequest? armed = null;
+        var heldAt = 40UL;
+        using var session = new ConsoleControlSession(source, request => {
+            armed = request;
+            request.StateTick = heldAt;
+            request.StateStamp = $"tick={heldAt} hash=00 pose=00";
+        });
+        var operation = session.ExecuteAsync(Capture(options: new ControlCapture(Mode: ControlCapture.Settled, Tick: 40UL)), Token);
+
+        source.Collect();
+        source.Collect();
+        Assert.Null(@object: armed);
+
+        released = true;
+        source.Collect();
+        Assert.NotNull(@object: armed);
+        _ = armed.Write(writer: static path => File.WriteAllBytes(bytes: [1, 2, 3], path: path), tick: 40UL);
+
+        var response = await operation;
+
+        Assert.Equal(expected: "completed", actual: response.Status);
+        Assert.Equal(expected: "Settled still held at tick=40 hash=00 pose=00; the frame shows tick 40.", actual: response.Output);
+
+        // A pin the world had passed when the still armed is withdrawn rather than answered as the pin.
+        armed = null;
+        heldAt = 41UL;
+        var passed = session.ExecuteAsync(Capture(options: new ControlCapture(Mode: ControlCapture.Settled, Tick: 40UL)), Token);
+
+        source.Collect();
+        Assert.Contains(expectedSubstring: "had completed tick 41", actualString: (await passed).Output);
+
+        // A refused wait arms nothing.
+        armed = null;
+        var refused = session.ExecuteAsync(Capture(options: new ControlCapture(Mode: ControlCapture.Settled, Tick: 999UL)), Token);
+
+        source.Collect();
+        Assert.Contains(expectedSubstring: "was not armed: [world.wait: refused]", actualString: (await refused).Output);
+        Assert.Null(@object: armed);
+        Assert.StartsWith(expectedStartString: "A presented capture reads the frames", actualString: LocalControlServer.Validate(request: Capture(options: new ControlCapture(Mode: ControlCapture.Presented, Tick: 3UL)))!.Output, comparisonType: StringComparison.Ordinal);
+    }
     [Fact]
     public void CaptureOptionsAreValidatedBeforeTheyReachTheHost() {
         Assert.Null(@object: LocalControlServer.Validate(request: Capture(options: new ControlCapture(Mode: ControlCapture.Settled))));
