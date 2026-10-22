@@ -1,0 +1,271 @@
+// Wonderland: a portal pair of two sizes, Alice's way down. A gilt door stands on the gallery lobby's west wall, and
+// its counterpart is the same door a quarter the size, a mouse hole at the foot of the east wall of the room next door.
+// A pair's scale is its counterpart's size over its own (WorldFrameIsometry.Scale), so a body walking into the big
+// door comes out of the mouse hole a quarter its size, moving a quarter as fast, and walking back into the mouse hole
+// comes out of the big door at full size. Each glass is a window as well as a door: the big door shows the room as
+// she will see it once she is small, its walls towering, and the mouse hole shows the lobby as she will see it once she
+// is big again. The debug world imports this file whole, after loop.puck, whose `self` reference names the debug
+// world's own document. wonderland.md beside this file says how to get in and what to watch.
+//
+//   (10.9, 0.05, 30.5)   the big door, on the lobby's west wall (x 10 .. 10.3), facing +X into the lobby
+//   x 0.7 .. 9.7         the room, z 23.7 .. 34.3, walls 0.3 m thick and 4.5 m tall, open to the sky
+//   (9.2, 0.05, 30.5)    the mouse hole, on the room's east wall, facing -X into the room
+//   (4.5, 0.05, 23.7)    the room's own doorway, in its south wall: walked through at full size, she looms in it
+//
+// A body's size is its cell of `bodyScale` (bodies.scaleRow, debug.puck): a crossing multiplies it by the pair's scale
+// and refuses one that would leave the row's 0.25 .. 1. Every value in this file is a world coordinate.
+
+let wonderGilt = { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
+let wonderWall = "#6FA6A8"
+let wonderFloor = "#C9B79C"
+let wonderSkirting = "#3A3F47"
+let wonderBoard = "#F2EEE4"
+let wonderLetters = "#3A3F47"
+// The stairs' game cases, in turn: red, blue, yellow, green.
+let wonderCaseSlots = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
+// What a glass shows past the deepest level of windows inside windows.
+let wonderFallback = "#FF00FF"
+
+// The two doors' common height and depth: the gallery lobby's floor and the room's are both at 0.05.
+let wonderFloorTop = 0.05
+let wonderZ = 30.5
+// The big door's glass stands 0.6 m proud of the lobby's west wall, the mouse hole's 0.2 m proud of the room's east
+// wall, so a body's origin passes either glass before its collider meets the wall behind it.
+let bigDoorX = 10.9
+let smallDoorX = 9.2
+// The mouse hole is the big door at a quarter of its size. Every extent below is a multiple of a sixteenth, so both
+// sizes are exact in fixed point and so is their ratio, as a crossing needs (WorldFrameIsometry.TryScale).
+let smallDoor = 0.25
+
+// One box given its world bounds, in the creation's author frame (turned 180 degrees about up from the world's) for a
+// placement at the origin with no yaw.
+template wonderBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+// A gilt door at `size` times the garden frame's: a 2.5 by 3.5 m rim round a 2.2 by 3.2 m opening at full size. Face 0,
+// the rim, carries the glass, so the door's aperture is the rim's rectangle, from the floor to its top. The rim is
+// palette slot 0 of `slots`.
+template wonderDoor(label, size, slots) {
+  behavior {
+    faces [{ name: "glass", shapeId: 0 }]
+  }
+  name: label
+  palette: slots
+  schema: "puck.creation.v1"
+  shape Box "rim" {
+    material: 0
+    position [0, (1.75 * size), 0]
+    scale [(1.25 * size), (1.75 * size), (0.0625 * size)]
+  }
+  shape Box "opening" {
+    blend: Subtraction
+    material: 0
+    position [0, (1.75 * size), 0]
+    scale [(1.125 * size), (1.625 * size), (0.25 * size)]
+  }
+}
+
+// The same-world destination both doors lead to: the debug world itself, through loop.puck's `self` reference.
+destinations [
+  {
+    durability: persisted
+    name: "wonderland"
+    reference: "self"
+    scope: global
+  }
+]
+
+spawnPoints [
+  // Two and a half metres in front of the big door in the gallery lobby, facing it; walk ahead to go through.
+  { id: "wonderland", position [13.4, wonderFloorTop, wonderZ], yawDegrees: 90 }
+  // Outside the room's own doorway, facing in: walk in at whatever size she is.
+  { id: "wonderland-room", position [4.5, 0, 21.5], yawDegrees: 180 }
+]
+
+placements {
+  // Each glass is a door onto the other and a window showing what lies past it, through the `wonderland` destination.
+  placement "wonderland-door" {
+    prototype: "wonderland-door"
+    position [bigDoorX, wonderFloorTop, wonderZ]
+    yawDegrees: -90
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "wonderland-mouse-hole/glass"
+          destination: "wonderland"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "wonderland"
+          fallback: wonderFallback
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "wonderland-mouse-hole" {
+    prototype: "wonderland-mouse-hole"
+    position [smallDoorX, wonderFloorTop, wonderZ]
+    yawDegrees: 90
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "wonderland-door/glass"
+          destination: "wonderland"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "wonderland"
+          fallback: wonderFallback
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "wonderland-room" {
+    prototype: "wonderland-room"
+    position [0, 0, 0]
+    solid
+  }
+
+  placement "wonderland-stairs" {
+    prototype: "wonderland-stairs"
+    position [0, 0, 0]
+    solid
+  }
+
+  placement "wonderland-cable" {
+    prototype: "wonderland-cable"
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  // The big door, and the sign over it on the lobby wall naming where it goes.
+  prototype "wonderland-door" {
+    document {
+      wonderDoor(label: "wonderland-door", size: 1, slots: [wonderGilt, { color: wonderBoard, roughness: 0.6 }, { color: wonderLetters, roughness: 0.6 }])
+      shape Box "sign" {
+        material: 1
+        position [0, 3.95, -0.55]
+        scale [1.1, 0.28, 0.02]
+      }
+      textRuns [
+        { text: "WONDERLAND", position [0, 4.02, -0.53], rotation [0, 0, 0, 1], emHeight: 0.16, depth: 0.004, mode: "emboss", material: 2, align: "center" }
+        { text: "step through: you come out a quarter your size", position [0, 3.83, -0.53], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 2, align: "center", maxWidth: 2 }
+      ]
+    }
+  }
+
+  prototype "wonderland-mouse-hole" {
+    document {
+      wonderDoor(label: "wonderland-mouse-hole", size: smallDoor, slots: [wonderGilt])
+    }
+  }
+
+  // The room: its floor, four walls with a doorway in the south one, and a dark skirting round the inside, every piece
+  // a box so the analytic contact provider collides it exactly. The skirting is 12 cm tall: a step for the Moth at full
+  // size, and a kerb at a quarter.
+  prototype "wonderland-room" {
+    document {
+      name: "wonderland-room"
+      palette [
+        { color: wonderWall, roughness: 0.85, specular: 0.04 }
+        { color: wonderFloor, roughness: 0.7, specular: 0.08 }
+        { color: wonderSkirting, roughness: 0.6, specular: 0.15 }
+      ]
+      schema: "puck.creation.v1"
+      wonderBox(label: "floor", x0: 0.7, x1: 9.7, y0: -0.2, y1: wonderFloorTop, z0: 23.7, z1: 34.3, slot: 1)
+      wonderBox(label: "east", x0: 9.4, x1: 9.7, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 34.3, slot: 0)
+      wonderBox(label: "west", x0: 0.7, x1: 1, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 34.3, slot: 0)
+      wonderBox(label: "north", x0: 1, x1: 9.4, y0: wonderFloorTop, y1: 4.55, z0: 34, z1: 34.3, slot: 0)
+      wonderBox(label: "south-west", x0: 1, x1: 3.5, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 24, slot: 0)
+      wonderBox(label: "south-east", x0: 5.5, x1: 9.4, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 24, slot: 0)
+      wonderBox(label: "lintel", x0: 3.5, x1: 5.5, y0: 3.05, y1: 4.55, z0: 23.7, z1: 24, slot: 0)
+      wonderBox(label: "skirting-east-south", x0: 9.38, x1: 9.4, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 29.9, slot: 2)
+      wonderBox(label: "skirting-east-north", x0: 9.38, x1: 9.4, y0: wonderFloorTop, y1: 0.17, z0: 31.1, z1: 34, slot: 2)
+      wonderBox(label: "skirting-west", x0: 1, x1: 1.02, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 34, slot: 2)
+      wonderBox(label: "skirting-north", x0: 1.02, x1: 9.38, y0: wonderFloorTop, y1: 0.17, z0: 33.98, z1: 34, slot: 2)
+      wonderBox(label: "skirting-south-west", x0: 1.02, x1: 3.5, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 24.02, slot: 2)
+      wonderBox(label: "skirting-south-east", x0: 5.5, x1: 9.38, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 24.02, slot: 2)
+    }
+  }
+
+  // A flight of game cases stacked against the south end of the deck's cabinet (devices.puck): ten stacks, each 6.5 cm
+  // taller than the last and 13 cm deep, climbing +Z to the cabinet's top at 0.7 m, where the console's cartridge
+  // stands. Each rise is under the 7.5 cm a quarter-size Moth steps, so she climbs them; at full size she strides them.
+  prototype "wonderland-stairs" {
+    document {
+      name: "wonderland-stairs"
+      palette [
+        { color: "#C8322B", roughness: 0.45, specular: 0.2 }
+        { color: "#2E42D0", roughness: 0.45, specular: 0.2 }
+        { color: "#F2E23A", roughness: 0.45, specular: 0.2 }
+        { color: "#2FA84A", roughness: 0.45, specular: 0.2 }
+      ]
+      schema: "puck.creation.v1"
+      for i in range(1, 10) {
+        wonderBox(label: $"cases-{i}", x0: 1.15, x1: 1.65, y0: wonderFloorTop, y1: (wonderFloorTop + (0.065 * i)), z0: (29.9 - (0.13 * (11 - i))), z1: (29.9 - (0.13 * (10 - i))), slot: wonderCaseSlots[(i - 1)])
+      }
+    }
+  }
+
+  // The pad's extension cable, 12 mm thick, dropping from the front of the cabinet's top by the television and snaking
+  // out across the floor toward the room's middle like a garden hose. It is not solid: she steps through it. Each
+  // sweep's points are offsets in the author frame (x and z negated from the world's) from its own start.
+  prototype "wonderland-cable" {
+    document {
+      name: "wonderland-cable"
+      palette [{ color: "#141517", roughness: 0.3, specular: 0.05 }]
+      schema: "puck.creation.v1"
+      shape Sweep "drop" {
+        material: 0
+        position [-1.7, 0.69, -31]
+        curve {
+          a [0, 0, 0]
+          b [-0.2, -0.09, -0.05]
+          c [-0.18, -0.629, -0.1]
+          radiusStart: 0.006
+          radiusEnd: 0.006
+        }
+      }
+      shape Sweep "loop" {
+        material: 0
+        position [-1.88, 0.061, -31.1]
+        curve {
+          a [0, 0, 0]
+          b [-0.52, 0, -0.9]
+          c [-1.52, 0, -0.1]
+          radiusStart: 0.006
+          radiusEnd: 0.006
+        }
+      }
+      shape Sweep "tail" {
+        material: 0
+        position [-3.4, 0.061, -31.2]
+        curve {
+          a [0, 0, 0]
+          b [-0.9, 0, 0.9]
+          c [-1.4, 0, 0.2]
+          radiusStart: 0.006
+          radiusEnd: 0.006
+        }
+      }
+    }
+  }
+}

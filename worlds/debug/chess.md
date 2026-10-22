@@ -2,7 +2,7 @@
 
 The debug world stands a chess table in the games corner of the gallery hall's
 lobby ([`shapes.md`](shapes.md#the-hall)), west of the entrance between the map
-board and the device row, beside the desktop computer
+board and the desktop computer
 ([`desktop.md`](desktop.md)). The board's centre is at (12.2, 0.85, 20) on the
 level 0 floor; the table is 2 m square, its top 0.8 m over the floor. White's
 back rank is on the table's -Z side, toward the entrance, and Black's on the +Z

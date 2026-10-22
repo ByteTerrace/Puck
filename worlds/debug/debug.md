@@ -103,7 +103,9 @@ case, `stage` when omitted:
 | Place | Where | Facing |
 |---|---|---|
 | `stage` | The spawn, (0, 0, 0) | -Z, toward the portal frame |
-| `devices` | (15, 0.05, 25.5), in the gallery lobby before the device row | +Z, toward the screens |
+| `devices` | (4, 0.05, 30.5), in Wonderland 2.3 m before the deck's television, at whatever size she is ([`devices.md`](devices.md)) | -X, toward the television |
+| `wonderland` | (13.4, 0.05, 30.5), in the gallery lobby 2.5 m before the big door ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
+| `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
 | `chess` | (12.2, 0.05, 18.4), at White's edge of the chess table in the gallery lobby, close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
 | `loop` | (-20, 0, -15), short of the floor glass | -Z; walk ahead to drop in |

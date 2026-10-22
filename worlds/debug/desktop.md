@@ -12,7 +12,7 @@ attachment (`world.control`, the `puck` MCP server), which is the same console.
 ## The desktop computer
 
 A desk stands against the lobby's west wall between the chess table
-([`chess.md`](chess.md)) and the device row ([`devices.md`](devices.md)), on
+([`chess.md`](chess.md)) and the big door to Wonderland ([`wonderland.md`](wonderland.md)), on
 the level 0 floor (y = 0.05), every piece at the size of the real thing and its
 own prototype in `desktop.puck`:
 

@@ -38,7 +38,7 @@ as far through it as its feet had gone through the floor glass.
 ## What to watch
 
 - Each crossing narrates on stderr:
-  `[world.transfer: transfer=24 'boot' seat 1 crossed loop-floor/glass -> loop-ceiling/glass in place, at (-20.00, 5.81, -19.93) moving (0.00, -40.00, 0.00) m/s]`.
+  `[world.transfer: transfer=24 'boot' seat 1 crossed loop-floor/glass -> loop-ceiling/glass in place, at (-20.00, 5.81, -19.93) moving (0.00, -40.00, 0.00) m/s, scale 1.00]`.
   The fall speeds up on each lap until it holds at the Moth's 40 m/s sink
   speed (its `fall` hold's `envelope.sinkSpeed`); from there the crossings
   alternate between two arrival heights, because six metres is not a whole

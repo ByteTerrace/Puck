@@ -51,7 +51,7 @@ west of it.
 | (12.4, 16) | The map board, left of the door, facing it |
 | (12.2, 20), x 11.2 to 13.2, z 19 to 21 | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side |
 | x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
-| z 28, x 12.5, 15 and 17.5 | The device row, facing -Z toward the door ([`devices.md`](devices.md)) |
+| West wall, z 30.5 | The big door to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
 | West wall, z 32.5 | The level's light switch |
 
 Lighting: an emissive strip runs along the ceiling over each viewing aisle and
