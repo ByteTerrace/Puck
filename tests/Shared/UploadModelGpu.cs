@@ -282,6 +282,11 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.Draw(nint commandBufferHandle, in GpuDrawParameters parameters) { }
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
+
+    bool IGpuRecorder.CanDrawIndirectCount => false;
+
+    void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
+        throw new NotSupportedException();
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         if (m_buffers.TryGetValue(key: bufferHandle, value: out var buffer)) {
