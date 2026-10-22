@@ -55,7 +55,7 @@ rule): the bar is the debug world's only on-screen UI.
 | Space | South | Jump, twice before landing; in flight mode, rise |
 | Ctrl | East | In flight mode, descend and land |
 | E | West | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
-| T | Right trigger | In the debug world, take the suit off or put it back on while standing; out of it she walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)) |
+| T | Right trigger | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)) |
 | 1 | | Native three-quarter inspection |
 | 2 | | Native front inspection |
 | 3 | | Native rear inspection |
@@ -156,7 +156,7 @@ Her head is the [`moth-head`](moth-head.puck) library's `mothHead` template,
 placed by `headAt` and scaled by `headScale` (0.68, about 0.26 m crown to chin)
 about the face's front at eye level. The template scales every position, extent,
 curve, sweep radius and blend radius, and takes the creation's palette slots, so
-the off-suit pilot reuses it at its own scale. The mouth and lid paints and the
+the off-suit pilot ([moth-pilot.md](moth-pilot.md)) wears it at the same scale. The mouth and lid paints and the
 blink frame (`blinkPose`) live in the creation and scale by the same
 `headScale`. A charcoal onion shell (`hoodLining`) lines the hood, so the
 headroom round her face reads as padded interior. The braid's root sweep starts
