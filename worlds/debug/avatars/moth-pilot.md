@@ -23,8 +23,10 @@ over her right collarbone to an ochre tie.
 
 [`suit.puck`](../suit.puck) imports this file, and the debug world, the garden
 and the night field import `suit.puck`. A body whose `suit` register is 0 runs the
-`pilot` kit (a walker with one grounded jump of 3.7 m/s, which lifts her feet
-0.56 m where the suit clears 1.1 m, and no flight mode, its capsule 0.25 m in
+`pilot` kit (a walker at the suit's 2.5 m/s, running at 5 with the run channel
+held, with one grounded jump of 3.7 m/s, which lifts her feet 0.56 m where the
+suit clears 1.1 m, and no flight mode, so fly does nothing for her and the
+`suit-off-flight-1` rule keeps flight mode off; its capsule 0.25 m in
 radius and 1.68 m tall) and wears the `moth-pilot` look. In the debug world, T,
 or South while the right trigger is held (K while X is held; the bar's Debug
 page, `SU`), flips the register while she stands, as does the play wheel's Suit
@@ -55,8 +57,8 @@ Yaw 180 is her front, 90 her right side, 0 her back and 140 the three-quarter
 front. `view.override camera orbit 48 1.36 -48 7.8 <yaw> 0 19` frames both
 forms at the same scale, as sheet 05 compares them. Walk and run across a side
 view with `view.override camera orbit 48 1.0 -47.5 8 90 0 26`,
-`body.pose 48 0.33 -45.6 0 0 0 0` and `body.press forward 0.3 2` (a walk) or
-`body.press forward 1 1` (a run).
+`body.pose 48 0.33 -45.6 0 0 0 0` and `body.press forward 0.6 2` (a walk) or
+`body.press run 1 1` with `body.press forward 1 1` (a run).
 
 ## Hold the handheld
 
@@ -77,12 +79,12 @@ shape it names and not the shapes riding it, so the hold frame poses every part
 of the brick with the shell.
 
 She picks the real brick up to play it. Out of the suit and at her full size,
-engaging it (E or the pad's X beside it) sets her `pilotHold` cell through
+engaging it (E or the pad's RB beside it) sets her `pilotHold` cell through
 `devices.puck`'s `brick-pick-up` rule, which reads the engagement as
 `engaged(each, 0)`. The brick's placement then shows nothing on its rest, and
 screen 0's `carry` puts the device's live picture on `brickPicture` in her
 hands. The engagement starts on a view of her holding it (the `brick-hold`
-camera, which the carry names), and the Frame control (the pad's East, `L`) goes
+camera, which the carry names), and the Frame control (`L`, or the pad's East with the left trigger held) goes
 to the picture alone and back ([devices](../devices.md)). Leaving puts it back on
 its rest and lowers her arms. In the suit, or at a quarter her size, she plays it where it
 stands. Setting the cell by hand holds the brick the same way, its live picture

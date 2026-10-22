@@ -317,8 +317,8 @@ screens [
 
 // The desktop page: while a seat is engaged on the monitor (the engagement family's `passthrough` state, a captured
 // screen showing a capture), a pad is the desktop's mouse, the way a controller's desktop mode is. Only the local user's
-// own pad acts through these verbs, and only while its seat frames the desktop. X (or E) leaves through the context
-// button, as at every device.
+// own pad acts through these verbs, and only while its seat frames the desktop. RB (or E) leaves through the context
+// button, as at every device, and West is the mouse's forward button.
 bindingOverlays [
   {
     id: "desktop-pad"
@@ -342,12 +342,12 @@ bindingOverlays [
               { command: "source.passthrough.button.right", id: "deskRightClick", label: "Right click", sources ["gamepad.buttonNorth"] }
               { command: "source.passthrough.button.middle", id: "deskMiddleClick", label: "Middle click", sources ["gamepad.buttonEast"] }
               { command: "source.passthrough.button.back", id: "deskBack", label: "Back", sources ["gamepad.leftShoulder"] }
-              { command: "source.passthrough.button.forward", id: "deskForward", label: "Forward", sources ["gamepad.rightShoulder"] }
+              { command: "source.passthrough.button.forward", id: "deskForward", label: "Forward", sources ["gamepad.buttonWest"] }
               { command: "source.passthrough.arrow.up", id: "deskUp", sources ["gamepad.dpadUp"] }
               { command: "source.passthrough.arrow.down", id: "deskDown", sources ["gamepad.dpadDown"] }
               { command: "source.passthrough.arrow.left", id: "deskLeft", sources ["gamepad.dpadLeft"] }
               { command: "source.passthrough.arrow.right", id: "deskRight", sources ["gamepad.dpadRight"] }
-              { channel: "interact", id: "deskLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.buttonWest"] }
+              { channel: "interact", id: "deskLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
             ]
           }
         }

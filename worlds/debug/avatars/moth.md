@@ -50,12 +50,21 @@ rule): the bar is the debug world's only on-screen UI.
 | Left mouse drag | | Orbit the gameplay camera |
 | Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
 | Left and right mouse buttons held | | Walk forward while the right button steers |
-| R (hold) | Right stick press (hold) | Recenter the camera behind the body |
+| Left Shift (hold) | West (hold) | Run: 5 m/s where she walks at 2.5, and 10 where she flies at 5 |
+| N | Left stick press | Switch running on or off |
+| Z held, then N | Left trigger held, then left stick press | Autorun: switch walking forward on or off; it keeps going with the trigger released, and the stick still steers and strafes |
 | F | North | Switch flight mode on or off |
 | Space | South | Jump, twice before landing; in flight mode, rise |
-| Ctrl | East | In flight mode, descend and land |
-| E | West | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
-| T | Right trigger held, then South | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)). Keyboard equivalent on the Debug page: X held, then K |
+| Left Ctrl or M (hold) | Right stick press (hold) | Fly: switch flight mode on if it is off and climb; letting go hovers |
+| Z held, then M | Left trigger held, then right stick press | Autofly: switch flying (flight mode on, climbing) on or off; it keeps climbing with the trigger released |
+| C | East | In flight mode, descend and land |
+| E | RB | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
+| L, or Z held, then L | Left trigger held, then East | While engaged, switch between the framed picture and the other view (`player.frame`) |
+| R (hold) | Left trigger held, then North (hold) | Recenter the camera behind the body |
+| Z held, then O (hold) | Left trigger held, then RB (hold) | Free look: the right stick orbits the camera without turning her (`player.look.free`) |
+| T | Right trigger held, then South | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks, runs and jumps once, with no flight mode ([`suit.puck`](../suit.puck)). Keyboard equivalent on the Debug page: X held, then K |
+| Enter | Start | Start on an engaged device; the Moth ignores it |
+| Right Shift | Back | Select on an engaged device; the Moth ignores it |
 | 1 | | Native three-quarter inspection |
 | 2 | | Native front inspection |
 | 3 | | Native rear inspection |
@@ -63,18 +72,24 @@ rule): the bar is the debug world's only on-screen UI.
 | 5 | | Following gameplay view |
 | F3 | | Toggle the annotation outlines (`view.annotate`) |
 | F4 | | Show the jetpack alone (`view.isolate`) |
-| F2 | Back | Switch between playing and building (`player.build`) |
-| Backspace | L3 | Respawn at the stage spawn, standing still, from anywhere (a fall or the portal loop included) |
+| F2 | The play wheel's Build sector | Switch between playing and building (`player.build`); in build mode the pad's Back returns to play |
+| Backspace | The play wheel's Respawn sector | Respawn at the stage spawn, standing still, from anywhere (a fall or the portal loop included) |
 | Tab (hold) | LB (hold) | Open the play wheel |
-| Z (hold) | Left trigger (hold) | The View page of the bar: the twelve controls become camera layouts and the annotation toggles |
+| Q (hold) | | In the debug world, open the gallery wheel |
+| Z (hold) | Left trigger (hold) | The View page of the bar: camera layouts, autorun and autofly, recenter, free look and the frame toggle |
 | X (hold) | Right trigger (hold) | The Debug page: inspection verbs, frame comparison, stop and the suit |
 | Z then X (hold) | Left then right trigger | The Go page: the debug world's places (`debug.go`) |
 | X then Z (hold) | Right then left trigger | The Tour page: the gallery tour, its lights and motion, two paintings |
 | Backtick | | Show or hide the console |
 
 Out of flight mode, letting go of Space while still rising cuts the jump short.
-In flight mode, releasing Space holds altitude. Inspection cameras stay at the
-studio origin; use **5** when moving away from it.
+In flight mode, releasing Space holds altitude. Fly is rise pressed without
+jump, which the `fly-1` rule reads as switching flight mode on, so Space and
+South, which press both, stay a jump; `body.press rise` from the console flies
+too. The run toggle, autorun and autofly latch the run, forward and rise
+channels on the input side: the simulation reads them as held, and a second
+press lets go. Inspection cameras stay at the studio origin; use **5** when
+moving away from it.
 
 The debug world, the garden and the night field draw these controls on screen
 from [`controls.puck`](../controls.puck): the standard controller bar along the
@@ -87,15 +102,16 @@ the Moth's own controls are everything above. Each trigger page keeps the
 sticks and the movement keys, and rebinds the twelve controls; its keyboard
 equivalents are the arrow keys for the d-pad, I, J, K, L for North, West, South
 and East, U and O for LB and RB and N and M for the stick presses
-([`pad-kit.puck`](../pad-kit.puck)).
+([`pad-kit.puck`](../pad-kit.puck)). N and M are the stick presses on Move
+too; Move's face buttons keep their own keys (F, Left Shift, Space, C, E).
 
 | Page | Held | Plates (d-pad up, right, down, left; LB; L3; North, West, South, East; RB; R3) |
 |---|---|---|
-| Move | nothing | forward, strafe right, back, strafe left; wheel (LB); respawn; flight, interact, jump, descend; gallery wheel (RB); recenter |
-| View | LT or Z | chase, three-quarter, front, rear; wide; chase camera; annotate, jetpack alone, face, boots; head; shoulder |
-| Debug | RT or X | where, channels, console, build; inspector on; inspector off; debug view, hold frame, suit, compare; clear hold; stop |
+| Move | nothing | forward, strafe right, back, strafe left; wheel (LB); run on/off; flight, run, jump, descend; interact; fly |
+| View | LT or Z | chase, three-quarter, front, rear; wide; autorun; recenter, jetpack alone, face, frame; free look; autofly |
+| Debug | RT or X | where, history on, console, capture; inspector on; inspector off; debug view, hold frame, suit, compare; clear hold; stop |
 | Go | LT then RT, Z then X | stage, gallery, portals, Wonderland; hero studio; devices; chess, computer, gallery levels 0 and 1; levels 2 and 3 on RB and R3 |
-| Tour | RT then LT, X then Z | next exhibit, flag, previous exhibit, debug view; slice; entrance; lights off, lights on, motion off, motion on; garden painting; night painting |
+| Tour | RT then LT, X then Z | next exhibit, flag, previous exhibit, quality; slice; update rates; lights off, lights on, motion off, motion on; garden painting; night painting |
 
 Go and Tour name the debug world's places and gallery
 ([`pad.puck`](../pad.puck)) and read empty in the garden and the night field.
@@ -111,8 +127,9 @@ Desktop (the desktop pane, `view.override layout desktop`) and the chase
 camera. Places: the stage, the hero studio, the gallery, the portals, the chess
 table, the computer, the devices deck and Wonderland (`debug.go`). Releasing at
 the hub cancels. The bar fades after six seconds without input, and the bar and
-the cursor step aside while the seat is engaged on a device; the bar also steps
-aside while a wheel is open.
+the cursor step aside while the seat's view frames an engaged screen (the held
+view of a carried screen keeps the bar); the bar also steps aside while a wheel
+is open.
 
 ## Edit the native character live
 

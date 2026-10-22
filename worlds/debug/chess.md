@@ -38,7 +38,7 @@ progress, then moves its piece itself and puts a piece it takes beside the board
 
 ## Playing at the table
 
-Walk up to the table and press the context button (E, or the pad's X) within
+Walk up to the table and press the context button (E, or the pad's RB) within
 2.5 m of the board's centre: the Moth sits down, stands still, and the camera
 eases to a view of the whole board from the side she stands on (White's side is
 -Z, the side nearer the entrance). `debug.go chess` stands her at White's edge,
@@ -55,7 +55,7 @@ h-file.
 |---|---|---|---|---|
 | Mouse | Point at a square | Click a piece, then click a square; or press on a piece, drag and release over a square | Right-click, or click the square it came from | E |
 | Keyboard | W A S D or the arrows, one square a press | Space or Enter | Escape or Backspace | E |
-| Pad | Left stick or d-pad, one square a push | South (A) | East (B) | West (X) |
+| Pad | Left stick or d-pad, one square a push | South (A) | East (B) | RB |
 
 A put-down takes a captured piece beside the board, moves the rook of a castle,
 lifts the pawn an en-passant capture takes and queens a pawn that reaches the

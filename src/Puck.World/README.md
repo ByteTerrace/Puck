@@ -493,12 +493,15 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-The island binds the left stick to `player.move.strafe`, the right stick to
-`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
-and South and Space to `jump`; East and West switch the view layout. It binds
-no run channel, no autorun and no free-look chord. An author gets autorun from
-a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
-`player.look.free` command suppresses body steering while camera look continues.
+The debug world's Moth (`worlds/debug/avatars/moth.puck`, with the bar's pages
+in `worlds/debug/controls.puck`) binds the left stick to `player.move.strafe`,
+the right stick to `player.look.steer`, mouse buttons 1 and 2 to `player.orbit`
+and `player.steer`, the `run` channel held on West and Left Shift and toggled
+(`BindingEntryMode.Toggle`) on the left stick's press and N, and, on the left
+trigger's page, autorun and autofly as toggles of `forward` and `rise` and the
+held `player.look.free`, which suppresses body steering while camera look
+continues. Its full control table is
+[the Moth's controls](../../worlds/debug/avatars/moth.md#controls).
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -1973,7 +1976,7 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
-`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
+`interact` channel, E or a pad's RB; [`devices.md`](../../worlds/debug/devices.md)).
 While a seat is captured on a screen, its own camera eases in on the screen's
 picture, square-on, derived from the row's own frame, with nothing between the
 camera and the glass drawn, until each source row is a whole number of window
