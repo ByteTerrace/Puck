@@ -755,13 +755,20 @@ every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
 a detached-seat/peer transfer restore), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
 previous occupant's value nor sits at the unscaled default the row itself
-disagrees with. `Scale` multiplies the kit's
+disagrees with. A crossing of a portal pair of two sizes writes the row:
+`WorldServer.TryApplyInPlaceCrossing` multiplies the body's cell by the pair's
+scale (`WorldFrameIsometry.Scale`, the counterpart face's width over the
+source's) and publishes it before the next step, refusing a world with no row
+or a size outside the row's envelope. `Scale` multiplies the kit's
 shared collider volumes about the body's own root (never mutated in place—
 a per-call scratch span, scaled only when `Scale != 1`), the resolved move
-speed and turn rate, hold probe height/standoff/reach, a hold's own gravity
+speed, authored launch and impulse velocities (`setVerticalVelocity`,
+`planarImpulse`), a screen's or tabletop's engage radius
+(`WorldBody.EngageReach`), hold probe height/standoff/reach, a hold's own gravity
 fall/rise and its vertical-channel envelope (including a medium's idle/settle
 target), a wall hold's travel speed, and a
-pull's own rate (`WorldBody.Hold.cs`)—a shrunk body's fall and depenetration stay
+pull's own rate (`WorldBody.Hold.cs`); a turn rate does not scale, an angle
+being the same at every size—a shrunk body's fall and depenetration stay
 proportionally gentle rather than free-falling one tick of full-scale gravity
 into a collider whose own contact skin margin it can no longer absorb; the
 client reads the same row live and folds it into the rendered rig and the

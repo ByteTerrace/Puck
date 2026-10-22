@@ -192,10 +192,21 @@ public static partial class WorldFederationCodec {
         WorldPoseCarry? carried = ((continuityKind == EntityContinuityKind.Carry)
             ? new WorldPoseCarry(
                 Rotation: reader.ReadFiniteQuaternion(field: $"snapshot entity {ordinal} carry rotation"),
-                Translation: reader.ReadFiniteVector(field: $"snapshot entity {ordinal} carry translation")
+                Translation: reader.ReadFiniteVector(field: $"snapshot entity {ordinal} carry translation"),
+                Scale: reader.ReadSingle()
             )
             : null
         );
+
+        if (
+            (carried is { Scale: var carriedScale }) &&
+            !(float.IsFinite(f: carriedScale) && (carriedScale > 0f))
+        ) {
+            reader.Fail(
+                detail: $"snapshot entity {ordinal} carry scale {carriedScale} is not a positive finite multiplier",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
         var generation = reader.ReadInt32();
         var placementId = reader.ReadNullableString(field: $"snapshot entity {ordinal} placement id");
         // Read wide and test wide: narrowing to the enum first would drop the very bits the admission test exists to
@@ -797,6 +808,7 @@ public static partial class WorldFederationCodec {
             if (entry.Continuity.Carried is { } carried) {
                 writer.WriteQuaternion(value: carried.Rotation);
                 writer.WriteVector(value: carried.Translation);
+                writer.WriteSingle(value: carried.Scale);
             }
             writer.WriteInt32(value: entry.Generation);
             writer.WriteNullableString(value: entry.PlacementId);

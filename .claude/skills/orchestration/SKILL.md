@@ -220,7 +220,11 @@ a cheaper role stalls, escalate that lane; never start on the expensive role
 because a brief is long. Codex is part of the same lineup: Sol is a peer of
 `implementer` and takes the same briefs, and Astra is comparable to `principal`
 and takes only what `principal` would. Spread implementer briefs across
-`implementer` and Sol, so both families' slots stay busy.
+`implementer` and Sol, so both families' slots stay busy. Concept art and
+other image generation go to Codex as the primary artist and judge (the
+owner's ruling): its built-in `image_generation` tool makes the images and its
+verdicts decide which to keep, and a Claude partner writes the brief and
+checks verifiable constraints, overruling only a hard-constraint violation.
 
 Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
 agentic coding on a hard lane, `max` only when correctness outweighs cost.

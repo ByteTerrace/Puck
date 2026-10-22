@@ -349,7 +349,7 @@ public sealed partial class WorldStampPool {
         live.FollowedOrientation = carry.Attitude(attitude: live.FollowedOrientation);
         live.DriverPosition = carry.Point(point: live.DriverPosition);
         live.DriverOrientation = carry.Attitude(attitude: live.DriverOrientation);
-        live.Kinematics.Carry(rotation: carry.Rotation);
+        live.Kinematics.Carry(carry: carry);
 
         for (var shapeSlot = 0; (shapeSlot < live.PartFollower.Length); shapeSlot++) {
             live.PartFollower[shapeSlot].Carry(

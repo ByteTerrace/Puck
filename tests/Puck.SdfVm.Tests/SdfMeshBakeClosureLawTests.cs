@@ -29,6 +29,21 @@ public sealed class SdfMeshBakeClosureLawTests {
         _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.NoSuchType", null)]));
         _ = Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: null!));
     }
+
+    [Fact]
+    public void AClassLayoutCountsOnlyTheFieldsTheCodeTouches() {
+        var members = SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: FixtureRoot).Members;
+        UInt128 Of(string type, string suffix) => members.Single(predicate: member => member.Key.Contains(value: ("SdfMeshBakeClosureFixture/" + type + suffix), comparisonType: StringComparison.Ordinal)).Value;
+
+        // An unread field changes nothing, a read field's type does, and a whole value type counts every field.
+        Assert.Equal(expected: Of(type: "Lean", suffix: " [layout]"), actual: Of(type: "Held", suffix: " [layout]"));
+        Assert.NotEqual(expected: Of(type: "Lean", suffix: " [layout]"), actual: Of(type: "Wide", suffix: " [layout]"));
+        Assert.NotEqual(expected: Of(type: "StructLean", suffix: " [layout]"), actual: Of(type: "StructWide", suffix: " [layout]"));
+        // A record a walk copies with `with` and reads one property of is layout-equal to a record with that property alone,
+        // whose synthesized copy moves every field without reading any; one the code makes counts every field.
+        Assert.Equal(expected: Of(type: "CopiedLean", suffix: " [layout]"), actual: Of(type: "CopiedWide", suffix: " [layout]"));
+        Assert.NotEqual(expected: Of(type: "MadeLean", suffix: " [layout]"), actual: Of(type: "MadeWide", suffix: " [layout]"));
+    }
 }
 
 /// <summary>The fixture <see cref="SdfMeshBakeClosureLawTests"/> walks from: one method holding every shape of IL the
@@ -37,8 +52,13 @@ public static unsafe class SdfMeshBakeClosureFixture {
     /// <summary>Runs every shape the walk names.</summary>
     /// <param name="carried">A value the method only carries.</param>
     /// <param name="choice">The case a switch takes.</param>
+    /// <param name="held">A class whose one field the method reads.</param>
+    /// <param name="lean">A class holding only that field.</param>
+    /// <param name="wide">A class whose read field has another type.</param>
+    /// <param name="copiedLean">A record the method copies and reads one property of.</param>
+    /// <param name="copiedWide">A record like it with a property nothing reads.</param>
     /// <returns>A sum of what ran.</returns>
-    public static long Run(Carried carried, int choice) {
+    public static long Run(Carried carried, int choice, Held held, Lean lean, Wide wide, CopiedLean copiedLean, CopiedWide copiedWide) {
         Transform transform = new Doubling();
         var grid = new int[2, 2];
         var bytes = Bytes;
@@ -46,6 +66,8 @@ public static unsafe class SdfMeshBakeClosureFixture {
         var total = (long)(transform.Apply(value: choice) + pointer(choice) + grid[1, 1] + bytes[7] + Table.Values[0]);
 
         fixed (int* first = &grid[0, 0]) { total += *first; }
+        total += (held.Read + lean.Read + wide.Read + (copiedLean with { Read = 3 }).Read + (copiedWide with { Read = 3 }).Read);
+        total += (new StructLean().Read + new StructWide().Read + new MadeLean(Read: 1).Read + new MadeWide(Read: 1, Unread: 2).Read);
         switch (choice) {
             case 0: total += 1; break;
             case 1: total += 2; break;
@@ -64,6 +86,49 @@ public static unsafe class SdfMeshBakeClosureFixture {
     private static ReadOnlySpan<byte> Bytes => [1, 2, 3, 4, 5, 6, 7, 8];
     private static int Twice(int value) => (2 * value);
 
+    /// <summary>A class with a field <see cref="Run"/> reads and one it does not.</summary>
+    public sealed class Held {
+        /// <summary>The field read.</summary>
+        public int Read;
+        /// <summary>The field no code touches.</summary>
+        public long Unread;
+    }
+    /// <summary>A class with the read field alone.</summary>
+    public sealed class Lean {
+        /// <summary>The field read.</summary>
+        public int Read;
+    }
+    /// <summary>A class whose read field has another type.</summary>
+    public sealed class Wide {
+        /// <summary>The field read.</summary>
+        public long Read;
+    }
+    /// <summary>A struct with the read field alone.</summary>
+    public struct StructLean {
+        /// <summary>The field read.</summary>
+        public int Read;
+    }
+    /// <summary>A struct with a field nothing reads.</summary>
+    public struct StructWide {
+        /// <summary>The field read.</summary>
+        public int Read;
+        /// <summary>The field no code touches.</summary>
+        public long Unread;
+    }
+    /// <summary>A record <see cref="Run"/> copies.</summary>
+    /// <param name="Read">The property read.</param>
+    public sealed record CopiedLean(int Read);
+    /// <summary>A record like <see cref="CopiedLean"/> with a property nothing reads.</summary>
+    /// <param name="Read">The property read.</param>
+    /// <param name="Unread">The property no code touches.</param>
+    public sealed record CopiedWide(int Read, long Unread);
+    /// <summary>A record <see cref="Run"/> makes.</summary>
+    /// <param name="Read">The property read.</param>
+    public sealed record MadeLean(int Read);
+    /// <summary>A record like <see cref="MadeLean"/> with a property nothing reads.</summary>
+    /// <param name="Read">The property read.</param>
+    /// <param name="Unread">The property no code touches.</param>
+    public sealed record MadeWide(int Read, long Unread);
     /// <summary>A value <see cref="Run"/> carries and never calls into.</summary>
     public sealed class Carried {
         /// <summary>Gets a value no walk from <see cref="Run"/> reads.</summary>

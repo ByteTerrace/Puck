@@ -31,10 +31,15 @@ public enum WorldPortalArrival {
     /// paired with this.</summary>
     Spawn,
 
-    /// <summary>The pose relative to this facet's own placement frame, mapped through the isometry between this
-    /// frame and <see cref="WorldPlacementPortal.Counterpart"/>'s frame in the destination document — the seamless
+    /// <summary>The pose relative to this facet's own placement frame, mapped through the map between this frame and
+    /// <see cref="WorldPlacementPortal.Counterpart"/>'s frame in the destination document — the seamless
     /// border-crossing half of a portal pair. Requires <see cref="WorldPlacementPortal.Counterpart"/> (refused by
-    /// name when absent).</summary>
+    /// name when absent). The map's scale is the counterpart face's size over this face's
+    /// (<see cref="WorldFrameIsometry.Scale"/>): a door paired with one a quarter its size sets a traveller down a
+    /// quarter its size, moving a quarter as fast, and the window through the door shows the far side at that scale.
+    /// A scaled pair stands in one world, which authors <c>bodies.scaleRow</c> to hold each body's size; its two faces
+    /// are one rectangle at two sizes a power of two apart, so a round trip returns a traveller to exactly its
+    /// size.</summary>
     Mapped,
 }
 /// <summary>

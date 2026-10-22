@@ -27,8 +27,8 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
     );
 }
 /// <summary>
-/// Presentation-float border-window math: maps a viewer's eye through a mapped border pair's isometry into the
-/// destination side. It is the float mirror of <see cref="WorldFrameIsometry.MapPoint"/>, kept separate because
+/// Presentation-float border-window math: maps a viewer's eye through a mapped border pair's map (its rotation and
+/// its <see cref="Scale"/>) into the destination side. It is the float mirror of <see cref="WorldFrameIsometry.MapPoint"/>, kept separate because
 /// nothing here ever reaches simulation state; <c>WorldWindowProjectionMathLawTests</c> pins the two against each
 /// other for a hand-picked pair. Public rather than internal because both
 /// <c>Puck.World.Client.WorldWindowFrustumFit</c> and <c>tests/Puck.World.Protocol.Tests</c> call it.
@@ -68,7 +68,10 @@ public static class WorldWindowProjectionMath {
     /// <param name="destination">The destination counterpart face's own aperture geometry.</param>
     /// <returns>The mapped point, in destination-world space.</returns>
     public static Vector3 MapPoint(Vector3 point, WorldFaceGeometry source, WorldFaceGeometry destination) {
-        var offset = (point - source.Origin);
+        var offset = ((point - source.Origin) * Scale(
+            destination: destination,
+            source: source
+        ));
         var u = Vector3.Dot(
             vector1: offset,
             vector2: source.Right
@@ -84,7 +87,18 @@ public static class WorldWindowProjectionMath {
 
         return (((destination.Origin - (u * destination.Right)) + (v * destination.Up)) - (n * destination.Normal));
     }
-    /// <summary>Maps a world-space direction through the same isometry as <see cref="MapPoint"/>: its rotation alone,
+    /// <summary>Returns the pair's uniform scale, the float mirror of <see cref="WorldFrameIsometry.Scale"/>: the
+    /// destination aperture's width over the source's, exactly one for two apertures of one width. A window looking
+    /// through a door onto a counterpart four times its size shows the far side four times smaller, as a traveller
+    /// arriving there at four times its size sees it.</summary>
+    /// <param name="source">The source face's own aperture geometry.</param>
+    /// <param name="destination">The destination counterpart face's own aperture geometry.</param>
+    /// <returns>The scale.</returns>
+    public static float Scale(WorldFaceGeometry source, WorldFaceGeometry destination) => ((destination.HalfWidth == source.HalfWidth)
+        ? 1f
+        : (destination.HalfWidth / source.HalfWidth)
+    );
+    /// <summary>Maps a world-space direction through the same map as <see cref="MapPoint"/>: its rotation alone,
     /// so a frame mapped axis by axis keeps its handedness.</summary>
     /// <param name="vector">The direction to map, in source-world space.</param>
     /// <param name="source">The source face's own aperture geometry.</param>

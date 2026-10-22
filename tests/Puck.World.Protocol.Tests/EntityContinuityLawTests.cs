@@ -11,9 +11,11 @@ public sealed class EntityContinuityLawTests {
         Rotation: Quaternion.Identity,
         Translation: new Vector3(x: 0f, y: 6f, z: 0f)
     );
+    // A half turn through a door onto one a quarter its size.
     private static readonly WorldPoseCarry HalfTurn = new(
         Rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: MathF.PI),
-        Translation: new Vector3(x: 1f, y: 0f, z: 0f)
+        Translation: new Vector3(x: 1f, y: 0f, z: 0f),
+        Scale: 0.25f
     );
 
     [Fact]

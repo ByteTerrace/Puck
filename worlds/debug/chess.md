@@ -2,7 +2,7 @@
 
 The debug world stands a chess table in the games corner of the gallery hall's
 lobby ([`shapes.md`](shapes.md#the-hall)), west of the entrance between the map
-board and the device row, beside the desktop computer
+board and the desktop computer
 ([`desktop.md`](desktop.md)). The board's centre is at (12.2, 0.85, 20) on the
 level 0 floor; the table is 2 m square, its top 0.8 m over the floor. White's
 back rank is on the table's -Z side, toward the entrance, and Black's on the +Z
@@ -17,8 +17,15 @@ colour, d1, left of the king; from Black's seat a8 is light at his right.
 The 32 pieces are rigid bodies on a tabletop board (the
 [tabletop primitive](../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
 However a piece was moved, the judge reads no move from input: whenever the
-physics comes to rest for one second, the rules read the settled arrangement off
-the board and judge it against the last legal position. A legal arrangement becomes the new position
+physics has stayed at rest for 0.3 s (nine ticks, `chessSettleTicks`), the rules
+read the settled arrangement off the board and judge it against the last legal
+position. The hold only has to outlast a piece that is touched or dropped beside
+another still settling: the rigid solver's own resting latch has already held
+each piece still before the world reads as at rest, and a fall or a bump wakes
+the latch and restarts the hold. The computer's and the seated player's own
+moves are placed 8 cm above their square and drop onto it. From Black's turn
+starting, the computer's reply is searched and placed within 16 ticks, rests by
+tick 24 and is judged at tick 32 (about 1.1 s at 30 Hz). A legal arrangement becomes the new position
 and passes the turn; any other is recorded as illegal (`illegalCount`) and the
 game waits for the pieces to be put right. The rules cover captures, promotion
 (the computer always queens), castling, en passant, check, the 75-move rule and

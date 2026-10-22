@@ -114,7 +114,7 @@ public sealed partial class SdfWorldTables {
         private readonly SdfSkyEnvironmentRefresh m_refresh = new();
         private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingByteLength)];
+        private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
 
         private bool m_physical;
         private bool m_tainted;
@@ -184,7 +184,7 @@ public sealed partial class SdfWorldTables {
                     m_sources[screen] = input.Publication;
                     if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsKnown) { known = false; }
                 }
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
                 var different = ((m_sources[screen] != m_renderedSources[screen]) ||
                     !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
                         .SequenceEqual(other: m_renderedMappings.AsSpan(length: ScreenMappingByteLength, start: offset)));

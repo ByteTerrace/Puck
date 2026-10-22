@@ -2343,6 +2343,11 @@
             "null"
           ],
           "default": null
+        },
+        "ripple": {
+          "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -6596,7 +6601,7 @@
           "const": "setVerticalVelocity"
         },
         "velocity": {
-          "description": "The vertical velocity, in world units per second.",
+          "description": "The vertical velocity, in world units per second at the body\u0027s authored size; a body whose live scale (bodies.scaleRow) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.",
           "type": "number"
         },
         "key": {
@@ -6654,7 +6659,7 @@
           "description": "The unit direction in the body\u0027s own frame."
         },
         "speed": {
-          "description": "The overlay\u0027s speed, in world units per second.",
+          "description": "The overlay\u0027s speed, in world units per second at the body\u0027s authored size, times the body\u0027s live scale.",
           "type": "number"
         },
         "durationSeconds": {

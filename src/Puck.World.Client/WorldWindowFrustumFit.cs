@@ -307,6 +307,11 @@ public static class WorldWindowFrustumFit {
     /// exist (see <see cref="SdfAsymmetricFrustum.MinEyeDepth"/>); <see langword="false"/> otherwise — the caller falls
     /// back to its ordinary default projection for this frame.</returns>
     public static bool TryFitWindow(Vector3 localEye, WorldFaceGeometry glass, WorldFaceGeometry source, WorldFaceGeometry destination, out CameraSnapshot camera) {
+        var scale = WorldWindowProjectionMath.Scale(
+            destination: destination,
+            source: source
+        );
+
         if (!SdfAsymmetricFrustum.TryFit(
             eye: WorldWindowProjectionMath.MapPoint(
                 destination: destination,
@@ -333,8 +338,8 @@ public static class WorldWindowFrustumFit {
                 source: source,
                 vector: glass.Normal
             ),
-            apertureHalfWidth: glass.HalfWidth,
-            apertureHalfHeight: glass.HalfHeight,
+            apertureHalfWidth: (glass.HalfWidth * scale),
+            apertureHalfHeight: (glass.HalfHeight * scale),
             frustum: out var frustum
         )) {
             camera = default;

@@ -40,6 +40,12 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
+    // A screen's record in the mapping region: its ScreenMappingByteLength mapping, then its ripple record, which the
+    // emission and sky-environment change checks leave out because it moves every frame and lights nothing. KEEP IN SYNC
+    // with WorldScreenMappingRows in frame/sdf-screen-mapping.hlsli.
+    private const int ScreenMappingStride = (ScreenMappingByteLength + ScreenRippleByteLength);
+    private const int ScreenRippleOffset = ScreenMappingByteLength;
+    private const int ScreenRippleByteLength = ((sizeof(float) * 4) * SdfScreenRipple.Rows);
     // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats, the glass flag in its
     // fourth.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
@@ -325,7 +331,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             region: ScreenSurfaceRegionIndex
         ));
         m_screenMappingRegion = scope.Own(created: CreateRegion(
-            byteCount: (MaxScreenSurfaces * ScreenMappingByteLength),
+            byteCount: (MaxScreenSurfaces * ScreenMappingStride),
             region: ScreenMappingRegionIndex
         ));
         m_volumeRegion = scope.Own(created: CreateRegion(

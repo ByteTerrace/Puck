@@ -164,6 +164,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
 
         return frame with {
             EnableCadenceGate = host.EnableCadenceGate,
+            DrawUnseen = host.DrawUnseen,
             Time = host.Time,
             Views = m_frameViews,
         };

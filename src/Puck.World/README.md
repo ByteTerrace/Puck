@@ -1172,7 +1172,8 @@ Facts a script needs:
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
   imports, the `theme.puck` theme and the `controls.puck` cursor, key hints,
   icons, binding bar and play wheel it and the garden import, and
-  `garden.puck`, the destination its portal frame opens onto
+  `garden.puck` and `night.puck`, the destinations its painting wing's portals
+  open onto, and `paintings.puck`, the wing in the gallery hall
   ([the portal demo](../../worlds/debug/debug.md));
   every other world named in this bullet is quarantined under
   `experimental/src/Puck.World/Assets/worlds/`

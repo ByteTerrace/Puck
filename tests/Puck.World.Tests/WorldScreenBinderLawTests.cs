@@ -115,6 +115,38 @@ public sealed class WorldScreenBinderLawTests {
         );
     }
     [Fact]
+    public void AnOpeningThatOptsInRipplesAndEveryOtherScreenDoesNot() {
+        using var scene = new BinderScene();
+        var binder = scene.Binder;
+
+        Assert.False(condition: binder.TryRippleOf(
+            ripple: out _,
+            screen: BinderScene.Session
+        ));
+        // The live bind shows the source over the row whether or not the session then resolves.
+        _ = binder.ApplyNonMachineSource(
+            index: BinderScene.Session,
+            source: new WorldScreenSource.Session(Destination: "garden", Projection: WorldScreenProjection.Window, Ripple: true)
+        );
+        Assert.True(condition: binder.TryRippleOf(
+            ripple: out var ripple,
+            screen: BinderScene.Session
+        ));
+        Assert.Equal(actual: ripple.Contact0.W, expected: 0f);
+        Assert.False(condition: binder.TryRippleOf(
+            ripple: out _,
+            screen: BinderScene.Pattern
+        ));
+        Assert.False(condition: binder.TryRippleOf(
+            ripple: out _,
+            screen: 99
+        ));
+        Assert.False(condition: ((ISdfScreenSources)new QuietSources()).TryRippleOf(
+            ripple: out _,
+            screen: 0
+        ));
+    }
+    [Fact]
     public void AScreenShowingAMachineReadsItFromTheMachineHost() {
         using var scene = new BinderScene(options: new BinderOptions(Cabinet: true));
 
@@ -569,6 +601,14 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: fault, expected: "binder disposed");
         Assert.Equal(actual: binder.ApplyNonMachineSource(index: BinderScene.Session, source: new WorldScreenSource.Session(Destination: "garden")), expected: (false, "binder disposed"));
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+    }
+
+    // A screen source set that implements only what the interface requires.
+    private sealed class QuietSources : ISdfScreenSources {
+        public IReadOnlyList<int> Screens => [];
+        public bool Emits(int screen) => false;
+        public Puck.Commands.SourceMapping? MappingOf(int screen) => null;
+        public string? ReadOf(int view, int screen) => null;
     }
 
     // How a scene's boot world and binder are made.

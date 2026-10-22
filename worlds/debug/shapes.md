@@ -16,7 +16,8 @@ its `commands`, and declares the font the labels emboss in.
 lights, level boards, tour and keys. The lobby holds a games corner: the gaming
 devices stand in a row ([`devices.md`](devices.md)), and west of the entrance
 the chess table ([`chess.md`](chess.md)) and a desktop computer showing the
-Claude window ([`desktop.md`](desktop.md)).
+Claude window ([`desktop.md`](desktop.md)). The east end of level 0 is the painting
+wing, five portal paintings behind a doorway ([`paintings.md`](paintings.md)).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look
@@ -40,6 +41,7 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
 | x 20 to 70 | The halls: each level's rows run along +X from x = 23, a sign at each row's west end |
+| x 51 to 69.7, z 12.3 to 39.7, level 0 | The painting wing: a partition at x = 51 with a doorway at z 24 to 28, and five portal paintings ([`paintings.md`](paintings.md)). Level 1's floor is holed and railed over the ceiling painting of the endless fall, at (66, 22.6) |
 | South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
 
 The lobby on level 0, from the entrance north. The walk from the door to the
@@ -48,10 +50,10 @@ west of it.
 
 | Where | What |
 |---|---|
-| (12.4, 16) | The map board, left of the door, facing it |
+| (12.4, 16) | The map board, left of the door, facing it: how to get around, the levels and their rows, and the painting wing (`debug.go portals`) |
 | (12.2, 20), x 11.2 to 13.2, z 19 to 21 | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side |
 | x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
-| z 28, x 12.5, 15 and 17.5 | The device row, facing -Z toward the door ([`devices.md`](devices.md)) |
+| West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
 | West wall, z 32.5 | The level's light switch |
 
 Lighting: an emissive strip runs along the ceiling over each viewing aisle and
@@ -229,7 +231,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | `polar` about Y and about Z with an origin, mirrored, material stride | `shape-polar-fold`, `shape-polar-z`, `shape-polar-mirror`, `shape-polar-stride`, `motion-polar` |
 | `wallpaper` Pmm, P4M (bounded), P3M1, P6M (clipped), material stride | `shape-wallpaper-pmm`, `-p4m`, `-p3m1`, `-p6m`, `-stride` |
 | Folds riding a moving parent | `motion-mirror`, `motion-polar` |
-| Creation `noise` | `shape-noise` (it displaces the whole creation, plinth and label included) |
+| Creation `noise` | `shape-noise` and `shape-noise-subject` (noise displaces every shape and text run of the creation it sits in, so the lumpy sphere is its own creation placed over the plinth's, which stays clean) |
 | The other thirteen wallpaper groups | not exhibited: the program refuses every group whose walls are not all mirrors |
 | `jitter` (CellJitter: hashed displacement, tumble, material variants, a noise flavour), `logSphere` (LogSphere) | `shape-jitter`, `shape-jitter-tumble`, `shape-log-sphere`: render only, each clipped by an intersection inside the creation scope, since neither lattice has an edge |
 | Shape types Vesica, Star | not exhibited: no creation primitive lowers to them; they are builder-only |

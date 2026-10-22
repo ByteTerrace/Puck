@@ -34,6 +34,64 @@ static const float3 CrtLumaWeights = float3(0.299, 0.587, 0.114);
 // column third. Spelled as literals rather than SDF_TAU/3: the divide would round differently by an ULP.
 static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.1887902047863905);
 
+// === OPENING RIPPLE: an event horizon ===============================================================================
+// An opening that opts in (ScreenRippleData.state.x) refracts the image it shows: slow travelling waves that interfere
+// all the time, a faint caustic highlight riding them, and rings that spread from each contact across the whole glass and
+// fade within RippleLifetime. Distances are metres on the glass, so the rings are round on a tall canvas. Presentation
+// only: the clock and the contacts are what the presenter wrote (SdfWorldTables.SetScreenRipple).
+static const float RippleClockPeriod = 256.0;     // the seconds the host wraps the clock at (SdfScreenRipple.ClockPeriod)
+static const float RippleLifetime = 1.4;          // the seconds a contact's rings last (SdfScreenRipple.Lifetime)
+static const float RippleIdleAmplitude = 0.022;   // metres of image displacement the idle waves add up to at most
+static const float RippleContactAmplitude = 0.2;  // metres of image displacement a fresh contact's ring reaches
+static const float RippleFrontSpeed = 1.9;        // metres a second a ring's front travels
+static const float RippleRingLength = 0.3;        // metres between a ring's crests
+static const float RippleEdge = 0.06;             // the share of the glass at each edge the refraction fades out over
+static const float RippleGlow = 0.09;             // the highlight's brightness
+static const float3 RippleGlowColor = float3(0.75, 0.9, 1.0);
+static const float2 RippleIdleDirection[3] = { float2(0.8, 0.6), float2(-0.5, 0.866025), float2(0.965926, -0.258819) };
+static const float RippleIdleLength[3] = { 0.62, 0.43, 0.91 }; // metres between crests
+static const float RippleIdleCycles[3] = { 90.0, -131.0, 61.0 }; // whole cycles each wave turns in a clock period, so the wrap is seamless
+// Returns the surface UV an opening's image is read at, and the highlight the waves add. `extent` is the glass's width and
+// height in metres.
+float2 sdfOpeningRipple(ScreenRippleData ripple, float2 uv, float2 extent, out float glow) {
+    float2 p = ((uv - 0.5) * extent);
+    float turn = (SDF_TAU * (ripple.state.y / RippleClockPeriod));
+    float2 offset = float2(0.0, 0.0);
+    float height[3];
+
+    [unroll]
+    for (int wave = 0; (wave < 3); wave++) {
+        float phase = ((dot(p, RippleIdleDirection[wave]) * (SDF_TAU / RippleIdleLength[wave])) + (turn * RippleIdleCycles[wave]));
+
+        height[wave] = sin(phase);
+        offset += (RippleIdleDirection[wave] * (cos(phase) * (RippleIdleAmplitude * 0.5)));
+    }
+    // The caustic net: bright where two waves crest together, thin lines rather than spots.
+    float ridge0 = pow((1.0 - abs(height[0])), 5.0);
+    float ridge1 = pow((1.0 - abs(height[1])), 5.0);
+    float ridge2 = pow((1.0 - abs(height[2])), 5.0);
+
+    glow = (RippleGlow * ((ridge0 * ridge1) + (0.6 * (ridge1 * ridge2))));
+
+    [unroll]
+    for (int contact = 0; (contact < 4); contact++) {
+        float4 c = ripple.contacts[contact];
+        float2 away = (p - ((c.xy - 0.5) * extent));
+        float radius = length(away);
+        float behind = ((RippleFrontSpeed * c.z) - radius);
+        float envelope = (smoothstep(0.0, 0.1, behind) * exp(-1.4 * max(behind, 0.0)));
+        float fade = (saturate(1.0 - (c.z / RippleLifetime)) * saturate(1.0 - (c.z / RippleLifetime)) * c.w * rsqrt(1.0 + (3.0 * radius)));
+        float amount = (sin(behind * (SDF_TAU / RippleRingLength)) * envelope * fade);
+
+        offset += ((away / max(radius, 1.0e-3)) * (amount * RippleContactAmplitude));
+        glow += (RippleGlow * 9.0 * max(amount, 0.0));
+    }
+
+    float edge = min(min(uv.x, (1.0 - uv.x)), min(uv.y, (1.0 - uv.y)));
+
+    return (uv + ((offset / extent) * smoothstep(0.0, RippleEdge, edge)));
+}
+
 // === GLYPH DECAL: the material-level text tier ======================================================================
 // Dense reading text sampled AT THE HIT on a ScreenSlab carrier (like sampleScreenSurface samples a screen image), NOT
 // marched as geometry (the SdfShapeType.Glyph op is that path — this is an ADDITIVE material flavor that leaves world
@@ -181,10 +239,21 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     ScreenMappingData mapping = worldScreenMapping(screenIndex);
     float2 centered = (uv - 0.5);
     float radiusSquared = dot(centered, centered);
+    // An opening that opts in reads its image through the ripple: the refracted UV, and the highlight added after.
+    float rippleGlow = 0.0;
+    float2 imageUv = uv;
+
+    if (mapping.state.w == 0.0) {
+        ScreenRippleData ripple = worldScreenRipple(screenIndex);
+
+        if (ripple.state.x > 0.0) {
+            imageUv = sdfOpeningRipple(ripple, uv, (2.0 * float2(surface.right.w, surface.up.w)), rippleGlow);
+        }
+    }
 
     // The glass's warp: the face point the glass samples. The image fills the area inside the bezel rather than being
     // masked by it, so a bezel frames a screen and never eats picture.
-    float3 face = float3(uv, 1.0);
+    float3 face = float3(imageUv, 1.0);
     float2 image = float2(dot(mapping.warpU.xyz, face), dot(mapping.warpV.xyz, face));
 
     // Bezel: a smooth rounded-rect mask on the face that fades to black where the warped point leaves the unit square,
@@ -213,7 +282,7 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     // An opening (a portal's window) is no display: it shows its image as the world beyond it, with no grille,
     // scanlines, bloom, bezel or glint.
     if (mapping.state.w == 0.0) {
-        outColor = sampled;
+        outColor = (sampled + (rippleGlow * RippleGlowColor));
 
         return true;
     }

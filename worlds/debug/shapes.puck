@@ -20,6 +20,24 @@
 let galleryStorey = 4.5
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 
+// The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the
+// ceiling at (fallX, fallZ). A body that falls out of the ceiling twin needs 2.2 m of air over it, so level 1's slab is
+// holed over the ceiling twin, `fallHole` either side of the axis (hall.puck), and a rail stands round the hole.
+let fallX = 66
+let fallZ = 22.6
+let fallHole = 1
+
+// One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
+// degrees about up from the world's, so the row negates x and z. The hall's shell (hall.puck) and the painting wing's
+// (paintings.puck) are written with it.
+template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
 let galleryX = 23
 let gallerySpacing = 2.6
 
@@ -150,15 +168,16 @@ template signPrototypes() {
       }
       shape Box "board" {
         material: 2
-        position [0, 1.6, 0]
-        scale [0.72, 0.6, 0.015]
+        position [0, 1.54, 0]
+        scale [0.72, 0.66, 0.015]
       }
       textRuns: concat(
         [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
         [{ text: "stairs and lift at the north-west corner: stand on CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
         map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
         map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
-        [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
+        [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
       )
     }
   }
@@ -252,6 +271,11 @@ template galleryPlacements() {
         position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
       }
     }
+  }
+  // The noisy sphere over the NOISE plinth (the fold row's last exhibit): a separate creation keeps the noise off the plinth.
+  placement "shape-noise-subject" {
+    prototype: "shape-noise-subject"
+    position [(galleryX + (gallerySpacing * (length(foldRow) - 1))), galleryFloor[1], foldZ]
   }
   gallerySignPlacements()
 }
@@ -595,23 +619,32 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "ERODE", note: "a sphere eroded by a lane: a static placement reads lane 0, halfway, so a ragged half-eaten ball")
+      exhibit(label: "ERODE", note: "a lane erodes the sphere, here halfway through")
     }
   }
-  // Creation noise displaces the whole creation's field, the plinth and its label included.
+  // Creation noise displaces every shape and text run of the creation it sits in, with no per-shape or per-group
+  // scope, so the plinth and label stay clean by living in a second prototype: "shape-noise" is the bare exhibit
+  // (plinth, label and plaque) and "shape-noise-subject" the noisy sphere, placed at the same spot by galleryPlacements().
   prototype "shape-noise" {
     document {
+      exhibit(label: "NOISE", note: "fBm noise lumps the sphere; the plinth stays clean")
+    }
+  }
+  prototype "shape-noise-subject" {
+    document {
+      name: "shape-noise-subject"
+      schema: "puck.creation.v1"
+      palette: galleryPalette
       noise {
-        frequency: 5
-        amplitude: 0.025
+        frequency: 4
+        amplitude: 0.12
         seed: 11
       }
       shape Sphere "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.45, 0.45, 0.45]
+        scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "NOISE", note: "fBm noise over the whole creation: the sphere, the plinth and the label all displaced")
     }
   }
 }

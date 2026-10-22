@@ -213,7 +213,7 @@ public sealed partial class WorldBody {
 
         switch (instruction.Operation) {
             case BodyMotionOp.SetVerticalVelocity:
-                m_verticalVelocity = instruction.Value;
+                m_verticalVelocity = (instruction.Value * m_scale);
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.ScaleVerticalVelocity:
@@ -221,7 +221,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (m_orientation.Rotate(vector: instruction.Direction) * instruction.Value);
+                m_overlayVelocity = (m_orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -575,7 +575,7 @@ public sealed partial class WorldBody {
                 m_orientation = scratch.Orientation;
                 break;
             case BodyMotionOp.SetVerticalVelocity:
-                m_verticalVelocity = instruction.Value;
+                m_verticalVelocity = (instruction.Value * m_scale);
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.ScaleVerticalVelocity:
@@ -583,7 +583,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (scratch.Orientation.Rotate(vector: instruction.Direction) * instruction.Value);
+                m_overlayVelocity = (scratch.Orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;

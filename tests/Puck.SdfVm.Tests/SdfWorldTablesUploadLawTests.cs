@@ -399,7 +399,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
-        const int Rows = 7;
+        // A screen's seven mapping rows, then its ripple's rows, all zero for a screen that does not ripple.
+        const int Rows = (7 + SdfScreenRipple.Rows);
         const float Border = 0.03f;
         using var rig = new Rig(slots: 1);
         var mapping = new SourceMapping(
@@ -727,8 +728,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
             expected.Add(item: 0u);
-            // The identity carry and the clip plane that clips nothing.
-            expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
+            // The identity carry (rotation, translation, a scale of one) and the clip plane that clips nothing.
+            expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
         }
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
