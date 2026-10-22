@@ -9,8 +9,8 @@ import "../quality"
 import "moth-head"
 
 // Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
-let headScale = 0.68
-let headAt = [0, 1.735, 0.172]
+let headScale = 0.7
+let headAt = [0, 1.735, 0.207]
 
 // The blink frame's poses in the head's unscaled frame, [id, x, y, z]: each closed lid forward over its eye, each open
 // eye's white, opening, iris, pupil, catchlights, lids and lash back inside the face.
@@ -137,10 +137,10 @@ let braidParent = [
 ]
 
 let braid0Position = [
-  [-0.1977, 1.658, 0.1051875]
-  [-0.2131, 1.6294, 0.1225625]
-  [-0.2285, 1.6008, 0.1119375]
-  [-0.2439, 1.5722, 0.1013125]
+  [-0.1542, 1.6678, 0.1348]
+  [-0.1834, 1.6361, 0.1428]
+  [-0.2114, 1.6047, 0.1236]
+  [-0.2394, 1.5732, 0.1044]
   [-0.2527, 1.53865, 0.120375]
   [-0.2549, 1.50015, 0.141125]
   [-0.2571, 1.46165, 0.133875]
@@ -167,10 +167,10 @@ let braid0Rotation = [
 ]
 
 let braid1Position = [
-  [-0.1697, 1.658, 0.1051875]
-  [-0.1851, 1.6294, 0.0945625]
-  [-0.2005, 1.6008, 0.1119375]
-  [-0.2159, 1.5722, 0.1293125]
+  [-0.1208, 1.669, 0.1384]
+  [-0.1488, 1.6376, 0.1192]
+  [-0.178, 1.6059, 0.1272]
+  [-0.2072, 1.5742, 0.1352]
   [-0.2247, 1.53865, 0.120375]
   [-0.2269, 1.50015, 0.113125]
   [-0.2291, 1.46165, 0.133875]
@@ -2208,10 +2208,6 @@ prototypes {
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            { parent: "bootPlan-left", type: "Box", position [0, 0, 0.04], scale [0.0025, 0.2, 0.17], color: "#D9AE88" }
-            { parent: "bootPlan-right", type: "Box", position [0, 0, 0.04], scale [0.0025, 0.2, 0.17], color: "#D9AE88" }
-          ]
         }
         {
           color: lavenderPlate
@@ -2253,8 +2249,8 @@ prototypes {
           specular: 0.04
           emissive: 0
           coat: 0
-          wrap: 0.15
-          fill: "#4B2318"
+          wrap: 0.35
+          fill: "#8A4A2C"
           // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
           paints [
             {
@@ -2685,11 +2681,13 @@ prototypes {
             wave: "sine"
             phase: 0
           }
+          // Moving in flight pitches the whole body 0.6 rad about her middle, so the legs trail behind; the cruise gate
+          // eases it in and out. A constant wave, since the rendered speed phase reads zero in the air.
           {
-            driver: "run"
+            driver: "cruise"
             axis [1, 0, 0]
-            amplitude: 0.1
-            pivot [0, 0, 0]
+            amplitude: 0.6
+            pivot [0, 1, 0]
             wave: "constant"
             phase: 0
           }
@@ -2804,11 +2802,11 @@ prototypes {
             phase: 0
           }
           {
-            driver: "cruise"
+            driver: "run"
             axis [1, 0, 0]
-            amplitude: 0.28
+            amplitude: 0.1
             pivot [0, 1.0765, 0]
-            wave: "linear"
+            wave: "constant"
             phase: 0
           }
         ]
@@ -2911,9 +2909,9 @@ prototypes {
 
       shape Prism "collar" {
         id: 20
-        position [0, 1.585, 0.05]
+        position [0, 1.585, 0.09]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.1, 0.085, 0.03]
+        scale [0.1, 0.095, 0.03]
         material: brass
         group: 3
         parent: "torso"
@@ -2925,9 +2923,9 @@ prototypes {
 
       shape Prism "collarOpening" {
         id: 21
-        position [0, 1.585, 0.05]
+        position [0, 1.585, 0.09]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.066, 0.052, 0.045]
+        scale [0.066, 0.065, 0.045]
         material: charcoal
         blend: "Subtraction"
         group: 3
@@ -2939,7 +2937,7 @@ prototypes {
 
       shape Cylinder "collarStud" {
         id: 22
-        position [0.035, 1.58, 0.13]
+        position [0.035, 1.58, 0.185]
         rotation [diagonal, 0, 0, diagonal]
         scale [0.011, 0.0025, 0.011]
         material: charcoal
@@ -2982,9 +2980,9 @@ prototypes {
           {
             driver: "cruise"
             axis [1, 0, 0]
-            amplitude: -0.18
+            amplitude: -0.4
             pivot [0, 1.5715, 0]
-            wave: "linear"
+            wave: "constant"
             phase: 0
           }
         ]
@@ -3122,13 +3120,13 @@ prototypes {
       // full thickness whatever the head's scale.
       shape Sweep "braid-root-0" {
         id: 119
-        position [-0.1197, 1.6856, 0.1064]
+        position [-0.1232, 1.6842, 0.1394]
         material: ink
         parent: "helmet"
         curve {
           a [0, 0, 0]
-          b [-0.052, -0.068, 0.012]
-          c [-0.1179, -0.1277, 0.0106]
+          b [-0.05, -0.068, 0]
+          c [-0.1144, -0.1263, -0.0224]
           radiusStart: 0.014
           radiusEnd: 0.017
         }
@@ -3192,8 +3190,8 @@ prototypes {
         parent: "torso"
         curve {
           a [0, 0, 0]
-          b [0.045, -0.125, 0]
-          c [0.09, -0.255, 0]
+          b [0.0363, -0.1009, 0]
+          c [0.0727, -0.2059, 0]
           radiusStart: 0.08
           radiusEnd: 0.08
         }
@@ -3217,7 +3215,7 @@ prototypes {
           {
             driver: "flight"
             axis [0, 0, 1]
-            amplitude: 0.28
+            amplitude: -0.1
             pivot [0.295, 1.4515, 0]
             wave: "linear"
             phase: 0
@@ -3245,9 +3243,9 @@ prototypes {
 
       shape Superellipsoid "elbow-left" {
         id: 149
-        position [0.345811, 1.165024, 0.005]
+        position [0.336, 1.2201, 0.004]
         rotation [0, 0, -0.078459, 0.996917]
-        scale [0.085, 0.08, 0.0875]
+        scale [0.07, 0.065, 0.072]
         material: charcoal
         parent: "upperArm-left"
         exponent: softness
@@ -3264,41 +3262,47 @@ prototypes {
         exponent: 3
       }
 
-      shape Prism "shoulderSlab-left" {
+      shape Superellipsoid "shoulderSlab-left" {
         id: 151
-        position [0.39, 1.565, -0.005]
-        rotation [0, 0, -0.0872, 0.9962]
-        scale [0.12, 0.068, 0.165]
+        position [0.395, 1.57, -0.005]
+        rotation [0, 0, -0.1305, 0.9914]
+        scale [0.135, 0.07, 0.175]
         material: violetBandLeft
         parent: "upperArm-left"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.35
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1.3
+          cubic: 0
+          target: 1
+          driver: 2
         }
-        rounding: 0.035
       }
 
-      shape Prism "shoulderSlabLower-left" {
+      shape Superellipsoid "shoulderSlabLower-left" {
         id: 152
-        position [0.41, 1.43, 0]
-        rotation [0, 0, -0.0436, 0.999]
-        scale [0.13, 0.08, 0.175]
+        position [0.415, 1.43, 0]
+        rotation [0, 0, -0.0698, 0.9976]
+        scale [0.14, 0.085, 0.185]
         material: violetBandLeft
         parent: "upperArm-left"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.35
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1
+          cubic: 0
+          target: 1
+          driver: 2
         }
-        rounding: 0.035
       }
 
       // The elbow piston, inside the bend: a cylinder on the upper arm and a rod on the forearm, both aimed at the
       // hinge so they meet inside the joint at any bend.
       shape Cylinder "elbowCylinder-left" {
         id: 153
-        position [0.3875, 1.3002, 0.052]
-        rotation [-0.7305, 0, 0.6479, 0.2159]
-        scale [0.022, 0.0895, 0.022]
+        position [0.3834, 1.3086, 0.0499]
+        rotation [-0.6604, 0, 0.6817, 0.3149]
+        scale [0.022, 0.0594, 0.022]
         material: pistonSteel
         parent: "upperArm-left"
         rounding: 0.006
@@ -3306,10 +3310,10 @@ prototypes {
 
       shape Superellipsoid "forearm-left" {
         id: 159
-        position [0.375516, 1.024866, 0.002901]
+        position [0.3706, 1.0524, 0.0024]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.107, 0.17, 0.112]
-        material: violet
+        scale [0.1, 0.2, 0.105]
+        material: charcoal
         parent: "upperArm-left"
         exponent: 2.6
         swings [
@@ -3317,7 +3321,7 @@ prototypes {
             driver: "run"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.7
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "constant"
             phase: 0
           }
@@ -3325,7 +3329,7 @@ prototypes {
             driver: "gait"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: 0.18
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "sine"
             phase: 3.6416
           }
@@ -3333,7 +3337,7 @@ prototypes {
             driver: "flight"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.25
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 0
           }
@@ -3342,7 +3346,7 @@ prototypes {
             driver: "air"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.03
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 12
           }
@@ -3351,7 +3355,7 @@ prototypes {
             driver: "land"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: 0.05
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
           }
         ]
@@ -3361,9 +3365,9 @@ prototypes {
       // forearm's twist, so its outer face and its vents look straight out.
       shape Superellipsoid "bracer-left" {
         id: 160
-        position [0.395, 0.98, 0]
+        position [0.395, 0.995, 0]
         rotation [-0.0915, 0, 0, 0.9958]
-        scale [0.12, 0.15, 0.135]
+        scale [0.12, 0.13, 0.135]
         material: gauntletLeft
         group: 16
         parent: "forearm-left"
@@ -3393,18 +3397,18 @@ prototypes {
 
       shape Capsule "elbowRod-left" {
         id: 156
-        position [0.301, 1.0199, -0.0455]
-        rotation [0.1615, 0, -0.1433, 0.9764]
-        scale [0.012, 0.356, 0.012]
+        position [0.466, 1.1236, 0.084]
+        rotation [-0.253, 0, 0.411, 0.8758]
+        scale [0.013, 0.2612, 0.013]
         material: steel
         parent: "forearm-left"
       }
 
       shape Superellipsoid "palm-left" {
         id: 165
-        position [0.377234, 0.798693, 0.044653]
+        position [0.3775, 0.7677, 0.0504]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.067, 0.054, 0.04]
+        scale [0.09045, 0.0729, 0.054]
         material: charcoal
         parent: "forearm-left"
         exponent: 2.8
@@ -3418,85 +3422,85 @@ prototypes {
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0079792, -0.0340783, 0]
-          c [0.0170983, -0.073025, 0]
-          radiusStart: 0.038
-          radiusEnd: 0.038
+          b [0.0107719, -0.0460057, 0]
+          c [0.0230827, -0.0985838, 0]
+          radiusStart: 0.0513
+          radiusEnd: 0.0513
         }
       }
 
       shape Sweep "finger-left-0" {
         id: 167
-        position [0.348163, 0.780479, 0.084894]
+        position [0.3382, 0.7431, 0.1047]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0159584, -0.0681566, 0.005]
-          c [0.0175351, -0.0626523, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0215438, -0.0920114, 0.00675]
+          c [0.0236724, -0.0845806, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-1" {
         id: 168
-        position [0.36914, 0.776489, 0.062422]
+        position [0.3665, 0.7377, 0.0744]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0173263, -0.0739986, 0.005]
-          c [0.0170919, -0.0689183, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0233905, -0.0998981, 0.00675]
+          c [0.0230741, -0.0930397, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-2" {
         id: 169
-        position [0.390117, 0.7725, 0.039948]
+        position [0.3949, 0.7324, 0.044]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0159584, -0.0681566, 0.005]
-          c [0.013913, -0.0635003, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0215438, -0.0920114, 0.00675]
+          c [0.0187826, -0.0857254, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-3" {
         id: 170
-        position [0.411094, 0.76851, 0.017476]
+        position [0.4232, 0.727, 0.0137]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0136787, -0.05842, 0.005]
-          c [0.0098222, -0.0541877, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0184662, -0.078867, 0.00675]
+          c [0.01326, -0.0731534, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "thumb-left" {
         id: 171
-        position [0.342981, 0.819577, 0.071049]
+        position [0.3312, 0.7959, 0.086]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [-0.0295877, -0.0644423, -0.004]
-          c [0.0148304, -0.0786912, -0.037]
-          radiusStart: 0.019
-          radiusEnd: 0.019
+          b [-0.0399434, -0.0869971, -0.0054]
+          c [0.020021, -0.1062331, -0.04995]
+          radiusStart: 0.02565
+          radiusEnd: 0.02565
         }
       }
 
@@ -3553,10 +3557,12 @@ prototypes {
             pivot [0.145, 1.0265, 0]
             wave: "sine"
           }
+          // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
+          // the leg 0.1 rad back, so she hovers and flies with straight legs.
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: -0.2
+            amplitude: 0.898
             pivot [0.145, 1.0265, 0]
             wave: "linear"
             phase: 0
@@ -3628,8 +3634,8 @@ prototypes {
 
       shape Prism "kneeGuard-left" {
         id: 179
-        position [0.19, 0.7465, 0.105]
-        scale [0.075, 0.09, 0.0475]
+        position [0.19, 0.735, 0.118]
+        scale [0.095, 0.105, 0.04]
         material: skin
         parent: "thigh-left"
         profile {
@@ -3648,14 +3654,14 @@ prototypes {
       shape Superellipsoid "shin-left" {
         id: 180
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinViolet
         group: 18
         parent: "thigh-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -3670,10 +3676,11 @@ prototypes {
             wave: "halfSine"
             phase: 5.184
           }
+          // And the knee undoes its 1.2 rad of air tuck, keeping a 0.2 rad bend.
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: -1
             pivot [0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
@@ -3711,15 +3718,15 @@ prototypes {
       shape Superellipsoid "shinCavity-left" {
         id: 182
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.083, 0.42, 0.09]
         material: charcoal
         blend: "Subtraction"
         group: 18
         parent: "shin-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -3772,15 +3779,15 @@ prototypes {
       shape Superellipsoid "archBand-left" {
         id: 950
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 76
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -3827,7 +3834,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-left" {
         id: 990
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.33, 0.109]
+        scale [0.083, 0.33, 0.09]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -3835,8 +3842,8 @@ prototypes {
         parent: "shin-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -3873,15 +3880,15 @@ prototypes {
       shape Superellipsoid "archBandBack-left" {
         id: 966
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 80
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -3954,15 +3961,15 @@ prototypes {
       shape Superellipsoid "sidePanel-left" {
         id: 954
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 77
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -4069,7 +4076,7 @@ prototypes {
         position [0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
         scale [0.235, 0.235, 0.2]
-        material: skin
+        material: violet
         group: 21
         swings [
           {
@@ -4133,7 +4140,7 @@ prototypes {
         position [0.2, 0.19, 0.085]
         rotation [diagonal, 0, 0, diagonal]
         scale [0.165, 0.24, 0.25]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 21
@@ -4150,7 +4157,7 @@ prototypes {
         position [0.2, -0.248, 0.3339]
         rotation [-0.342, 0, 0, 0.9397]
         scale [0.5, 0.5, 0.5]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
         group: 21
@@ -4163,7 +4170,7 @@ prototypes {
         position [0.2, 0.169638, -0.212769]
         rotation: bootNozzleRotation
         scale [0.12, 0.24, 0.12]
-        material: skin
+        material: violet
         blend: "Subtraction"
         group: 21
         parent: "boot-left"
@@ -5100,8 +5107,8 @@ prototypes {
         parent: "torso"
         curve {
           a [0, 0, 0]
-          b [-0.045, -0.125, 0]
-          c [-0.09, -0.255, 0]
+          b [-0.0363, -0.1009, 0]
+          c [-0.0727, -0.2059, 0]
           radiusStart: 0.08
           radiusEnd: 0.08
         }
@@ -5125,7 +5132,7 @@ prototypes {
           {
             driver: "flight"
             axis [0, 0, 1]
-            amplitude: -0.28
+            amplitude: 0.1
             pivot [-0.295, 1.4515, 0]
             wave: "linear"
             phase: 0
@@ -5153,9 +5160,9 @@ prototypes {
 
       shape Superellipsoid "elbow-right" {
         id: 217
-        position [-0.345811, 1.165024, 0.005]
+        position [-0.336, 1.2201, 0.004]
         rotation [0, 0, 0.078459, 0.996917]
-        scale [0.085, 0.08, 0.0875]
+        scale [0.07, 0.065, 0.072]
         material: charcoal
         parent: "upperArm-right"
         exponent: softness
@@ -5170,39 +5177,45 @@ prototypes {
         exponent: 3
       }
 
-      shape Prism "shoulderSlab-right" {
+      shape Superellipsoid "shoulderSlab-right" {
         id: 219
-        position [-0.39, 1.565, -0.005]
-        rotation [0, 0, 0.0872, 0.9962]
-        scale [0.12, 0.068, 0.165]
+        position [-0.395, 1.57, -0.005]
+        rotation [0, 0, 0.1305, 0.9914]
+        scale [0.135, 0.07, 0.175]
         material: violetBandRight
         parent: "upperArm-right"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.35
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1.3
+          cubic: 0
+          target: 1
+          driver: 2
         }
-        rounding: 0.035
       }
 
-      shape Prism "shoulderSlabLower-right" {
+      shape Superellipsoid "shoulderSlabLower-right" {
         id: 220
-        position [-0.41, 1.43, 0]
-        rotation [0, 0, 0.0436, 0.999]
-        scale [0.13, 0.08, 0.175]
+        position [-0.415, 1.43, 0]
+        rotation [0, 0, 0.0698, 0.9976]
+        scale [0.14, 0.085, 0.185]
         material: violetBandRight
         parent: "upperArm-right"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.35
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1
+          cubic: 0
+          target: 1
+          driver: 2
         }
-        rounding: 0.035
       }
 
       shape Cylinder "elbowCylinder-right" {
         id: 221
-        position [-0.3875, 1.3002, 0.052]
-        rotation [-0.7305, 0, -0.6479, 0.2159]
-        scale [0.022, 0.0895, 0.022]
+        position [-0.3834, 1.3086, 0.0499]
+        rotation [-0.6604, 0, -0.6817, 0.3149]
+        scale [0.022, 0.0594, 0.022]
         material: pistonSteel
         parent: "upperArm-right"
         rounding: 0.006
@@ -5210,10 +5223,10 @@ prototypes {
 
       shape Superellipsoid "forearm-right" {
         id: 227
-        position [-0.375516, 1.024866, 0.002901]
+        position [-0.3706, 1.0524, 0.0024]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.107, 0.17, 0.112]
-        material: violet
+        scale [0.1, 0.2, 0.105]
+        material: charcoal
         parent: "upperArm-right"
         exponent: 2.6
         swings [
@@ -5221,7 +5234,7 @@ prototypes {
             driver: "run"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.7
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "constant"
             phase: 0
           }
@@ -5229,7 +5242,7 @@ prototypes {
             driver: "gait"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: 0.18
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "sine"
             phase: 0.5
           }
@@ -5237,7 +5250,7 @@ prototypes {
             driver: "flight"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.25
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 0
           }
@@ -5246,7 +5259,7 @@ prototypes {
             driver: "air"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.03
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 12
           }
@@ -5255,7 +5268,7 @@ prototypes {
             driver: "land"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: 0.05
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
           }
         ]
@@ -5263,9 +5276,9 @@ prototypes {
 
       shape Superellipsoid "bracer-right" {
         id: 228
-        position [-0.395, 0.98, 0]
+        position [-0.395, 0.995, 0]
         rotation [-0.0915, 0, 0, 0.9958]
-        scale [0.12, 0.15, 0.135]
+        scale [0.12, 0.13, 0.135]
         material: gauntletRight
         group: 30
         parent: "forearm-right"
@@ -5295,18 +5308,18 @@ prototypes {
 
       shape Capsule "elbowRod-right" {
         id: 224
-        position [-0.301, 1.0199, -0.0455]
-        rotation [0.1615, 0, 0.1433, 0.9764]
-        scale [0.012, 0.356, 0.012]
+        position [-0.466, 1.1236, 0.084]
+        rotation [-0.253, 0, -0.411, 0.8758]
+        scale [0.013, 0.2612, 0.013]
         material: steel
         parent: "forearm-right"
       }
 
       shape Superellipsoid "palm-right" {
         id: 233
-        position [-0.377234, 0.798693, 0.044653]
+        position [-0.3775, 0.7677, 0.0504]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.067, 0.054, 0.04]
+        scale [0.09045, 0.0729, 0.054]
         material: charcoal
         parent: "forearm-right"
         exponent: 2.8
@@ -5320,85 +5333,85 @@ prototypes {
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0079792, -0.0340783, 0]
-          c [-0.0170983, -0.073025, 0]
-          radiusStart: 0.038
-          radiusEnd: 0.038
+          b [-0.0107719, -0.0460057, 0]
+          c [-0.0230827, -0.0985838, 0]
+          radiusStart: 0.0513
+          radiusEnd: 0.0513
         }
       }
 
       shape Sweep "finger-right-0" {
         id: 235
-        position [-0.348163, 0.780479, 0.084894]
+        position [-0.3382, 0.7431, 0.1047]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0159584, -0.0681566, 0.005]
-          c [-0.0175351, -0.0626523, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0215438, -0.0920114, 0.00675]
+          c [-0.0236724, -0.0845806, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-1" {
         id: 236
-        position [-0.36914, 0.776489, 0.062422]
+        position [-0.3665, 0.7377, 0.0744]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0173263, -0.0739986, 0.005]
-          c [-0.0170919, -0.0689183, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0233905, -0.0998981, 0.00675]
+          c [-0.0230741, -0.0930397, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-2" {
         id: 237
-        position [-0.390117, 0.7725, 0.039948]
+        position [-0.3949, 0.7324, 0.044]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0159584, -0.0681566, 0.005]
-          c [-0.013913, -0.0635003, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0215438, -0.0920114, 0.00675]
+          c [-0.0187826, -0.0857254, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-3" {
         id: 238
-        position [-0.411094, 0.76851, 0.017476]
+        position [-0.4232, 0.727, 0.0137]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0136787, -0.05842, 0.005]
-          c [-0.0098222, -0.0541877, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0184662, -0.078867, 0.00675]
+          c [-0.01326, -0.0731534, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "thumb-right" {
         id: 239
-        position [-0.342981, 0.819577, 0.071049]
+        position [-0.3312, 0.7959, 0.086]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [0.0295877, -0.0644423, -0.004]
-          c [-0.0148304, -0.0786912, -0.037]
-          radiusStart: 0.019
-          radiusEnd: 0.019
+          b [0.0399434, -0.0869971, -0.0054]
+          c [-0.020021, -0.1062331, -0.04995]
+          radiusStart: 0.02565
+          radiusEnd: 0.02565
         }
       }
 
@@ -5455,7 +5468,7 @@ prototypes {
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: -0.2
+            amplitude: 0.898
             pivot [-0.145, 1.0265, 0]
             wave: "linear"
             phase: 0
@@ -5525,8 +5538,8 @@ prototypes {
 
       shape Prism "kneeGuard-right" {
         id: 247
-        position [-0.19, 0.7465, 0.105]
-        scale [0.075, 0.09, 0.0475]
+        position [-0.19, 0.735, 0.118]
+        scale [0.095, 0.105, 0.04]
         material: skin
         parent: "thigh-right"
         profile {
@@ -5545,14 +5558,14 @@ prototypes {
       shape Superellipsoid "shin-right" {
         id: 248
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinViolet
         group: 32
         parent: "thigh-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5570,7 +5583,7 @@ prototypes {
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: -1
             pivot [-0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
@@ -5608,15 +5621,15 @@ prototypes {
       shape Superellipsoid "shinCavity-right" {
         id: 250
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.083, 0.42, 0.09]
         material: charcoal
         blend: "Subtraction"
         group: 32
         parent: "shin-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5669,15 +5682,15 @@ prototypes {
       shape Superellipsoid "archBand-right" {
         id: 957
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 78
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5724,7 +5737,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-right" {
         id: 991
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.33, 0.109]
+        scale [0.083, 0.33, 0.09]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -5732,8 +5745,8 @@ prototypes {
         parent: "shin-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5770,15 +5783,15 @@ prototypes {
       shape Superellipsoid "archBandBack-right" {
         id: 974
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 81
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5851,15 +5864,15 @@ prototypes {
       shape Superellipsoid "sidePanel-right" {
         id: 961
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 79
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5966,7 +5979,7 @@ prototypes {
         position [-0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
         scale [0.235, 0.235, 0.2]
-        material: skin
+        material: violet
         group: 35
         swings [
           {
@@ -6030,7 +6043,7 @@ prototypes {
         position [-0.2, 0.19, 0.085]
         rotation [diagonal, 0, 0, diagonal]
         scale [0.165, 0.24, 0.25]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 35
@@ -6047,7 +6060,7 @@ prototypes {
         position [-0.2, -0.248, 0.3339]
         rotation [-0.342, 0, 0, 0.9397]
         scale [0.5, 0.5, 0.5]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
         group: 35
@@ -6060,7 +6073,7 @@ prototypes {
         position [-0.2, 0.169638, -0.212769]
         rotation: bootNozzleRotation
         scale [0.12, 0.24, 0.12]
-        material: skin
+        material: violet
         blend: "Subtraction"
         group: 35
         parent: "boot-right"

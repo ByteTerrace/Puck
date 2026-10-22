@@ -153,14 +153,17 @@ against the sheet, never from the hex alone. The plates carry no wear: every
 plate's weathering floor is `plateWear`, 0, and lane 0 is constant.
 
 Her head is the [`moth-head`](moth-head.puck) library's `mothHead` template,
-placed by `headAt` and scaled by `headScale` (0.68, about 0.26 m crown to chin)
+placed by `headAt` and scaled by `headScale` (0.7, about 0.27 m crown to chin)
 about the face's front at eye level. The template scales every position, extent,
 curve, sweep radius and blend radius, and takes the creation's palette slots, so
 the off-suit pilot reuses it at its own scale. The mouth and lid paints and the
 blink frame (`blinkPose`) live in the creation and scale by the same
-`headScale`. A charcoal onion shell (`hoodLining`) lines the hood, so the
-headroom round her face reads as padded interior. The braid's root sweep starts
-at her cheek and bridges to the unscaled braid below it.
+`headScale`. Her face sits forward at the hood's rim, in the key light, with the
+skin's wrap and warm fill raised so it reads lit inside the hood. A charcoal
+onion shell (`hoodLining`) lines the hood, so the headroom round her face reads
+as padded interior, and the ochre collar stands forward round her neck. The
+braid's root sweep and its first beads start at her cheek, under the side lock,
+and bridge to the unscaled braid below.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
 lavender hexagon, above the segmented charcoal waist and the ochre belt; the
@@ -168,26 +171,33 @@ ochre collar stands above it at the neck. A lavender plate (`pelvicShield`)
 narrows below the belt. The slab inherits the torso's breathing and lean; the
 belt and pelvic plate inherit the pelvis.
 
-Each shoulder is a stack of two thick rounded slabs on a charcoal superellipsoid
-pivot, all riding the upper arm: the upper slab lavender with an ivory band, the
-lower one ivory above a lavender skirt. The upper slab's inner edge stays
-outboard of the hood through the gait and the flight splay. The gauntlets are
-squared blocks from the elbow to the wrist, faced square to the body rather than
-the forearm's twist. Each hip carries a large charcoal disc on the hip axis over
-an ivory guard, both riding the thigh; the thighs are bare charcoal.
+Each shoulder is a stack of two thick slabs on a charcoal superellipsoid pivot,
+all riding the upper arm: flat-faced, round-edged superellipsoids (exponent 4)
+that a quadratic `shear` curves down over the shoulder at front and back, the
+upper slab lavender with an ivory band, the lower one, larger and further out,
+ivory above a lavender skirt. The upper slab's inner edge stays outboard of the
+hood through the gait and the flight splay. Each hip carries a large charcoal
+disc on the hip axis over an ivory guard, both riding the thigh; the thighs are
+bare charcoal.
+
+The arm is a short upper arm, an elbow at 1.22 m and a long forearm, as on the
+sheets: the charcoal elbow joint shows between the shoulder stack and the
+gauntlet, a squared block from below the hinge to the wrist, faced square to the
+body rather than the forearm's twist. The gloved hands are a third larger than
+the first Moth's, scaled about the wrist.
 
 The pistons need no driver of their own. Each is a satin steel cylinder on the
 upper bone and a steel capsule rod on the lower bone, each aimed at the hinge,
 so at any bend they meet inside the joint ball and nothing stretches. The
-elbow's cylinder runs from under the shoulder stack, inside the bend, and its
-rod continues the same line at rest into the gauntlet, which covers most of the
-forearm, so the rod shows only between the joint and the gauntlet's top. The
-knee's cylinder and rod converge behind the knee from lugs on the thigh and the
-greave's top.
+elbow's cylinder runs from under the shoulder stack and its rod from a lug on
+the gauntlet's top, inside the bend; the knee's converge behind the knee from
+lugs on the thigh and the greave's top.
 
-The boots follow the reference's lavender armor, fitted ivory ankle arches,
-sloping ivory insteps, broad lavender toe caps on thick charcoal soles and split
-heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
+The greaves flare straight from a narrow top under the knee to a wide foot,
+under an ivory knee guard that rides the thigh and stands proud of the greave's
+lavender front. The boots are their own lavender blocks under the greave's
+ivory cuff: fitted ivory ankle arches, broad lavender insteps and toe caps on
+thick charcoal soles, and split heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
 boot's rest frame; its lens and exhaust share that axis. The cyan lens and pale
 core stay softly lit at rest. An axial clearance cut passes through the cream
 instep and rubber ankle behind the nozzle; the raised rear arch clears the barrel.
@@ -206,9 +216,17 @@ closed. Judge the silhouette separately from that remaining surface defect.
 The rig swings the thighs, shins, feet, arms and forearms during walking.
 Two surface effectors plant the feet in alternating stride phases. Their target
 is the boot origin, held 0.1875 units above the floor, with sole alignment to the
-contact normal and replanted steps when the resting stance drifts. Flight bends the knees and
-splays the arms; speed and turn rate add a forward lean and bank. The torso has
-a small breathing motion. The blink frame hides the open-eye pieces and seats
+contact normal and replanted steps when the resting stance drifts. The torso has
+a small breathing motion.
+
+In flight mode she flies as sheet 10 shows. The airborne `air` driver tucks the
+hips and knees for a jump, which flight mode would otherwise hold in a hover, so
+the `flight` swings (`airPose`) undo that tuck at zero vertical speed and leave
+the legs hanging straight with a slight bend. Moving in flight pitches the whole
+body 0.6 rad forward about her middle (the pelvis's `cruise` swing), so the legs
+trail; the head looks back up 0.4 rad, and turning banks the torso. The `cruise`
+swings use a constant wave: the speed phase reads zero in the air, so the gate
+alone eases the pitch in and out. The blink frame hides the open-eye pieces and seats
 closed lids in their place, using the existing scheduled `blink` state.
 
 The `flight` and `wings` drivers read `airPose` and `airWings`. Existing server
