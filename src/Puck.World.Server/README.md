@@ -644,7 +644,9 @@ sorted `WorldDeadlineTable`, so a tick with nothing due pays four front
 comparisons and walks none of the four collections. Then
 `SweepPlacementResponses` (`WorldTick.Responses.cs`—right after `StepFields`, so it reads this
 tick's own lattice writes: the first `WorldPlacementResponse` entry whose
-condition holds at a placement's coupled cell becomes its prototype) and
+condition holds at a placement's coupled cell becomes its prototype; a booting
+document is born with its state entries settled,
+`WorldStateSettlement.SettleResponses`, so its first frame already shows them) and
 `SweepPlacementDeals` (`WorldTick.Deals.cs`—right after the response
 sweep, so the rule frame has folded and a cell a rule wrote this tick deals on
 this tick: each placement carrying a `WorldPlacementDeal` is a template whose

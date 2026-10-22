@@ -15,7 +15,9 @@ namespace Puck.World;
 /// tick immediately after the field lattice steps), and the sweep records which held in
 /// <see cref="WorldPlacement.Holding"/>. The row shows the FIRST holding entry in authored order, and its authored
 /// prototype while none holds: a response lasts exactly as long as its condition, and the authored
-/// <see cref="WorldPlacement.PrototypeId"/> is never overwritten. A world that wants a change to outlast its cause
+/// <see cref="WorldPlacement.PrototypeId"/> is never overwritten. A booting document is born with its state entries'
+/// bits settled (<see cref="WorldStateSettlement.SettleResponses"/>), so it shows from its first frame what its first
+/// sweep would. A world that wants a change to outlast its cause
 /// latches the cause in state (a rule that sets a flag cell) and conditions the entry on the flag.</para>
 /// <para><see cref="When"/> is a closed union (see <see cref="WorldPlacementResponseCondition"/>): the original
 /// lattice-field condition, tested at the cell the placement's own authored <see cref="WorldPlacement.Position"/>

@@ -506,7 +506,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
 /// <param name="Holding">Which of <paramref name="Respond"/>'s entries held at the last response sweep, one bit per
 /// entry in authored order (bit <c>i</c> for entry <c>i</c>); 0 while none holds, and always 0 on a row without
-/// <paramref name="Respond"/>. The response sweep writes it; the row shows the lowest set bit's entry, else its own
+/// <paramref name="Respond"/>. The response sweep writes it, and a booting document's state entries are settled into
+/// it before admission (<see cref="WorldStateSettlement.SettleResponses"/>); the row shows the lowest set bit's entry, else its own
 /// authored <paramref name="PrototypeId"/> (<see cref="ShownPrototypeId"/>). Refused on a row without
 /// <paramref name="Respond"/> and with a bit at or past its entry count. A reader whose disclosure withholds a cell an
 /// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
