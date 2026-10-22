@@ -19,7 +19,10 @@ namespace Puck.SdfVm;
 /// same frame values, copied by declared member offsets as the resolve's are.</para>
 /// <para><see cref="EnvironmentParameters"/> serves the residency's shared environment producer: its map dispatch reads
 /// acquired panorama images, and its reduction publishes the coefficients after the map's graph dependency.</para>
-/// <para><see cref="World"/> serves the native per-view dispatches: the bake's mask and sampler, surface and views. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
+/// <para><see cref="MeshBake"/> serves the bake's mask and sampler, the one interface whose bytecode keys the stored
+/// meshes: the World group <see cref="World"/> declares and a pass group of the bake's own, stamped with the field's
+/// instruction set alone (<see cref="FieldStamp"/>).</para>
+/// <para><see cref="World"/> serves the other native per-view dispatches: the pyramid, surface and views. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
 /// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
 /// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
 /// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
@@ -30,7 +33,7 @@ namespace Puck.SdfVm;
 /// <para><see cref="World"/>, <see cref="BrickBake"/> and <see cref="ResolveParameters"/> carry an instruction set's stamp
 /// (<see cref="SdfIsaHlsl.StampOf"/>, <see cref="Stamp"/>) in their pass blocks' variable names, so every kernel's bytecode
 /// reflects the instruction set it was compiled against, and a reload holds each kernel to its interface's layout, stamp
-/// included. The interfaces are declared for any stamp: <c>puck shaders generate</c> declares them for the model's own
+/// included. The interfaces are declared for any stamps: <c>puck shaders generate</c> declares them for the model's own
 /// instruction set, and the engine for the one its build recorded (<c>SdfWorldInterfaces</c> in <c>Puck.SdfVm</c>).</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline: one pass set per
 /// frame slot binding the pass block the world interface lays out and the mesh region, with the view and the draw pushed
@@ -60,6 +63,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The mesh pass occlusion's depth pyramid: from level one up, each texel the farthest forward depth of its
     /// block of the first phase's target, positive infinity where any pixel of it is uncovered.</summary>
     public const string MeshOcclusionDepthWritten = "sdfMeshOcclusionDepthRW";
+    /// <summary>The name of the mesh bake's interface (<see cref="MeshBake"/>).</summary>
+    public const string MeshBakeInterfaceName = "sdf-mesh-bake";
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
@@ -91,17 +96,30 @@ public sealed class SdfKernelInterfaces {
     public const string SkyCoefficients = "sdfSkyCoefficients";
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelInterfaces"/> class.</summary>
-    /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
-    /// <exception cref="ArgumentException"><paramref name="stamp"/> is null or empty.</exception>
-    public SdfKernelInterfaces(string stamp) {
+    /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/> of
+    /// <see cref="SdfIsaHlsl.DescribeFingerprint"/>).</param>
+    /// <param name="fieldStamp">The field's instruction set's stamp, which the bake's interface carries
+    /// (<see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaHlsl.DescribeFieldFingerprint"/>).</param>
+    /// <exception cref="ArgumentException"><paramref name="stamp"/> or <paramref name="fieldStamp"/> is null or
+    /// empty.</exception>
+    public SdfKernelInterfaces(string stamp, string fieldStamp) {
         ArgumentException.ThrowIfNullOrEmpty(argument: stamp);
+        ArgumentException.ThrowIfNullOrEmpty(argument: fieldStamp);
 
         Stamp = stamp;
+        FieldStamp = fieldStamp;
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
+        // The bake's mask and sampler bind the residency's World set, so their World group is the world interface's; their
+        // pass group holds only what the bake reads, and their stamp names the field's instruction set alone.
+        MeshBakeParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [.. SdfWorldPackage.BakeMembers, .. LightAndSkyTables],
+            package: MeshBakeInterfaceName
+        ).Stamped(stamp: fieldStamp);
         // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
         // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
@@ -167,6 +185,7 @@ public sealed class SdfKernelInterfaces {
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
             (IncludePath(shaderInterface: World), World),
+            (IncludePath(shaderInterface: MeshBake), MeshBake),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
@@ -209,6 +228,17 @@ public sealed class SdfKernelInterfaces {
 
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
+    /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
+    /// <see cref="Stamp"/>.</summary>
+    public string FieldStamp { get; }
+    /// <summary>Gets the frame data of the mesh bake's mask and sampler (<c>sdf-mesh-bake-mask</c>, <c>sdf-mesh-bake</c>):
+    /// the standard frame group, the World group the world interface declares, and a pass group of the bake's values
+    /// and resources alone (<see cref="SdfWorldPackage.BakeMembers"/>), stamped with <see cref="FieldStamp"/>. Its
+    /// declarations are all the bake kernels read beside the field's instruction set, and their bytecode keys the stored
+    /// meshes, so a value, resource or define another pass gains leaves the bake kernels byte for byte as they were.</summary>
+    public ShaderPipelineParameterLayout MeshBakeParameters { get; }
+    /// <summary>Gets the interface the mesh bake's mask and sampler read.</summary>
+    public ShaderInterface MeshBake => MeshBakeParameters.Interface;
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the
     /// residency's tables, and a pass group whose block holds the view's render extent and the frame's values, followed by
     /// the view's own resources. Its frame block is written through

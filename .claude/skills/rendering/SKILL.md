@@ -24,7 +24,7 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 | Mesh bake | `src/Puck.SdfVm` (`SdfMeshPathBake`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshRegionArena`); `src/Puck.SignedDistance/Baking` (`SdfSampledLattice`, `SdfDualContouring`) | [mesh bake](references/mesh-bake.md) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, and under `passes/` one `*.comp.hlsl` wrapper per dispatch plus the stage modules | [kernels](references/kernels.md) |
-| Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
+| Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfRenderHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
 | Shader packages, pipelines, render graph | `src/Puck.Shaders` (`RenderGraphRuntime`, `ShaderPipelineRenderNode`, `ShaderPipelineCompiler`), `build/Shaders.targets` | [shaders reference](../../../docs/reference/shaders.md), [runtime contracts](references/runtime-contracts.md) |
@@ -176,10 +176,17 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   wrapper makes an edit to it recompile both kernels.
 - **The bake kernels include `passes/sdf-bake-world.hlsli`, never
   `sdf-world.hlsli`.** Their compiled bytecode keys the stored meshes
-  (`SdfMeshBakeIdentity`), and SPIR-V orders its constants by first use in the
-  whole source, dead code included, so a lighting, screen or view module in
-  their closure can move a stored mesh's key. Add to `sdf-bake-world.hlsli`
-  only what the bake reads, and check with `puck mesh identity --against`.
+  (`SdfMeshBakeIdentity`), so their closure holds only what the bake reads:
+  their own interface (`isa/sdf-mesh-bake.interface.hlsli`: a pass block of
+  `SdfWorldPackage.BakeValues` alone, stamped with the field's fingerprint), the
+  field interpreter and the field's generated vocabulary (`isa/sdf-isa.hlsli`).
+  A light, exposure, view, pass-block value, pass resource or World table goes
+  in `isa/sdf-render.hlsli`, the world interface or after
+  `SdfWorldPackage.FieldTables`, and leaves the bake's bytecode byte for byte as
+  it was on both backends. SPIR-V orders its constants by first use in the whole
+  source, dead code included, so a lighting, screen or view module in the
+  closure would move a stored mesh's key. Add to the bake's closure only what
+  the bake reads, and check with `puck mesh identity --against`.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:
@@ -232,7 +239,10 @@ GPU parity pass alone does not finish it:
    add the enum member and regenerate. Give the instruction a call in
    `SdfEncodingProbe` that passes every field it packs
    (`SdfEncodingProbeLawTests` refuses one that is missing). Regenerating also
-   rewrites `SdfIsaFingerprint.cs`.
+   rewrites `SdfIsaFingerprint.cs`. `sdf-isa.hlsli` is the field's vocabulary
+   alone, and its fingerprint keys the bake: a constant only the renderer reads
+   (a light, the exposure, the visibility record, mesh records, the debug views)
+   is declared in `SdfIsaHlsl.DeclareRender`, which writes `isa/sdf-render.hlsli`.
 4. **Every GPU call site.** `mapCore` (rigid-leaf fast paths included) and the
    compiled part walk in `sdf-parts.hlsli`; a blend also needs `blendShape` and
    the material-winner rules in `sdfComposeCandidate`.
@@ -244,7 +254,7 @@ GPU parity pass alone does not finish it:
    and the stamp emitters or refuse the value there, then `puck schema`.
 
 When two lanes both add an instruction, the merge conflicts in generated files
-(`sdf-isa.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
+(`sdf-isa.hlsli`, `sdf-render.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
 regenerate with `puck shaders generate` or a build of `Puck.SdfVm`. Never
 hand-merge a generated file; `puck shaders generate --check` (and CI) only
 compares and fails naming the file that drifted, it writes nothing.

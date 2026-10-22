@@ -4,12 +4,12 @@
 // material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
 // slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry and its clip plane), then the vertices, six words
 // each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
-// flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-isa.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
+// flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
 // sdfDynamicTransforms: sdf-world and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 // The bits below the view (SDF_MESH_VIEW_SHIFT) in the index a mesh draw call pushes: the draw.
 static const uint SdfMeshDrawMask = ((1u << SDF_MESH_VIEW_SHIFT) - 1u);

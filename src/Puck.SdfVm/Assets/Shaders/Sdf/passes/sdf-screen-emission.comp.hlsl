@@ -1,7 +1,7 @@
 // One group per acquired image. Four lanes sum each of the sixteen cells in source-pixel order; a fixed reduction
 // tree publishes the pixel-weighted whole-image mean, in nits. No CPU color or displayed-frame guess is read.
 #include "../isa/sdf-sky-environment.interface.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
 
 groupshared float4 sdfScreenSums[64];

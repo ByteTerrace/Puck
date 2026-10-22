@@ -327,7 +327,8 @@ pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
 `SdfWorldPipelines.PrepareReload` reflects each changed kernel and holds it to
 its interface's layout (`SdfKernelSet.InterfaceMismatch`), whose pass block
-carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`): a kernel compiled
+carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`, or for the two
+bake kernels the field's, `SdfWorldInterfaces.FieldStamp`): a kernel compiled
 against another instruction set, or binding anything where the host does not
 place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
 the `dxc` on the path.
@@ -440,7 +441,11 @@ The kernels read the instruction set from
 `Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` (in
 `Puck.SdfVm.Model`) generates from `Puck.SignedDistance`: every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
-constants. It is checked in and never edited by hand. This project references
+constants, all the field interpreter and the mesh bake read. What the renderer
+alone reads (lights, exposure, the visibility record, mesh records, the debug
+views) is in `isa/sdf-render.hlsli` (`SdfRenderHlsl`), which includes it, so a
+renderer constant leaves the bake kernels, and the stored meshes they key, as
+they were. Both are checked in and never edited by hand. This project references
 `Puck.Shaders.Generator` as a build-only reference, so building it writes every
 declaration the model has changed before its kernels compile
 ([generated declarations](../../docs/reference/shaders.md#generated-declarations));

@@ -176,8 +176,8 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
-  their own group. The pass block's lattice rows are a sync pair with
-  `SdfFrameBlock.WriteMeshBake`.
+  their own group. The bake's own pass block (`sdf-mesh-bake.interface.hlsli`)
+  and its lattice rows are a sync pair with `SdfFrameBlock.WriteMeshBake`.
 - **A bake never reads the frame's transforms.** A dynamic group's box,
   lattices and points are slot-local, and `sdf-mesh-bake` reads every transform
   through the poses the group's geometry hashed (`SdfMeshGeometryBuilder.Poses`,
@@ -305,10 +305,18 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
   (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
-  (their source closure is `passes/sdf-bake-world.hlsli`, the field
-  interpreter and the work counters, with no lighting, screen or view module,
-  so an edit to one of those leaves their bytecode as it was on both backends)
-  and the code the bake runs (`SdfMeshBakeClosure`). The code part is read from
+  and the code the bake runs (`SdfMeshBakeClosure`). The kernels' source
+  closure is `passes/sdf-bake-world.hlsli`: their own interface
+  (`isa/sdf-mesh-bake.interface.hlsli`, `SdfWorldInterfaces.MeshBakeParameters`:
+  a pass block of `SdfWorldPackage.BakeValues` alone, the masks, samples and
+  counters, and the World group with the field's tables first), the field
+  interpreter, the field's generated vocabulary (`isa/sdf-isa.hlsli`) and the
+  work counters, stamped with the field's fingerprint
+  (`SdfIsaFingerprint.Field`). A lighting, screen or view module, a renderer
+  constant (`isa/sdf-render.hlsli`), a world pass-block value or resource, or a
+  World table after `FieldTables` is outside it and leaves their bytecode byte
+  for byte as it was on DXIL and SPIR-V; an edit to the field, its generated
+  vocabulary, the encoding or the bake kernels moves it. The code part is read from
   the build's assemblies: from the bake's roots (`SdfMeshPathBake`, the group,
   geometry, mesh and material-cut types, `SdfFrameBlock.WriteMeshBake`, the
   point table and program upload, the store's entry format) it follows every

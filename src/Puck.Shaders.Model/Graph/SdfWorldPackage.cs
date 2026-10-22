@@ -6,8 +6,9 @@ namespace Puck.Shaders;
 /// <summary>
 /// The <see cref="RenderGraphPackageCatalog.SdfWorld"/> package's declaration: the values and resources every one of its
 /// kernels reads from its pass group, the layout facts its storages are sized by, and the fragment it runs as.
-/// <para>Every compute pass of the fragment reads one interface, <see cref="Members"/>, whose pass block holds the
-/// extent and the world values in ordinal name order and whose resources follow. A buffer one pass writes and a later
+/// <para>Every compute pass of the fragment but the bake's reads one interface, <see cref="Members"/>, whose pass block
+/// holds the extent and the world values in ordinal name order and whose resources follow; the bake's mask and sampler
+/// read their own (<see cref="BakeMembers"/>), which holds only what the bake reads. A buffer one pass writes and a later
 /// pass reads is two members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a
 /// read-only member for its readers.</para>
 /// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the bake's instance
@@ -261,7 +262,6 @@ public static partial class SdfWorldPackage {
         Value(name: IndirectApply, type: ShaderValueType.Float4),
         Value(name: IndirectContact, type: ShaderValueType.Float),
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
-        Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
         Value(name: ScreenCount, type: ShaderValueType.Uint),
         Value(name: ViewBase, type: ShaderValueType.Uint),
@@ -316,30 +316,21 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
         Value(name: MeshShadowTexels, type: ShaderValueType.Uint),
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshBakeBatch * MeshBakeLatticeRows), name: MeshBakeLattices, type: ShaderValueType.Float4),
-        Value(name: MeshBakeCount, type: ShaderValueType.Uint),
         Value(name: MeshIrradianceVolume, type: ShaderValueType.Uint4),
         Value(name: MeshIrradianceLow, type: ShaderValueType.Int4),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];
-    /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
-    /// brick pool, the glyph atlas and the samplers, which the residency binds as one set per upload ring slot, written
-    /// once and again only when what it binds moves.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
+    /// <summary>Gets the World group's tables the field interpreter reads, which the mesh bake samples through: the program
+    /// words, the dynamic transforms, the brick pool, the bake's point table, the glyph atlas and the samplers. They lead
+    /// <see cref="Tables"/>, so their bindings are alike in every interface that holds the World group and a table added
+    /// after them moves none of them: the bake kernels' bytecode keys the stored meshes, and a binding they read that
+    /// moved would move that key (<see cref="BakeMembers"/>).</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> FieldTables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
-        Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
-        Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
-        Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
-        Table(element: ShaderValueType.Float4, name: ScreenMappings),
-        Table(element: ShaderValueType.Float4, name: ScreenLights),
-        Table(element: ShaderValueType.Uint4, name: DecalCells),
         Table(element: ShaderValueType.Float, name: BrickPool),
-        Table(element: ShaderValueType.Float4, name: Volumes),
-        Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Float4, name: MeshBakePoints),
-        Table(element: ShaderValueType.Uint, name: MeshIrradiance),
         WorldImage(name: GlyphAtlas),
         ShaderInterfaceMember.Sampler(
             group: ShaderInterfaceGroup.World,
@@ -347,13 +338,53 @@ public static partial class SdfWorldPackage {
             name: Samplers
         ),
     ];
-    /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
-    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh and cascade targets and the
-    /// work counters; and the World group's members (<see cref="Tables"/>).</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
-        .. Values,
+    /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
+    /// brick pool, the glyph atlas and the samplers, which the residency binds as one set per upload ring slot, written
+    /// once and again only when what it binds moves. The field's tables come first (<see cref="FieldTables"/>), and a new
+    /// table goes after them.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
+        .. FieldTables,
+        Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
+        Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
+        Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
+        Table(element: ShaderValueType.Float4, name: ScreenMappings),
+        Table(element: ShaderValueType.Float4, name: ScreenLights),
+        Table(element: ShaderValueType.Uint4, name: DecalCells),
+        Table(element: ShaderValueType.Float4, name: Volumes),
+        Table(element: ShaderValueType.Uint, name: MeshRegion),
+        Table(element: ShaderValueType.Uint, name: MeshIrradiance),
+    ];
+    /// <summary>Gets the values the mesh bake's two parts (<see cref="Parts.Mask"/>, <see cref="Parts.Bake"/>) read from
+    /// their own pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their
+    /// count, and the work-counter rows. No other part reads the first three, and the bake reads nothing else of the
+    /// frame.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> BakeValues { get; } = [
+        Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshBakeBatch * MeshBakeLatticeRows), name: MeshBakeLattices, type: ShaderValueType.Float4),
+        Value(name: MeshBakeCount, type: ShaderValueType.Uint),
+        ShaderWorkCounters.RowMember,
+        ShaderWorkCounters.DetailRowMember,
+    ];
+    /// <summary>Gets what the mesh bake's two parts read, the mask and the sampler: a pass block of
+    /// <see cref="BakeValues"/> alone, the instance masks one writes and the other reads, the bake's samples and the
+    /// work counters, and the World group's members (<see cref="Tables"/>), so the parts bind the residency's World set
+    /// as every other part does. The bake kernels' bytecode keys the stored meshes (<c>SdfMeshBakeIdentity</c>), so the
+    /// pass group holds only what the bake reads: a value or resource another part gains leaves the bake's declarations,
+    /// and with them its kernels, as they were.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> BakeMembers { get; } = [
+        .. BakeValues,
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
+        Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
+        ShaderWorkCounters.BufferMember,
+        .. Tables,
+    ];
+    /// <summary>Gets what every compute pass of the fragment but the bake's reads (<see cref="BakeMembers"/>): from its
+    /// pass group, beside the extent, the values (<see cref="Values"/>), the view's scratch, its output, the screens it
+    /// shows, the mesh and cascade targets and the work counters; and the World group's members
+    /// (<see cref="Tables"/>).</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
+        .. Values,
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
@@ -377,7 +408,6 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNear, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFar, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecond, type: ShaderValueType.Float4),
-        Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
         ShaderWorkCounters.BufferMember,
         Read(element: ShaderValueType.Uint, name: MeshPyramid),
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
@@ -395,8 +425,8 @@ public static partial class SdfWorldPackage {
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
-            Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
-            Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]),
+            Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]) with { Members = BakeMembers },
+            Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]) with { Members = BakeMembers },
             ShadowRaster(name: Parts.ShadowNear, depth: Parts.ShadowNearDepth),
             ShadowRaster(name: Parts.ShadowFar, depth: Parts.ShadowFarDepth),
             ShadowRaster(name: Parts.ShadowSecond, depth: Parts.ShadowSecondDepth),

@@ -1217,7 +1217,11 @@ bytecode reflects the stamp. `ShaderInterfaceLayout.Mismatch` holds a module
 to a stamped layout's stamp before anything else: a module whose pass block
 carries another name, or that reads no pass block, is refused. The SDF kernels'
 interfaces carry the instruction set's stamp (`SdfWorldInterfaces.Stamp`), which is
-how a kernel reload refuses kernels compiled against another instruction set.
+how a kernel reload refuses kernels compiled against another instruction set. The
+mesh bake's interface (`sdf-mesh-bake`) carries the field's stamp instead
+(`SdfWorldInterfaces.FieldStamp`), the fingerprint of `sdf-isa.hlsli` and the
+encoding alone: the bake kernels' bytecode keys the stored meshes, so a renderer
+constant, which moves the whole stamp, leaves theirs as it was.
 
 The spike interfaces three passes: film grain, a pixelate compute pass, and a
 compute pass reading structured buffers of a 4-byte and a 16-byte element, a
@@ -1379,10 +1383,13 @@ package declares the push with `RenderGraphPackage.PushesIndex`, which
 
 A kernel compiled at build never declares what the C# model owns. The model
 generates it: `sdf-isa.hlsli`, the SDF instruction set's enums, lane accessors
-and packed-layout constants (`SdfIsaHlsl`); the R2 dither's two 32-bit increments
+and packed-layout constants, all the field interpreter and the mesh bake read
+(`SdfIsaHlsl`); `sdf-render.hlsli`, which includes it and adds the constants the
+renderer alone reads, lights, exposure, the visibility record, mesh records and
+the debug views among them (`SdfRenderHlsl`); the R2 dither's two 32-bit increments
 (`ShaderLowDiscrepancyHlsl`, `Puck.Shaders/Assets/Shaders/Shared/low-discrepancy.hlsli`,
-which `display-encode.frag.hlsl` includes); the instruction set's fingerprint,
-recorded for the host in `src/Puck.SdfVm/SdfIsaFingerprint.cs`; and every
+which `display-encode.frag.hlsl` includes); the instruction set's fingerprint and
+the field's, recorded for the host in `src/Puck.SdfVm/SdfIsaFingerprint.cs`; and every
 generated interface include (`<name>.interface.hlsli`), an engine package's
 found by its file name and the SDF kernels' (`SdfKernelInterfaces`) at fixed
 paths. `ShaderDeclarations` (in `Puck.SdfVm.Model`) is the one list of them.

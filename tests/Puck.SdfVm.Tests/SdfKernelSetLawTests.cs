@@ -123,7 +123,7 @@ public sealed class SdfKernelSetLawTests {
                 Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
                 Assert.Contains(
                     collection: reflected,
-                    filter: static binding => (binding.Name == ("passGroup" + SdfWorldInterfaces.Stamp))
+                    filter: binding => (binding.Name == ("passGroup" + SdfKernelSet.LayoutOf(kernel: kernel).Interface.Stamp))
                 );
             }
         }
@@ -139,9 +139,48 @@ public sealed class SdfKernelSetLawTests {
             );
         }
 
-        // The recorded fingerprint is the model's: the host names the instruction set its kernels were generated against.
+        // The bake's interface carries the field's instruction set alone, as the bake kernels do.
+        Assert.Equal(expected: SdfWorldInterfaces.FieldStamp, actual: SdfWorldInterfaces.MeshBakeLayout.Interface.Stamp);
+        Assert.NotEqual(expected: SdfWorldInterfaces.Stamp, actual: SdfWorldInterfaces.FieldStamp);
+        Assert.All(
+            action: kernel => Assert.Same(expected: SdfWorldInterfaces.MeshBakeLayout, actual: SdfKernelSet.LayoutOf(kernel: kernel)),
+            collection: [SdfKernel.MeshBakeMask, SdfKernel.MeshBake]
+        );
+
+        // The recorded fingerprints are the model's: the host names the instruction set its kernels were generated against.
         Assert.Equal(expected: SdfIsaFingerprint.Value, actual: SdfIsaHlsl.DescribeFingerprint());
+        Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.DescribeFieldFingerprint());
         Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value), actual: SdfWorldInterfaces.Stamp);
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Field), actual: SdfWorldInterfaces.FieldStamp);
+    }
+    // The renderer's declarations are no part of the field's instruction set: the bake's stamp, which keys its kernels'
+    // bytecode and through it the stored meshes, is the fingerprint of the field's include and the encoding alone, so a
+    // renderer constant added to the model moves the whole instruction set's stamp and leaves the bake's. The field's
+    // include names nothing the renderer's declares, and the renderer's builds on it.
+    [Fact]
+    public void ARendererConstantMovesNoBakeStamp() {
+        var field = SdfIsaHlsl.Generate();
+        var render = SdfRenderHlsl.Generate();
+        var encoding = SdfEncodingProbe.Describe();
+        var withRenderConstant = render.Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: "#define SDF_LIGHT_STAGE_PROBE 3u\n#endif // SDF_RENDER_HLSLI",
+            oldValue: "#endif // SDF_RENDER_HLSLI"
+        );
+
+        Assert.NotEqual(expected: render, actual: withRenderConstant);
+        Assert.Contains(actualString: render, expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
+        Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: field));
+        Assert.NotEqual(
+            expected: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + render)),
+            actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + withRenderConstant))
+        );
+
+        // The renderer's own vocabulary stays out of the field's include, which the bake compiles against.
+        foreach (var prefix in ((ReadOnlySpan<string>)["SDF_LIGHT_", "SDF_MESH_", "SDF_VISIBILITY_", "SDF_DEBUG_VIEW_", "SDF_REFERENCE_WHITE", "SDF_LOCAL_", "SDF_SKY_", "SDF_AIR_", "SDF_INDIRECT_SOURCES_"])) {
+            Assert.DoesNotContain(actualString: field, expectedSubstring: ("#define " + prefix));
+            Assert.Contains(actualString: render, expectedSubstring: ("#define " + prefix));
+        }
     }
     // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
     // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction

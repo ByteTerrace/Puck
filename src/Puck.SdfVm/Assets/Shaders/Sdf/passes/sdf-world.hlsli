@@ -4,6 +4,8 @@
 // put over the sky. KEEP IN SYNC with SdfWorldTables's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
 #define SDF_WORLD_HLSLI
+// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+#include "../isa/sdf-world.interface.hlsli"
 #include "../field/sdf-vm.hlsli"
 #include "../shade/sdf-material.hlsli"
 #include "../frame/sdf-viewport.hlsli"

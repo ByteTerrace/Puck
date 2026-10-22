@@ -4211,7 +4211,7 @@ item 2 landed.
    and debug mode, the jitter and previous view, and every shading and grid
    lever are written by `SdfFrameBlock` at the offsets the generated
    declarations read, and the light kinds reach the kernels generated
-   (`SDF_LIGHT_*` in `sdf-isa.hlsli`). The lights and the sky are not pass-block
+   (`SDF_LIGHT_*` in `sdf-render.hlsli`). The lights and the sky are not pass-block
    members: they are World-group regions with generated decoders (P18-4). The
    mesh pass's interface lays out the world pass block member for member, so it
    binds the block its node writes. A block value and a config field may be an array of

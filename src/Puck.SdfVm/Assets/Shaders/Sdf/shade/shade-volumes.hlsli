@@ -9,7 +9,7 @@
 #include "../field/sdf-noise.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 #include "sdf-atmosphere.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 // The table's capacity in volumes is SDF_MAX_VOLUMES (SdfProgramBuilder.MaxVolumes) and the phase anisotropy a medium
 // scatters the bodies' light by SDF_VOLUME_SCATTER_ANISOTROPY (SdfVolume.ScatterAnisotropy).
 struct SdfVolumeData {

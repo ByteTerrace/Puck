@@ -35,9 +35,9 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         foreach (var (kernels, reason) in ((ReadOnlySpan<(SdfKernelSet, string)>)[
             (changed.With(
                 bytecode: SpirvEdits.Renamed(
-                    from: ("passGroup" + SdfWorldInterfaces.Stamp),
+                    from: ("passGroup" + SdfWorldInterfaces.FieldStamp),
                     module: changed[SdfKernel.MeshBakeMask].Span,
-                    to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
+                    to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Field ^ 1U))
                 ),
                 kernel: SdfKernel.MeshBakeMask
             ), "stamped"),
@@ -161,10 +161,10 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         Assert.True(condition: node.Produce(context: in context));
     }
 
-    // A bake mask kernel that reads this host's world interface and runs one statement, on its fifth line.
+    // A bake mask kernel that reads this host's bake interface and runs one statement, on its fifth line.
     private static string MaskSource(string body) =>
         $$"""
-        #include "{{RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory).Replace(newChar: '/', oldChar: '\\')}}/isa/sdf-world.interface.hlsli"
+        #include "{{RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory).Replace(newChar: '/', oldChar: '\\')}}/isa/sdf-mesh-bake.interface.hlsli"
 
         [numthreads(1, 1, 1)]
         void CSMain() {

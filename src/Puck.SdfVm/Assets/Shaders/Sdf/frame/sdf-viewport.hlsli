@@ -4,7 +4,7 @@
 // host writes it through SdfFrameBlock.
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 // The view the pass renders, gathered from the pass block into the rows the shading and the mesh projection read it
 // through.

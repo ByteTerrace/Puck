@@ -61,7 +61,6 @@ public static partial class SdfFrameBlock {
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
     private static readonly int LocalAdaptation = Offset(member: SdfWorldPackage.LocalAdaptation);
     private static readonly int SkyPeakLuminance = Offset(member: SdfWorldPackage.SkyPeakLuminance);
-    private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
@@ -140,8 +139,8 @@ public static partial class SdfFrameBlock {
             x: camera.Near,
             y: SdfWorldPackage.MinimumNear
         );
-    /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens,
-    /// instance-mask width and mesh draws the tables packed, the view's camera and quality
+    /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens and mesh draws the
+    /// tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
     /// light count and shadow slots (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
     /// node writes it.</summary>
@@ -167,7 +166,6 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: ViewportCount, value: 1u);
         WriteUInt32(block: block, offset: ViewBase, value: 0u);
         WriteUInt32(block: block, offset: ScreenCount, value: tables.ScreenCount);
-        WriteUInt32(block: block, offset: InstanceMaskWordCount, value: tables.InstanceMaskWordCount);
         WriteUInt32(block: block, offset: MeshDraws, value: tables.MeshDraws);
         WriteVector3(block: block, offset: ViewPosition, value: camera.Position);
         WriteVector3(block: block, offset: ViewRight, value: camera.Right);

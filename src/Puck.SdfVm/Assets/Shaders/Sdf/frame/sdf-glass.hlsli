@@ -5,7 +5,7 @@
 // complement in a uint, accumulated atomically, so the order faces rasterize in never moves a sum.
 #ifndef FRAME_SDF_GLASS_HLSLI
 #define FRAME_SDF_GLASS_HLSLI
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 uint sdfGlassSumWord(uint2 pixel, uint2 extent) {
     return (SDF_GLASS_SUM_WORDS * ((pixel.y * extent.x) + pixel.x));

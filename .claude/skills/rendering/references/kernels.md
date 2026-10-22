@@ -246,8 +246,10 @@ transitions each buffer it copied into, once.
 ## Registers and bindings
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
-includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`isa/sdf-bricks.interface.hlsli`, both generated from `SdfKernelInterfaces` and
+but the bake's includes `isa/sdf-world.interface.hlsli` (through `passes/sdf-world.hlsli`),
+the mesh bake's two `isa/sdf-mesh-bake.interface.hlsli` (through
+`passes/sdf-bake-world.hlsli`) and the brick baker
+`isa/sdf-bricks.interface.hlsli`, all generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's

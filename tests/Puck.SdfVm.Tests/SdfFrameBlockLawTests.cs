@@ -30,7 +30,7 @@ public sealed class SdfFrameBlockLawTests {
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
-        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow,
+        SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow,
         // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
         SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
     // A camera basis none of whose components is zero.
@@ -321,7 +321,7 @@ public sealed class SdfFrameBlockLawTests {
     [Fact]
     public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
         Assert.Matches(
-            actualString: SdfIsaHlsl.Generate(),
+            actualString: SdfRenderHlsl.Generate(),
             expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfWorldPackage.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
         );
 

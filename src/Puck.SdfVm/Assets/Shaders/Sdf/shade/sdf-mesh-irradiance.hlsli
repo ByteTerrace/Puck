@@ -1,11 +1,11 @@
 // The baked-mesh path's indirect light (views only): the irradiance volume SdfMeshIrradiance traces on the CPU against the
 // static meshes, read at a shaded point by the eight probes about it. It performs no field query. The probe record and the
-// normal bias are SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-isa.hlsli (SDF_MESH_IRRADIANCE_*); the
+// normal bias are SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_IRRADIANCE_*); the
 // key, the toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's KeyOf, SlotOf and Incoming, the CPU
 // trace's read of the same volume.
 #ifndef SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 bool sdfMeshIrradianceEnabled() {
     return (passGroup.meshIrradianceVolume.x != 0u);

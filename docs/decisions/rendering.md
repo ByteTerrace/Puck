@@ -739,7 +739,7 @@ a passthrough destination: `route.input: Passthrough` is refused by name.
 
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model
-owns, `sdf-isa.hlsli` and the `*.interface.hlsli` of each engine package and
+owns, `sdf-isa.hlsli`, `sdf-render.hlsli` and the `*.interface.hlsli` of each engine package and
 SDF kernel interface, are written by `puck shaders generate` and tracked in
 Git, because the engine's kernels include them from the source tree. CI runs
 `puck shaders generate --check`, which regenerates each in memory and fails on

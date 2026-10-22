@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/31781e874000d704bbe6d1b680936a9c775ddf36e36ec32f8070f66970747aa8). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/abddbca2023f1b7d6429223952e20fd2c3f83b5a0d5e732adc1afd3bfabd5b61). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -99,19 +99,19 @@ struct SdfWorldFrame {
 // The World group: descriptor set 1, register space 1.
 [[vk::binding(0, 1)]] StructuredBuffer<uint4> sdfWords : register(t0, space1);
 [[vk::binding(1, 1)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t1, space1);
-[[vk::binding(2, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t2, space1);
-[[vk::binding(3, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t3, space1);
-[[vk::binding(4, 1)]] StructuredBuffer<float4> screenSurfaces : register(t4, space1);
-[[vk::binding(5, 1)]] StructuredBuffer<float4> screenMappings : register(t5, space1);
-[[vk::binding(6, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t6, space1);
-[[vk::binding(7, 1)]] StructuredBuffer<uint4> sdfDecalCells : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float> sdfBrickPool : register(t8, space1);
-[[vk::binding(9, 1)]] StructuredBuffer<float4> sdfVolumes : register(t9, space1);
-[[vk::binding(10, 1)]] StructuredBuffer<uint> sdfMeshRegion : register(t10, space1);
-[[vk::binding(11, 1)]] StructuredBuffer<float4> sdfMeshBakePoints : register(t11, space1);
-[[vk::binding(12, 1)]] StructuredBuffer<uint> sdfMeshIrradiance : register(t12, space1);
-[[vk::binding(13, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t13, space1);
-[[vk::binding(14, 1)]] SamplerState samplers[2] : register(s14, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<float> sdfBrickPool : register(t2, space1);
+[[vk::binding(3, 1)]] StructuredBuffer<float4> sdfMeshBakePoints : register(t3, space1);
+[[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
+[[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
+[[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
+[[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
+[[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);
+[[vk::binding(12, 1)]] StructuredBuffer<uint4> sdfDecalCells : register(t12, space1);
+[[vk::binding(13, 1)]] StructuredBuffer<float4> sdfVolumes : register(t13, space1);
+[[vk::binding(14, 1)]] StructuredBuffer<uint> sdfMeshRegion : register(t14, space1);
+[[vk::binding(15, 1)]] StructuredBuffer<uint> sdfMeshIrradiance : register(t15, space1);
 [[vk::binding(16, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t16, space1);
 #define sdfLights sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5
 [[vk::binding(17, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t17, space1);
@@ -169,7 +169,7 @@ struct SdfWorldPass {
     [[vk::offset(252)]] uint _pad252;
     [[vk::offset(256)]] float4 indirectSourceGains;
     [[vk::offset(272)]] uint indirectSources;
-    [[vk::offset(276)]] uint instanceMaskWordCount;
+    [[vk::offset(276)]] uint _pad276;
     [[vk::offset(280)]] float2 jitter;
     [[vk::offset(288)]] uint lightCount;
     [[vk::offset(292)]] uint _pad292;
@@ -177,64 +177,56 @@ struct SdfWorldPass {
     [[vk::offset(300)]] uint _pad300;
     [[vk::offset(304)]] uint4 lightMask;
     [[vk::offset(320)]] float localAdaptation;
-    [[vk::offset(324)]] uint meshBakeCount;
+    [[vk::offset(324)]] uint meshDraws;
     [[vk::offset(328)]] uint _pad328;
     [[vk::offset(332)]] uint _pad332;
-    [[vk::offset(336)]] float4 meshBakeLattices[64];
-    [[vk::offset(1360)]] uint meshDraws;
-    [[vk::offset(1364)]] uint _pad1364;
-    [[vk::offset(1368)]] uint _pad1368;
-    [[vk::offset(1372)]] uint _pad1372;
-    [[vk::offset(1376)]] int4 meshIrradianceLow;
-    [[vk::offset(1392)]] uint4 meshIrradianceVolume;
-    [[vk::offset(1408)]] float4 meshShadowCascades[12];
-    [[vk::offset(1600)]] uint meshShadowCount;
-    [[vk::offset(1604)]] uint _pad1604;
-    [[vk::offset(1608)]] uint _pad1608;
-    [[vk::offset(1612)]] uint _pad1612;
-    [[vk::offset(1616)]] float4 meshShadowParameters;
-    [[vk::offset(1632)]] uint meshShadowTexels;
-    [[vk::offset(1636)]] float meterLuminance;
-    [[vk::offset(1640)]] float nearDistance;
-    [[vk::offset(1644)]] uint _pad1644;
-    [[vk::offset(1648)]] float4 previousView[6];
-    [[vk::offset(1744)]] uint screenCount;
-    [[vk::offset(1748)]] float screenFidelity;
-    [[vk::offset(1752)]] uint shadowFadeCount;
-    [[vk::offset(1756)]] uint shadowSlotCount;
-    [[vk::offset(1760)]] int4 shadowSlots;
-    [[vk::offset(1776)]] float skyPeakLuminance;
-    [[vk::offset(1780)]] float tanHalfFieldOfView;
-    [[vk::offset(1784)]] uint temporal;
-    [[vk::offset(1788)]] uint viewBase;
-    [[vk::offset(1792)]] float3 viewForward;
-    [[vk::offset(1804)]] uint _pad1804;
-    [[vk::offset(1808)]] float3 viewPosition;
-    [[vk::offset(1820)]] uint _pad1820;
-    [[vk::offset(1824)]] float3 viewRight;
-    [[vk::offset(1836)]] uint _pad1836;
-    [[vk::offset(1840)]] float3 viewUp;
-    [[vk::offset(1852)]] uint viewportCount;
-    [[vk::offset(1856)]] uint workCounterRow;
-    [[vk::offset(1860)]] uint workCounterRowDetail;
+    [[vk::offset(336)]] int4 meshIrradianceLow;
+    [[vk::offset(352)]] uint4 meshIrradianceVolume;
+    [[vk::offset(368)]] float4 meshShadowCascades[12];
+    [[vk::offset(560)]] uint meshShadowCount;
+    [[vk::offset(564)]] uint _pad564;
+    [[vk::offset(568)]] uint _pad568;
+    [[vk::offset(572)]] uint _pad572;
+    [[vk::offset(576)]] float4 meshShadowParameters;
+    [[vk::offset(592)]] uint meshShadowTexels;
+    [[vk::offset(596)]] float meterLuminance;
+    [[vk::offset(600)]] float nearDistance;
+    [[vk::offset(604)]] uint _pad604;
+    [[vk::offset(608)]] float4 previousView[6];
+    [[vk::offset(704)]] uint screenCount;
+    [[vk::offset(708)]] float screenFidelity;
+    [[vk::offset(712)]] uint shadowFadeCount;
+    [[vk::offset(716)]] uint shadowSlotCount;
+    [[vk::offset(720)]] int4 shadowSlots;
+    [[vk::offset(736)]] float skyPeakLuminance;
+    [[vk::offset(740)]] float tanHalfFieldOfView;
+    [[vk::offset(744)]] uint temporal;
+    [[vk::offset(748)]] uint viewBase;
+    [[vk::offset(752)]] float3 viewForward;
+    [[vk::offset(764)]] uint _pad764;
+    [[vk::offset(768)]] float3 viewPosition;
+    [[vk::offset(780)]] uint _pad780;
+    [[vk::offset(784)]] float3 viewRight;
+    [[vk::offset(796)]] uint _pad796;
+    [[vk::offset(800)]] float3 viewUp;
+    [[vk::offset(812)]] uint viewportCount;
+    [[vk::offset(816)]] uint workCounterRow;
+    [[vk::offset(820)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa4A8E2D0D : register(b0, space3);
-#define passGroup passGroupIsa4A8E2D0D
-[[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
-[[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
-[[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u4, space3);
-[[vk::binding(5, 3)]] RWStructuredBuffer<float> reactivityRW : register(u5, space3);
-[[vk::binding(6, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u6, space3);
-[[vk::binding(7, 3)]] Texture2D<float4> screenSources[32] : register(t7, space3);
-[[vk::binding(39, 3)]] Texture2D<float4> meshVisibility : register(t39, space3);
-[[vk::binding(40, 3)]] Texture2D<float4> meshShadowNear : register(t40, space3);
-[[vk::binding(41, 3)]] Texture2D<float4> meshShadowFar : register(t41, space3);
-[[vk::binding(42, 3)]] Texture2D<float4> meshShadowSecond : register(t42, space3);
-[[vk::binding(43, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u43, space3);
-[[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
-[[vk::binding(45, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t45, space3);
-[[vk::binding(46, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u46, space3);
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa8A2B3C24 : register(b0, space3);
+#define passGroup passGroupIsa8A2B3C24
+[[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
+[[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
+[[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
+[[vk::binding(4, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u4, space3);
+[[vk::binding(5, 3)]] Texture2D<float4> screenSources[32] : register(t5, space3);
+[[vk::binding(37, 3)]] Texture2D<float4> meshVisibility : register(t37, space3);
+[[vk::binding(38, 3)]] Texture2D<float4> meshShadowNear : register(t38, space3);
+[[vk::binding(39, 3)]] Texture2D<float4> meshShadowFar : register(t39, space3);
+[[vk::binding(40, 3)]] Texture2D<float4> meshShadowSecond : register(t40, space3);
+[[vk::binding(41, 3)]] RWStructuredBuffer<uint> workCounters : register(u41, space3);
+[[vk::binding(42, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t42, space3);
+[[vk::binding(43, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u43, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

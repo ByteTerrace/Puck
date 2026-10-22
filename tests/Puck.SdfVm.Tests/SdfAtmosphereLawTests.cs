@@ -61,7 +61,7 @@ public sealed partial class SdfAtmosphereLawTests {
     public void TheKernelsHeightMediumIsTheReferences() {
         var atmosphere = CodeOf(path: "shade/sdf-atmosphere.hlsli");
 
-        // The series a ray parallel to the base takes; its guards are SdfAir's, generated into sdf-isa.hlsli.
+        // The series a ray parallel to the base takes; its guards are SdfAir's, generated into sdf-render.hlsli.
         Assert.Contains(actualString: atmosphere, expectedSubstring: "((abs(x) < SDF_AIR_SERIES_LIMIT) ? (1.0 - (x * (0.5 - (x / 6.0)))) : ((1.0 - exp(-x)) / x))");
     }
     [Fact]

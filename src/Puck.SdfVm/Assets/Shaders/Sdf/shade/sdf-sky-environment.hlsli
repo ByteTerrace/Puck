@@ -6,7 +6,7 @@
 #ifndef SHADE_SDF_SKY_ENVIRONMENT_HLSLI
 #define SHADE_SDF_SKY_ENVIRONMENT_HLSLI
 #include "../field/sdf-octahedral.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 // The map's size, its coefficients per colour channel and the largest finite half float a texel's channel is clamped to
 // are SdfSkyEnvironment's (SDF_SKY_ENVIRONMENT_SIZE, SDF_SKY_ENVIRONMENT_COEFFICIENTS, SDF_SKY_ENVIRONMENT_MAX_RADIANCE).
 

@@ -691,7 +691,9 @@ nothing), 2 a bound under one minute.
 `generate` writes the files the C# model owns (`ShaderDeclarations`):
 `src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
 enums and packed-layout constants, generated from `Puck.SignedDistance` by
-`Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
+`Puck.SdfVm.SdfIsaHlsl`; `sdf-render.hlsli` beside it, the constants the
+renderer alone reads (`Puck.SdfVm.SdfRenderHlsl`); the instruction set's
+fingerprint and the field's, recorded in
 `src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
 (`<name>.interface.hlsli`). An engine package that declares pass-group members,
 such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by

@@ -8,12 +8,12 @@
 // in-scatter colour, and counts each kind it evaluates at a pixel in its atmosphere detail row.
 #ifndef SHADE_SDF_ATMOSPHERE_HLSLI
 #define SHADE_SDF_ATMOSPHERE_HLSLI
-// SdfAir's guards and flags, generated into sdf-isa.hlsli: SDF_AIR_FOG_COLOR_AUTHORED (the flag the fog's authored colour
+// SdfAir's guards and flags, generated into sdf-render.hlsli: SDF_AIR_FOG_COLOR_AUTHORED (the flag the fog's authored colour
 // sets in AirFlags), SDF_AIR_MAX_LIGHTS (the air lights the block bakes), SDF_AIR_SERIES_LIMIT (below this |x| a height
 // medium's share takes its series, so a ray parallel to its base integrates to its length), SDF_AIR_EXPONENT_LIMIT (the
 // largest exponent a height medium's density is raised by) and SDF_AIR_STEEP_LIMIT (the x below which a descending ray
 // folds its two exponentials into one).
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 // What the atmosphere does along a ray from the eye to one ray distance (SdfAirSpan): the transmittance, and each kind's
 // in-scatter weight, fog in x, haze in y, medium in z.

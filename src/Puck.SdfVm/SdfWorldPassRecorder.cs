@@ -8,11 +8,13 @@ namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers,
-// light count and curvature shading, the shadow cascades, the irradiance volume and the world values. Every compute part
-// binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the lights and the
-// sky among them), and the world interface's pass group: the fragment storages its ports bind and, at every member its
-// ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes into its pass
-// block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into
+// light count and curvature shading, the shadow cascades, the irradiance volume and the world values; the bake's mask and
+// sampler write their own (SdfFrameBlock.WriteMeshBake), which holds the batch they sample and nothing of the view. Every
+// compute part binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the
+// lights and the sky among them), and its interface's pass group (the bake's, SdfWorldInterfaces.MeshBakeLayout, or the
+// world interface's): the fragment storages its ports bind and, at every member its ports do not, a dummy of the
+// residency's; the node's work counters for the frame slot, whose row it writes into its pass block; and, but for the
+// bake, the screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into
 // its target through the mesh pipeline and each shadow cascade into its depth alone through the shadow pipeline, each
 // with a set of its own per frame slot binding its pass block. A recorder records no barrier on the graph's resources:
 // the planner's are the instance's, and the node's orders the work counters. The one exception is the mesh part's
@@ -24,14 +26,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
-        SdfWorldPackage.InstanceMasks,
-        SdfWorldPackage.InstanceMasksWritten,
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
-        SdfWorldPackage.MeshBakeSamplesWritten,
         SdfWorldPackage.MeshPyramid,
         SdfWorldPackage.MeshPyramidWritten,
+    ];
+    // The bake interface's scratch buffer members, each bound to the dummy unless a port binds it.
+    private static readonly string[] BakeScratchMembers = [
+        SdfWorldPackage.InstanceMasks,
+        SdfWorldPackage.InstanceMasksWritten,
+        SdfWorldPackage.MeshBakeSamplesWritten,
     ];
     private static readonly uint MeshShadowNearBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNear);
     private static readonly uint MeshShadowFarBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFar);
@@ -150,9 +155,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             return;
         }
         if (!IsMesh) {
+            // The bake's parts read their own pass group (SdfWorldInterfaces.MeshBakeLayout); every other compute part
+            // the world interface's.
             m_sets = new RenderGraphPackageSets(
                 context: context,
-                groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles,
+                groupLayoutHandles: tables.Pipeline(kernel: (IsBake ? SdfKernel.MeshBake : SdfKernel.Surface)).GroupLayoutHandles,
                 groups: groups
             );
 
@@ -299,6 +306,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // cascades, which draw from the cascade's light camera, or the glass pass, which draws the glass draws alone.
     private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass || IsShadowCascade);
     private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
+    // Whether the part is one of the bake's, which read the bake's interface (SdfWorldInterfaces.MeshBakeLayout).
+    private bool IsBake => (m_part is SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake);
+    // The interface the part's pass set is laid out by.
+    private ShaderInterfaceLayout PassLayout => (IsBake ? SdfWorldInterfaces.MeshBakeLayout : SdfWorldInterfaces.WorldLayout);
     private bool TargetsWritten => Array.TrueForAll(array: m_targetsWritten, match: static written => written);
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
 
@@ -409,6 +420,37 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             return RenderGraphPackageOutcome.Drew;
         }
+        // The bake's parts write their own pass block, which holds the batch they sample and nothing of the view.
+        if (IsBake) {
+            if (!ClaimsBake(batch: out var batch)) {
+                return RenderGraphPackageOutcome.Drew;
+            }
+            SdfFrameBlock.WriteMeshBake(
+                batch: batch,
+                block: recording.PassBlock,
+                instanceMaskWordCount: tables.PassValues.InstanceMaskWordCount,
+                workCounterDetailRow: recording.WorkDetailRow,
+                workCounterRow: WorkCountersOf(recording: in recording).Row
+            );
+            if (m_part == SdfWorldPackage.Parts.Bake) {
+                PollBake();
+
+                var target = m_bakeSlots[recording.Slot];
+
+                // A batch recorded but never copied answers nothing; its groups dispatch their lattices again.
+                if (target.Record || (target.Fence is not null)) {
+                    target.Batch?.Bake?.Abandon(batch: target.Batch);
+                    target.Fence = null;
+                }
+                target.Record = true;
+                target.Batch = batch;
+                residency.MeshPathBake.Record(batch: batch);
+                target.Version = recording.Outputs[0].Version;
+            }
+            RecordCompute(recording: in recording, tables: tables);
+
+            return RenderGraphPackageOutcome.Drew;
+        }
         var frame = residency.Frame!;
         var view = Math.Min(
             val1: m_view.View,
@@ -468,28 +510,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 _ => 2,
             }], texels: cascades.Texels);
         }
-        if (m_part is SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake) {
-            if (!ClaimsBake(batch: out var batch)) {
-                return RenderGraphPackageOutcome.Drew;
-            }
-            SdfFrameBlock.WriteMeshBake(batch: batch, block: recording.PassBlock);
-            if (m_part == SdfWorldPackage.Parts.Bake) {
-                PollBake();
-
-                var target = m_bakeSlots[recording.Slot];
-
-                // A batch recorded but never copied answers nothing; its groups dispatch their lattices again.
-                if (target.Record || (target.Fence is not null)) {
-                    target.Batch?.Bake?.Abandon(batch: target.Batch);
-                    target.Fence = null;
-                }
-                target.Record = true;
-                target.Batch = batch;
-                residency.MeshPathBake.Record(batch: batch);
-                target.Version = recording.Outputs[0].Version;
-            }
-        }
-
         if (IsMesh) {
             RecordMesh(
                 cascadeTexels: cascades.Texels,
@@ -639,11 +659,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             set: set,
             tables: tables
         );
-        BindScreens(
-            recording: in recording,
-            set: set,
-            tables: tables
-        );
+        if (!IsBake) {
+            BindScreens(
+                recording: in recording,
+                set: set,
+                tables: tables
+            );
+        }
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
@@ -865,7 +887,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             return;
         }
 
-        tables.WriteWorldBuffer(buffer: counters, member: ShaderWorkCounters.Buffer, set: set);
+        tables.WriteInterfaceBuffer(buffer: counters, layout: PassLayout, member: ShaderWorkCounters.Buffer, set: set);
         m_boundCounters[recording.Slot] = counters;
     }
     // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
@@ -882,14 +904,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         var bindings = tables.Bindings;
+        var layout = PassLayout;
         var output = tables.StorageFiller.ImageViewHandle;
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
         var shadowNear = tables.SampledFiller.ImageViewHandle;
         var shadowFar = tables.SampledFiller.ImageViewHandle;
         var shadowSecond = tables.SampledFiller.ImageViewHandle;
 
-        foreach (var member in ScratchMembers) {
-            tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
+        foreach (var member in (IsBake ? BakeScratchMembers : ScratchMembers)) {
+            tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
         }
 
         for (var port = 0; (port < m_inputs.Length); port++) {
@@ -898,7 +921,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (bound.Buffer is { } buffer) {
                 if (ReadMemberOf(version: name) is { } member) {
-                    tables.WriteWorldBuffer(buffer: buffer, member: member, set: set);
+                    tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (string.Equals(
                 a: name,
@@ -920,7 +943,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (bound.Buffer is { } buffer) {
                 if (WrittenMemberOf(version: name) is { } member) {
-                    tables.WriteWorldBuffer(buffer: buffer, member: member, set: set);
+                    tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
                 output = bound.Image.ImageViewHandle;
@@ -928,6 +951,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_boundCounters[slot] = null;
+        m_portTables[slot] = tables;
+
+        // The bake's interface binds no image.
+        if (IsBake) {
+            return;
+        }
+
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
@@ -944,7 +974,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         bindings.WriteSampledImage(arrayElement: 0, binding: MeshShadowFarBinding, descriptorSetHandle: set, imageViewHandle: shadowFar);
         bindings.WriteSampledImage(arrayElement: 0, binding: MeshShadowSecondBinding, descriptorSetHandle: set, imageViewHandle: shadowSecond);
         Array.Clear(array: m_screens[slot]);
-        m_portTables[slot] = tables;
     }
     // Writes each screen's image into the slot's pass set: a host's image every frame, since its handle is unique only among
     // live objects, and the filler once while the screen shows nothing.
