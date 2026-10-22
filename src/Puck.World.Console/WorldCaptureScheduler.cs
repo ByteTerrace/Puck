@@ -141,6 +141,7 @@ public sealed class WorldCaptureScheduler {
     private readonly WorldServer m_server;
     private readonly IWorldEngineReadiness? m_readiness;
     private readonly IWorldCaptureSources? m_sources;
+    private readonly Func<int>? m_stillSamples;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -173,9 +174,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="sources">The source instance each screen reads, which a row naming a screen captures, and the images
     /// deterministic sources state they show, which a capture of one is held to; <see langword="null"/> for a boot that
     /// composes no renderer, where a row naming a screen captures nothing.</param>
+    /// <param name="stillSamples">The temporal samples an ordinary settled still armed outside the schedule converges
+    /// over (<see cref="FrameCaptureRequest.ConvergeOver"/>), read as it arms: positive under lockstep presentation, zero
+    /// to observe the next normal sample; <see langword="null"/> is always zero.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null, Func<int>? stillSamples = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -188,6 +192,7 @@ public sealed class WorldCaptureScheduler {
         m_captureTarget = captureTarget;
         m_readiness = readiness;
         m_sources = sources;
+        m_stillSamples = stillSamples;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -244,6 +249,16 @@ public sealed class WorldCaptureScheduler {
     public void ArmUnscheduled(FrameCaptureRequest request, ICaptureRequestTarget target) {
         ArgumentNullException.ThrowIfNull(argument: request);
         ArgumentNullException.ThrowIfNull(argument: target);
+
+        // An ordinary still under lockstep converges over a fresh sequence of temporal samples, so it never carries the
+        // history the frames before it built, whose count follows the display rather than the ticks.
+        if (
+            (request.Mode == FrameCaptureMode.Settled) &&
+            (request.Converge == 0) &&
+            ((m_stillSamples?.Invoke() ?? 0) is > 0 and var samples)
+        ) {
+            request.ConvergeOver(samples: samples);
+        }
 
         target.RequestCapture(request: request);
         m_unscheduled = new Unscheduled(

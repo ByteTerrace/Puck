@@ -108,7 +108,8 @@ public readonly record struct WorldQualityPreset(
 /// <param name="UpscaleSharpness">The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
-/// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
+/// jitters its samples and resolves them over its history, native or reduced. The world's own views include every layout
+/// slot that names a camera; the camera views screens film and session views never do.</param>
 /// <param name="DynamicResolution">Whether views boot adapting their grids (<c>world.render-scale auto</c>).
 /// Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while
 /// adaptation is enabled, since a native view reconstructs nothing.</param>

@@ -701,6 +701,11 @@ public static class WorldBootComposition {
                     )
                     : null
                 ),
+                // Under lockstep an ordinary still converges over one fresh jitter period, so it is the same image for
+                // the same tick whatever temporal history the display's frames built before it.
+                stillSamples: ((sp.GetService<PresentPacingControl>() is { } pacing)
+                    ? (Func<int>)(() => (pacing.TickLocked ? ((int)SdfTemporalSamples.Period) : 0))
+                    : null),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
         });
@@ -939,6 +944,7 @@ public static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        services.AddSingleton<ICommandModule, WorldReseedCommandModule>();
 
         // The on-screen annotations (view.annotate): presentation-only state, core like view.override because the
         // debug world binds the verb. A windowed boot draws it on the overlay and feeds it from the pointer.

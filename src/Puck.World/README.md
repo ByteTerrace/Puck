@@ -2238,7 +2238,12 @@ native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
 the world's own views over time at any render scale: each jitters its samples,
 resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
-Camera and session views never reconstruct over time. The render section's `temporal`
+The world's own views are every view the presentation lays out: seat views, the
+operator pose, and layout slots that name a camera alike, so a named-camera slot
+reconstructs too and its settled still converges over a jitter period. The
+camera views a screen films and session views never reconstruct over time: their
+reduced quality (`WorldScreenBinder.CameraViewQuality`,
+`WorldSessionSceneEmitter.ReducedQuality`) does not ask. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
 `world.shadows off|low|medium|high` selects the shadow tier: `off` renders and
 holds no cascade, and `low`, `medium` and `high` render every cascade at 512,
@@ -2630,10 +2635,12 @@ drain right after its tick completes, whatever ingress armed it, so a script
 armed over MCP lands on the same ticks as one piped on stdin. `world.wait until
 <tick>` holds a session until an absolute tick has completed, and `world.at`
 alone reads back what ran. Two presentation levers make the stills of a repeat
-match: `world.lockstep on` has the windowed host step at most once a frame and
-hand presentation exactly the ticks it stepped, as the offscreen host does
-(`PresentPacingControl.TickLocked`), so gait and exposure adaptation advance
-with the ticks rather than wall time; and `view.reseed <body>`
+match: `world.lockstep on` has the windowed host step at most once a frame,
+present the completed tick and advance presentation animation by the ticks
+completed since the last captured frame, as the offscreen host does
+(`PresentPacingControl.TickLocked`, `WorldFramePresenter.HistoryFree`), so gait
+and followers advance with the ticks rather than wall time; a frame held for a
+settled capture also culls by box and rates no work; and `view.reseed <body>`
 (`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
 followers as for a new occupant, which a `body.pose` teleport deliberately does
 not. The procedure and its measured repeatability are in

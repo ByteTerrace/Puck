@@ -9442,7 +9442,7 @@ export type WorldRenderDefaults = {
    */
   upscaleSharpness?: number;
   /**
-   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
+   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. The world's own views include every layout slot that names a camera; the camera views screens film and session views never do.
    */
   temporal?: boolean;
   /**

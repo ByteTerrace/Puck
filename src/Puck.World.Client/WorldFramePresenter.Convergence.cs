@@ -5,6 +5,7 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 public sealed partial class WorldFramePresenter {
+    private ulong m_capturedTick;
     private FrameCaptureRequest? m_convergence;
     private SdfFrame? m_convergedFrame;
 
@@ -37,6 +38,8 @@ public sealed partial class WorldFramePresenter {
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
+        var tickedSeconds = TickedSeconds();
+
         if (m_convergence is { Completion.IsCompleted: false }) {
             if (m_convergedFrame is { } frozen) {
                 PlaceComposedFrame();
@@ -45,6 +48,12 @@ public sealed partial class WorldFramePresenter {
             deltaSeconds = 0f;
         } else {
             m_convergedFrame = null;
+
+            // A lockstep frame advances presentation by the ticks completed since the last frame captured, so a frame
+            // the render graph did not ask for drops no time and every run animates the same ticks the same.
+            if (TickLocked) {
+                deltaSeconds = tickedSeconds;
+            }
         }
         m_elapsedSeconds += deltaSeconds;
         m_frameRate.Sample(deltaSeconds: deltaSeconds);
@@ -101,6 +110,16 @@ public sealed partial class WorldFramePresenter {
         } finally {
             m_continuum.EndFrame();
         }
+    }
+
+    // The seconds of simulation completed since the previous captured frame, at the world's rate.
+    private float TickedSeconds() {
+        var tick = m_simulation.Tick;
+        var advanced = ((tick > m_capturedTick) ? (tick - m_capturedTick) : 0UL);
+
+        m_capturedTick = tick;
+
+        return (advanced / (float)Math.Max(val1: 1, val2: m_client.Definition.SimulationRateHz));
     }
 
     /// <inheritdoc/>

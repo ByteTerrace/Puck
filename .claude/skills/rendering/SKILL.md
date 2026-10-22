@@ -146,7 +146,29 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   with (`SdfWorldTables.HoldsFrame`, the `held` argument of
   `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
   so a temporal view converges over the held renders. Settling motion history
-  on a held upload makes every capture of the motion view read still.
+  on a held upload makes every capture of the motion view read still. A frame
+  held for a settled capture also culls by box rather than by the occlusion
+  test and rates no work (`WorldFramePresenter.CullOf`/`RatesOf`), so the still
+  owes nothing to earlier frames' visible set or rated updates; under
+  `world.lockstep` every frame also presents the completed tick and advances
+  presentation by the ticks completed, and its frames (`SdfFrame.TickLocked`)
+  have the residency trace the irradiance window to the end before rendering
+  (`SdfMeshIrradiance.Stage`; the asynchronous trace otherwise lands probes at
+  wall-clock moments as the window follows the first view's camera) and adapt
+  exposure over the frame's own presentation time
+  (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
+  converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
+  since without it a temporally resolved view's still depends on how many
+  frames the display rendered before the hold (five stills of one paused tick
+  differed by up to 141 levels on 12-17% of pixels). Together these make stills
+  of one tick repeat across Worlds to a 1-level per-render residue.
+- **A named-camera layout slot reconstructs; a screen's camera does not.**
+  `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
+  dresses: seat views, the operator pose and `views.layouts` slots that name a
+  camera. A camera view a screen films and a session view take a reduced
+  quality (`WorldScreenBinder.CameraViewQuality`,
+  `WorldSessionSceneEmitter.ReducedQuality`) whose `Temporal` is off, and
+  `SdfViewQuality.Restrict` ANDs it, so they never jitter.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:

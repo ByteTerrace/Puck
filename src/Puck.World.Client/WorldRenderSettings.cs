@@ -121,7 +121,8 @@ public sealed partial class WorldRenderSettings {
     /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
     /// and resolves them over its history into its output, at native or reduced render scale, through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
-    /// one. Camera and session views never ask for it.</summary>
+    /// one. The world's own views include every layout slot that names a camera; the camera views screens film and session
+    /// views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's

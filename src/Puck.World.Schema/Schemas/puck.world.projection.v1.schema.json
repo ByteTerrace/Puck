@@ -136,7 +136,7 @@
           "default": 0
         },
         "temporal": {
-          "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
+          "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. The world\u0027s own views include every layout slot that names a camera; the camera views screens film and session views never do.",
           "type": "boolean",
           "default": false
         },

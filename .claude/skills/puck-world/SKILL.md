@@ -317,8 +317,8 @@ check the flag: the owner may be holding the pad.
   echoes `pending` on stdout; the file is announced on stderr
   (`[capture] … -> <path>`). Fence a frame with `world.wait` before reading it.
   Compare windowed captures by changed-pixel count: outside the tick-exact
-  procedure below two are never byte-identical, and inside it most are but
-  silhouette edges can still differ.
+  procedure below two are never byte-identical, and inside it stills of one
+  tick in fresh Worlds are, but for a 1-level residue on a few pixels.
 - **A capture is a settled still unless asked otherwise.** The ordinary capture
   (`world.screenshot`, `puck_capture_frame`) holds presentation and lets
   temporal views converge, so it never shows flicker, ghosting or trails. For
