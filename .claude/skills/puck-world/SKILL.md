@@ -251,7 +251,9 @@ the choice is the operator's per run, never a document member (a document must
 not decide whose hardware a run reads). `--devices none` opens no pad, registers
 no gamepad manager, arbiter or capture, and drops every OS key, text and pointer
 event the window receives before a seat sees it
-(`WorldWindowInputFilters.ConsumesEveryEvent`). stdin, the console,
+(`WorldWindowInputFilters.ConsumesEveryEvent`). A framed desktop screen claims no
+system-wide hotkey either (`WorldSourcePassthrough.ClaimsSystemChord`), so the
+owner's Control+Alt+Escape never reaches the World. stdin, the console,
 `player.signal`, `body.*`, schedule rows and MCP drive the World as before. The
 boot says `[world.host] physical input devices are off` on stderr; a stderr with
 a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or

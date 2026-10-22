@@ -1346,7 +1346,8 @@ public static class WorldBootComposition {
     /// <param name="physicalDevices">Whether the boot opens the machine's physical input devices. <see langword="false"/>
     /// registers no gamepad manager, arbiter, capture or hosted service, and makes the window input filters consume
     /// every event (<see cref="WorldWindowInputFilters.ConsumesEveryEvent"/>), so no OS key, text or pointer event
-    /// reaches a seat.</param>
+    /// reaches a seat, and keeps a framed desktop from claiming the system-wide chord
+    /// (<see cref="WorldSourcePassthrough.ClaimsSystemChord"/>).</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddWorldPresentation(this IServiceCollection services, bool hostsOnDirectX, bool physicalDevices) {
         ArgumentNullException.ThrowIfNull(argument: services);
@@ -1551,7 +1552,7 @@ public static class WorldBootComposition {
         // mode's pointer (a drag circles on screen and reaches neither the camera nor a binding), then host passthrough
         // (the panes the local user opened as passthrough sources with source.passthrough, so a focused source's keys
         // and the pointer over its pane reach its window instead of the game).
-        services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
+        services.AddSingleton(implementationFactory: sp => new WorldSourcePassthrough(
             anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             seats: new WorldPassthroughSeats(
@@ -1562,7 +1563,7 @@ public static class WorldBootComposition {
             time: TimeProvider.System,
             viewports: sp.GetRequiredService<WorldSeatViewports>(),
             windows: sp.GetRequiredService<WorldScreenBinder>()
-        ));
+        ) { ClaimsSystemChord = physicalDevices });
         // With the physical devices off the filters consume every event, so the window delivers nothing to the
         // observers, the passthrough door or the router.
         services.AddSingleton(implementationFactory: sp => new HostCapabilityContribution(
