@@ -6,9 +6,37 @@
 
 schema: "puck.world.definition.v1"
 basis: "debug"
-// The debug world's own id: its doors lead through the `self` reference, which names the document `debug`, so a
-// scenario world under another id would resolve them to a second world rather than to itself.
+// The debug world's own id: its doors lead through the `self` reference, which names the document `debug`, and the
+// garden's frames back name it too, so a scenario world under another id would resolve them to a second world rather
+// than to itself.
 documentId: "debug"
+
+// The round trip's witnesses, for the scenario that leaves through the garden painting. A live body's size never falls
+// below a quarter (size.puck), so body 0's size reads 0 only while she is in another world: `away` latches that she left.
+// `homeSmall` latches that she then stood in front of the garden painting a quarter her size, which only the garden's
+// frame back sets her down at.
+state {
+  world {
+    table away {
+      "0" = 0
+    }
+    table homeSmall {
+      "0" = 0
+    }
+  }
+}
+
+rule "round-trip-away" {
+  when $tick > 10 and bodyState(body, 0, size) == 0
+  mode: Edge
+  away[0] = 1
+}
+
+rule "round-trip-home-small" {
+  when away[0] == 1 and bodyState(body, 0, size) == 0.25 and bodyPosition(body, 0, x) > 50 and bodyPosition(body, 0, z) > 38
+  mode: Edge
+  homeSmall[0] = 1
+}
 
 test "the big painting sets her down a quarter her size" {
   when {
@@ -65,5 +93,36 @@ test "a quarter her size she cannot shrink further" {
   }
   expect {
     bodyState(body, 0, size) == 0.25
+  }
+}
+
+// Her size is her own register, so it crosses with her: shrunk by the big painting, she walks through the garden
+// painting (+Z into its glass on the gallery's north wall), arrives in the garden a quarter her size, walks back out of
+// its frame (+Z again, from just past the arrival frame), comes home a quarter her size, and the mouse hole sets her
+// down at full size. The poses after the first crossing land in whichever world she is in, so a run that never left
+// stands her far from any door, and one that came home to a second world leaves body 0 empty here.
+test "a quarter her size she crosses the garden and back, and the mouse hole sets her down at full size" {
+  when {
+    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    ticks 15
+    seat1: body.fly 0 -1 0 0 0 0 1.5 0
+    ticks 60
+    seat1: body.pose 57 0.05 38.6 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 1.5
+    ticks 60
+    seat1: body.pose 3 0.05 -8.6 0 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 1.5
+    ticks 60
+    seat1: body.pose 8.8 0.05 30.5 -90 0 0
+    ticks 15
+    seat1: body.fly 0 1 0 0 0 0 1.5
+    ticks 60
+  }
+  expect {
+    away[0] == 1
+    homeSmall[0] == 1
+    bodyState(body, 0, size) == 1
   }
 }

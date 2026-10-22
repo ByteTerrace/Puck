@@ -5,17 +5,32 @@
 //
 // The crossing scenarios walk her at the garden painting and back. A headless seat's camera faces -Z, so
 // `body.fly -1 …` walks +Z: from the pose before the painting (z 36.3) into its glass, and in the garden from just past
-// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways in
-// the running world, so what she did in the garden reads here: a flight press there turns flight mode on only in the
-// suit, and flightFuel comes home with whatever it did. This harness cannot cross yet: it writes no sibling worlds
-// beside its generated ones, so the garden is refused for want of its file and the walk stays in this world (the open
-// item on crossing worlds in `puck test` in docs/plans/open-items.md).
+// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways, so
+// what she did in the garden reads here: a flight press there turns flight mode on only in the suit, and flightFuel
+// comes home with whatever it did. `puck test` stages the garden beside each scenario world, and the garden's way back
+// names this world's id, so she comes home to the instance the run booted and body 0 is her again.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
 // The debug world's own id: the garden's way back names the document `debug`, so a scenario world under another id
 // would send her home to a second world rather than to this one.
 documentId: "debug"
+
+// The crossing's witness. A live body's size never falls below a quarter (size.puck), so body 0's size reads 0 only
+// while she is in another world: `away` latches that she left, and a crossing scenario that never leaves fails on it.
+state {
+  world {
+    table away {
+      "0" = 0
+    }
+  }
+}
+
+rule "round-trip-away" {
+  when $tick > 10 and bodyState(body, 0, size) == 0
+  mode: Edge
+  away[0] = 1
+}
 
 // The two-seat scenarios seat a second body: the toggle is one rule per local seat (suit-toggle.puck), and this world
 // seats two where the Moth worlds seat one, so it instantiates the second seat's own.
@@ -117,6 +132,7 @@ test "in the suit she crosses suited, and flight mode works in the garden" {
     ticks 45
   }
   expect {
+    away[0] == 1
     bodyState(body, 0, suit) == 1
     bodyState(body, 0, flightFuel) > 0
     bodyPosition(body, 0, z) > 38
@@ -140,6 +156,7 @@ test "out of the suit she crosses unsuited, and the garden refuses her flight" {
     ticks 45
   }
   expect {
+    away[0] == 1
     bodyState(body, 0, suit) == 0
     bodyState(body, 0, flightFuel) == 0
     bodyPosition(body, 0, z) > 38
@@ -165,6 +182,7 @@ test "suited up in the garden, she comes home suited and flies" {
     ticks 30
   }
   expect {
+    away[0] == 1
     bodyState(body, 0, suit) == 1
     bodyPosition(body, 0, y) > 1
     bodyPosition(body, 0, z) > 38
