@@ -234,7 +234,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Vector3[][] Meshes(SdfMeshPathBake bake) => [.. bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh.Positions.ToArray())];
 
         var baked = Run(name: "first");
-        var entries = Directory.GetFiles(path: directory).OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
+        var entries = Directory.GetFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.mesh").OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
 
         Assert.Equal(expected: 2, actual: entries.Length);
         Assert.Contains(expectedSubstring: "loaded=0", actualString: baked.Describe());
