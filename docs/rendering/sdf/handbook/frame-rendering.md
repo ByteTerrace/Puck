@@ -188,6 +188,22 @@ Temporal sampling renders the geometry again while a sample is owed. Once
 lit history converges, visual edits leave its sample count and ring standing.
 `world.cadence off` forces active passes to render for measurement.
 
+The cadence also rates changing work by its size on screen (`world.rates`,
+`SdfUpdateRates`), presentation only and only where the drop is barely
+perceptible (`SdfUpdateRateTiers`): the far cascade stands between 30 Hz
+refreshes ([the shadow cascades](#the-shadow-cascades)); a footprint showing a
+nested portal or session view asks for it at 30 Hz at or below 120 display
+pixels high and 15 Hz at or below 60, and one showing a screen's source at 30
+Hz once the screen stands at or below its image's height on the display and 15
+Hz at or below half of it (`RenderGraphFootprint.Refresh`, which the scheduler
+honours as it does a root's refresh, the most frequent demand winning); and a
+body's pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz
+at or below 15, its root followed every frame and its parts riding the root
+rigidly between packs (`WorldStampPool.Rates`). The machine behind a rated
+screen and the simulation behind a rated body run at full rate. Each tier
+bounds the step a held update jumps by on screen to two pixels for the speed it
+is sized for. `world.counters sdf.rates` counts what each lever held.
+
 ## What each pass costs
 
 The passes scale with different things. `mask` and `bake` scale with the
@@ -1185,6 +1201,18 @@ the fit snaps to that size's texels. The tier and whether the world holds a
 second stable slot choose the view's fragment (`SdfWorldPackage.WithShadows`),
 so changing either rebuilds the view's graph once; the slot count is the
 world's configured policy, so a handoff between lights allocates nothing.
+
+The far cascade refreshes at 30 Hz (`world.rates shadow-far`,
+`SdfUpdateRates.ShadowFar`): a view holds its far cascade's depth and fit for
+the frames a 30 Hz period spans at the display's rate (`SdfWorldPasses.Rates`),
+so `shadow-far` stands between refreshes whatever forces the frame's other
+passes, and every pass of the view reads that depth through the camera it was
+drawn from, so a static caster's shadow is exact on a held frame and only a
+dynamic caster beyond the near cascade lags, by under one of the far cascade's
+texels at walking speed. A hold ends early when the fit no longer covers what
+the view shows: the light's direction, the cascade's extent or texels change,
+the camera cuts, turns past half a degree or moves half a metre, or a capture
+converges. A display at or below 30 Hz holds nothing.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

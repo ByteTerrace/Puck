@@ -32,6 +32,9 @@ public static partial class WorldSessionLevers {
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
+    /// <summary>Which work updates less often when far or small on screen, a <see cref="SdfUpdateRates"/> in
+    /// <see cref="WorldSessionLever.A"/> (<c>world.rates</c>).</summary>
+    public const string Rates = "rates";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
     public const string RenderScale = "render-scale";
     /// <summary>The shadow tier, a <see cref="ShadowTier"/> in <see cref="WorldSessionLever.A"/> (<c>world.shadows</c>).</summary>
@@ -96,6 +99,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: Cull,
             setter: lever => settings.Cull = ((SdfMeshCullLevel)((int)lever.A))
+        );
+        sink.Register(
+            name: Rates,
+            setter: lever => settings.UpdateRates = (((SdfUpdateRates)((int)lever.A)) & SdfUpdateRates.All)
         );
         sink.Register(
             name: Indirect,

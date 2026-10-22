@@ -391,7 +391,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     position: map([0, 1.7295, 0.2295], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     material: skin
     blend: "SmoothUnion"
-    smooth: 0.009 * s
+    smooth: 0.014 * s
     group: 6
     parent: parentName
     curve {
@@ -409,7 +409,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     scale: map([0.01452, 0.01012, 0.0126], v => v * s)
     material: skin
     blend: "SmoothUnion"
-    smooth: 0.006 * s
+    smooth: 0.014 * s
     group: 6
     parent: parentName
     exponent: mothHeadSoftness

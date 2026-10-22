@@ -16,6 +16,7 @@ public sealed partial class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
+    private SdfUpdateRates m_updateRates;
     private bool m_dynamicResolution;
     private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
@@ -46,6 +47,7 @@ public sealed partial class WorldRenderSettings {
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;
         Cull = SdfMeshCullLevel.Occlusion;
+        UpdateRates = SdfUpdateRates.All;
     }
 
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
@@ -72,6 +74,14 @@ public sealed partial class WorldRenderSettings {
     /// draws every draw in every view and cascade, which measure each level's saving. Session state, never durable
     /// config; rides <see cref="Puck.SdfVm.SdfFrame.MeshCull"/>.</summary>
     public SdfMeshCullLevel Cull { get => m_cull; set { m_cull = value; m_revision++; } }
+    /// <summary>Which work updates less often when it is far or small on screen (<c>world.rates</c>; default
+    /// <see cref="SdfUpdateRates.All"/>): bodies' poses, nested views, screens' uploads and the far shadow cascade, each
+    /// only where the drop is barely perceptible (<see cref="SdfUpdateRateTiers"/>). Session state, never durable config;
+    /// rides <see cref="Puck.SdfVm.SdfFrame.UpdateRates"/>.</summary>
+    public SdfUpdateRates UpdateRates { get => m_updateRates; set { m_updateRates = value; m_revision++; } }
+    /// <summary>Gets the counters every frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), which
+    /// <c>world.counters sdf.rates</c> reads.</summary>
+    public Puck.Abstractions.Counting.WorkCounterSet RateCounts { get; } = SdfUpdateRateCounts.Counters();
     /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
     /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
     /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a

@@ -16,8 +16,10 @@ namespace Puck.Hosting;
 /// stalest due instance is admitted first, ties in render order, so an instance the budget defers is first in line on
 /// the next frame; the display's own instances always render.</description></item>
 /// <item><description>A root asks for its instance at most once per its own refresh
-/// (<see cref="RenderGraphRoot.Refresh"/>): an instance only roots show renders when its own refresh and its most
-/// frequent root's have both passed since it last rendered, and on its first frame whatever either says.</description></item>
+/// (<see cref="RenderGraphRoot.Refresh"/>), and a consumer for its producer at most once per the footprint's
+/// (<see cref="RenderGraphFootprint.Refresh"/>): an instance renders when its own refresh, or a source's cadence, and the
+/// most frequent of the roots and the rendering consumers' footprints demanding it have all passed since it last
+/// rendered, and on its first frame whatever any says.</description></item>
 /// <item><description>A read of an instance's own output, and a read declared previous-frame, samples the producer's
 /// latest output completed before this frame and creates no demand for its producer.</description></item>
 /// <item><description>A same-frame buffer read has no footprint: every consumer that renders reads it, so its producer is
@@ -39,7 +41,8 @@ namespace Puck.Hosting;
 /// </summary>
 public static class RenderGraphScheduler {
     // One producer a consumer reads this frame: an image it shows over a footprint, or a buffer (no extent).
-    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame, ShaderPipelineResourceKind Kind);
+    // Divisor is the footprint's resolved refresh (RenderGraphFootprint.Refresh), one for a buffer read.
+    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame, ShaderPipelineResourceKind Kind, int Divisor = 1);
     // The working state of one schedule, sized to its set and cleared at the start of every call, so nothing from an
     // earlier frame reaches a result.
     internal sealed class Scratch {
@@ -57,6 +60,7 @@ public static class RenderGraphScheduler {
             Unchanged = new bool[count];
             ConsumerDemanded = new bool[count];
             RootDivisor = new int[count];
+            ShownDivisor = new int[count];
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
@@ -93,6 +97,9 @@ public static class RenderGraphScheduler {
         public bool[] ConsumerDemanded { get; }
         // The most frequent resolved refresh divisor of the roots showing the instance, or 0 when none does.
         public int[] RootDivisor { get; }
+        // The most frequent resolved refresh of the footprints through which consumers rendering this frame passed
+        // demand to the instance, or 0 when none did.
+        public int[] ShownDivisor { get; }
         public int[] Height { get; }
         public bool[] IsRoot { get; }
         public int[] Passes { get; }
@@ -123,6 +130,7 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Unchanged);
             Array.Clear(array: ConsumerDemanded);
             Array.Clear(array: RootDivisor);
+            Array.Clear(array: ShownDivisor);
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
@@ -216,7 +224,14 @@ public static class RenderGraphScheduler {
             ) {
                 continue;
             }
+            if (!footprint.Refresh.IsValid) {
+                throw new ArgumentException(
+                    message: $"Footprint '{footprint.Consumer}' -> '{footprint.Producer}' declares refresh divisor {footprint.Refresh.Divisor} and hertz {footprint.Refresh.Hertz}; exactly one must be positive.",
+                    paramName: nameof(frame)
+                );
+            }
 
+            var divisor = footprint.Refresh.ResolveDivisor(displayHertz: frame.DisplayHertz);
             var list = shown[consumer];
             var existing = -1;
 
@@ -230,6 +245,7 @@ public static class RenderGraphScheduler {
 
             if (existing < 0) {
                 list.Add(item: new Shown(
+                    Divisor: divisor,
                     Height: height,
                     Kind: edge.Kind,
                     PreviousFrame: edge.PreviousFrame,
@@ -238,6 +254,10 @@ public static class RenderGraphScheduler {
                 ));
             } else {
                 list[existing] = (list[existing] with {
+                    Divisor = Math.Min(
+                        val1: list[existing].Divisor,
+                        val2: divisor
+                    ),
                     Height = Math.Max(
                         val1: list[existing].Height,
                         val2: height
@@ -384,6 +404,20 @@ public static class RenderGraphScheduler {
 
             unchanged[index] = true;
         }
+    }
+    // The fewest frames between renders the instance's demand asks for: the most frequent of the roots showing it and of
+    // the footprints through which a consumer rendering this frame passed it demand, one when nothing asks for less.
+    private static int DemandDivisor(bool consumerDemanded, int rootDivisor, int shownDivisor) {
+        var limit = int.MaxValue;
+
+        if (rootDivisor > 0) {
+            limit = rootDivisor;
+        }
+        if (consumerDemanded) {
+            limit = Math.Min(val1: limit, val2: Math.Max(val1: 1, val2: shownDivisor));
+        }
+
+        return ((limit == int.MaxValue) ? 1 : limit);
     }
     // Whether a source is due this frame, and its frame divisor: a static source until it has rendered once, a tick
     // source whenever the frame's tick differs from the one it last rendered at, and a rate source as a refresh at its
@@ -667,22 +701,23 @@ public static class RenderGraphScheduler {
                 decided[index] = true;
                 changed = true;
 
+                // Demanded only through roots and footprints that ask less often than every frame, the instance renders
+                // no more often than the most frequent of them asks: its own refresh, or its producer's cadence, and
+                // theirs must both have passed since it last rendered.
+                var limit = DemandDivisor(consumerDemanded: consumerDemanded[index], rootDivisor: rootDivisor[index], shownDivisor: work.ShownDivisor[index]);
+                if (
+                    due[index] &&
+                    !forced[index] &&
+                    (limit > 1) &&
+                    (history.LatestFrame(index: index) is var last and >= 0) &&
+                    ((frame.Index - last) < limit)
+                ) {
+                    due[index] = false;
+                }
                 // A source renders at its producer's negotiated extent, so a footprint demands it without sizing it, and
                 // it reads nothing to pass demand on to.
                 if (set.Instances[index].IsSource) {
                     continue;
-                }
-                // Shown only through roots, the instance renders no more often than the most frequent root asks: its
-                // own refresh and that root's must both have passed since it last rendered.
-                if (
-                    due[index] &&
-                    !forced[index] &&
-                    !consumerDemanded[index] &&
-                    (rootDivisor[index] > 1) &&
-                    (history.LatestFrame(index: index) is var last and >= 0) &&
-                    ((frame.Index - last) < rootDivisor[index])
-                ) {
-                    due[index] = false;
                 }
 
                 var (allocatedWidth, allocatedHeight) = history.Allocated(index: index);
@@ -714,7 +749,9 @@ public static class RenderGraphScheduler {
                     if (entry.PreviousFrame || decided[entry.Producer]) {
                         continue;
                     }
-                    consumerDemanded[entry.Producer] = true;
+                    consumerDemanded[entry.Producer] = true;                    work.ShownDivisor[entry.Producer] = ((work.ShownDivisor[entry.Producer] == 0)
+                        ? entry.Divisor
+                        : Math.Min(val1: work.ShownDivisor[entry.Producer], val2: entry.Divisor));
                     if (entry.Kind == ShaderPipelineResourceKind.Buffer) {
                         demanded[entry.Producer] = true;
 

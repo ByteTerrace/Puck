@@ -1259,6 +1259,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         graphs.BeginFrame(
+            displayHertz: context.DisplayHertz,
             sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
@@ -1821,6 +1822,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             transforms: transforms,
             views: m_frameViews
         );
+        // The next pack rates the bodies by the views this frame renders them through.
+        m_animator.RateBy(
+            counts: m_settings.RateCounts,
+            height: height,
+            rates: m_settings.UpdateRates,
+            views: m_frameViews
+        );
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
@@ -1869,6 +1877,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             MeshCull = m_settings.Cull,
+            UpdateRates = m_settings.UpdateRates,
+            RateCounts = m_settings.RateCounts,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,

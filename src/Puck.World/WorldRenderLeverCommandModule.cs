@@ -44,6 +44,24 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
     // The world.sky-quality echo.
     private static string SkyQualityEcho(WorldRenderSettings settings) =>
         $"[world.sky-quality: {SkyQualityName(tier: settings.SkyQuality)}]";
+    // The world.rates lever a token names, or null for none.
+    private static SdfUpdateRates? RatesLever(ReadOnlySpan<char> token) => token switch {
+        "bodies" => SdfUpdateRates.Bodies,
+        "views" => SdfUpdateRates.Views,
+        "screens" => SdfUpdateRates.Screens,
+        "shadow-far" => SdfUpdateRates.ShadowFar,
+        _ => null,
+    };
+    // The world.rates echo: each lever, then what each counted so far.
+    private static string RatesEcho(WorldRenderSettings settings) {
+        static string On(SdfUpdateRates rates, SdfUpdateRates lever) => (((rates & lever) != 0) ? "on" : "off");
+
+        var rates = settings.UpdateRates;
+        var counts = settings.RateCounts;
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"[world.rates: bodies={On(rates: rates, lever: SdfUpdateRates.Bodies)} views={On(rates: rates, lever: SdfUpdateRates.Views)} screens={On(rates: rates, lever: SdfUpdateRates.Screens)} shadow-far={On(rates: rates, lever: SdfUpdateRates.ShadowFar)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)}]");
+    }
     // The world.cadence echo.
     private static string CadenceEcho(WorldRenderSettings settings) {
         return $"[world.cadence: {(settings.CadenceGate
@@ -346,6 +364,39 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     principal: context.Principal,
                     name: WorldSessionLevers.Cull,
                     a: ((double)selected),
+                    formatEcho: Echo
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.rates",
+            description: "Selects which presentation work updates less often when it is far or small on screen, live (no rebuild): world.rates [status|on|off|<lever> on|off], the levers bodies (a body's pose at 30 Hz at or below 30 pixels per metre and 15 Hz at or below 15, its root followed every frame), views (a nested portal or session view at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60), screens (a screen's source upload at 30 Hz at or below its native height on the display and 15 Hz at or below half of it) and shadow-far (the far shadow cascade refreshed at 30 Hz, its fit held between). Every lever ships on. Presentation only: the simulation ticks every body and every machine runs at its own rate. world.counters sdf.rates counts what each held; world.counters gpu shows the far cascade standing between refreshes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: RatesEcho(settings: settings));
+
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return Echo();
+                }
+
+                var rates = settings.UpdateRates;
+                SdfUpdateRates? selected = null;
+
+                if ((args.Count == 1) && (ParseOnOff(token: args[0]) is { } all)) {
+                    selected = (all ? SdfUpdateRates.All : SdfUpdateRates.None);
+                } else if ((args.Count == 2) && (RatesLever(token: args[0]) is { } lever) && (ParseOnOff(token: args[1]) is { } on)) {
+                    selected = (on ? (rates | lever) : (rates & ~lever));
+                }
+
+                if (selected is not { } chosen) {
+                    return CommandResult.Error(output: $"[world.rates: unknown '{args.Tail(start: 0)}' — status|on|off|bodies|views|screens|shadow-far on|off]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Rates,
+                    a: ((double)chosen),
                     formatEcho: Echo
                 );
             }

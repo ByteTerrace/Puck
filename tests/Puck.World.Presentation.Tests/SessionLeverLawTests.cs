@@ -307,6 +307,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.Cull,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
+            WorldSessionLevers.Rates,
             WorldSessionLevers.RenderScale,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
