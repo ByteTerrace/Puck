@@ -176,6 +176,11 @@ public sealed partial class WorldStampPool {
         // The creation's reach from its root (CreationGeometry.Reach), measured on the first pack that needs it; -1
         // before.
         public float Reach = -1f;
+        // The world.rates hold of a body's pose (WorldStampPool.Rates): the seconds the frames that held it carried its
+        // pose past, which its next full pack advances its drivers, effectors and part followers by, and whether a held
+        // frame owes that pack whatever wakes the registration.
+        public float RateSeconds;
+        public bool RateOwed;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;

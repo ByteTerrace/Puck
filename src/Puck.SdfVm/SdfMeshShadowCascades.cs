@@ -72,6 +72,19 @@ public readonly struct SdfMeshShadowCascades {
         _ => m_second,
     };
 
+    /// <summary>Returns these cascades with the far cascade's camera replaced: a far cascade held from an earlier frame
+    /// (<see cref="SdfUpdateRates.ShadowFar"/>), whose depth was drawn from that camera and is read through it.</summary>
+    /// <param name="far">The far cascade's camera.</param>
+    /// <returns>The cascades, every other member unchanged.</returns>
+    public SdfMeshShadowCascades WithFar(in SdfMeshShadowCamera far) => new(
+        count: Count,
+        far: far,
+        near: m_near,
+        penumbraSlope: PenumbraSlope,
+        second: m_second,
+        secondSlope: SecondPenumbraSlope,
+        texels: Texels
+    );
     /// <summary>Fits the cascades of a view of a frame.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>

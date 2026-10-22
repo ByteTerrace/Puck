@@ -14,9 +14,11 @@ namespace Puck.DirectX;
 public sealed class DirectXCommandBufferState {
     /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
     public DirectXBufferStates BufferStates { get; } = new();
+
     /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
     /// call.</summary>
     internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
+
     /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
     internal int BarrierDepth { get; set; }
 
@@ -38,16 +40,19 @@ public sealed class DirectXCommandBufferState {
 /// <see cref="IGpuPipeline.DescriptorSetLayoutHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXPipelineLayout : IDisposable {
+public sealed partial class DirectXPipelineLayout : IDisposable {
     public nint PsoHandle;
     public nint RootSignatureHandle;
+
     public byte[] RootSignatureBlob = [];
     public int DescriptorTableParamIndex = -1;
     public int RootConstantsParamIndex = -1;
+
     public uint RootConstantsCount;
     /// <summary>The total number of heap slots this set's descriptor table occupies once bindings are packed, so
     /// <c>AllocateSet</c> can hand each set from a shared pool its own non-overlapping heap region.</summary>
     public uint DescriptorSlotCount;
+
     /// <summary>Maps each binding index to the base heap slot it was packed to (indexed by <c>GpuComputeBinding.Binding</c>;
     /// an array binding occupies <c>Count</c> consecutive slots from there). Heap slots are packed in binding-list order
     /// rather than equated to the binding index, so an array binding never collides with a later binding regardless of
@@ -86,50 +91,8 @@ public sealed class DirectXPipelineLayout : IDisposable {
 
     // The layout's draw command signature, created on its first counted indirect draw.
     private nint m_drawSignature;
+
     private readonly Lock m_drawSignatureLock = new();
-
-    /// <summary>Returns the command signature a counted indirect draw through this layout executes, creating it on first
-    /// use: a root-constant argument writing a record's identity into the layout's root constants, then a draw, over
-    /// <see cref="GpuDrawIndirectCommand.StrideBytes"/>-byte records; a layout without root constants draws alone. It is
-    /// released with the layout.</summary>
-    /// <param name="device">The device the layout's root signature was created on.</param>
-    /// <returns>The native <c>ID3D12CommandSignature*</c>.</returns>
-    internal unsafe nint DrawSignature(ID3D12Device* device) {
-        lock (m_drawSignatureLock) {
-            if (0 != m_drawSignature) {
-                return m_drawSignature;
-            }
-
-            var arguments = stackalloc D3D12_INDIRECT_ARGUMENT_DESC[2];
-            var count = 0u;
-
-            if (0 <= RootConstantsParamIndex) {
-                arguments[count].Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-                arguments[count].Anonymous.Constant.RootParameterIndex = ((uint)RootConstantsParamIndex);
-                arguments[count].Anonymous.Constant.DestOffsetIn32BitValues = 0;
-                arguments[count].Anonymous.Constant.Num32BitValuesToSet = 1;
-                count++;
-            }
-
-            arguments[count].Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-            count++;
-
-            var description = new D3D12_COMMAND_SIGNATURE_DESC {
-                ByteStride = GpuDrawIndirectCommand.StrideBytes,
-                NumArgumentDescs = count,
-                pArgumentDescs = arguments,
-            };
-
-            device->CreateCommandSignature(
-                pDesc: in description,
-                pRootSignature: ((0 <= RootConstantsParamIndex) ? ((ID3D12RootSignature*)RootSignatureHandle) : null),
-                ppvCommandSignature: out ID3D12CommandSignature* signature
-            );
-            m_drawSignature = ((nint)signature);
-
-            return m_drawSignature;
-        }
-    }
 
     /// <inheritdoc/>
     public void Dispose() {

@@ -43,7 +43,14 @@ world.budget
   so a reading carries the machine that made it. Without the `gpu` filter,
   `world.counters` also prints every other counter source the World
   registered, one section per source, and `--json` prints the same readout as
-  one line of JSON. `puck counters` runs an authored workload offscreen on both
+  one line of JSON. A world with many render-graph instances prints hundreds
+  of kilobytes of `gpu` lines, so narrow the reading to what the question
+  needs: `world.counters gpu summary` prints one `draws vertices texels
+  dispatches` line per node, `node <name>` keeps one node and the nodes under
+  it, `pass <label>` keeps one pass (`sdf.world$mesh`) in every node that has
+  it, and `counter <prefix>` keeps the counts under a name prefix (`vertices`,
+  `draws`). The options combine, and a text reading past 131,072 characters
+  prints the summary form under a note that says so. `puck counters` runs an authored workload offscreen on both
   backends and checks these counts agree, and `puck counters compare` holds a
   report from before a change to one from after it, pass by pass; see the
   [CLI reference](../../../reference/cli.md#puck-counterswork-counter-collector).

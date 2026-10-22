@@ -286,6 +286,7 @@
     { "name": "world.properties", "bindable": false, "audience": "anyone" },
     { "name": "world.quality", "bindable": false, "audience": "anyone" },
     { "name": "world.rate", "bindable": false, "audience": "anyone" },
+    { "name": "world.rates", "bindable": false, "audience": "anyone" },
     { "name": "world.references", "bindable": false, "audience": "anyone" },
     { "name": "world.reflow.cancel", "bindable": true, "audience": "anyone" },
     { "name": "world.reflow.commit", "bindable": true, "audience": "anyone" },

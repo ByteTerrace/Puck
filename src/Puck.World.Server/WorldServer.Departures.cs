@@ -158,7 +158,7 @@ public sealed partial class WorldServer {
             slot: detached.Slot
         );
         // The restored body postdates the last scale resync, like every other admission door's fresh body.
-        m_population.SyncBodyScale(definition: Definition);
+        m_population.SyncBodyCells(definition: Definition);
         // The restored principal provably holds none of these rows at this moment, so the server administers it.
         foreach (var grant in detached.SourceGrants) {
             Grant(

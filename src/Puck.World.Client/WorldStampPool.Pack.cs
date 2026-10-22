@@ -161,6 +161,8 @@ public sealed partial class WorldStampPool {
                 );
             }
 
+            var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
+
             if (Wake(
                 client: client,
                 deltaSeconds: deltaSeconds,
@@ -169,7 +171,7 @@ public sealed partial class WorldStampPool {
                 moved: moved,
                 rootPosition: rootPosition,
                 rootRotation: rootRotation
-            )) {
+            ) || live.RateOwed) {
                 var previous = m_previousSlots.AsSpan(
                     length: packedSlots,
                     start: 0
@@ -179,20 +181,50 @@ public sealed partial class WorldStampPool {
                     length: previous.Length,
                     start: rootSlot
                 ).CopyTo(destination: previous);
-                PackRegistration(
-                    client: client,
-                    deltaSeconds: deltaSeconds,
-                    live: live,
-                    parkPosition: parkPosition,
-                    placementScale: placementScale,
-                    rootPosition: rootPosition,
-                    rootRotation: rootRotation,
-                    rootSlot: rootSlot,
-                    shapeCount: shapeCount,
-                    transforms: transforms
-                );
-                if (packedSlots > (1 + shapeCount)) {
-                    transforms[(rootSlot + TextSlot(shapeCount: shapeCount))] = transforms[rootSlot];
+
+                // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
+                // table is owed (WorldStampPool.Rates).
+                if (
+                    (live.BodyIndex is not null) &&
+                    packedBefore &&
+                    !moved.Everything &&
+                    !m_owners.Reseats(owner: index) &&
+                    HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))
+                ) {
+                    CarryPose(
+                        deltaSeconds: deltaSeconds,
+                        live: live,
+                        packedSlots: packedSlots,
+                        rootPosition: rootPosition,
+                        rootRotation: rootRotation,
+                        rootSlot: rootSlot,
+                        transforms: transforms
+                    );
+                    live.RateSeconds += deltaSeconds;
+                    live.RateOwed = true;
+                    m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
+                } else {
+                    PackRegistration(
+                        client: client,
+                        deltaSeconds: (live.RateSeconds + deltaSeconds),
+                        live: live,
+                        parkPosition: parkPosition,
+                        placementScale: placementScale,
+                        rootDeltaSeconds: deltaSeconds,
+                        rootPosition: rootPosition,
+                        rootRotation: rootRotation,
+                        rootSlot: rootSlot,
+                        shapeCount: shapeCount,
+                        transforms: transforms
+                    );
+                    if (packedSlots > (1 + shapeCount)) {
+                        transforms[(rootSlot + TextSlot(shapeCount: shapeCount))] = transforms[rootSlot];
+                    }
+                    if (live.BodyIndex is not null) {
+                        m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
+                    }
+                    live.RateSeconds = 0f;
+                    live.RateOwed = false;
                 }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
@@ -368,9 +400,10 @@ public sealed partial class WorldStampPool {
             live.EffectorStepToNormal[effector] = carry.Direction(direction: live.EffectorStepToNormal[effector]);
         }
     }
-    // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
-    // deltaSeconds.
-    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
+    // Packs one live registration's root and shape slots, stepping its root follower by rootDeltaSeconds, this frame's,
+    // and its drivers, effectors and part followers by deltaSeconds, which spans every frame since the registration's
+    // last full pack (a held pose's frames included, WorldStampPool.Rates).
+    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, float rootDeltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.
@@ -433,7 +466,7 @@ public sealed partial class WorldStampPool {
 
         if (live.HasRootDynamics) {
             StepRootFollower(
-                deltaSeconds: deltaSeconds,
+                deltaSeconds: rootDeltaSeconds,
                 live: live,
                 targetPosition: rootPosition,
                 targetRotation: rootRotation

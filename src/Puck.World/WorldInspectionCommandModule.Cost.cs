@@ -63,7 +63,7 @@ internal sealed partial class WorldInspectionCommandModule {
             if (!sample.PassLabels.ToArray().Any(predicate: IsSky)) { continue; }
             found = true;
             text.Append(value: "node ").Append(value: node.Name).Append(value: ' ');
-            GpuWorkReport.AppendSample(builder: text, includePass: IsSky, sample: sample);
+            GpuWorkReport.AppendSample(builder: text, sample: sample, selection: new GpuWorkSelection(pass: IsSky));
         }
         if (!found) { text.Append(value: "work unavailable: no sky submission has completed\n"); }
         return new CommandResult(Output: text.Append(value: ']').ToString());

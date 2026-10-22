@@ -1209,6 +1209,7 @@ public static partial class WorldDefinitionValidator {
 
         ValidateAssignment(
             assignment: definition.Assignment,
+            definition: definition,
             kitNames: kitNames,
             errors: errors
         );
@@ -1510,6 +1511,7 @@ public static partial class WorldDefinitionValidator {
 
         ValidateLookAssignment(
             assignment: definition.LookAssignment,
+            definition: definition,
             lookNames: lookNames,
             errors: errors
         );

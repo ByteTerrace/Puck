@@ -175,7 +175,7 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index].Active) {
-                counts[m_entries[index].KitIndex]++;
+                counts[KitIndex(index: index)]++;
             }
         }
 
@@ -188,7 +188,7 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index].Active) {
-                counts[m_entries[index].LookIndex]++;
+                counts[LookIndex(index: index)]++;
             }
         }
 
@@ -369,10 +369,7 @@ public sealed partial class WorldPopulation {
             ) {
                 continue;
             }
-            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
-                ? m_seatKit
-                : entry.KitIndex
-            );
+            var kitIndex = ResolveKitIndex(index: index);
 
             if (
                 m_kits[kitIndex].Producers.TryGetValue(
@@ -700,10 +697,14 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The population index (0-based, <c>0..</c><see cref="Capacity"/>).</param>
     /// <returns><see langword="true"/> when the entry is active.</returns>
     public bool IsActive(int index) => m_entries[index].Active;
-    /// <summary>The deterministic kit row index assigned to a stable population slot.</summary>
+    /// <summary>The deterministic kit row index assigned to a stable population slot: the row its own selector cell
+    /// picks (<see cref="WorldRowAssignment.Select"/>), else the row the kit assignment's sequence gives it.</summary>
     /// <param name="index">The population index (0-based).</param>
     /// <returns>The slot's assigned kit row index.</returns>
-    public byte KitIndex(int index) => m_entries[index].KitIndex;
+    public byte KitIndex(int index) => ((m_entries[index].SelectedKit >= 0)
+        ? (byte)m_entries[index].SelectedKit
+        : m_entries[index].KitIndex
+    );
     /// <summary>The declared motion tuning of the kit assigned to a stable population slot — the runtime
     /// <c>body.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
     /// checks at boot, so a document-legal kit cannot runtime-switch into a program its tuning cannot back.</summary>
@@ -725,9 +726,14 @@ public sealed partial class WorldPopulation {
         : default
     );
     /// <summary>The resolved look row index for a stable population slot — carried out on the snapshot for the client's
-    /// renderer (presentation-only).</summary>
+    /// renderer (presentation-only): the row its own selector cell picks (<see cref="WorldRowAssignment.Select"/>), else
+    /// the row its inhabit facet or the look assignment's sequence gives it.</summary>
     /// <param name="index">The 0-based population index.</param>
-    public byte LookIndex(int index) => m_entries[index].LookIndex;
+    /// <returns>The slot's look row index.</returns>
+    public byte LookIndex(int index) => ((m_entries[index].SelectedLook >= 0)
+        ? (byte)m_entries[index].SelectedLook
+        : m_entries[index].LookIndex
+    );
     /// <summary>The most recent <c>body.motion</c> switch refusal for a body, or <see cref="string.Empty"/> when its
     /// last attempt succeeded (or none has been made).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>

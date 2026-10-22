@@ -31,13 +31,16 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
 
+    // The sequence and its row view, then any per-body selector as select(<state row>: <value>=<row>, …).
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
             ? "all"
             : string.Join(
                 separator: ",",
                 values: assignment.Rows
-            ))}]";
+            ))}]{((assignment.Select is { } select)
+            ? $" select({select.State}: {string.Join(separator: ",", values: select.Cases.Select(selector: static selectCase => $"{selectCase.Value}={selectCase.Row}"))})"
+            : string.Empty)}";
     // A gamepad's battery and accessories text for world.devices, or null without a manager or a report.
     private string? DescribeGamepadStatus(InputDeviceId device) =>
         ((gamepads is not null) &&

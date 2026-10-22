@@ -18,7 +18,12 @@ public readonly record struct RenderGraphRoot(string Instance, double Width, dou
 /// <param name="Producer">The instance shown; the consumer must declare a read of it.</param>
 /// <param name="Width">The fraction of the consumer's width the producer covers.</param>
 /// <param name="Height">The fraction of the consumer's height the producer covers.</param>
-public readonly record struct RenderGraphFootprint(string Consumer, string Producer, double Width, double Height);
+public readonly record struct RenderGraphFootprint(string Consumer, string Producer, double Width, double Height) {
+    /// <summary>Gets how often the consumer asks for the producer through this footprint, every frame unless set: a
+    /// producer only footprints and roots demand renders no more often than the most frequent of their refreshes, as a
+    /// window covering a few pixels of its consumer asks for fewer renders than one filling it.</summary>
+    public RenderGraphRefresh Refresh { get; init; } = RenderGraphRefresh.EveryFrame;
+}
 /// <summary>What a source instance's producer declares for one frame: the cadence its image follows and the extent it
 /// negotiated, read from its descriptor (<c>ImageSourceDescriptor</c>). A source renders at this extent, never at a
 /// footprint's, and a source whose producer has negotiated no extent (either axis zero) or declares nothing this frame is

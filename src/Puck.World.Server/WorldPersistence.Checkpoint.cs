@@ -875,7 +875,7 @@ public sealed partial class WorldPersistence {
         // state, not part of WorldPopulationCheckpoint, so it needs the same catch-up every other admission door
         // gives a freshly minted body. m_definition is already the checkpoint's own restored document (set above),
         // so this reads the SAME cells the live server had when it captured.
-        Host.Population.SyncBodyScale(definition: Host.Document.Definition);
+        Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

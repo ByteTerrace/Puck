@@ -1113,6 +1113,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
+            typeof(WorldRowSelector),
+            nameof(WorldRowSelector.State),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(WorldTargetRegister),
             nameof(WorldTargetRegister.RangeState),
             WorldNameKind.State,
@@ -1584,6 +1590,11 @@ public static partial class WorldNameRegistry {
             typeof(WorldKit),
             nameof(WorldKit.BodyMotionProgram),
             "a body motion program name"
+        ),
+        new(
+            typeof(WorldRowSelectorCase),
+            nameof(WorldRowSelectorCase.Row),
+            "a kit or look row name"
         ),
         new(typeof(WorldViewLayout), nameof(WorldViewLayout.Name), "a view layout name"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),

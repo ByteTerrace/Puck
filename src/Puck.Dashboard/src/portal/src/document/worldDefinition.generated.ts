@@ -10826,7 +10826,7 @@ export type WorldRigid = {
 };
 
 /**
- * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row).
+ * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own cell of a state row maps to a row, and follows that cell as the simulation writes it.
  */
 export type WorldRowAssignment = {
   /**
@@ -10834,9 +10834,41 @@ export type WorldRowAssignment = {
    */
   sequence: WorldSequence;
   /**
+   * The per-body selector, or null for the sequence alone.
+   */
+  select?: WorldRowSelector | null;
+  /**
    * Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   rows: DocumentIdentifierList;
+};
+
+/**
+ * A per-body row selector inside a WorldRowAssignment: each body's own cell of a keyed state.world row (the cell keyed by the body's 0-based index, the way bodies.scaleRow is) picks the row the case for its value names. A body with no cell, or a value no case names, keeps the row the assignment's sequence gives it. The cell is simulation state, so the choice follows it deterministically: a rule or a console write moves the row, a replay moves it at the same tick, and a saved world restores it with the cell. The look assignment's selector changes only what a body wears; the kit assignment's selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
+ */
+export type WorldRowSelector = {
+  /**
+   * The keyed state.world row of kind Int or Bool whose cells are keyed by body index.
+   */
+  state: string;
+  /**
+   * The value-to-row mapping, each value at most once.
+   */
+  cases: (WorldRowSelectorCase | null)[];
+};
+
+/**
+ * One case of a WorldRowSelector: the row a body's cell value selects.
+ */
+export type WorldRowSelectorCase = {
+  /**
+   * The cell value: an Int cell's integer, or 0 and 1 for a Bool cell.
+   */
+  value: number;
+  /**
+   * The kit or look row name the value selects.
+   */
+  row: string;
 };
 
 export type WorldRule = {

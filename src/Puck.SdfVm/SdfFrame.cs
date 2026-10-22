@@ -1,4 +1,5 @@
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SignedDistance;
@@ -206,6 +207,14 @@ public sealed record SdfFrame(
     /// measures each one's saving and checks it shows the same image. The cadence signature folds it, so a change
     /// re-renders.</summary>
     public SdfMeshCullLevel MeshCull { get; init; }
+    /// <summary>Which work the frame's views update less often when it is far or small on screen
+    /// (<see cref="SdfUpdateRates"/>, <c>world.rates</c>); the default, <see cref="SdfUpdateRates.None"/>, updates
+    /// everything every frame. The residency reads <see cref="SdfUpdateRates.ShadowFar"/>; the host reads the rest
+    /// before it composes the frame.</summary>
+    public SdfUpdateRates UpdateRates { get; init; }
+    /// <summary>The counters the frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), or
+    /// <see langword="null"/> to count nothing.</summary>
+    public WorkCounterSet? RateCounts { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
     /// passes and re-composites from the retained views output — pixel-identical to a

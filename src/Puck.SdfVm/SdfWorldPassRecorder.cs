@@ -455,9 +455,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
 
-        var cascades = SdfMeshShadowCascades.Fit(frame: frame, texels: BoundCascadeTexels(recording: in recording), view: view);
+        var cascades = m_owner.CascadesOf(frame: frame, instance: m_context.Instance, texels: BoundCascadeTexels(recording: in recording), view: view);
 
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
+        if (m_part == SdfWorldPackage.Parts.ShadowFar) {
+            frame.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarRendered);
+        }
         if (IsShadowCascade) {
             SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: cascades[m_part switch {
                 SdfWorldPackage.Parts.ShadowNear => 0,

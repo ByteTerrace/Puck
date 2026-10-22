@@ -432,7 +432,7 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: SdfShapeType.Ellipse, actual: elliptic.Type);
         Assert.Equal(expected: Vector3.One, actual: elliptic.Scale);
         Assert.Equal(expected: SdfShapeType.ConvexPolygon, actual: polygon.Type);
-        Assert.Equal(expected: 3u, actual: BitConverter.SingleToUInt32Bits(value: polygon.Data0.X));
+        Assert.Equal(expected: SdfPrismProfile.PackConvexReference(count: 3, tableVector: 0), actual: BitConverter.SingleToUInt32Bits(value: polygon.Data0.X));
         Assert.Equal(expected: 6, actual: polygon.Table.Count);
         // Bounds: the canonical box at the scale, a revolve's reach on every axis, a sweep's control points widened by
         // its radius, and a plane unbounded.
@@ -445,6 +445,56 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: new Vector3(x: 1.5f, y: 1f, z: 0.5f), actual: sweep.Bound.HalfExtents);
         Assert.True(condition: SdfPaintShape.Of(scale: Vector3.One, type: SdfSolidPrimitive.Plane).Bound.IsUnbounded);
         Assert.Throws<ArgumentException>(testCode: () => SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Path), scale: Vector3.One, type: SdfSolidPrimitive.Prism));
+    }
+    /// <summary>A polygon paint covers every sector of its outline: reading the packed paint the way sdfApplyPaints does
+    /// (the vertex count and table vector in the shape's first data lane, the vertices two to a vector) yields exactly the
+    /// polygon's own vertices, and the sdfConvexPolygon2D distance at each sector's centre is inside. A count read one
+    /// too high adds a vertex at the table's zeroed tail and cuts a sector away.</summary>
+    [Theory]
+    [InlineData(SdfPrismProfileKind.Polygon, 5)]
+    [InlineData(SdfPrismProfileKind.Polygon, 6)]
+    [InlineData(SdfPrismProfileKind.Convex, 6)]
+    public void PolygonPaintsPackWholeAndCoverEverySector(SdfPrismProfileKind kind, int sides) {
+        var vertices = Enumerable.Range(start: 0, count: sides).Select(selector: index => new Vector2(x: MathF.Sin(x: (index * MathF.Tau / sides)), y: MathF.Cos(x: (index * MathF.Tau / sides)))).ToArray();
+        var profile = ((kind == SdfPrismProfileKind.Polygon)
+            ? new SdfPrismProfile(Kind: kind, Sides: sides)
+            : new SdfPrismProfile(Kind: kind, CornerRadius: 0f, Vertices: vertices));
+        var scale = new Vector3(x: 0.115f, y: 0.105f, z: 0.06f);
+        var paint = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(profile: profile, scale: scale, type: SdfSolidPrimitive.Prism), Stroke: 0f);
+        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Paints: [paint])]);
+        var first = ((((int)program.Words[SdfProgram.ProgramDataOffsetLane]) + SdfProgram.InstructionDataVectors) * 4);
+        var reference = program.Words[(first + 12)];
+        var count = (int)((reference & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1u);
+        var tableWord = (int)((reference >> SdfPrismProfile.ConvexCountBits) * 4u);
+        var packed = Enumerable.Range(start: 0, count: count).Select(selector: index => new Vector2(x: BitConverter.UInt32BitsToSingle(value: program.Words[(tableWord + (2 * index))]), y: BitConverter.UInt32BitsToSingle(value: program.Words[(tableWord + (2 * index) + 1)]))).ToArray();
+
+        Assert.Equal(expected: sides, actual: count);
+        Assert.Equal(expected: vertices.Select(selector: vertex => vertex * new Vector2(x: scale.X, y: scale.Y)), actual: packed);
+        // sdfConvexPolygon2D: the running minimum squared segment distance, signed by crossing parity.
+        float Distance(Vector2 point) {
+            var previous = packed[^1];
+            var best = Vector2.Dot(value1: (point - packed[0]), value2: (point - packed[0]));
+            var sign = 1f;
+
+            foreach (var vertex in packed) {
+                var edge = (previous - vertex);
+                var offset = (point - vertex);
+                var closest = (offset - (edge * Math.Clamp(value: (Vector2.Dot(value1: offset, value2: edge) / Vector2.Dot(value1: edge, value2: edge)), min: 0f, max: 1f)));
+
+                best = MathF.Min(x: best, y: Vector2.Dot(value1: closest, value2: closest));
+                if (((point.Y >= vertex.Y) == (point.Y < previous.Y)) && (((point.Y >= vertex.Y) == ((edge.X * offset.Y) > (edge.Y * offset.X))))) { sign = -sign; }
+                previous = vertex;
+            }
+
+            return (sign * MathF.Sqrt(x: best));
+        }
+
+        for (var sector = 0; (sector < sides); sector++) {
+            var angle = ((sector + 0.5f) * MathF.Tau / sides);
+            var centre = (new Vector2(x: MathF.Sin(x: angle) * scale.X, y: MathF.Cos(x: angle) * scale.Y) * 0.5f);
+
+            Assert.True(condition: (Distance(point: centre) < 0f), userMessage: $"sector {sector} of the {sides}-sided {kind} paint is uncovered");
+        }
     }
     [Fact]
     public void MaterialLayersPackAuthoredSurfacesAndAllStops() {
