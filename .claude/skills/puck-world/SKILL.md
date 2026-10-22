@@ -399,8 +399,13 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   and a lift.
 - A world declares at most 16 channels (`ChannelLimits.MaxChannels`, the
   intent's wire slots), and the debug world declares all 16 (the chess
-  board's cancel rides the Moth's `select`), so a new pressable action there
-  reuses a channel or binds a command.
+  board's cancel rides the Moth's `select`). This is the current implementation,
+  not the target contract: the owner asks for more capacity, economical reuse,
+  and generic action, shooting, fighting, rhythm, board, and UI support.
+  [Input channels](../../../docs/decisions/input-channels.md) owns the accepted
+  typed-storage, authoritative-mode, release, and timed-history design and its
+  migration. Follow its steps; do not couple another action to an unrelated
+  name to preserve the sixteen-slot ceiling.
 - A kit whose collider differs from the body's last one (a kit `select` by a
   body register: the suit, noclip) steps the body to the nearest pose up its
   axis or along world X or Z where the new volume is not embedded

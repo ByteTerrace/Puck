@@ -4,6 +4,30 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Input channels
+
+The [input channel decision](../decisions/input-channels.md) owns the model,
+migration inventory, genre checks, and each step's completion criteria. The
+runtime still has sixteen uniform channel slots; the design record is complete.
+
+- [ ] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
+  buttons, separate target-register reach, all consumers and codecs migrated,
+  shared debug declarations, and chess `confirm`/`cancel` without Select coupling.
+- [ ] C2 relative input: Q32.32 displacement in the numeric bank, authored
+  units/sensitivity/bounds, single consumption, and no tick-rate scaling.
+- [ ] C3 authoritative modes: finite state selectors, composed live sets,
+  per-combination allocation and permissions, named capacity refusals, and debug
+  form/engagement migration. Deliver with C4 before enabling slot reuse.
+- [ ] C4 switch barrier: input epochs, complete release and cancellation,
+  neutral rearming, reload/disconnect/route handling, and checkpoint continuity.
+- [ ] C5 timed ingress and history: sub-tick events, lateness admission,
+  calibration, bounded rings and overflow outcomes, replay and hash coverage.
+- [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
+  patterns, consumption, tick buffers, and event-time beat judgement.
+- [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
+  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
+  ordinal surfaces removed, and executable checks of the genre table.
+
 ## Standalone
 
 - [ ] Owner decision: whether the engine ships or requires the GameInput redistributable (the `Microsoft.GameInput` package's runtime). Without it the Xbox path cannot see the Series X|S Share button or the Elite paddles, cannot identify a pad by device rather than XInput slot, and is capped at four pads; the inbox GameInput v0 runtime, where `GameInputCreate` accepts it, reaches only the impulse-trigger motors. See [device input](../reference/input.md#limits-and-hardware-evidence).
