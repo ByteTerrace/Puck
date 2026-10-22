@@ -49,11 +49,4 @@ SdfMeshSample sdfMeshSampleAt(uint2 pixel) {
     return hit;
 }
 
-// Where a bake lattice's instance mask starts: its mask words, then their summary words, one lattice after another.
-uint worldInstanceMaskBase(uint lattice) {
-    uint summaryWords = ((passGroup.instanceMaskWordCount + 31u) >> 5u);
-
-    return ((passGroup.instanceMaskWordCount + summaryWords) * lattice);
-}
-
 #endif

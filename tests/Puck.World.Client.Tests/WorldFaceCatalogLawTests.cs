@@ -35,6 +35,15 @@ public sealed class WorldFaceCatalogLawTests {
         y: 2f,
         z: 0.15f
     );
+    // The engine rotation whose author-frame form (the fixture converts through CreationFrame.ToAuthor, a premultiply by
+    // the half turn) is the identity: the shape a world authors without a rotation, which the engine door turns by the
+    // half turn.
+    private static Quaternion HalfTurnedFromIdentityAuthor { get; } = new(
+        w: 0f,
+        x: 0f,
+        y: -1f,
+        z: 0f
+    );
     // A rotation about the face's own RIGHT axis — pitch, the axis a world-up-pinned frame cannot represent.
     private static Quaternion Pitched { get; } = Quaternion.CreateFromAxisAngle(
         axis: Vector3.UnitX,
@@ -77,7 +86,7 @@ public sealed class WorldFaceCatalogLawTests {
             AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = reservedSlots }),
         };
     }
-    private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
+    private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false, bool halfTurned = false) {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -85,7 +94,9 @@ public sealed class WorldFaceCatalogLawTests {
             Position: ShapeOffset,
             Rotation: (pitched
             ? Pitched
-            : Quaternion.Identity),
+            : (halfTurned
+            ? HalfTurnedFromIdentityAuthor
+            : Quaternion.Identity)),
             Scale: ShapeScale,
             Material: 0,
             Blend: SdfBlendOp.Union,
@@ -139,6 +150,7 @@ public sealed class WorldFaceCatalogLawTests {
         bool animated = false,
         bool carriesPortal = true,
         bool pitched = false,
+        bool halfTurned = false,
         WorldPlacementAttach? attach = null,
         WorldScreenSource? source = null
     ) {
@@ -146,6 +158,7 @@ public sealed class WorldFaceCatalogLawTests {
             animated: animated,
             faceNamesShape: faceNamesShape,
             faceShape: faceShape,
+            halfTurned: halfTurned,
             pitched: pitched
         );
         var portal = new WorldPlacementPortal(
@@ -729,6 +742,45 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(
             expected: (root + FixedVector3.FromVector3(value: ShapeOffset)),
             actual: row.Frame.Origin
+        );
+    }
+    // THE LAW: a face's origin is the named shape's centre as it is drawn, the placement's position plus the shape's
+    // engine-frame offset turned by the placement's yaw alone (WorldPlacementStamper). A shape that carries the engine
+    // half turn, as every unrotated author-frame shape does, turns its own axes and not where it stands: an offset
+    // along its normal moves the glass to the drawn side, on a cardinal yaw and off it.
+    [InlineData(0f, false)]
+    [InlineData(0f, true)]
+    [InlineData(90f, true)]
+    [InlineData(180f, true)]
+    [InlineData(270f, true)]
+    [InlineData(30f, true)]
+    [InlineData(90f, false)]
+    [Theory]
+    public void AFaceOriginSitsOnTheDrawnShapeCentre_ForAnOffsetAlongItsNormal(float yawDegrees, bool halfTurned) {
+        var placement = new Vector3(
+            x: 4f,
+            y: 1.5f,
+            z: -7f
+        );
+        var drawn = (placement + Vector3.Transform(
+            rotation: Quaternion.CreateFromAxisAngle(
+                axis: Vector3.UnitY,
+                angle: ((yawDegrees * MathF.PI) / 180f)
+            ),
+            value: ShapeOffset
+        ));
+        var frame = DoorRow(definition: BuildDoorDocument(
+            carriesPortal: false,
+            halfTurned: halfTurned,
+            yawDegrees: yawDegrees
+        )).Frame;
+
+        Assert.True(
+            condition: (Vector3.Distance(
+                value1: frame.Origin.ToVector3(),
+                value2: drawn
+            ) < 0.002f),
+            userMessage: $"yaw {yawDegrees}, half turn {halfTurned}: face origin {frame.Origin.ToVector3()} is not the drawn centre {drawn}"
         );
     }
     [Fact]

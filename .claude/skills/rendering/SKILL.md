@@ -39,8 +39,9 @@ Find the existing mechanism before adding one: `puck references`,
 A view is a chain of separate dispatches: `mask` → `bake` (only while the
 residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
-the cascades) → `mesh` (graphics) → `pyramid` (the occlusion's depth pyramid
-from the mesh target) → `surface` (each pixel's visibility record from the mesh
+the cascades) → `mesh` (graphics, in two occlusion phases with the occlusion
+kernel between them, `SdfMeshOcclusion`) → `pyramid` (the ambient occlusion's
+depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
@@ -70,6 +71,19 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   no box (`SdfMeshBox.TryOf` returns false) or it vanishes while visible. A
   missing object that `world.cull off` brings back is the cull's;
   `gpu.vertices` in `world.counters gpu` counts what each pass draws.
+- **The mesh pass also culls by occlusion** (`SdfMeshOcclusion`,
+  `passes/sdf-mesh-occlusion.comp.hlsl`, the default `world.cull occlusion`):
+  phase one draws the previous frame's visible set through a counted indirect
+  draw (`IGpuRecorder.DrawIndirectCount`), the kernel builds a farthest-depth
+  pyramid from the target's fourth channel (forward depth) and tests every kept
+  box, phase two draws the newly visible over phase one's target and depth. The
+  recorder moves the mesh target between the phases itself and returns it in
+  its attachment layout. Draws a kernel issues are counted on the GPU past the
+  counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
+  `gpu.vertices` include them. An object `world.cull frustum` brings back is the
+  occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
+  (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
+  the draw there.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
@@ -121,6 +135,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `passes/sdf-world.hlsli` itself. The shader cache keys, and a reload
   recompiles, by include closure, so routing a stage module through another
   wrapper makes an edit to it recompile both kernels.
+- **The bake kernels include `passes/sdf-bake-world.hlsli`, never
+  `sdf-world.hlsli`.** Their compiled bytecode keys the stored meshes
+  (`SdfMeshBakeIdentity`), and SPIR-V orders its constants by first use in the
+  whole source, dead code included, so a lighting, screen or view module in
+  their closure can move a stored mesh's key. Add to `sdf-bake-world.hlsli`
+  only what the bake reads, and check with `puck mesh identity --against`.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:

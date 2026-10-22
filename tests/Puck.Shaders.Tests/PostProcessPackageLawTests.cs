@@ -158,7 +158,7 @@ public sealed class PostProcessPackageLawTests {
         // The node's counter buffers, one a frame slot of the pass's one row, which the pass binds at the counters'
         // binding.
         var counters = gpu.CreatedObjects
-            .Where(predicate: static created => ((created.Kind == "buffer") && (created.Bytes == ((ulong)GpuKernelCounters.RowBytes))))
+            .Where(predicate: static created => ((created.Kind == "buffer") && (created.Bytes == GpuKernelCounters.SlotBytesOf(rows: 1))))
             .Select(selector: static created => created.Handle)
             .ToHashSet();
 

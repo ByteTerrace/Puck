@@ -77,8 +77,9 @@ beside the package that owns it. The open parts are:
   counted-default checks are named under their steps. P18-11's part-two binder
   work uses the existing layer and prototype vocabulary; P18-7's separate
   celestial body vocabulary remains open.
-- **P20:** P20-1, the per-pass cull of mesh draws by box, has landed; areas,
-  occlusion, levels of detail and residency are open
+- **P20:** P20-1, the per-pass cull of mesh draws by box, and P20-2, the mesh
+  pass's occlusion from depth, have landed; cached cascades, levels of detail,
+  residency and lights per view are open
   ([P20](#p20--visibility-areas-and-residency)).
 
 Of P18's landed steps, the sky and the bounded media animate on the presented
@@ -7310,25 +7311,84 @@ than two captures of the same state (stairwell and landing: no pixel; the
 garden window seen through the entrance: at most 2 of 255 where two captures
 differ by 4).
 
+**P20-2, landed: occlusion from depth.** Each view's mesh pass draws in two
+phases and tests every box the box cull keeps against the view's own depth, on
+the GPU, with no authoring (`SdfMeshOcclusion`, the kernel
+`passes/sdf-mesh-occlusion.comp.hlsl`). The host writes the kept opaque draws in
+their staged order as candidates (draw, vertex count, box); the first phase
+draws, through a counted indirect draw, the candidates the view's previous frame
+found visible and every draw no host box bounds; the mesh target's fourth
+channel holds each pixel's forward depth, from which a pyramid of the farthest
+forward depth per block is built (positive infinity wherever a pixel shows no
+mesh); each box is projected as the vertex stage projects a vertex, a pixel
+past its reach each way, and is hidden when its nearest corner lies beyond the
+farthest of the 2×2 texels of the coarsest level that cover it; the verdict
+becomes the visible set, and the second phase draws, over the first's target
+and depth, the visible candidates the first did not. Each phase writes one
+command a candidate at the candidate's place, empty when it draws nothing, so
+the draws keep the box cull's order and depth ties resolve alike. A box that
+reaches the near plane is never hidden. Glass draws in its own pass and never
+occludes; the shadow cascades keep the box cull; a skinned draw with no box is
+always drawn; every nested view tests against its own camera and pyramid; the
+temporal jitter is the vertex stage's own, and the pixel of margin covers it.
+The counted indirect draw is `IGpuRecorder.DrawIndirectCount`: `ExecuteIndirect`
+with a count buffer and a per-layout command signature that writes each record's
+identity into the root constants on Direct3D 12, `vkCmdDrawIndirectCountKHR`
+with the identity as the first instance on Vulkan (`VK_KHR_draw_indirect_count`,
+`multiDrawIndirect`, `drawIndirectFirstInstance`; a device without them keeps
+the box cull). The GPU counts the draws and vertices it issues into the work
+counters past their rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
+`gpu.vertices` stay whole; `gpu.draws.indirect` counts the host's calls.
+`world.cull occlusion|frustum|off` compares the levels; occlusion is the
+default.
+
+Measured on the debug world (now 43.2 M baked triangles; its portals moved into
+the painting wing, so the spawn and the look back out the entrance show no
+nested window), Direct3D 12 Release, RTX 4070, `world.cadence off`, the
+operator camera posed as in the table above and the body four metres behind it,
+`world.cull frustum` against `occlusion` in one session. Triangles are
+`gpu.vertices` over three.
+
+| View | Mesh pass draws | Mesh pass triangles | Mesh pass fragments | Frame triangles |
+|---|---:|---:|---:|---:|
+| Lobby | 171 → 102 | 17.87 → 10.75 M | 1,632,557 → 1,633,087 | 77.2 → 70.1 M |
+| Level 1 aisle | 254 → 133 | 21.97 → 14.60 M | 1,970,023 → 1,970,741 | 71.0 → 63.7 M |
+| Stairwell, looking up | 38 → 36 | 3.51 → 3.24 M | 2,008,939 → 2,008,443 | 43.9 → 43.6 M |
+| Level 1 landing at the lift | 26 → 25 | 3.14 → 2.95 M | 2,140,048 → 2,140,048 | 26.3 → 26.1 M |
+| Outdoors at the spawn | 20 → 20 | 2.14 → 2.14 M | 715,713 → 715,559 | 6.4 → 6.4 M |
+| Outdoors, facing the hall | 547 → 123 | 39.95 → 15.62 M | 1,023,722 → 1,023,165 | 94.2 → 69.9 M |
+| Outside the entrance, facing in | 305 → 160 | 22.44 → 10.17 M | 1,242,720 → 1,241,529 | 86.7 → 74.5 M |
+| Inside, looking back out the entrance | 20 → 20 | 3.11 → 3.11 M | 954,882 → 954,882 | 14.1 → 14.1 M |
+| Before the wonderland painting (three views) | 845 → 419 | 12.63 → 8.21 M | 2,210,885 → 2,194,050 | 40.7 → 36.3 M |
+
+The lobby's and the aisle's mesh passes lose 40% and 34% of their triangles,
+the view of the whole hall 61%; the cascades are unchanged, since they keep the
+box cull. Fragments move by under 0.1% either way: hidden draws drawn before
+their occluders no longer write, and the sub-pixel order of the two phases
+differs. Each pair of settled captures differs no more than two captures of the
+same state do (temporal on); with `world.temporal off`, where two frustum
+captures are bit-identical, the lobby's `world.debug-view normals` is
+bit-identical between the levels and the lit image differs by one code in 546
+of 1,152,000 pixels, scattered over the frame (lighting, not geometry; the
+nested screen views' share of the lights is the likely carrier, unconfirmed). A
+150° snap turn at the painting wing's doorway shows the whole hall in its first
+presented frame, a crossing of the wonderland painting at a quarter scale
+draws the body and the room whole, and Vulkan (with shadows, ambient
+occlusion, indirect and temporal off, which keep its open device loss away)
+draws the lobby through the counted indirect draw within one code of
+`frustum`.
+
 **Design for what follows.** Presentation only: nothing here reaches
 simulation state, and a world that declares nothing keeps P20-1's cull.
 
-1. **Occlusion from depth, not from authored areas.** The debug world authors
-   no rooms or doors, and its levels are open plan, so cells and portals would
-   have to be derived from the walls' box unions (a flood fill of the field's
-   empty space, split at openings narrower than a threshold, is a research
-   problem) or written by hand (a new `areas` section: the owner's call, below).
-   A two-phase occlusion test against a hierarchical depth buffer needs neither
-   and serves indoors and out alike: draw what was visible last frame, build a
-   conservative max-depth pyramid from it, test every remaining box against the
-   pyramid, and draw the newly visible in the same frame, so nothing pops. A
-   doorway leaks exactly what it shows. It needs indirect draws:
-   `IGpuRecorder` has `DispatchIndirect` only, so this adds a counted indirect
-   draw (`ExecuteIndirect` with a count buffer on Direct3D 12,
-   `vkCmdDrawIndirectCount` on Vulkan) and a cull compute pass per view that
-   writes the draw arguments, and the existing pyramid gains a max-depth level
-   chain beside its representative one. The lobby's 17.3 M and the aisle's
-   18.2 M mesh-pass triangles are its target.
+1. **Occlusion from depth, not from authored areas: landed as P20-2.** The
+   debug world authors no rooms or doors, and its levels are open plan, so cells
+   and portals would have to be derived from the walls' box unions or written
+   by hand; the two-phase test against the view's own depth needs neither and
+   serves indoors and out alike. What it leaves: the cascades' casters (item
+   2, and the same test run from the light), and a pyramid level chosen per box
+   that reads 2×2 texels, which hides less behind a thin occluder than a finer
+   level would.
 2. **Cascades: static casters cached, dynamic drawn.** The far cascade's static
    casters change only when the light turns or the cascade's snapped fit moves;
    drawing them into a retained depth once and only the dynamic draws (857
@@ -7363,8 +7423,8 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
 
 **Owner decisions** (each with what it buys on the debug world):
 
-- *Authored areas or derived occlusion.* Recommended: derived (item 1), no
-  authoring. Authored areas (an `areas` section of boxes and openings,
+- *Authored areas or derived occlusion.* Derived occlusion landed (item 1, the
+  lead's call), no authoring. Authored areas (an `areas` section of boxes and openings,
   placements assigned by containment) would let the CPU skip the hidden halls
   before any GPU work and drive residency (item 4), at the cost of every world
   writing and keeping them.
@@ -7375,10 +7435,15 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
   lifts the eight-light cap; it darkens what lies past the cutoff.
 
 **Timing to read on a quiet machine** (no other World, no build): each view of
-the table above with `world.cadence off` and `world.gpu-timing on`, read under
-`world.cull off` and then `on` (the `sdf.world$mesh`, `shadow-near` and
-`shadow-far` passes and the nested views'), with `host.frames` for the frame's
-worst iteration.
+both tables above with `world.cadence off` and `world.gpu-timing on`, read under
+`world.cull off`, `frustum` and `occlusion` (the `sdf.world$mesh`, `shadow-near`
+and `shadow-far` passes and the nested views'), with `host.frames` for the
+frame's worst iteration. Under `occlusion` the mesh pass holds the occlusion
+kernel's dispatches (its two phases, the pyramid's levels, about eleven at
+1280×900, and the test) and its two render passes, so its time is read whole
+against `frustum`'s; the lobby, the aisle and the view of the hall are where it
+should pay, and the spawn and the look out the entrance, which hide nothing,
+show its fixed cost.
 
 ## Sequencing
 

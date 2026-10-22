@@ -78,8 +78,21 @@ a thousandth of the near distance before the near plane and the shadow filter's
 reach, so the cull changes no pixel; a skinned draw, whose vertices the GPU
 places from its members' slots, has no box and is always drawn. Each nested
 view culls by its own camera, a portal window by the frustum fitted through its
-glass. `world.cull off` draws every draw, and `gpu.vertices` counts the vertices
-each pass's draws ask for.
+glass.
+
+The mesh pass then skips what the view's own depth hides
+(`SdfMeshOcclusion`). It draws in two phases: first, through a counted indirect
+draw, the draws its previous frame found visible and every draw with no box;
+then the occlusion kernel (`sdf-mesh-occlusion.comp.hlsl`) builds a pyramid of
+the farthest forward depth the first phase wrote (the target's fourth channel),
+tests each box the box cull kept against it, keeps the verdict as the next
+frame's visible set and writes the second phase's draws, the visible ones the
+first phase missed, which draw over the first's target and depth. Together the
+phases draw everything a pixel shows in the frame it shows it. Each phase keeps
+the staged draw order, glass never occludes, and the cascades keep the box cull.
+`world.cull frustum` keeps the box cull alone, `world.cull off` draws every
+draw, and `gpu.vertices` counts the vertices each pass's draws ask for, the
+GPU's indirect draws included.
 
 **pyramid** (`sdf-mesh-pyramid.comp.hlsl`) reduces the mesh target into the
 depth pyramid the surface pass's occlusion reads (`frame/sdf-mesh-pyramid.hlsli`):

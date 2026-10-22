@@ -11,6 +11,13 @@ namespace Puck.Abstractions.Gpu;
 /// when that addition carries. The HLSL that adds to a row is generated from these constants into every pass interface
 /// that declares the work counters (<c>ShaderWorkCounters</c> in <c>Puck.Shaders</c>).
 /// <para>
+/// After the rows lie the drawn counts, <see cref="DrawnWords"/> words a row in the same row order: the draws and the
+/// vertices a pass's kernels issued as indirect draw commands (<see cref="IGpuRecorder.DrawIndirectCount"/>), which the
+/// host never sees, each a 64-bit count as a row's are. They join the pass's <see cref="GpuWork.Draws"/> and
+/// <see cref="GpuWork.Vertices"/>, beside the draws the host recorded. A kernel finds them past the rows, whose count it
+/// reads from the buffer's length (<see cref="SlotBytesOf"/>), so no generated interface changes for them.
+/// </para>
+/// <para>
 /// Every frame records <see cref="RecordClear"/> before its first pass and <see cref="RecordCopy"/> after its last,
 /// outside every pass: one clear, one copy and three buffer barriers, after the clear, before the copy and from the copy
 /// to the host. The passes between add atomically and need no barrier between them. The frame's submission names the slot to its ledger
@@ -25,6 +32,12 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     // The sample column of each kernel kind, in GpuWork.KernelKinds order.
     private static readonly int[] KernelColumns = GpuWork.KernelKinds.ToArray()
         .Select(selector: kind => GpuWork.SubmissionKinds.IndexOf(kind)).ToArray();
+    // The sample column of each drawn count, in the order a row's drawn counts lie: the draws, then the vertices.
+    private static readonly int[] DrawnColumns = [GpuWork.SubmissionKinds.IndexOf(GpuWork.Draws), GpuWork.SubmissionKinds.IndexOf(GpuWork.Vertices)];
+
+    /// <summary>The 32-bit words one row's drawn counts take past every row: the draws a pass's kernels issued as indirect
+    /// draw commands, then those commands' vertices, each a 64-bit count.</summary>
+    public const int DrawnWords = (2 * CountWords);
 
     private readonly IGpuBuffer[] m_counters;
     private readonly IGpuReadbackBuffer[] m_readbacks;
@@ -67,7 +80,7 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
         m_part = part;
         m_rows = new int[slots];
         Array.Fill(array: m_rows, value: rows);
-        var sizeBytes = checked((((ulong)rows) * ((ulong)RowBytes)));
+        var sizeBytes = SlotBytesOf(rows: rows);
 
         m_counters = new IGpuBuffer[slots];
         m_readbacks = new IGpuReadbackBuffer[slots];
@@ -114,8 +127,14 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <summary>Gets the bytes every buffer holds together, device-local and readback: two buffers a frame
     /// slot.</summary>
     public ulong TotalBytes {
-        get { var bytes = 0UL; foreach (var rows in m_rows) { bytes += ((((ulong)rows) * ((ulong)RowBytes)) * 2UL); } return bytes; }
+        get { var bytes = 0UL; foreach (var rows in m_rows) { bytes += (SlotBytesOf(rows: rows) * 2UL); } return bytes; }
     }
+    /// <summary>Returns the bytes one frame slot's counter buffer takes for a number of rows: the rows, then each row's
+    /// drawn counts (<see cref="DrawnWords"/>).</summary>
+    /// <param name="rows">The rows, at least one.</param>
+    /// <returns>The buffer's size in bytes.</returns>
+    public static ulong SlotBytesOf(int rows) =>
+        checked(((ulong)rows) * ((ulong)(RowBytes + (DrawnWords * sizeof(uint)))));
 
     private static string ReadbackDetail => "readback";
 
@@ -226,6 +245,9 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
                     row: row
                 );
             }
+            for (var kind = 0; (kind < DrawnColumns.Length); kind++) {
+                rowCounts[DrawnColumns[kind]] += ReadCount(offset: ((((m_rows[slot] * RowWords) + (row * DrawnWords)) + (kind * CountWords)) * sizeof(uint)));
+            }
         }
     }
     /// <summary>Releases every buffer created. Safe to call more than once; the owner calls it once no submission that
@@ -247,14 +269,14 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     }
 
     // One 64-bit count of a row: its low word, then its high word.
-    private long CountAt(int row, int kind) {
-        var offset = (((row * RowWords) + (kind * CountWords)) * sizeof(uint));
-
-        return ((long)BinaryPrimitives.ReadUInt64LittleEndian(source: m_read.AsSpan(
+    private long CountAt(int row, int kind) =>
+        ReadCount(offset: (((row * RowWords) + (kind * CountWords)) * sizeof(uint)));
+    // The 64-bit count at a byte offset of the read slot.
+    private long ReadCount(int offset) =>
+        ((long)BinaryPrimitives.ReadUInt64LittleEndian(source: m_read.AsSpan(
             length: sizeof(ulong),
             start: offset
         )));
-    }
 }
 /// <summary>Where one pass counts its kernels' work in a frame (<see cref="GpuKernelCounters.RowOf"/>): the frame slot's
 /// counter buffer, which the pass binds read-write, and the row its kernels add to.</summary>

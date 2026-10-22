@@ -94,7 +94,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
     // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
     // arrays; callers that need those probe separately and fall back otherwise.
-    private static readonly uint[] OptionalBaseFeatureIndices = [31u, 32u, 36u];
+    // multiDrawIndirect and drawIndirectFirstInstance, which a counted indirect draw needs beside
+    // VK_KHR_draw_indirect_count: several draws in one call, each starting its instances at its own record's identity.
+    private const uint MultiDrawIndirectFeatureIndex = 9u;
+    private const uint DrawIndirectFirstInstanceFeatureIndex = 10u;
+    private static readonly uint[] OptionalBaseFeatureIndices = [MultiDrawIndirectFeatureIndex, DrawIndirectFirstInstanceFeatureIndex, 31u, 32u, 36u];
+
+    // Whether a device reports both base features a counted indirect draw needs.
+    private static bool SupportsIndirectDrawFeatures(IReadOnlyList<bool> support) =>
+        ((DrawIndirectFirstInstanceFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)] && support[((int)DrawIndirectFirstInstanceFeatureIndex)]);
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -169,10 +177,18 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     }
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         VulkanInstanceCommands instance,
-        nint physicalDeviceHandle
+        nint physicalDeviceHandle,
+        IReadOnlyList<bool> support
     ) {
         var extensions = new List<string> { SwapchainExtension };
         var featureStructureTypes = new List<uint>();
+        var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
+
+        if (drawIndirectCount) {
+            extensions.Add(item: VulkanDeviceCommands.DrawIndirectCountExtension);
+        }
+        Console.Error.WriteLine(value: $"[draw-indirect-count] {VulkanDeviceCommands.DrawIndirectCountExtension} {(drawIndirectCount ? "ENABLED" : "unavailable")}");
 
         var deviceFault = (m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceFault.ExtensionName, instance: instance, physicalDeviceHandle: physicalDeviceHandle) &&
@@ -247,11 +263,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return (extensions, featureStructureTypes);
     }
-    private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-        FeatureIndicesOf(support: m_physicalDeviceApi.GetFeatureSupport(
-            instance: instance,
-            physicalDeviceHandle: physicalDeviceHandle
-        ));
 
     /// <summary>Returns the <c>VkPhysicalDeviceFeatures</c> flag indices a device is created with: the required
     /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading's indexed screen sources and samplers
@@ -398,14 +409,16 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         RequireGroupedBinding(capabilities: capabilities);
 
-        var featureIndices = ComposeFeatureIndices(
+        var support = m_physicalDeviceApi.GetFeatureSupport(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+        var featureIndices = FeatureIndicesOf(support: support);
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
-            physicalDeviceHandle: physicalDevice.Handle
+            physicalDeviceHandle: physicalDevice.Handle,
+            support: support
         );
         var request = new VulkanLogicalDeviceCreateRequest(
             EnabledFeatureIndices: featureIndices,

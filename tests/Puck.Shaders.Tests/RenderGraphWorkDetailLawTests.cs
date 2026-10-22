@@ -29,7 +29,7 @@ public sealed class RenderGraphWorkDetailLawTests {
             if (index != slot) { Assert.Equal(expected: previous[index], actual: factory.Buffers[index]); }
         }
         Assert.Equal(actual: factory.FirstRow, expected: 2u);
-        Assert.Equal(expected: (bytes + ((ulong)(4 * GpuKernelCounters.RowBytes))), actual: node.OwnedBytes);
+        Assert.Equal(expected: (bytes + GpuKernelCounters.SlotBytesOf(rows: 4)), actual: node.OwnedBytes);
         Assert.Equal(expected: node.OwnedBytes, actual: node.InstalledAccount.SteadyBytes);
         var wait = gpu.Events.FindIndex(match: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "wait fence"));
         var create = gpu.Events.FindIndex(match: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "create buffer"));
@@ -51,7 +51,7 @@ public sealed class RenderGraphWorkDetailLawTests {
         var creations = gpu.CreationCount;
 
         factory.Labels = ["stars", "clouds"];
-        var replacement = ((ulong)(8 * GpuKernelCounters.RowBytes));
+        var replacement = GpuKernelCounters.SlotBytesOf(rows: 8);
 
         node.BudgetCapBytes = ((bytes + replacement) - 1);
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => node.ProduceFrame(context: default));
@@ -61,7 +61,7 @@ public sealed class RenderGraphWorkDetailLawTests {
         Assert.Equal(expected: bytes, actual: node.OwnedBytes);
         node.BudgetCapBytes = (bytes + replacement);
         node.ProduceFrame(context: default);
-        Assert.Equal(expected: (bytes + ((ulong)(6 * GpuKernelCounters.RowBytes))), actual: node.OwnedBytes);
+        Assert.Equal(expected: (bytes + GpuKernelCounters.SlotBytesOf(rows: 6)), actual: node.OwnedBytes);
         Assert.Equal(expected: node.OwnedBytes, actual: node.InstalledAccount.SteadyBytes);
     }
 

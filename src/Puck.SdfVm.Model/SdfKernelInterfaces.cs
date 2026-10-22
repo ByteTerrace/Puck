@@ -42,8 +42,24 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
     public const string BakePool = "brickPool";
     /// <summary>The bit the view starts at in the index a <see cref="Mesh"/> draw call pushes; the bits below it name the
-    /// draw.</summary>
+    /// draw. The occlusion kernel's pushed index holds its step from this bit up and the pyramid level it writes
+    /// below it.</summary>
     public const int MeshViewShift = 24;
+    /// <summary>The mesh pass occlusion's candidates, a <see cref="Mesh"/> table of <c>uint4</c>s the host writes each
+    /// frame: a header (the candidates, the depth pyramid's levels), then four rows a candidate, its draw, its vertex
+    /// count and its world box (<c>SdfMeshOcclusion</c> in <c>Puck.SdfVm</c>).</summary>
+    public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
+    /// <summary>The mesh pass occlusion's visible set: one word a draw, nonzero for a draw its latest test found
+    /// visible, which the next frame's first phase draws.</summary>
+    public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
+    /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
+    /// <c>GpuDrawIndirectCommand</c> records long.</summary>
+    public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
+    /// <summary>The mesh pass occlusion's draw counts: the first phase's, then the second's.</summary>
+    public const string MeshOcclusionCountsWritten = "sdfMeshOcclusionCountsRW";
+    /// <summary>The mesh pass occlusion's depth pyramid: from level one up, each texel the farthest forward depth of its
+    /// block of the first phase's target, positive infinity where any pixel of it is uncovered.</summary>
+    public const string MeshOcclusionDepthWritten = "sdfMeshOcclusionDepthRW";
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
@@ -135,6 +151,15 @@ public sealed class SdfKernelInterfaces {
                 // shadow passes bind the tables' dummy at both.
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.VisibilityRecords),
                 Written(element: ShaderValueType.Uint, name: SdfWorldPackage.GlassSumsWritten),
+                // The mesh pass's occlusion kernel (passes/sdf-mesh-occlusion.comp.hlsl) reads the target its first phase
+                // drew and the frame's candidates, and writes the depth pyramid, each draw's visibility and both phases'
+                // indirect draws; every other raster part binds the tables' filler and dummy at them.
+                ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.MeshVisibility, type: ShaderValueType.Float4),
+                Read(element: ShaderValueType.Uint4, name: MeshOcclusionCandidates),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionVisibleWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionDrawsWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionCountsWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionDepthWritten),
             ],
             name: "sdf-mesh",
             pushesIndex: true
@@ -214,7 +239,9 @@ public sealed class SdfKernelInterfaces {
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
     /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
     /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
-    /// the draw (<see cref="MeshPushedIndex"/>).</summary>
+    /// the draw (<see cref="MeshPushedIndex"/>). The mesh pass's occlusion kernel reads the same interface through a
+    /// compute layout, with the mesh target and the occlusion's tables (<see cref="MeshOcclusionCandidates"/> and the
+    /// members after it), which the raster stages leave unread.</summary>
     public ShaderInterface Mesh { get; }
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;

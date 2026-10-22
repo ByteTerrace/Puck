@@ -14,6 +14,11 @@ public sealed partial class SdfWorldTables {
     private readonly IGpuRenderPass m_shadowRenderPass;
     // The glass pass's pipeline, drawing in the mesh render pass.
     private readonly IGpuPipeline m_glassPipeline;
+    // The mesh pass's occlusion kernel, which binds the mesh pass's set.
+    private readonly IGpuComputePipeline m_occlusionPipeline;
+
+    // The mesh pass's occlusion kernel (SdfMeshOcclusion).
+    internal IGpuComputePipeline OcclusionPipeline => m_occlusionPipeline;
 
     // The glass pass's graphics pipeline: the mesh pass's layout, vertex stage and render pass with the glass fragment
     // stage.
@@ -115,9 +120,13 @@ public sealed partial class SdfWorldTables {
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
         // The native per-view pipelines share the sdf-world groups; the baker uses sdf-bricks. Optional resolve uses
-        // its own pass group. Mesh draws through sdf-mesh, with one set per frame slot and the view and draw pushed.
+        // its own pass group. Mesh draws through sdf-mesh, with one set per frame slot and the view and draw pushed; the
+        // mesh pass's occlusion kernel reads the same interface through a compute layout of its own, with sets of its own
+        // binding the same resources.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
-        internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
+        internal const GpuShaderStage MeshStages = (GpuShaderStage.Vertex | GpuShaderStage.Fragment);
+        internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: MeshStages);
+        internal static readonly GpuPipelineLayoutDescription MeshOcclusion = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Environment = SdfWorldInterfaces.EnvironmentParameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.

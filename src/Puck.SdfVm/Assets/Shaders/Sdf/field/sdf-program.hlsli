@@ -88,7 +88,7 @@ float3 sdfDynamicBoundCenter(float3 offset, uint slot) {
 // The instance-mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word
 // iteration — buffer INDEXING (entry width and lattice base) comes from the host-pushed
-// passGroup.instanceMaskWordCount (worldInstanceMaskBase in frame/sdf-frame.hlsli). KEEP IN SYNC with
+// passGroup.instanceMaskWordCount (worldInstanceMaskBase in passes/sdf-bake-world.hlsli). KEEP IN SYNC with
 // SdfProgram.InstanceMaskWordCount — the host derives the pushed value and sizes the mask buffer with the
 // identical formula.
 uint sdfInstanceMaskWordCount(uint instanceCount) {
@@ -173,7 +173,7 @@ uint sdfInstanceCount() {
 }
 
 // The ceiling-clamped instance count. The mask-buffer indexing contract itself (entry width, lattice base) lives in
-// frame/sdf-frame.hlsli's worldInstanceMaskBase: both bake kernels resolve it from the host-pushed
+// passes/sdf-bake-world.hlsli's worldInstanceMaskBase: both bake kernels resolve it from the host-pushed
 // passGroup.instanceMaskWordCount (the bake mask WRITES lattice `lattice`'s words, the bake hands mapCore the SAME
 // entry's base).
 uint sdfInstanceCountClamped() {

@@ -156,7 +156,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // buffer and a readback buffer, one row a pass each (GpuKernelCounters).
     private static ulong KernelCounterBytes(ShaderPipelinePlan plan, uint inFlight) =>
         (plan.CountsKernelWork
-            ? checked(((((ulong)inFlight) * 2UL) * (((ulong)plan.Passes.Count) * ((ulong)GpuKernelCounters.RowBytes))))
+            ? checked(((((ulong)inFlight) * 2UL) * GpuKernelCounters.SlotBytesOf(rows: plan.Passes.Count)))
             : 0UL);
     // The bytes of the constant buffers a graph's passes bind, one per frame slot: the frame group's block, which every
     // pass shares, and each pass's own pass block, each in whole constant-buffer views.

@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 
 namespace Puck.World;
@@ -14,7 +15,7 @@ public sealed partial class WorldRenderSettings {
 
     private bool m_ambientOcclusion;
     private bool m_cadenceGate;
-    private bool m_cull;
+    private SdfMeshCullLevel m_cull;
     private bool m_dynamicResolution;
     private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
@@ -44,7 +45,7 @@ public sealed partial class WorldRenderSettings {
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;
-        Cull = true;
+        Cull = SdfMeshCullLevel.Occlusion;
     }
 
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
@@ -66,11 +67,11 @@ public sealed partial class WorldRenderSettings {
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
     /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
     public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
-    /// <summary>Whether each raster pass skips the mesh draws it cannot show any of (default <see langword="true"/>;
-    /// pixel-identical either way). Set <see langword="false"/> (via <c>world.cull off</c>) to draw every draw in every
-    /// view and cascade, which measures the cull's saving. Session state, never durable config; rides
-    /// <see cref="Puck.SdfVm.SdfFrame.DrawUnseen"/>.</summary>
-    public bool Cull { get => m_cull; set { m_cull = value; m_revision++; } }
+    /// <summary>How much of the mesh draws each raster pass skips (default <see cref="SdfMeshCullLevel.Occlusion"/>;
+    /// pixel-identical at every level). <c>world.cull frustum</c> keeps the cull by box alone and <c>world.cull off</c>
+    /// draws every draw in every view and cascade, which measure each level's saving. Session state, never durable
+    /// config; rides <see cref="Puck.SdfVm.SdfFrame.MeshCull"/>.</summary>
+    public SdfMeshCullLevel Cull { get => m_cull; set { m_cull = value; m_revision++; } }
     /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
     /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
     /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a
