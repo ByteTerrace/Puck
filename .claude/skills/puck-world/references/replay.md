@@ -675,7 +675,10 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   Camera and look never touch the tape, so they stay the viewer's.
 - **Ending (`EndDrive`).** Seats return to live input, one stderr line
   reports `reached`/`cancelled at tick N of T` and the verdict, and the
-  world stays where the drive left it. A completed fork hands over to
+  world stays where the drive left it. The recorded-extension epoch opens
+  again (`WorldExtensions.CompleteReplay`): a runtime admitted before the
+  drive stays retired, and a fresh `WorldRecordedExtension` admits and
+  contributes ([Extensions.md](../../../../src/Puck.World.Server/Extensions.md#replay-and-lifetime)). A completed fork hands over to
   `Recording` instead of `Idle`: `m_ticks` = the parent's tick groups
   `0..tick-1` (the same objects, verbatim), `m_liveHashes` = the hashes the
   LIVE session reached during the drive (equal to the parent's on a matching
@@ -756,7 +759,8 @@ The contracts a change must keep:
   refuse external authority events, changed rebuild content, and a hosted
   world's reload, which is replayed from its store and no history holds one. Seek retires
   providers from the abandoned timeline and suppresses save effects while
-  re-simulating; only an explicit extension epoch admits fresh providers.
+  re-simulating; its end opens the extension epoch again, where a fresh
+  provider admits and the retired ones stay retired.
 - **Steady ticks allocate nothing.** Capture buffers are reused when only the
   history records, spans are sized on the keyframe tick, and per-tick paths
   avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.
