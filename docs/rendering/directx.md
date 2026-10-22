@@ -107,9 +107,9 @@ so it needs no view object of its own: `BindVertexBuffer` and `BindIndexBuffer`
 build a vertex and an index view over ranges of it, and `DrawIndexed` records
 `DrawIndexedInstanced`. `DirectXGpuPipelineFactory` creates an opaque PSO whose
 attribute *n* is `POSITIONn`, with the render pass's formats and, exactly when
-the pass has a depth attachment, a depth test that writes; the pipeline-library
-identity covers the formats, the depth test and each attribute's format, offset
-and semantic index. A framebuffer or pipeline that does not match its render
+the pass has a depth attachment, a depth test that writes, and counter-clockwise
+faces in front; the pipeline-library identity covers the formats, the depth
+test, the front face and each attribute's format, offset and semantic index. A framebuffer or pipeline that does not match its render
 pass is refused before the device is touched.
 
 A command list has separate compute and graphics root signatures, so

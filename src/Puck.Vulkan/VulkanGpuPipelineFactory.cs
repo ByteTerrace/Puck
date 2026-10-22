@@ -295,6 +295,10 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                     CullMode = CullModeNone,
                     DepthBiasEnable = False,
                     DepthClampEnable = False,
+                    // A triangle wound counter-clockwise as it appears on the attachment is a front face, the sense of the
+                    // baked meshes' outward winding (SdfDualContouring). The recorder's negative-height viewport puts clip
+                    // +y at the attachment's top, so the framebuffer-space sense matches the image; the D3D12 factory's
+                    // FrontCounterClockwise = true is this setting's other side.
                     FrontFace = FrontFaceCounterClockwise,
                     LineWidth = 1f,
                     PolygonMode = PolygonModeFill,

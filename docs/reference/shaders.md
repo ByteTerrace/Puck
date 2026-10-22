@@ -1921,7 +1921,9 @@ refuses `vertex` on a compute or geometry pass.
 
 Every graphics pass draws opaquely, single-sampled and unculled, and clip-space
 +y is the top of its attachments on both backends: Vulkan draws through a
-viewport of negative height. `blend` admits only `Opaque`; `AlphaOver` and
+viewport of negative height. A triangle that appears counter-clockwise on the
+attachment is a front face on both (`SV_IsFrontFace`), the winding the mesh bake
+gives a surface's outward faces. `blend` admits only `Opaque`; `AlphaOver` and
 `Additive` are refused (`SHADERPIPE_UNSUPPORTED_BLEND`), and so is any
 `alphaTest` (`SHADERPIPE_UNSUPPORTED_ALPHA_TEST`), until each is executable on
 both backends. A compute pass declaring `geometry`, `depthCompare`, `blend` or

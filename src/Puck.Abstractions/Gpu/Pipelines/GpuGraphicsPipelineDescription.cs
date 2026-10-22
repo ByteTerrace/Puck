@@ -4,7 +4,9 @@ namespace Puck.Abstractions.Gpu;
 /// Describes a graphics pipeline both backends build identically: a vertex input layout, the frequency groups it binds
 /// (<see cref="Layout"/>), and the depth test of a render pass with a depth attachment. Every such pipeline draws an
 /// opaque, single-sampled, unculled triangle list whose clip-space +y is the top of the attachment: a fragment replaces
-/// what its color attachment holds. A field only one backend would honor is a defect, not a capability.
+/// what its color attachment holds. A triangle that appears counter-clockwise on the attachment is a front face on both
+/// backends (<c>SV_IsFrontFace</c>), which is how the bake winds a mesh's outward faces. A field only one backend would
+/// honor is a defect, not a capability.
 /// </summary>
 /// <param name="Name">A diagnostics-only label; not read by either backend factory.</param>
 /// <param name="VertexInput">The pipeline's vertex input layout.</param>

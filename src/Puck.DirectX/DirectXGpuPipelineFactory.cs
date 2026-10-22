@@ -179,7 +179,10 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
                 DepthClipEnable = true,
                 FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID,
                 ForcedSampleCount = 0,
-                FrontCounterClockwise = false,
+                // A triangle wound counter-clockwise as it appears on the attachment is a front face, the sense of the
+                // baked meshes' outward winding (SdfDualContouring); Vulkan's FrontFaceCounterClockwise is this
+                // setting's other side, which its negative-height viewport keeps true to the image.
+                FrontCounterClockwise = true,
                 MultisampleEnable = false,
                 SlopeScaledDepthBias = 0f,
             },
@@ -210,10 +213,9 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
         if (library is not null) {
             // The fixed state this factory varies besides the stages and root signature: the render-target count and
-            // formats, the depth-stencil format, the depth test (-1 for none), and each vertex attribute's format,
-            // offset and semantic index.
+            // formats, the depth-stencil format, the depth test (-1 for none), the rasterizer's front face, and each vertex attribute's format, offset and semantic index.
             var colorCount = renderPass.ColorFormats.Count;
-            var state = new byte[(sizeof(int) * ((3 + colorCount) + (3 * ((int)inputElementCount))))];
+            var state = new byte[(sizeof(int) * ((4 + colorCount) + (3 * ((int)inputElementCount))))];
             var words = MemoryMarshal.Cast<byte, int>(span: state.AsSpan());
 
             words[0] = colorCount;
@@ -226,11 +228,12 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             words[(2 + colorCount)] = ((depthCompare is { } test)
                 ? ((int)test)
                 : -1);
+            words[(3 + colorCount)] = (psoDesc.RasterizerState.FrontCounterClockwise ? 1 : 0);
 
             for (var index = 0; (index < inputElementCount); index++) {
-                words[((3 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
-                words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].AlignedByteOffset);
-                words[((5 + colorCount) + (3 * index))] = ((int)inputElements[index].SemanticIndex);
+                words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
+                words[((5 + colorCount) + (3 * index))] = ((int)inputElements[index].AlignedByteOffset);
+                words[((6 + colorCount) + (3 * index))] = ((int)inputElements[index].SemanticIndex);
             }
 
             return library.CreateGraphicsPipeline(

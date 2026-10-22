@@ -228,6 +228,11 @@ wrong. The contracts that bite most often:
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.
   A per-pixel field view would put a second interpreter copy in a pixel kernel.
+- **Winding is one contract across places.** The bake winds outward faces
+  counter-clockwise (`SdfDualContouring`), and both backends declare a
+  counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
+  pipeline factories). Probe facing with `SV_IsFrontFace` in the mesh fragment
+  stage and `world.debug-view depth`, on both backends.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes
