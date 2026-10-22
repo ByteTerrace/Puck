@@ -250,6 +250,43 @@ public sealed class WorldCaptureScheduler {
             Request: request,
             Tick: m_lastPublishedTick
         );
+
+        if (
+            (request.Mode == FrameCaptureMode.Settled) &&
+            (m_lastPublishedTick is { } tick)
+        ) {
+            Stamp(
+                request: request,
+                tick: tick
+            );
+        }
+    }
+
+    // Records the tick a settled capture is held at and the state hashes of that tick (the capture scope world.state.hash
+    // reads by default, and the tick-free pose scope), and narrates the still once it lands, with the tick its frame shows.
+    private void Stamp(FrameCaptureRequest request, ulong tick) {
+        var stamp = string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"tick={tick} hash={ToHex(hash: ComputeStateHash(server: m_server, tick: tick))} pose={ToHex(hash: WorldStateHashComposition.Hash(scope: WorldStateHashScope.Pose, server: m_server, tick: tick))}"
+        );
+
+        request.StateStamp = stamp;
+        request.StateTick = tick;
+        _ = request.Completion.ContinueWith(
+            continuationAction: static (completed, state) => {
+                var (stamp, tick) = ((string Stamp, ulong Tick))state!;
+                var result = completed.Result;
+
+                if (result.Succeeded) {
+                    Console.Error.WriteLine(value: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[still] {result.Path} {stamp} shown={TickText(tick: result.Tick)}{((result.Tick == tick) ? string.Empty : " (the frame shows another tick)")}"
+                    ));
+                }
+            },
+            scheduler: TaskScheduler.Default,
+            state: (stamp, tick)
+        );
     }
 
     /// <summary>Gets the kind counting the host time a holding host withheld steps for while a capture was owed, in

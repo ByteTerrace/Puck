@@ -14,7 +14,7 @@ namespace Puck.World;
 /// <see cref="IWorldSimulationClock"/> — offscreen steps the server exactly like <c>none</c> and drives the frame
 /// producer separately, off the same fixed-step pump.
 /// </summary>
-internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IFixedStepSimulation, IWorldSimulationClock {
+internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IFixedStepSimulation, IWorldSimulationClock {
     private readonly WorldHostStep m_step = new(
         captureScheduler: captureScheduler,
         extensions: extensions,
@@ -23,6 +23,7 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
         peerHost: peerHost,
         replayTape: replayTape,
         scheduleRunner: scheduleRunner,
+        tickScript: tickScript,
         seatRouter: seatRouter,
         server: server,
         sourceWatch: sourceWatch,

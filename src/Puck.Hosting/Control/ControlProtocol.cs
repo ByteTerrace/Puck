@@ -35,8 +35,12 @@ public sealed record ControlRequest(long Id, string Operation, string? Command, 
 /// of more than one is written to files on the serving host and answered as a report, with no image.</param>
 /// <param name="Region">The region a presented capture measures each frame's difference over, as <c>x y width
 /// height</c> fractions of the frame, or <see langword="null"/> for the whole frame.</param>
+/// <param name="Tick">The simulation tick a settled capture is pinned to: the session holds until the world has
+/// completed it and arms the capture before the next tick steps, so the still shows exactly that tick; a tick already
+/// completed refuses. <see langword="null"/> captures the last tick completed when the request reaches the pump.</param>
 public sealed record ControlCapture(string Mode, int Frames = 1,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double[]? Region = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double[]? Region = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ulong? Tick = null) {
     /// <summary>The settled mode's name.</summary>
     public const string Settled = "settled";
     /// <summary>The presented mode's name.</summary>
@@ -58,6 +62,9 @@ public sealed record ControlCapture(string Mode, int Frames = 1,
         }
         if ((Mode == Settled) && ((Frames != 1) || (Region is not null))) {
             return "A settled capture is one frame and takes no region; frames and region are presented options.";
+        }
+        if ((Mode == Presented) && (Tick is not null)) {
+            return "A presented capture reads the frames the display shows next and takes no tick; tick is a settled option.";
         }
         if (Region is { } region) {
             return ((region.Length != 4)

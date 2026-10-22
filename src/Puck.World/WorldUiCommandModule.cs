@@ -30,7 +30,7 @@ namespace Puck.World;
 /// cannot is a caller being lied to.
 /// <para>Registered in every boot shape so the command vocabulary stays stable; its presentation dependencies are
 /// optional and handlers refuse by name when unavailable.</para></remarks>
-internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureScheduler captureScheduler, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null, WorldCrossingCapture? crossingCapture = null, WorldStateRoot? stateRoot = null) : ICommandModule {
+internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureScheduler captureScheduler, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null, WorldCrossingCapture? crossingCapture = null, WorldStateRoot? stateRoot = null, WorldViewComposer? composer = null) : ICommandModule {
     /// <summary>The binding-bar visibility and read-back verb.</summary>
     public const string BindingBarCommand = "world.binding-bar";
 
@@ -269,8 +269,13 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
                         render: render
                     );
                 }
-                if (((args.Count > 1) && !crossing) || (args.Count > 3)) {
-                    return CommandResult.Error(output: "[world.screenshot: expected world.screenshot <path.png> [crossing [player]] or world.screenshot <path.png> presented [<frames>] [region <x> <y> <width> <height>]]");
+                var slots = args.Is(
+                    index: 1,
+                    value: "slots"
+                );
+
+                if (((args.Count > 1) && !crossing && !slots) || (args.Count > 3) || (slots && (args.Count != 2))) {
+                    return CommandResult.Error(output: "[world.screenshot: expected world.screenshot <path.png> [slots | crossing [player]] or world.screenshot <path.png> presented [<frames>] [region <x> <y> <width> <height>]]");
                 }
 
                 if (
@@ -335,6 +340,18 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
                     request: request,
                     target: render
                 );
+
+                if (slots) {
+                    var views = WorldSlotStills.Of(slots: (composer?.Slots ?? []));
+
+                    _ = request.Completion.ContinueWith(
+                        continuationAction: static (completed, state) => WorldSlotStills.Write(result: completed.Result, slots: ((IReadOnlyList<WorldSlotStill>)state!)),
+                        scheduler: TaskScheduler.Default,
+                        state: views
+                    );
+
+                    return new CommandResult(Output: $"[world.screenshot: pending {path} and {views.Count} slot still(s) ({string.Join(separator: ", ", values: views.Select(selector: static view => view.Name))}) — lands on the next composed frame]");
+                }
 
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.
