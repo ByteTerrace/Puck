@@ -105,7 +105,9 @@ granted the GPU share it through one lease on the lead machine: before booting
 a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/gpu-lease`
 (atomic: it fails while another lane holds the lease), writes its lane name and
 the time into `gpu-lease/holder`, and removes the directory as soon as its
-World stops. A lane that finds the lease taken does CPU work and tries again
+World stops. Chain the boot on the `mkdir` (`mkdir … && …`), never run it as a
+separate step: a lane that carried on after a failed `mkdir` overwrote another
+lane's holder and then removed its lease. A lane that finds the lease taken does CPU work and tries again
 later, and never holds it longer than its batch of checks, at most 20 minutes.
 Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
