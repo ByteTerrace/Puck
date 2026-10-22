@@ -305,10 +305,11 @@ public sealed partial class WorldReplayTape {
             EndDrive(completed: true);
         }
     }
-    // Installs the tape's boot image into the running server through its own doors: a forced world.load of the
-    // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild
-    // pipeline), then the complete authority checkpoint a fresh server reaches after the recorded seats join.
-    // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
+    // Installs the tape's starting state into the running server through its own doors: a forced world.load of the
+    // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild pipeline;
+    // an unchanged machine row keeps its running runtime), then the tape's start checkpoint, or the complete authority
+    // checkpoint a fresh server reaches after the recorded seats join. This resets clocks, memory, decisions, latches,
+    // grants, sessions, held input, screen slots and machine cores as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
         // A tape that starts from a checkpoint carries its whole starting authority state; one that starts from the
         // boot image has it rebuilt here, on a shadow with the recorded seats joined.
@@ -424,9 +425,11 @@ public sealed partial class WorldReplayTape {
     /// and arms the per-step injection that feeds one recorded tick ahead of each live step (or a burst per step
     /// when fast-forwarding). Refuses, leaving the session untouched, when the tape is busy, recorded nothing, its
     /// active seat set differs from the live one (join or leave to match — a seat cannot be respawned through the
-    /// session door), a screen machine or addon guest already holds state the rebuild door cannot reset, an
-    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline,
-    /// or the boot-image rebuild is rejected. The host tick thread owns this operation.</summary>
+    /// session door), the tape pins addons and a guest already holds state the rebuild door cannot reset, an
+    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline, or the
+    /// boot-image rebuild is rejected. A stepped machine and a moved screen selector are no obstacle: the start
+    /// checkpoint the reset installs restores the machine cores, the screen slots and the sessions over the running
+    /// host. The host tick thread owns this operation.</summary>
     /// <param name="name">The saved tape's name.</param>
     /// <param name="toTick">How many recorded ticks to drive (<c>1..TickCount</c>), or <see langword="null"/> for
     /// the whole tape.</param>
@@ -500,14 +503,6 @@ public sealed partial class WorldReplayTape {
                 separator: ", ",
                 values: liveSeats.Select(selector: static slot => (slot + 1))
             )}] joined — player.join/player.leave to match first";
-            return false;
-        }
-
-        if (
-            m_liveServer.AnyScreenOpEverApplied ||
-            ((definition.Screens.Count > 0) && m_liveServer.AnyMachineEverPumped)
-        ) {
-            refusal = "a screen or machine operation has applied, or the tape declares screens and a live machine has stepped — screen-owned state and memory observations are outside the checkpoint inventory, so the boot image cannot be reached in this session";
             return false;
         }
 

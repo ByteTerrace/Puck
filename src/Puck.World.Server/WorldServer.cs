@@ -213,18 +213,17 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// state before a recording began is exactly what offline replay cannot re-establish (fresh guests, sim
     /// counter zero), so <c>replay.record</c> refuses to arm once this is <see langword="true"/>.</summary>
     public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
-    /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually submitted — the identical
-    /// boot-anchored replay arm predicate <see cref="AnyAddonEverPumped"/> applies to addons: offline replay
-    /// rehydrates a fresh <see cref="IWorldMachineHost"/> from the tape's embedded
-    /// definition, which can reconstruct a machine's boot image but never its accumulated core state (WRAM, CPU
-    /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
-    /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
+    /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually
+    /// submitted. The tape's embedded definition reconstructs a machine's boot image but never its accumulated core
+    /// state, so a recording armed past this point starts from an authority checkpoint, which carries each core's
+    /// image when the host supports it (<see cref="IWorldMachineCheckpointHost"/>) and refuses by name when it does
+    /// not.</summary>
     public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
     /// <summary>Gets whether a screen operation reached host dispatch or a named provider operation reached its runtime
-    /// commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
-    /// reconstruction even when a runtime operation faults after changing hardware. Screen operations before
-    /// recording are absent from its authority tape; generic provider operations have no entry in the current
-    /// replay format and are refused while its screen-operation tap is attached.</summary>
+    /// commit barrier. This irreversible latch takes the live state off its boot image, even when a runtime operation
+    /// faults after changing hardware, so a recording armed afterwards starts from an authority checkpoint, which
+    /// carries the screen slots and machine cores the operation moved. Generic provider operations have no entry in
+    /// the replay format and are refused while its screen-operation tap is attached.</summary>
     public bool AnyScreenOpEverApplied { get; private set; }
     /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>

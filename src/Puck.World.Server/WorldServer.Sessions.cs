@@ -157,11 +157,12 @@ public sealed partial class WorldServer {
 
         m_observerEndedSessions.Clear();
     }
-    /// <summary>Ends every live session no observer holds, through the one end door: a session a replay drive restored
-    /// from its tape, whose recorded viewer is not watching this world, so nothing it last pressed or pointed at stays
-    /// held. A session admits only through an observation (<see cref="TryObserveAsSession"/>), so one without an attached
-    /// observer has nobody left to end it. Called as a drive ends.</summary>
-    internal void EndUnobservedSessions() {
+    /// <summary>Ends every live session no observer holds, through the one end door: a session a checkpoint restored,
+    /// whose viewer is not watching this world, so nothing it last pressed or pointed at stays held. A session admits
+    /// only through an observation (<see cref="TryObserveAsSession"/>), so one without an attached observer has nobody
+    /// left to end it. Called as a replay drive ends and as a hosted activation restores; a replay's shadow keeps its
+    /// restored sessions, which the tape ends where the live ones ended.</summary>
+    public void EndUnobservedSessions() {
         foreach (var session in m_grants.LiveSessionPrincipals()) {
             if (!m_sessionSinks.ContainsKey(key: session)) {
                 _ = m_grants.EndSession(

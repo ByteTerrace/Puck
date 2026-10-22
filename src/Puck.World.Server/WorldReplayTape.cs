@@ -598,14 +598,13 @@ public sealed partial class WorldReplayTape {
         }
     }
     /// <summary>Arms recording — refusing first when the tape could not re-drive from where it starts. Before the
-    /// world's first step (and before any guest or machine has run), the tape starts from its definition's boot image
-    /// with the active seats joined; <see cref="Server.WorldServer.AnyScreenOpEverApplied"/> refuses there, because a
-    /// screen operation applied between steps already changed live machine-host state the definition never reflects.
-    /// Once the world has stepped (or a guest or machine has run), the tape starts from an authority checkpoint of the
-    /// live state, captured now without the owned-world catalog (<see cref="WorldReplaySnapshot.ForTape"/>); a state no
-    /// checkpoint captures — a mounted or pumped addon guest, a screen operation, a stepped machine without checkpoint
-    /// support, a coupled link or rewind history, a live session, an engagement in flight, or an edit not yet applied —
-    /// refuses by name (<see cref="ReplayRefusal.StartNotCheckpointable"/>).
+    /// world's first step, and before any guest, machine or screen operation has moved the live state off its boot
+    /// image, the tape starts from its definition's boot image with the active seats joined and the live sessions
+    /// re-admitted at its first tick. Afterwards the tape starts from an authority checkpoint of the live state,
+    /// captured now without the owned-world catalog (<see cref="WorldReplaySnapshot.ForTape"/>), which holds the
+    /// sessions, the screen selectors and links, and the machine cores; a state no checkpoint captures — a mounted or
+    /// pumped addon guest, a stepped machine without checkpoint support, a coupled link or rewind history, an engagement
+    /// in flight, or an edit not yet applied — refuses by name (<see cref="ReplayRefusal.StartNotCheckpointable"/>).
     /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) ride the
     /// shared grant/revoke leaf on tape.
     /// <para>On success: snapshots the record-start starting state (the live definition, the start checkpoint when
@@ -633,21 +632,20 @@ public sealed partial class WorldReplayTape {
 
         WorldAuthorityCheckpoint? start = null;
 
-        // A world that has stepped, or run a guest or a machine, holds state its definition and seats cannot
-        // re-establish (bodies moved, cells written, a machine's synchronized bindings), so its recording starts from a
-        // checkpoint of that state, or refuses by name when the state is one no checkpoint captures.
+        // A world that has stepped, run a guest or a machine, or applied a screen operation holds state its definition
+        // and seats cannot re-establish (bodies moved, cells written, a selector moved, a machine's core), so its
+        // recording starts from a checkpoint of that state, or refuses by name when the state is one no checkpoint
+        // captures.
         if (
             (m_liveServer.NextInputTick > 1UL) ||
             m_liveServer.AnyAddonEverPumped ||
-            m_liveServer.AnyMachineEverPumped
+            m_liveServer.AnyMachineEverPumped ||
+            m_liveServer.AnyScreenOpEverApplied
         ) {
             if (!TryCaptureStart(reason: out var startRefusal, start: out start)) {
                 refusal = $"{nameof(ReplayRefusal.StartNotCheckpointable)}: the world has stepped, so a recording starts from a checkpoint of its live state, and this state cannot be captured — {startRefusal}";
                 return false;
             }
-        } else if (m_liveServer.AnyScreenOpEverApplied) {
-            refusal = "a screen or machine operation has already reached runtime execution this session; the current replay format cannot reconstruct its prior hardware state from the definition alone; record from a fresh boot before any operation executes";
-            return false;
         }
 
         refusal = "";
@@ -671,11 +669,13 @@ public sealed partial class WorldReplayTape {
         m_liveAuthoritativeHashes.Clear();
         m_recordPrefix.Clear();
 
-        // A session admitted before the arm is re-established at the tape's first tick, as it stands now, so the
-        // authority it holds reaches the replay too. The prefix is the recording's own: history keeps only actual
-        // events from live ticks and refuses session state its authority keyframes cannot preserve.
-        foreach (var serverEvent in m_liveServer.GrantTable.LiveSessionEvents()) {
-            m_recordPrefix.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
+        // A session admitted before a boot-image arm is re-established at the tape's first tick, as it stands now, so
+        // the authority it holds reaches the replay too; a start checkpoint already carries its sessions. The prefix is
+        // the recording's own: history keeps only actual events from live ticks.
+        if (start is null) {
+            foreach (var serverEvent in m_liveServer.GrantTable.LiveSessionEvents()) {
+                m_recordPrefix.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
+            }
         }
 
         SetMode(mode: WorldReplayMode.Recording);
