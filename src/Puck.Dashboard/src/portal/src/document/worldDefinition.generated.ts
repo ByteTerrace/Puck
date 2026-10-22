@@ -99,7 +99,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -5188,6 +5188,29 @@ export type WorldEffectScaleVerticalVelocity = {
    * The participant a kit's action addresses — see Target.
    */
   target?: ActionTarget;
+};
+
+/**
+ * Writes one state.body counter of a world-addressed body: the register a kit's own setState writes, in the arena's participant lane, settled through the register's envelope. The register is the body's, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.
+ */
+export type WorldEffectSetBodyState = {
+  $type?: "setBodyState";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The state.body counter.
+   */
+  state: string;
+  /**
+   * The literal value.
+   */
+  value?: number | null;
+  /**
+   * A bounded fixed-point expression evaluated at fire time.
+   */
+  expression?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -10830,7 +10853,7 @@ export type WorldRigid = {
 };
 
 /**
- * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own cell of a state row maps to a row, and follows that cell as the simulation writes it.
+ * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.
  */
 export type WorldRowAssignment = {
   /**
@@ -10848,13 +10871,13 @@ export type WorldRowAssignment = {
 };
 
 /**
- * A per-body row selector inside a WorldRowAssignment: each body's own cell of a keyed state.world row (the cell keyed by the body's 0-based index, the way bodies.scaleRow is) picks the row the case for its value names. A body with no cell, or a value no case names, keeps the row the assignment's sequence gives it. The cell is simulation state, so the choice follows it deterministically: a rule or a console write moves the row, a replay moves it at the same tick, and a saved world restores it with the cell. The look assignment's selector changes only what a body wears; the kit assignment's selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
+ * A per-body row selector inside a WorldRowAssignment: each body's own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment's sequence gives it. The register is body state, so the choice is the body's and goes where the body goes: a kit action or a rule's setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment's selector changes only what a body wears; the kit assignment's selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
  */
 export type WorldRowSelector = {
   /**
-   * The keyed state.world row of kind Int or Bool whose cells are keyed by body index.
+   * The state.body counter whose value selects.
    */
-  state: string;
+  bodyState: string;
   /**
    * The value-to-row mapping, each value at most once.
    */
@@ -10862,11 +10885,11 @@ export type WorldRowSelector = {
 };
 
 /**
- * One case of a WorldRowSelector: the row a body's cell value selects.
+ * One case of a WorldRowSelector: the row a body's register value selects.
  */
 export type WorldRowSelectorCase = {
   /**
-   * The cell value: an Int cell's integer, or 0 and 1 for a Bool cell.
+   * The register value, a whole number; a counter holding a fraction matches no case.
    */
   value: number;
   /**

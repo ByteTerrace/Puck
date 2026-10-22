@@ -1,4 +1,5 @@
-using System.Globalization;
+using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -9,17 +10,40 @@ public sealed partial class WorldPopulation {
     private byte[]? m_priorLooks;
     private int[]? m_selectedKits;
     private int[]? m_selectedLooks;
+    // Whether the last selection pass had a selector to resolve, so the pass after a document drops both selectors
+    // still clears what they selected, and a document without one costs nothing per tick.
+    private bool m_selecting;
 
-    /// <summary>Resyncs what every body takes from its own state cells: its live <see cref="WorldBody.Scale"/> from
-    /// <c>bodies.scaleRow</c>, and its kit and look from the kit and look assignments' selectors
-    /// (<see cref="WorldRowAssignment.Select"/>). Called from the same <c>WorldServer.Install</c>/
-    /// <c>InstallRuntimeStateValue</c> choke points <c>WorldGrants.SyncState</c> is, and from the end-of-tick
-    /// publication when a row one of them reads moved, never per tick. A body whose kit moves recompiles it in place,
-    /// keeping its pose, velocity and action state; a moved kit or look bumps <see cref="Revision"/>, so the client
-    /// rebuilds its program and re-latches that body's look.</summary>
+    /// <summary>Resyncs what every body takes from its own state: its live <see cref="WorldBody.Scale"/> from
+    /// <c>bodies.scaleRow</c>, and its kit and look from the assignments' selectors (<see cref="SyncBodySelections"/>).
+    /// Called from the same <c>WorldServer.Install</c>/<c>InstallRuntimeStateValue</c> choke points
+    /// <c>WorldGrants.SyncState</c> is, and from the end-of-tick publication when the scale row moved.</summary>
     /// <param name="definition">The live document.</param>
     public void SyncBodyCells(WorldDefinition definition) {
         SyncBodyScale(definition: definition);
+        SyncBodySelections(definition: definition);
+    }
+    /// <summary>Resyncs every body's kit and look from the kit and look assignments' selectors
+    /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. Called once a
+    /// tick after the world rules, the last writer of a register in a tick; from every choke point
+    /// <see cref="SyncBodyCells"/> is; and when a crossing lands a body with the registers it carried. A body whose kit
+    /// moves recompiles it in place, keeping its pose, velocity and action state; a moved kit or look bumps
+    /// <see cref="Revision"/>, so the client rebuilds its program and re-latches that body's look.</summary>
+    /// <param name="definition">The live document.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public void SyncBodySelections(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var selecting = (
+            (definition.Assignment.Select is not null) ||
+            (definition.LookAssignment.Select is not null)
+        );
+
+        if (!selecting && !m_selecting) {
+            return;
+        }
+
+        m_selecting = selecting;
 
         var kits = (m_priorKits ??= new byte[m_entries.Length]);
         var looks = (m_priorLooks ??= new byte[m_entries.Length]);
@@ -59,7 +83,8 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    // Swaps one live body's compiled feel to a kit row in place: pose, velocity, tape and source survive.
+    // Swaps one live body's compiled feel to a kit row in place: pose, velocity, tape, source and the registers the
+    // arena's slot lanes hold survive.
     private void RecompileBodyKit(WorldBody body, byte kitIndex) {
         var kit = m_kits[kitIndex];
 
@@ -81,9 +106,9 @@ public sealed partial class WorldPopulation {
             holds: kit.Holds
         );
     }
-    // Resolves every entry's selected kit and look from the assignments' selectors against the definition's stored
-    // cells: a body whose cell holds a value a case names takes that case's row, and every other body none (-1).
-    // Returns whether any entry's selection moved.
+    // Resolves every entry's selected kit and look from the assignments' selectors against each active body's own
+    // register: a body whose register holds a value a case names takes that case's row, and every other body none
+    // (-1). Returns whether any entry's selection moved.
     private bool ResolveSelections(WorldDefinition definition) {
         var kits = (m_selectedKits ??= new int[m_entries.Length]);
         var looks = (m_selectedLooks ??= new int[m_entries.Length]);
@@ -113,9 +138,9 @@ public sealed partial class WorldPopulation {
 
         return moved;
     }
-    // Writes the row each body's cell of one selector's state row selects, -1 for every body without a cell or whose
-    // value no case names. The validator admits only a keyed Int or Bool row of body-index keys read at its stored value,
-    // so the tick-0 read is each cell's truth.
+    // Writes the row each active body's register selects, -1 for every other body and for a value no case names. The
+    // validator admits only a state.body Counter and a case value is a whole number, so a register holding a fraction
+    // selects nothing.
     private void SelectRows(WorldDefinition definition, WorldRowSelector? select, bool kits, int[] selected) {
         Array.Fill(
             array: selected,
@@ -124,37 +149,34 @@ public sealed partial class WorldPopulation {
 
         if (
             (select is null) ||
-            (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: select.State
-        ) is not { } row)
+            !WorldBodyStateReads.TryResolveSlot(
+            definition: definition,
+            kind: out var kind,
+            name: select.BodyState,
+            slot: out var slot
+        ) ||
+            (kind != ActionStateKind.Counter)
         ) {
             return;
         }
 
-        foreach (var cell in (row.Cells ?? [])) {
-            if (
-                !int.TryParse(
-                s: cell.Key,
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var bodyIndex
-            ) ||
-                (((uint)bodyIndex) >= ((uint)selected.Length)) ||
-                !WorldStateReader.TryRead(
-                definition: definition,
-                rowName: row.Name,
-                key: cell.Key.Value,
-                tick: 0UL,
-                engineTick: 0UL,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) ||
-                (raw is not { } value)
-            ) {
+        const long Fraction = ((1L << FixedQ4816.FractionBitCount) - 1L);
+
+        for (var bodyIndex = 0; (bodyIndex < selected.Length); bodyIndex++) {
+            if (!m_entries[bodyIndex].Active) {
                 continue;
             }
+
+            var raw = m_actionStateLane.Read(
+                ordinal: bodyIndex,
+                slot: slot
+            );
+
+            if ((raw & Fraction) != 0L) {
+                continue;
+            }
+
+            var value = (raw >> FixedQ4816.FractionBitCount);
 
             foreach (var selectCase in select.Cases) {
                 if (selectCase.Value != value) {

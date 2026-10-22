@@ -589,6 +589,18 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Expression
         ),
         new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.Expression),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
             typeof(WorldEffect.PaintField),
             nameof(WorldEffect.PaintField.Field),
             WorldNameKind.Field,
@@ -1109,12 +1121,6 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldBodiesDefaults),
             nameof(WorldBodiesDefaults.ScaleRow),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(WorldRowSelector),
-            nameof(WorldRowSelector.State),
             WorldNameKind.State,
             WorldNameRole.Names
         ),
@@ -1699,6 +1705,16 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldPredicate.TimerElapsed),
             nameof(WorldPredicate.TimerElapsed.State),
+            "a per-body slot name"
+        ),
+        new(
+            typeof(WorldRowSelector),
+            nameof(WorldRowSelector.BodyState),
+            "a per-body slot name"
+        ),
+        new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.State),
             "a per-body slot name"
         ),
         new(

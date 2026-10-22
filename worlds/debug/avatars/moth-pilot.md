@@ -22,21 +22,23 @@ over her right collarbone to an ochre tie.
 ## Wear her
 
 [`suit.puck`](../suit.puck) imports this file, and the debug world, the garden
-and the night field import `suit.puck`. A body whose `suit` cell is 0 runs the
+and the night field import `suit.puck`. A body whose `suit` register is 0 runs the
 `pilot` kit (a walker with one grounded jump of 3.7 m/s, which lifts her feet
 0.56 m where the suit clears 1.1 m, and no flight mode, its capsule 0.25 m in
 radius and 1.68 m tall) and wears the `moth-pilot` look. In the debug world, T,
 or South while the right trigger is held (K while X is held; the bar's Debug
-page, `SU`), flips the cell while she stands, as does the play wheel's Suit
+page, `SU`), flips the register while she stands, as does the play wheel's Suit
 sector; from the console:
 
 ```text
 body.press suit 1 0.2 0
-world.state suit
+body.state 0
 ```
 
-The first time she is worn in a run, her meshes bake for a moment; every later
-toggle swaps forms on the next frame. `world.reload` resets the cell to 1.
+The register is her own, so she walks through a painting into the garden or
+the night field and back in the form she left in. The first time she is worn
+in a run, her meshes bake for a moment; every later toggle swaps forms on the
+next frame. `world.reload` resets the register to 1.
 
 ## Inspect her
 

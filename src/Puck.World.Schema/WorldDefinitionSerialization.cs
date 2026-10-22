@@ -296,6 +296,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.Pose))]
 [JsonSerializable(typeof(WorldEffect.PoseCell))]
 [JsonSerializable(typeof(WorldEffect.SetIdentityFact))]
+[JsonSerializable(typeof(WorldEffect.SetBodyState))]
 [JsonSerializable(typeof(WorldIdentityFacts))]
 [JsonSerializable(typeof(WorldPredicate.Now))]
 [JsonSerializable(typeof(WorldPredicate.Recently))]

@@ -30,8 +30,8 @@ public static class WorldPredicate {
 /// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="Designate"/>) are one operation in
 /// both scopes: a kit's action acts on its own body when it names none, and a world rule, which has no body of its
 /// own, names one with <c>key</c> (<see cref="WorldBodyEffects"/> is the one check and lowering both read). A timer
-/// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, and save arms
-/// belong to world rules and refuse in a kit.</summary>
+/// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, body-state and save
+/// arms belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
     /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
@@ -149,6 +149,21 @@ public static class WorldEffect {
     public sealed record SetIdentityFact(
         StateChannelRef Key,
         string Fact,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
+    ) : ActionEffect;
+    /// <summary>Writes one <c>state.body</c> counter of a world-addressed body: the register a kit's own
+    /// <c>setState</c> writes, in the arena's participant lane, settled through the register's envelope. The register
+    /// is the body's, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds
+    /// one like any body. Exactly one of <paramref name="Value"/> and <paramref name="Expression"/> is authored. A kit
+    /// writes its own registers with <c>setState</c>, so this arm refuses in a kit.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="State">The <c>state.body</c> counter.</param>
+    /// <param name="Value">The literal value.</param>
+    /// <param name="Expression">A bounded fixed-point expression evaluated at fire time.</param>
+    public sealed record SetBodyState(
+        StateChannelRef Key,
+        string State,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;

@@ -123,6 +123,8 @@ public enum WorldRuleRefusal : byte {
     BodyFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a '$bodyState:' channel does not spell '$bodyState:<bodyRef>:<slot>' with a slot the document's state.body or state.identity declares", kind: RefusalKind.Verdict)]
     BodyStateMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a 'setBodyState' effect names a register state.body does not declare as a Counter", kind: RefusalKind.Verdict)]
+    BodyStateUnwritable,
     [Refusal(door: "world.rule.compile", condition: "a '$bodyPosition:' channel does not spell '$bodyPosition:<bodyRef>:<axis>' with an axis of x, y or z", kind: RefusalKind.Verdict)]
     BodyPositionMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel names a fact that is not a cell name, or the channel does not spell '$identity:<bodyRef>:<fact>'", kind: RefusalKind.Verdict)]
@@ -165,6 +167,9 @@ public enum WorldRuleRefusal : byte {
 public enum WorldRuleEffectRefusal : byte {
     [Refusal(door: "world.rule.effect", condition: "a rule body/pose/cue effect resolves no active body", kind: RefusalKind.Verdict)]
     BodyInactive,
+
+    [Refusal(door: "world.rule.effect", condition: "a 'setBodyState' effect's value expression faulted", kind: RefusalKind.Verdict)]
+    BodyStateFaulted,
 
     [Refusal(door: "world.rule.effect", condition: "a rule designation resolves no valid active target body or target register", kind: RefusalKind.Verdict)]
     BodyTargetInvalid,

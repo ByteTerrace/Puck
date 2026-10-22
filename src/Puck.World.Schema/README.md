@@ -2750,32 +2750,39 @@ divided by the first pass's own resolved-pair count, so a lightly loaded tick
 gets every authored pass and a crowded one stays bounded. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 
-### Kit and look selected by a body's cell
+### Kit and look selected by a body's register
 
 `kits.assignment` and `looks.assignment` each take an optional `select`
-(`WorldRowSelector`): `state` names a keyed `state.world` row of kind Int or
-Bool whose cells are keyed by 0-based body index, and `cases` maps a cell value
-to a kit or look row (`{ value: 0, row: "pilot" }`). A body whose cell holds a
-value a case names wears that look, or runs that kit, outranking the sequence
-and, for a local seat, the seat kit; a body with no cell, or a value no case
-names, keeps what the sequence gives it. The validator refuses, by name, a
-`state` the document does not declare, a row of another kind or with a
-value-over-time trait, a key outside `0..bodies.capacity-1`, an empty or
-repeated case value, and a case row naming no kit or look.
+(`WorldRowSelector`): `bodyState` names a `state.body` Counter, and `cases`
+maps a whole-number register value to a kit or look row
+(`{ value: 0, row: "pilot" }`). A body whose register holds a value a case
+names wears that look, or runs that kit, outranking the sequence and, for a
+local seat, the seat kit; a value no case names (a fraction included) keeps
+what the sequence gives it. The validator refuses, by name, a `bodyState`
+`state.body` does not declare, a Timer register, an empty or repeated case
+value, and a case row naming no kit or look.
 
-The cell is simulation state, so the choice follows it deterministically: a
-rule's write, a `world.state.cell.set`, a replay and `puck test --reproduce`
-all move it at the same tick. `WorldPopulation.SyncBodyCells` resolves it at
-the same choke points as `bodies.scaleRow` and whenever the end-of-tick
-publication moves the selector's row; a body whose kit moves recompiles it in
-place (pose, velocity and action state kept), and a moved kit or look bumps the
-population revision, so the client rebuilds and re-latches the body's stamp. A
-checkpoint carries the cell, not the selection, and the restore resolves it
-again. A look never changes a kit: a collider change is the kit assignment's
-own mapping, authored beside the look's. `world.assign` replaces the sequence
-and rows and keeps the authored `select`; `world.population` echoes each
-assignment's selector and `world.looks` the bodies each look holds. The debug
-world's suit toggle (`worlds/debug/suit.puck`) selects both by a `suit` table.
+The register is the body's own state, so the choice is the body's and goes
+where the body goes. A kit action's `setState` and a world rule's
+`setBodyState(key, state, value | expression)` write it (the rule effect
+settles through the register's envelope inside the firing's journal scope, and
+a kit refuses it by name, since a kit writes its own registers with
+`setState`); a replay and `puck test --reproduce` move the choice at the same
+tick. `WorldPopulation.SyncBodySelections` resolves it at the same choke points
+as `bodies.scaleRow`, once a tick after the world rules, and when a crossing
+lands; a body whose kit moves recompiles it in place (pose, velocity and every
+register kept), and a moved kit or look bumps the population revision, so the
+client rebuilds and re-latches the body's stamp. A checkpoint carries the
+register, not the selection, and the restore resolves it again. A mapped
+crossing carries every register by name, so a destination declaring the same
+register selects by the carried value before the traveller first advances
+there, anonymous seats included. A look never changes a kit: a collider change
+is the kit assignment's own mapping, authored beside the look's. `world.assign`
+replaces the sequence and rows and keeps the authored `select`;
+`world.population` echoes each assignment's selector and `world.looks` the
+bodies each look holds. The debug world's suit toggle
+(`worlds/debug/suit.puck`) selects both by a `suit` register, which the garden
+and the night field declare too.
 
 ### Body sleep
 

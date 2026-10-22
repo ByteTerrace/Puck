@@ -588,6 +588,15 @@ public static partial class WorldFactsVocabulary {
                 discriminator: "setIdentityFact",
                 effectType: typeof(WorldEffect.SetIdentityFact)
             ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyState(
+                    context: context,
+                    effect: ((WorldEffect.SetBodyState)effect),
+                    ruleName: ruleName
+                ),
+                discriminator: "setBodyState",
+                effectType: typeof(WorldEffect.SetBodyState)
+            ),
         ],
         keys: [new WorldFactsPairKeyFamily()],
         operands: [new WorldFactsOperandFamily()],

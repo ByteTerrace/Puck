@@ -1,8 +1,10 @@
-// The Moth's suit on and off. `suit` holds 1 for each body wearing the mech suit and 0 for one out of it, and the
-// look and kit assignments select by it (`select`), so what she wears and how she moves follow the cell: a rule, a
-// console write (`world.state.cell.set suit 0 0`) or a replay moves both at the same tick, and a saved world keeps
-// them. The suit channel (T, or South while the right trigger is held; `body.press suit` from the console and the play
-// wheel's Suit sector) flips it while she stands; a press in the air does nothing unless it is still held when she lands.
+// The Moth's suit on and off. `suit` is a body register (state.body) holding 1 while the body wears the mech suit and 0
+// while it is out of it, and the look and kit assignments select by it (`select`), so what she wears and how she moves
+// follow the register: a rule or a replay moves both at the same tick, and a saved world keeps them. The register is
+// the body's own, so it crosses with her through a painting: every world she can walk into imports this file and
+// declares the same register, and she arrives in the form she left in. The suit channel (T, or South while the right
+// trigger is held; `body.press suit` from the console and the play wheel's Suit sector) flips it while she stands; a
+// press in the air does nothing unless it is still held when she lands.
 //
 // Out of the suit she runs the `pilot` kit, a walker with one jump and no flight mode, so flight is refused, and wears
 // the `moth-pilot` look: the 1.68 m woman inside the suit (avatars/moth-pilot.puck), the same head on a body of her
@@ -20,16 +22,18 @@ channels [
 ]
 
 state {
-  world {
-    table suit {
-      "0" = 1
+  body [
+    {
+      name: "suit"
+      kind: "Counter"
+      initial: 1
     }
-  }
+  ]
 }
 
 kits {
-  // The sequence and rows are the inert default the basis leaves implied: a body without a suit cell keeps the kit it
-  // had.
+  // The sequence and rows are the inert default the basis leaves implied: a body whose register holds no case's value
+  // keeps the kit it had.
   assignment {
     rows []
     sequence {
@@ -38,7 +42,7 @@ kits {
       step: 0
     }
     select {
-      state: suit
+      bodyState: "suit"
       cases [
         { value: 1, row: "walker" }
         { value: 0, row: "pilot" }
@@ -146,7 +150,7 @@ kits {
 looks {
   assignment {
     select {
-      state: suit
+      bodyState: "suit"
       cases [
         { value: 1, row: "moth" }
         { value: 0, row: "moth-pilot" }
@@ -176,12 +180,12 @@ looks {
 rule "suit-toggle" {
   when channel(1, suit) >= 1 and fact(body, 0, Airborne) == 0
   mode: Edge
-  suit[0] = 1 - suit[0]
+  setBodyState(key: 0, state: "suit", expression: 1 - bodyState(body, 0, suit))
 }
 
 // The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.
 rule "airborne-on" {
-  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and suit[$each] == 1
+  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and bodyState(each, suit) == 1
   mode: Edge
   forEach: airPose
   airPose[$each] = 1

@@ -310,8 +310,6 @@ public sealed partial class WorldServer {
 
         var installed = before.AuthoredState;
         var scaleRow = before.Population.ScaleRow;
-        var kitSelectRow = before.Assignment.Select?.State;
-        var lookSelectRow = before.LookAssignment.Select?.State;
         var descriptors = m_arena.Catalog.Descriptors;
         var bodyCells = false;
         var driveGate = false;
@@ -352,22 +350,10 @@ public sealed partial class WorldServer {
 
             // Which of the consumers that keep their own copy of a state value read a row this publication moves.
             driveGate |= published.GatesDrive;
-            bodyCells |= (
-                string.Equals(
-                    a: name,
-                    b: scaleRow,
-                    comparisonType: StringComparison.Ordinal
-                ) ||
-                string.Equals(
-                    a: name,
-                    b: kitSelectRow,
-                    comparisonType: StringComparison.Ordinal
-                ) ||
-                string.Equals(
-                    a: name,
-                    b: lookSelectRow,
-                    comparisonType: StringComparison.Ordinal
-                )
+            bodyCells |= string.Equals(
+                a: name,
+                b: scaleRow,
+                comparisonType: StringComparison.Ordinal
             );
             // A document value bound to a state row, a placement's spatial extent or a creation's scale, is
             // resolved against the row's value, so a moved row re-resolves the values reading it.

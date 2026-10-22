@@ -1,18 +1,26 @@
 // The Moth's suit on and off (suit.puck), each scenario booted in the whole debug world:
-// `puck test worlds/debug/suit-tests.puck --reproduce`. `suit[0]` is body 0's cell, which selects her kit (walker in
-// the suit, pilot out of it) and her look (moth, or moth-pilot). Flight mode is the walker's: pressing
-// flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
+// `puck test worlds/debug/suit-tests.puck --reproduce`. `bodyState(body, 0, suit)` is body 0's own register, which
+// selects her kit (walker in the suit, pilot out of it) and her look (moth, or moth-pilot). Flight mode is the walker's:
+// pressing flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
+//
+// The crossing scenarios walk her through the garden painting and back. A headless seat's camera faces -Z, so
+// `body.fly -1 …` walks +Z: from the pose before the painting (z 36.3) into its glass, and in the garden from just past
+// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways, so
+// what she did in the garden reads here: a flight press there turns flight mode on only in the suit, and flightFuel
+// comes home with whatever it did.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
-documentId: "suit-tests"
+// The debug world's own id: the garden's way back names the document `debug`, so a scenario world under another id
+// would send her home to a second world rather than to this one.
+documentId: "debug"
 
 test "the Moth starts in the suit" {
   when {
     ticks 30
   }
   expect {
-    suit[0] == 1
+    bodyState(body, 0, suit) == 1
   }
 }
 
@@ -25,7 +33,7 @@ test "in the suit, flight lifts her off the ground" {
     ticks 30
   }
   expect {
-    suit[0] == 1
+    bodyState(body, 0, suit) == 1
     bodyState(body, 0, flightFuel) > 0
     bodyPosition(body, 0, y) > 1
   }
@@ -42,7 +50,7 @@ test "a press on the ground takes the suit off and refuses flight" {
     ticks 30
   }
   expect {
-    suit[0] == 0
+    bodyState(body, 0, suit) == 0
     bodyState(body, 0, flightFuel) == 0
     airPose[0] == 0
     bodyPosition(body, 0, y) < 0.5
@@ -62,7 +70,7 @@ test "a second press puts the suit back on and flight works again" {
     ticks 30
   }
   expect {
-    suit[0] == 1
+    bodyState(body, 0, suit) == 1
     bodyPosition(body, 0, y) > 1
   }
 }
@@ -76,6 +84,75 @@ test "a press in the air leaves the suit on" {
     ticks 45
   }
   expect {
-    suit[0] == 1
+    bodyState(body, 0, suit) == 1
+  }
+}
+
+// The control for the next scenario: in the suit, the same flight press in the garden turns flight mode on, and the
+// fuel comes home with her.
+test "in the suit she crosses suited, and flight mode works in the garden" {
+  when {
+    ticks 30
+    seat1: body.pose 57 0.05 36.3 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+  }
+  expect {
+    bodyState(body, 0, suit) == 1
+    bodyState(body, 0, flightFuel) > 0
+    bodyPosition(body, 0, z) > 38
+  }
+}
+
+test "out of the suit she crosses unsuited, and the garden refuses her flight" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.pose 57 0.05 36.3 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.press rise 1 1 0
+    ticks 30
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+  }
+  expect {
+    bodyState(body, 0, suit) == 0
+    bodyState(body, 0, flightFuel) == 0
+    bodyPosition(body, 0, z) > 38
+  }
+}
+
+test "suited up in the garden, she comes home suited and flies" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.pose 57 0.05 36.3 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.press rise 1 1 0
+    ticks 30
+  }
+  expect {
+    bodyState(body, 0, suit) == 1
+    bodyPosition(body, 0, y) > 1
+    bodyPosition(body, 0, z) > 38
   }
 }
