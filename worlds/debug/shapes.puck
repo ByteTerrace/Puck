@@ -241,9 +241,9 @@ let galleryCommands = [
   }
   {
     name: "gallery.view"
-    help: "Steps every camera to the next debug view (off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow, then off again), or selects one by name."
+    help: "Steps every camera to the next debug view (off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow, indirect, then off again), or selects one by name."
     parameters [
-      { name: "view", kind: Choice, values ["next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao", "shadow"], default: "next" }
+      { name: "view", kind: Choice, values ["next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao", "shadow", "indirect"], default: "next" }
     ]
     lines [
       "world.debug-view {view}"

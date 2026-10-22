@@ -8593,13 +8593,15 @@ render {
   // The camera adapts like an eye: it meters the light about each view's camera and eases there over three quarters of
   // a second, from a sunlit day (about EV 14) down to a dim room (EV 7), where a 150-nit screen shows its picture as
   // bright as a display does and a room lit only by it stays dark. It exposes two and a half stops over the meter's
-  // middle grey, the pale, bright look the world was drawn for.
+  // middle grey, the pale, bright look the world was drawn for, and adapts halfway to each surface's own surroundings,
+  // so a room beside its sunlit windows reads as the eye sees it rather than as a photograph's dark interior.
   exposure {
     mode: Auto
     minimum: 7
     maximum: 16
     compensation: 2.5
     adaptation: 0.75
+    local: 0.5
   }
   renderScale: 1
   shadowLights: 1

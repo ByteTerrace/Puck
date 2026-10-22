@@ -155,10 +155,10 @@ let blindPalette = [{ color: "#D8CFBD", roughness: 0.9, specular: 0.03 }]
 let blindSeams = 8
 
 // The ceiling fixtures a level owns, by `hallLamps` key, with the luminous power, in lumens, each emits while its level
-// is On: every level's downlights (a recessed LED downlight's 1,500 lm, a neutral 4,000 K), and the stairwell's pendant
-// (800 lm, a 60 W bulb's) on level 1's switch. A fixture neither occludes nor is occluded, so a brighter one would light
-// the level below through its slab.
-let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 1500 }), [{ key: "stairs", level: 1, lumens: 800 }])
+// is On: every level's downlights (a commercial LED downlight's 3,000 lm, a neutral 4,000 K), and the stairwell's
+// pendant (800 lm, a 60 W bulb's) on level 1's switch. A fixture stands still, so the irradiance volume traces it: its
+// light bounces about its room and stops at the slab under it.
+let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 3000 }), [{ key: "stairs", level: 1, lumens: 800 }])
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
@@ -555,10 +555,11 @@ placements {
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
 // car's body under its ceiling and a wash over the painting wing. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
-// A point or spot light never occludes and is never occluded, and reaches only as far as its light still shows at the
-// darkest exposure the world takes; each view shades only the fixtures that reach what it sees. The rooms' light is
-// also the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the
-// occlusion.
+// A point or spot light reaches only as far as its light still shows at the darkest exposure the world takes, and each
+// view shades only the fixtures that reach what it sees. A fixture that stands still is traced into the irradiance
+// volume, which bounces its light and occludes it where the probes about a surface cannot see it; the lift car's lamp
+// rides a body, so it is neither. The rooms' light is also the emissive strips' and the windows', carried indoors by
+// the traced indirect light, the shadows and the occlusion.
 render {
   lighting {
     lights: concat(
@@ -644,9 +645,9 @@ state {
     // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
       level0 = 0.0
-      level1 = 1500
-      level2 = 1500
-      level3 = 1500
+      level1 = 3000
+      level2 = 3000
+      level3 = 3000
       stairs = 800
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
