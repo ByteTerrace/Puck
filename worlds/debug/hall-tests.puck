@@ -31,7 +31,7 @@ test "the context button at the lobby switch turns its lights on" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[level0] == 1500
+    hallLamps[level0] == 3000
     hallLights[level1] == 1
   }
 }
@@ -87,7 +87,7 @@ test "writing a level's cell, as gallery.lights does, switches it" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[level0] == 1500
+    hallLamps[level0] == 3000
     hallLights[level1] == 0
     hallLamps[stairs] == 0
   }
