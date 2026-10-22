@@ -112,15 +112,59 @@ public sealed class SdfMeshStoreLawTests {
         var identity = SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bytes));
         var views = bytes.ToArray();
         var bake = bytes.ToArray();
+        var mask = bytes.ToArray();
 
         views[(int)SdfKernel.Views] = new byte[] { 200 };
         bake[(int)SdfKernel.MeshBake] = new byte[] { 200 };
+        mask[(int)SdfKernel.MeshBakeMask] = new byte[] { 200 };
 
-        Assert.NotEqual(expected: UInt128.Zero, actual: SdfMeshStore.CodeIdentity);
-        Assert.Equal(expected: identity, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: views)));
-        Assert.NotEqual(expected: identity, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bake)));
+        Assert.True(condition: identity.HasParts);
+        Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: identity.Code);
+        Assert.Equal(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: views)).Value);
+        Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bake)).Value);
+        Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: mask)).Value);
+        Assert.Equal(expected: identity.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: identity.BakeKernel, code: identity.Code, maskKernel: identity.MaskKernel));
         Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshStore.IdentityOf(kernels: null!));
+        Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshBakeIdentity.Of(code: null!, kernels: null!));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfMeshStore(capacityBytes: 0, directory: "meshes"));
+    }
+    [Fact]
+    public void AMissNamesThePartOfTheIdentityThatChanged() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
+        var first = SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bytes));
+
+        // Nothing recorded: the store names no earlier identity, then records this one.
+        Assert.Contains(expectedSubstring: "records no earlier identity", actualString: store.ExplainMisses(identity: first));
+        Assert.Contains(expectedSubstring: "unchanged", actualString: store.ExplainMisses(identity: first));
+        Assert.Contains(expectedSubstring: "parts unknown", actualString: store.ExplainMisses(identity: new SdfMeshBakeIdentity(value: 5)));
+        store.Record(identity: new SdfMeshBakeIdentity(value: 5));
+        Assert.Single(collection: Directory.GetFiles(path: store.Directory, searchPattern: ("*" + SdfMeshStore.IdentityExtension)));
+
+        // Another bake kernel is named as the bake kernel, against the identity it shares the code and mask with.
+        var rebaked = bytes.ToArray();
+
+        rebaked[(int)SdfKernel.MeshBake] = new byte[] { 200 };
+
+        var kernelChange = store.ExplainMisses(identity: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: rebaked)));
+
+        Assert.Contains(expectedSubstring: "the bake kernel's bytecode changed", actualString: kernelChange);
+        Assert.DoesNotContain(expectedSubstring: "mask", actualString: kernelChange);
+
+        // A recorded identity whose code differs names the code's changed members by assembly: here every member, since
+        // the earlier record holds none of them, and a file of another format is passed over.
+        var path = Path.Combine(path1: store.Directory, path2: ("0".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension));
+
+        File.WriteAllText(contents: $"puck.mesh-identity.v1\ncode {(first.Code + 1):x32}\nmask {first.MaskKernel:x32}\nbake {first.BakeKernel:x32}\n{0:x32} Puck.Gone!Gone.Member`0()Void\n", path: path);
+        File.WriteAllText(contents: "another format\n", path: Path.Combine(path1: store.Directory, path2: ("1".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension)));
+        File.Delete(path: Path.Combine(path1: store.Directory, path2: (first.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
+
+        var codeChange = store.ExplainMisses(identity: first);
+
+        Assert.Contains(expectedSubstring: "the code,", actualString: codeChange);
+        Assert.Contains(expectedSubstring: "Puck.SdfVm", actualString: codeChange);
+        Assert.Contains(expectedSubstring: "Puck.Gone 1", actualString: codeChange);
     }
 
     [Fact]
@@ -151,17 +195,32 @@ public sealed class SdfMeshStoreLawTests {
         Assert.False(condition: SdfMeshStore.TryReadFile(materials: out _, mesh: out _, path: scratch.PathOf(name: "absent.mesh")));
     }
     [Fact]
-    public void ABuildsCodeIdentityReadsFromItsAssembliesAsItsOwnProcessComputesIt() {
-        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
-        var kernels = new SdfKernelSet(bytecode: bytes);
+    public void ABakesCodeIsTheClosureOfWhatItRunsReadFromItsBuild() {
+        var closure = SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory);
+        var members = closure.Members.Keys;
 
-        Assert.Equal(expected: SdfMeshStore.CodeIdentity, actual: SdfMeshStore.CodeIdentityOf(directory: AppContext.BaseDirectory));
-        Assert.Equal(expected: SdfMeshStore.IdentityOf(kernels: kernels), actual: SdfMeshStore.BuildIdentityOf(code: SdfMeshStore.CodeIdentity, kernels: kernels));
-        Assert.NotEqual(expected: SdfMeshStore.IdentityOf(kernels: kernels), actual: SdfMeshStore.BuildIdentityOf(code: (SdfMeshStore.CodeIdentity + 1), kernels: kernels));
+        Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: closure.Hash);
+        // The bake's own code, the contouring it calls, and the maths that calls into: each a member, and its layouts.
+        Assert.Contains(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshPathBake.", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: members, filter: static member => member.StartsWith(value: "Puck.SignedDistance!Puck.SignedDistance.Baking.SdfDualContouring.", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: members, filter: static member => member.EndsWith(value: " [layout]", comparisonType: StringComparison.Ordinal));
+        // What holds meshes rather than makes them, and the renderer's other passes, are not.
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshLibrary", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshIrradiance", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.Abstractions!Puck.Abstractions.CacheRetention", comparisonType: StringComparison.Ordinal));
+
+        var edited = closure.Members.ToDictionary();
+        var first = members.First();
+
+        edited[first] += 1;
+        edited.Remove(key: members.Last());
+        edited["Puck.Gone!Gone.Member"] = 1;
+        Assert.Equal(expected: new[] { first, members.Last(), "Puck.Gone!Gone.Member" }.Order(comparer: StringComparer.Ordinal), actual: SdfMeshBakeClosure.Changed(earlier: edited, members: closure.Members));
+        Assert.Empty(collection: SdfMeshBakeClosure.Changed(earlier: closure.Members, members: closure.Members));
 
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
 
-        _ = Assert.Throws<FileNotFoundException>(testCode: () => SdfMeshStore.CodeIdentityOf(directory: scratch.RootPath));
+        _ = Assert.Throws<FileNotFoundException>(testCode: () => SdfMeshBakeClosure.Of(directory: scratch.RootPath));
     }
 
     // A two-triangle mesh with normals and triangle materials, as a bake meshes one.

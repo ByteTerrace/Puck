@@ -196,8 +196,9 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Gets or sets the identity of the bake on the kernels it dispatches (<see cref="SdfMeshStore.IdentityOf"/>),
     /// under which a new program's groups load from the library's store and its meshes are written there; the residency
-    /// sets it from its kernel set. A group keeps the identity its program started under.</summary>
-    public UInt128 Identity { get; set; }
+    /// sets it from its kernel set. A group keeps the identity its program started under. A program that misses groups
+    /// the store does not hold logs why, by the identity's parts (<see cref="SdfMeshStore.ExplainMisses"/>).</summary>
+    public SdfMeshBakeIdentity Identity { get; set; } = new(value: UInt128.Zero);
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
@@ -662,6 +663,11 @@ public sealed partial class SdfMeshPathBake {
             m_reported = false;
             m_clock.Restart();
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
+            if ((rebaked > 0) && (Library.Disk is { } disk)) {
+                Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={Residency} baking={rebaked}: {disk.ExplainMisses(identity: Identity)}");
+            } else {
+                Library.Disk?.Record(identity: Identity);
+            }
         }
         // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
         // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
@@ -689,7 +695,7 @@ public sealed partial class SdfMeshPathBake {
         group.Low = (center - new Vector3(value: half));
         group.High = (center + new Vector3(value: half));
         group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
-        group.Identity = Identity;
+        group.Identity = Identity.Value;
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity)) { return false; }
         group.Deferred = group.Next;
         group.Next = null;

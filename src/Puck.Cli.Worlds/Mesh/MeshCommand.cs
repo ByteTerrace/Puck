@@ -29,11 +29,12 @@ public static class MeshCommand {
     private const float HistoryReach = 0.001f;
     private const int HistorySamples = 512;
 
-    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c> and <c>scene</c> subverbs.</summary>
+    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c>, <c>scene</c> and <c>identity</c> subverbs.</summary>
     /// <returns>The verb.</returns>
     public static Command Create() => new(description: "Inspect the meshes the baked-mesh path stores.", name: "mesh") {
         AuditCommand(),
         MeshSceneCommand.Create(),
+        MeshIdentityCommand.Create(),
     };
 
     private static Command AuditCommand() {
@@ -181,10 +182,7 @@ public static class MeshCommand {
         }
 
         try {
-            identity = SdfMeshStore.BuildIdentityOf(
-                code: SdfMeshStore.CodeIdentityOf(directory: buildDirectory),
-                kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(buildDirectory, "Assets", "Shaders", "Sdf")))
-            );
+            identity = BuildIdentity(buildDirectory: buildDirectory, extension: extension).Value;
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"{verb}: cannot read the bake identity of the build in '{buildDirectory}' — {exception.Message}");
@@ -192,6 +190,16 @@ public static class MeshCommand {
             return false;
         }
     }
+    /// <summary>Reads the bake identity of the build deployed in a directory on a backend: the code its assemblies' bake
+    /// closure holds and its bake kernels' bytecode.</summary>
+    /// <param name="buildDirectory">The build's directory (its <c>Puck.World.dll</c>'s, or any holding its
+    /// <c>Puck.SdfVm.dll</c> and kernels).</param>
+    /// <param name="extension">The bytecode extension of the backend: <c>.dxil</c> or <c>.spv</c>.</param>
+    /// <returns>The identity.</returns>
+    internal static SdfMeshBakeIdentity BuildIdentity(string buildDirectory, string extension) => SdfMeshBakeIdentity.Of(
+        code: SdfMeshBakeClosure.Of(directory: buildDirectory),
+        kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(buildDirectory, "Assets", "Shaders", "Sdf")))
+    );
     // Whether the request selects a group: by the prototype its body wears and by its label.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);

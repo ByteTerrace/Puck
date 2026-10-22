@@ -63,4 +63,7 @@ public sealed record WorldBootInputs(
     /// <summary>Gets how much of its backend's validation the device is created with (<c>--debug-layers
     /// [basic|full]</c>); <see cref="GpuValidation.Off"/> when the flag is absent.</summary>
     public GpuValidation Validation { get; init; }
+    /// <summary>Gets whether the Direct3D 12 device is created on WARP, the software rasterizer
+    /// (<c>--software-gpu</c>).</summary>
+    public bool Software { get; init; }
 }
