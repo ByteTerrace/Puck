@@ -5,10 +5,11 @@
 // press in the air does nothing unless it is still held when she lands.
 //
 // Out of the suit she runs the `pilot` kit, a walker with one jump and no flight mode, so flight is refused, and wears
-// the `moth-pilot` look. Until the off-suit model lands that look is the 2 m green reference cube (`cube-2m` in
-// debug.puck) worn as a stand-in, so the switch is plain to see; the off-suit creation replaces its source.
+// the `moth-pilot` look: the 1.68 m woman inside the suit (avatars/moth-pilot.puck), the same head on a body of her
+// own. Her look raises the `hold` frame while her `pilotHold` cell is set, and blinks otherwise.
 
 schema: "puck.world.definition.v1"
+import "avatars/moth-pilot"
 
 channels [
   {
@@ -46,11 +47,11 @@ kits {
   }
   rows [
     // The woman inside the suit: 1.68 m tall and as quick on foot, with one jump and no flight pack. Her capsule's
-    // 0.3 m spheres span 0 to 1.68 m.
+    // 0.25 m spheres span 0 to 1.68 m and the 0.5 m across her shoulders and hanging hands.
     {
       bodyContact: Solid
       bodyMotionProgram: "walk"
-      collider: capsule(endpoint: [0, 1.08, 0], radius: 0.3)
+      collider: capsule(endpoint: [0, 1.18, 0], radius: 0.25)
       mass: 0
       motion {
         facingSnap: false
@@ -157,10 +158,15 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
+        // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
+        poses {
+          hold: "state.pilotHold.$body"
+          blink: "state.blink.$body"
+        }
       }
       name: "moth-pilot"
       scale: 1
-      source: creation(prototypeId: `cube-2m`)
+      source: creation(prototypeId: `moth-pilot`)
     }
   ]
 }
