@@ -178,7 +178,7 @@ document: the build compiles it. `--world foo.puck` boots straight from source,
 printer (generated rows refuse by name).
 
 After editing a world, run it (`dotnet run --project src/Puck.World -c Release
--- --world worlds/debug --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
+-- --world worlds/debug --devices none --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
 
 ## Route adjacent work
 

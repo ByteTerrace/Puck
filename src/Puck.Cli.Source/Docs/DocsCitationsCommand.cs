@@ -418,6 +418,7 @@ public static class DocsCitationsCommand {
                 arguments: [
                     artifact,
                     "--world", world,
+                    .. WorldDevices.NoneArguments,
                     "--exit-after-seconds", "20",
                     "--state-dir", stateDirectory,
                     "--headless", (headless

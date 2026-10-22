@@ -102,6 +102,12 @@ power then its accessories when it reports them: `battery N%`, `charging N%`,
 lines on stderr. Bindings are data in `Puck.World`; they are not hard-coded in
 this project.
 
+`--devices none` opens no pad and drops the window's keyboard and mouse events
+before a seat sees them, so a World started for a test or an agent is never
+driven by the person at the machine; scripted input still reaches every seat. It
+is the flag agents and the `puck` verbs boot Worlds with
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+
 ## The gamepad pipeline
 
 ### Per-device I/O and coalescing

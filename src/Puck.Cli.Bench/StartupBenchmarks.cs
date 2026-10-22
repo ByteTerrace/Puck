@@ -61,7 +61,7 @@ public static class StartupBenchmarks {
 
                 Directory.CreateDirectory(path: directory);
                 var capture = $"{directory}/frame.png";
-                var arguments = new[] { artifact, "--world", worlds[index], "--headless", (headless ? "true" : "false"), "--exit-after-seconds", "0", "--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", $"{directory}/state", "--capture-dir", $"{directory}/captures" };
+                var arguments = new[] { artifact, "--world", worlds[index], "--devices", "none", "--headless", (headless ? "true" : "false"), "--exit-after-seconds", "0", "--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", $"{directory}/state", "--capture-dir", $"{directory}/captures" };
                 var input = (("world.status\n" + (headless ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
                 StartupSample row;
 

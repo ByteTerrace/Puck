@@ -134,6 +134,10 @@ public sealed partial class WorldSourcePassthrough {
     // left the engagement brings the host's window back to the front, however the seat left (the pad's context button,
     // the console), while one a reload replaced leaves the keyboard where it is.
     private void ClaimChord() {
+        if (!ClaimsSystemChord) {
+            return;
+        }
+
         ISourcePassthroughDesktop? framed = null;
         var framedSlot = -1;
 

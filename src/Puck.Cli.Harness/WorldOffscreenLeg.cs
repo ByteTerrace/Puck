@@ -136,6 +136,7 @@ public static class WorldOffscreenLeg {
                 arguments: [
                     artifact,
                     "--world", world,
+                    .. WorldDevices.NoneArguments,
                     "--backend", backend,
                     "--exit-after-seconds", exitAfterSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                     "--state-dir", StateDirectoryOf(backend: backend, runDirectory: runDirectory),

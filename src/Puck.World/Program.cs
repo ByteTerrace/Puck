@@ -157,10 +157,18 @@ var controlOption = new Option<bool>(name: "--control") {
     DefaultValueFactory = static _ => false,
     Description = "Start the local trusted Operator control endpoint at boot, as a first console line `world.control start` would, and print its attachment file on standard error. `puck mcp --profile operator` then attaches to this World. Absent, the endpoint stays closed until a console line starts it.",
 };
+// An OPERATOR's per-run choice, never world-authored (the --control pattern): a document cannot decide whose hardware a
+// run may read. Agents and automation boot with `none`, so the owner's pads, keyboard and mouse never drive their Worlds.
+var devicesOption = new Option<string>(name: "--devices") {
+    DefaultValueFactory = static _ => "all",
+    Description = "Which physical input devices this run opens: all (the default: every gamepad, and the keyboard and mouse the window receives) or none (no pad is opened or polled, and no OS key, text or pointer event reaches a seat; stdin, the console, player.signal, body.*, schedule rows and MCP drive the World exactly as before). Every World an agent boots passes none.",
+};
+devicesOption.AcceptOnlyFromAmong(values: ["all", "none"]);
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
     controlOption,
+    devicesOption,
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
@@ -452,6 +460,12 @@ if (parseResult.GetValue(option: captureToolOption) is { } captureToolName) {
 
     Console.Error.WriteLine(value: $"{GpuFrameCapture.LinePrefix} {captureTool!.Name} loaded; gpu.capture <path> [<frames>] captures the next frames");
 }
+var physicalDevices = (parseResult.GetValue(option: devicesOption) != "none");
+if (!physicalDevices) {
+    Console.Error.WriteLine(value: (hostSettings.Presentation == WorldHostPresentation.Windowed)
+        ? "[world.host] physical input devices are off (--devices none): no gamepad is opened, and no key, text or pointer event from the OS reaches a seat; scripted input still drives the World."
+        : "[world.host] physical input devices are off (--devices none); this boot shape opens none either way.");
+}
 var builder = Host.CreateApplicationBuilder(args: args);
 // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
 // and whichever thread writes it, goes to standard error beside the narration.
@@ -490,6 +504,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     CaptureTool = captureTool,
     ConnectionSubject = connectionSubject,
     Control = parseResult.GetValue(option: controlOption),
+    PhysicalDevices = physicalDevices,
     // The parser hands a bare flag its default rather than its custom parser, so a present flag with no value is read
     // here as the basic level.
     Validation = ((parseResult.GetResult(option: debugLayersOption) is { Implicit: false, Tokens.Count: 0 })
