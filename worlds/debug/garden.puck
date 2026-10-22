@@ -224,7 +224,7 @@ prototypes {
       palette [
         {
           color: "#F2C230"
-          emissive: 0.35
+          emissive: 14000
           roughness: 0.5
           specular: 0.3
         }
@@ -244,18 +244,25 @@ prototypes {
   }
 }
 
+// A sunset: a low sun's 2,000 lux under a 400-nit sky, so the garden reads as evening in its own exposure and a painting
+// onto it from the dimmer gallery shows its colours rather than a sunlit glare.
 render {
   farDistance: 120
+  lighting {
+    lights [
+      directional(name: "key", direction: [3, 5, -4], color: "#FFC27A", illuminance: 2000lx, shadow: always, angularRadius: 0.2)
+    ]
+  }
   sky {
     layers [
-      gradient(name: "air", stops: [
+      gradient(name: "air", luminance: 400nit, stops: [
         { elevation: -1, color: "#3A2440" }
         { elevation: 0, color: "#FF9A4D" }
         { elevation: 0.25, color: "#D2557A" }
         { elevation: 1, color: "#3B2A6E" }
       ]
       )
-      sunDisc(name: "sun", light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
+      sunDisc(name: "sun", luminance: 400nit, light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
     ]
   }
   atmosphere {

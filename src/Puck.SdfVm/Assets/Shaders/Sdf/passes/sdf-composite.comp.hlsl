@@ -18,11 +18,36 @@
 // - The bounded volumes composite last over each share, the surface share's clipped at the transport's distance and the
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
+// - The local adaptation (localAdaptation, SdfExposure.Local) then moves the surface share's exposure from the view's
+//   toward the one the irradiance volume's probes about the surface would meter looking at it (sdfMeshLocalLuminance
+//   against meterLuminance, within SDF_LOCAL_ADAPTATION_RANGE stops), as the eye adapts across a scene: a dim ceiling
+//   beside a sunlit window lifts, and the sunlit ground through the window compresses. The sky share and a pixel the
+//   volume holds no probe about keep the view's exposure.
 // A debug view's lit image is its whole picture, so it passes through.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
+#include "../shade/sdf-sky-lighting.hlsli"
+#include "../shade/sdf-mesh-irradiance.hlsli"
 #include "../shade/shade-volumes.hlsli"
+
+// The gain the local adaptation applies to a surface share at a distance along the pixel's ray: one without a reading.
+float sdfLocalAdaptationGain(float3 origin, float3 direction, float t) {
+    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.meterLuminance > 0.0) || !(t > 0.0) || !sdfMeshIrradianceEnabled()) {
+        return 1.0;
+    }
+
+    float3 surfacePoint = (origin + (direction * t));
+    float local = sdfMeshLocalLuminance(sdfMeshProbesAt(surfacePoint, -direction), direction);
+
+    if (!(local > 0.0)) {
+        return 1.0;
+    }
+
+    float stops = (clamp(log2(passGroup.meterLuminance / local), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
+
+    return exp2(stops);
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -59,7 +84,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         weights *= (1.0 - fidelity);
 
         float3 kinds = max(weights, skyAir.weights);
-        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? sdfSkyPassEnvironment(direction) : float3(0.0, 0.0, 0.0));
+        // The sky and the bodies light the air only as far as the air about the camera sees them open (airLight): a
+        // closed room's air is not lit by the sky outside it.
+        float airLight = saturate(passGroup.airLight);
+        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);
 
         if (kinds.x > 0.0) {
@@ -68,7 +96,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         if (kinds.y > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            hazeColor = (ambient + sdfAirBodies(direction, sdfSky[0].HazeAnisotropy));
+            hazeColor = (ambient + (sdfAirBodies(direction, sdfSky[0].HazeAnisotropy) * airLight));
             surface += (hazeColor * weights.y);
         }
         if (kinds.z > 0.0) {
@@ -91,6 +119,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float far = worldFarDistance(view);
         float covered;
 
+        surface *= sdfLocalAdaptationGain(origin, direction, t);
         color = float3(0.0, 0.0, 0.0);
         if (!geometryOnly || (coverage > 0.0)) {
             // The far layer has no background share. Integrate the surface through the existing volume helper, then
@@ -108,8 +137,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    // The float working color; the display encode dithers and quantizes it.
-    output[id.xy] = float4(color, (geometryOnly ? litColor.a : 1.0));
+    // The view's exposure maps the luminance it shaded, in nits, to the display before the root's tonemap; a view a
+    // window shows applies the window share of it (exposeShare), and the view looking through the window applies the
+    // rest of its own; a debug view leaves it as it is.
+    if (passGroup.debugMode == 0u) {
+        color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
+    }
+
+    // The float working color, held within the half-float range it is stored in; the display encode dithers and
+    // quantizes it.
+    output[id.xy] = float4(min(color, SDF_LUMINANCE_CEILING), (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

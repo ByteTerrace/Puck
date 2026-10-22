@@ -54,16 +54,29 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.IndirectIntensity] = Indirect(s => new WorldRenderIndirect(Apply: new WorldRenderIndirectApply(Intensity: s)), e => e.Indirect.Apply.Intensity, "apply.intensity"),
         [WorldValueFields.IndirectContact] = Indirect(s => new WorldRenderIndirect(Apply: new WorldRenderIndirectApply(Contact: s)), e => e.Indirect.Apply.Contact, "apply.contact"),
         [WorldValueFields.LightBounce] = Lit(author: s => new WorldRenderLight.Directional { Bounce = s }, present: static e => e.Lights[0].Bounce, member: "bounce"),
-        [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
+        // A photometric quantity reaches the record converted (over pi, or through a cone or a black body), so the
+        // presentation reads none back exactly; the validator's judgement is the law for it.
+        [WorldValueFields.DirectionalIlluminance] = Lit(author: s => new WorldRenderLight.Directional(Illuminance: s), present: null, member: "illuminance"),
+        [WorldValueFields.DirectionalTemperature] = Lit(author: s => new WorldRenderLight.Directional(Temperature: s), present: null, member: "temperature"),
+        [WorldValueFields.PointIntensity] = Lit(author: s => new WorldRenderLight.Point(Intensity: s), present: null, member: "intensity"),
+        [WorldValueFields.PointPower] = Lit(author: s => new WorldRenderLight.Point(Power: s), present: null, member: "power"),
+        [WorldValueFields.PointTemperature] = Lit(author: s => new WorldRenderLight.Point(Temperature: s), present: null, member: "temperature"),
+        [WorldValueFields.SpotIntensity] = Lit(author: s => new WorldRenderLight.Spot(Intensity: s), present: null, member: "intensity"),
+        [WorldValueFields.SpotPower] = Lit(author: s => new WorldRenderLight.Spot(Power: s), present: null, member: "power"),
+        [WorldValueFields.SpotTemperature] = Lit(author: s => new WorldRenderLight.Spot(Temperature: s), present: null, member: "temperature"),
+        [WorldValueFields.SpotAngle] = Lit(author: s => new WorldRenderLight.Spot(Angle: new BindableAngle(value: s), InnerAngle: new BindableAngle(value: new BindableScalar(literal: 0f))), present: null, member: "angle"),
+        // The inner angle lies within the default outer one, which a wider literal is refused beside.
+        [WorldValueFields.SpotInnerAngle] = Lit(author: s => new WorldRenderLight.Spot(InnerAngle: new BindableAngle(value: s)), present: null, member: "innerAngle", controls: [0f, WorldRenderLight.Spot.DefaultAngle]),
+        [WorldValueFields.SkyLayerLuminance] = Sky(author: s => new WorldRenderSkyLayer.Panel { Luminance = s }, present: static e => e.Sky.First<SdfSkyPanel>().Intensity, member: "luminance"),
+        [WorldValueFields.FogLuminance] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Color: new BindableColor(Raw: "#FFFFFF"), Luminance: s)), present: static e => e.Sky.Atmosphere.FogColor.X, member: "fog.luminance"),
+        [WorldValueFields.MediumLuminance] = Air(author: s => new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Color: new BindableColor(Raw: "#FFFFFF"), Luminance: s)), present: static e => e.Sky.Atmosphere.MediumColor.X, member: "medium.luminance"),
         [WorldValueFields.DirectionalAngularRadius] = Lit(author: s => new WorldRenderLight.Directional(AngularRadius: s), present: static e => MathF.Atan(x: e.Lights[0].Param), member: "angularRadius"),
         [WorldValueFields.EnvironmentAmbient] = Env(s => new WorldRenderEnvironment(Ambient: s), e => e.Sky.Block.Ambient, "ambient"),
         [WorldValueFields.EnvironmentReflection] = Env(s => new WorldRenderEnvironment(Reflection: s), e => e.Sky.Block.Reflection, "reflection"),
         [WorldValueFields.PanelIntensity] = Sky(s => new WorldRenderSkyLayer.Panel(Intensity: s), e => e.Sky.First<SdfSkyPanel>().Intensity, "intensity"),
         [WorldValueFields.PanelBlur] = Sky(s => new WorldRenderSkyLayer.Panel(Blur: s), e => e.Sky.First<SdfSkyPanel>().Blur, "blur"),
-        [WorldValueFields.RimWeight] = Lit(author: s => new WorldRenderLight.Rim(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
+        [WorldValueFields.RimLuminance] = Lit(author: s => new WorldRenderLight.Rim(Luminance: s), present: static e => e.Lights[0].Weight, member: "luminance"),
         [WorldValueFields.RimPower] = Lit(author: s => new WorldRenderLight.Rim(Power: s), present: static e => e.Lights[0].Param, member: "power"),
-        [WorldValueFields.PointRadius] = Lit(author: s => new WorldRenderLight.Point(Radius: s), present: static e => e.Lights[0].Param, member: "radius"),
-        [WorldValueFields.PointWeight] = Lit(author: s => new WorldRenderLight.Point(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
         [WorldValueFields.OccluderRadius] = Lit(author: s => new WorldRenderLight.Occluder(Radius: s), present: static e => e.Lights[0].Param, member: "radius"),
         [WorldValueFields.OccluderWeight] = Lit(author: s => new WorldRenderLight.Occluder(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
         [WorldValueFields.CurvatureCavity] = Curve(author: s => new WorldRenderCurvature(Cavity: s), present: static e => e.Lights.Curvature.Cavity, member: "cavity"),
@@ -215,10 +228,13 @@ public sealed class WorldValueDomainLawTests {
         Path: $"render.indirect.{member}",
         Present: (definition, mirror, domains) => present(Environment(definition: definition, domains: domains, mirror: mirror))
     );
-    private static Case Lit(Func<BindableScalar, WorldRenderLight> author, Func<WorldResolvedEnvironment, float> present, string member) => new(
+    private static Case Lit(Func<BindableScalar, WorldRenderLight> author, Func<WorldResolvedEnvironment, float>? present, string member, float[]? controls = null) => new(
         Author: s => Render(lighting: new WorldRenderLighting(Lights: [author(arg: s)])),
+        Controls: controls,
         Path: $"render.lighting.lights[0].{member}",
-        Present: (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror))
+        Present: ((present is null)
+            ? null
+            : (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror)))
     );
     private static Case Curve(Func<BindableScalar, WorldRenderCurvature> author, Func<WorldResolvedEnvironment, float>? present, string member, float[]? controls = null) => new(
         Author: s => Render(lighting: new WorldRenderLighting(Curvature: author(arg: s))),
@@ -228,8 +244,9 @@ public sealed class WorldValueDomainLawTests {
             ? null
             : (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror)))
     );
+    // A layer whose luminance is one presents its brightnesses as authored.
     private static Case Sky(Func<BindableScalar, WorldRenderSkyLayer> author, Func<WorldResolvedEnvironment, float>? present, string member) => new(
-        Author: s => Layer(layer: author(arg: s)),
+        Author: s => Layer(layer: ((author(arg: s) is { Luminance: null } plain) ? (plain with { Luminance = new BindableScalar(literal: 1f) }) : author(arg: s))),
         Path: $"render.sky.layers[0].{member}",
         Present: ((present is null)
             ? null

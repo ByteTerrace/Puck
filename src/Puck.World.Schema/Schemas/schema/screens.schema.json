@@ -250,6 +250,14 @@
         ],
         "default": "Nearest",
         "title": "GpuSamplerFilter"
+      },
+      "luminance": {
+        "description": "The display\u0027s peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld\u0027s unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world\u0027s own luminance whatever this says.",
+        "type": [
+          "number",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [

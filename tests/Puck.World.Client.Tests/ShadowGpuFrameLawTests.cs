@@ -80,6 +80,6 @@ public sealed class ShadowGpuFrameLawTests {
         Assert.Equal(expected: 1u, actual: frame.Lights[0].Shadows);
         Assert.Equal(expected: 0, actual: frame.Lights.ShadowSlots.FadeCount);
 
-        static WorldRenderLight.Directional Light(string name, float weight) => new(Name: name, Shadow: WorldShadowMode.Auto, Weight: new BindableScalar(literal: weight));
+        static WorldRenderLight.Directional Light(string name, float weight) => new(Name: name, Shadow: WorldShadowMode.Auto, Illuminance: new BindableScalar(literal: weight));
     }
 }

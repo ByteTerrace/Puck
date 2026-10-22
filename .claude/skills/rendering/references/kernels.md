@@ -266,8 +266,8 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow`
-selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with) (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect`
+selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
 isolates the raster. To see what a shadow cascade sees, place a camera at the
 shaded point looking along the sun direction under `material-id`.

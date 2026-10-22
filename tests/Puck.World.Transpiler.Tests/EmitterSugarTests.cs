@@ -656,6 +656,45 @@ public class EmitterSugarTests {
         Assert.False(condition: effect.ContainsKey(propertyName: "key"));
     }
     [Fact]
+    public void PhotometricFieldsTakeTheirOneUnitAndPassItThrough() {
+        // Each light quantity is native in its one unit, which a suffix names and nothing converts; a point's and a
+        // spot's power and intensity qualify by the call, since a rim's `power` is an exponent.
+        var (json, diagnostics) = WorldSources.Lower(body: """
+            host {
+                a: directional(illuminance: 100000lx, temperature: 5500K)
+                b: point(power: 800lm)
+                c: spot(intensity: 300cd, angle: 30deg)
+                d: rim(power: 3)
+                e: gradient(luminance: 10000nits)
+            }
+            """);
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: diagnostics.FormatReport("")
+        );
+        var host = Assert.IsType<JsonObject>(@object: json["host"]);
+
+        Assert.Equal(100000d, LoweredNumbers.AsDouble(node: host["a"]!["illuminance"]));
+        Assert.Equal(5500d, LoweredNumbers.AsDouble(node: host["a"]!["temperature"]));
+        Assert.Equal(800d, LoweredNumbers.AsDouble(node: host["b"]!["power"]));
+        Assert.Equal(300d, LoweredNumbers.AsDouble(node: host["c"]!["intensity"]));
+        Assert.Equal(Math.Round(digits: 6, value: (Math.PI / 6d)), LoweredNumbers.AsDouble(node: host["c"]!["angle"]), 6);
+        Assert.Equal(10000d, LoweredNumbers.AsDouble(node: host["e"]!["luminance"]));
+    }
+    [Fact]
+    public void APhotometricFieldWithAnotherQuantitysUnitReportsPuck025() => WorldSources.AssertRefused(
+        label: nameof(APhotometricFieldWithAnotherQuantitysUnitReportsPuck025),
+        refusal: new(
+            Body: """
+                host {
+                    a: point(power: 800lx)
+                }
+                """,
+            Code: "PUCK025",
+            Needle: "power: 800lx"
+        )
+    );
+    [Fact]
     public void RadiansFieldConvertsDegreesAndPassesThroughRadians() {
         // `orbit`'s named-argument keys thread as the CallExpressionNode's own field keys regardless of the
         // enclosing property's own name, so this exercises the table without needing real seatRig semantics.

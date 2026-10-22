@@ -86,6 +86,32 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   the draw there.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **The frame shades luminance in nits, and each view's composite applies its
+  exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
+  A light record carries illuminance or intensity over π; emission, sky layers
+  and displays are nits. A new constant meant as a display colour (an outline,
+  a grid, a placeholder glass) is divided by `passGroup.exposure` or it vanishes
+  outdoors and blows out indoors. A window's view and a sky layer's view publish
+  nits under the window share of their exposure (`SdfViewSnapshot.Unexposed`,
+  `SdfPhotometry.WindowAdaptation`), and the opening applies the rest of the
+  viewer's. A point or spot light's falloff is exactly zero at its range, each
+  view shades only the lights its frustum may reach (`SdfLightSelection`, the
+  pass block's `lightMask`), and a static one is occluded by the irradiance
+  volume's visibility bits (`SdfLight.IsTraced`, `sdfMeshLightVisibility`): a
+  fixture that lights through a slab is an anchored light or a volume that
+  holds no probe there. `world.exposure` reads each view's EV and meter.
+- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and the
+  gather feeds the indirect light, the reflection and every traced light's
+  visibility; a probe artefact (a band along a wall) shows in
+  `world.debug-view indirect` apart from the direct light. The volume a view
+  reads is filtered over the neighbours each probe sees
+  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies within its
+  depth cube along one axis (`sdfMeshProbeDepthVisibility`): a leak through a
+  wall off the axes, or a storey the 2 m lattice straddles, is the lattice's
+  coarseness. The composite's local adaptation (`render.exposure.local`,
+  `sdfLocalAdaptationGain`) reads the same probes toward each surface, so a
+  surface lit wrongly by the volume is also exposed wrongly by it. A nested
+  world's views read their own volume at their own authored tier.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

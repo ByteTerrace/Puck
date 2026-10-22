@@ -15,7 +15,7 @@ public sealed class ShadowFrameLawTests {
     private static WorldRenderLight.Directional Light(string name, float weight, WorldShadowMode mode = WorldShadowMode.Auto) => new(
         Name: name,
         Color: new BindableColor(Raw: "#FFFFFF"),
-        Weight: new BindableScalar(literal: weight),
+        Illuminance: new BindableScalar(literal: weight),
         Shadow: mode
     );
     private static WorldDefinition Definition(int slots, params WorldRenderLight[] lights) => Fixtures.BuildDocument() with {
@@ -109,10 +109,10 @@ public sealed class ShadowFrameLawTests {
 
     private static WorldDefinition FadingDefinition() {
         var definition = Definition(2,
-            Light("a", 0f) with { Weight = Weights(half: 1f, quarter: 1f, start: 4f) },
-            Light("c", 0f) with { Weight = Weights(half: 0f, quarter: 0f, start: 3f) },
-            Light("b", 0f) with { Weight = Weights(half: 4f, quarter: 4f, start: 0f) },
-            Light("d", 0f) with { Weight = Weights(half: 3f, quarter: 3f, start: 0f) });
+            Light("a", 0f) with { Illuminance = Weights(half: 1f, quarter: 1f, start: 4f) },
+            Light("c", 0f) with { Illuminance = Weights(half: 0f, quarter: 0f, start: 3f) },
+            Light("b", 0f) with { Illuminance = Weights(half: 4f, quarter: 4f, start: 0f) },
+            Light("d", 0f) with { Illuminance = Weights(half: 3f, quarter: 3f, start: 0f) });
 
         return definition with {
             RenderRaw = definition.Render with {
@@ -126,7 +126,7 @@ public sealed class ShadowFrameLawTests {
     [Fact]
     public void KeyedWeightSelectsAtDeliveryWhileTheFrameStillPresentsThePreviousTick() {
         var definition = Definition(1,
-            Light("rising", 0f) with { Weight = Weights(half: 2f, quarter: 1f, start: 0f) },
+            Light("rising", 0f) with { Illuminance = Weights(half: 2f, quarter: 1f, start: 0f) },
             Light("steady", 1f));
         var mirror = ClientFixtures.StateMirror(definition: definition);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
@@ -162,7 +162,7 @@ public sealed class ShadowFrameLawTests {
         Assert.Equal(expected: 0, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
     }
     [Fact]
-    public void BoundColorAndAdvancingWeightUseCurrentDeliveredSamplesForLuminance() {
+    public void AdvancingIlluminanceUsesCurrentDeliveredSamplesForLuminance() {
         var power = new WorldStateRow(
             Name: CellName.Parse(candidate: "power"),
             Kind: CellKind.Int,
@@ -177,9 +177,10 @@ public sealed class ShadowFrameLawTests {
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Text(value: "#FF0000"))]
         );
         var weight = new BindableScalar(binding: "state.power");
+        // A light's colour is scaled to unit luminance, so its tint leaves its luminance its illuminance.
         var definition = Definition(1,
-            Light("bound", 0f) with { Color = new BindableColor(Raw: "state.tint"), Weight = weight },
-            Light("steady", 0.5f)).WithWorldState(rows: [power, tint]);
+            Light("bound", 0f) with { Color = new BindableColor(Raw: "state.tint"), Illuminance = weight },
+            Light("steady", 3f)).WithWorldState(rows: [power, tint]);
         var mirror = ClientFixtures.StateMirror(definition: definition);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
@@ -196,16 +197,16 @@ public sealed class ShadowFrameLawTests {
         var selected = Assert.Single(collection: Slots(resolver: resolver, tick: (2UL * FixedTickConversion.TicksPerSecond)));
 
         Assert.Equal(expected: "bound", actual: selected.Candidate.Name);
-        Assert.Equal(expected: (4d * 0.2126d), actual: selected.Candidate.Luminance, precision: 12);
+        Assert.Equal(expected: 4d, actual: selected.Candidate.Luminance, precision: 12);
         mirror.Apply(fraction: 1f);
         Assert.Equal(expected: 0, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
     }
     [Fact]
     public void DeliveriesWithoutFramesPreserveTheSlotAcquiredAtTheIntermediateTick() {
         var definition = Definition(2,
-            Light("first", 0f) with { Weight = Weights(half: 2f, quarter: 0f, start: 3f) },
-            Light("second", 0f) with { Weight = Weights(half: 0f, quarter: 3f, start: 2f) },
-            Light("third", 0f) with { Weight = Weights(half: 3f, quarter: 2f, start: 0f) });
+            Light("first", 0f) with { Illuminance = Weights(half: 2f, quarter: 0f, start: 3f) },
+            Light("second", 0f) with { Illuminance = Weights(half: 0f, quarter: 3f, start: 2f) },
+            Light("third", 0f) with { Illuminance = Weights(half: 3f, quarter: 2f, start: 0f) });
         var mirror = ClientFixtures.StateMirror(definition: definition);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
@@ -270,8 +271,8 @@ public sealed class ShadowFrameLawTests {
         );
 
         var definition = Definition(2,
-            Light("first", 0f) with { Weight = new BindableScalar(binding: "state.weights.first") },
-            Light("second", 0f) with { Weight = new BindableScalar(binding: "state.weights.second") }
+            Light("first", 0f) with { Illuminance = new BindableScalar(binding: "state.weights.first") },
+            Light("second", 0f) with { Illuminance = new BindableScalar(binding: "state.weights.second") }
         ).WithWorldState(rows: [WeightsRow(first: 3, second: 2)]);
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
 
@@ -295,7 +296,7 @@ public sealed class ShadowFrameLawTests {
     public void BootShadowSelectionWaitsForTheSnapshotsFieldCellsAfterStateDelivery() {
         var weight = new BindableScalar(binding: "state.heat.0");
         var definition = Fixtures.WithLattice(
-            definition: Definition(1, Light("field", 0f) with { Weight = weight }, Light("steady", 1f)),
+            definition: Definition(1, Light("field", 0f) with { Illuminance = weight }, Light("steady", 1f)),
             composite: new WorldFieldsSection(
                 Lattice: new WorldFieldLatticeDefinition(
                     Origin: new DocumentVector3(value: Vector3.Zero),
@@ -340,7 +341,7 @@ public sealed class ShadowFrameLawTests {
     public void BootAndSameTickReloadInstallFieldSelectionOnceBeforeNormalAdvancesResume() {
         var definition = Fixtures.WithLattice(
             definition: Definition(1,
-                Light("field", 0f) with { Weight = new BindableScalar(binding: "state.heat.0") },
+                Light("field", 0f) with { Illuminance = new BindableScalar(binding: "state.heat.0") },
                 Light("steady", 1f)),
             composite: new WorldFieldsSection(
                 Lattice: new WorldFieldLatticeDefinition(
@@ -381,8 +382,8 @@ public sealed class ShadowFrameLawTests {
     [Fact]
     public void SunDiscFollowsPresentedSlotZeroPreservesExplicitLightAndFallsBackWithoutSlots() {
         var definition = Definition(1,
-            Light("first", 0f) with { Weight = Weights(half: 0f, quarter: 0f, start: 2f) },
-            Light("second", 0f) with { Weight = Weights(half: 3f, quarter: 3f, start: 0f) });
+            Light("first", 0f) with { Illuminance = Weights(half: 0f, quarter: 0f, start: 2f) },
+            Light("second", 0f) with { Illuminance = Weights(half: 3f, quarter: 3f, start: 0f) });
 
         definition = definition with {
             RenderRaw = definition.Render with {
@@ -425,12 +426,12 @@ public sealed class ShadowFrameLawTests {
             Clock: "day",
             Keys: [
                 new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> {
-                    ["first"] = new WorldRenderLight.Directional(Weight: new BindableScalar(literal: 2f)),
-                    ["second"] = new WorldRenderLight.Directional(Weight: new BindableScalar(literal: 1f)),
+                    ["first"] = new WorldRenderLight.Directional(Illuminance: new BindableScalar(literal: 2f)),
+                    ["second"] = new WorldRenderLight.Directional(Illuminance: new BindableScalar(literal: 1f)),
                 }),
                 new WorldRenderLightingKey(At: 0.25d, Lights: new Dictionary<string, WorldRenderLight> {
-                    ["first"] = new WorldRenderLight.Directional(Weight: new BindableScalar(literal: 1f)),
-                    ["second"] = new WorldRenderLight.Directional(Weight: new BindableScalar(literal: 3f)),
+                    ["first"] = new WorldRenderLight.Directional(Illuminance: new BindableScalar(literal: 1f)),
+                    ["second"] = new WorldRenderLight.Directional(Illuminance: new BindableScalar(literal: 3f)),
                 }),
             ]
         );

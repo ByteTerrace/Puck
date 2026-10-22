@@ -27,6 +27,26 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// its document is validated.
 /// </summary>
 public static class WorldValueFields {
+    /// <summary>The brightest illuminance a directional light admits, in lux: twice the brightest sunlight at the Earth's
+    /// surface, so a weight authored as if it were lux, or lux authored as a weight, is caught by name.</summary>
+    public const float MaxIlluminance = 250000f;
+    /// <summary>The brightest luminous intensity a point or spot light admits, in candela: a stadium floodlight's.</summary>
+    public const float MaxIntensity = 10000000f;
+    /// <summary>The largest luminous power a point or spot light admits, in lumens.</summary>
+    public const float MaxPower = 100000000f;
+    /// <summary>The brightest luminance a sky layer, a rim, a fog or a medium admits, in nits: the sun's own disc.</summary>
+    public const float MaxLuminance = 2000000000f;
+
+    // The photometric domains the lights and the sky share.
+    private static readonly WorldValueDomain Temperature = new(Maximum: SdfPhotometry.MaximumTemperature, Minimum: SdfPhotometry.MinimumTemperature);
+    private static readonly WorldValueDomain Intensity = new(Maximum: MaxIntensity, Minimum: 0f);
+    private static readonly WorldValueDomain Power = new(Maximum: MaxPower, Minimum: 0f);
+    private static readonly WorldValueDomain Luminance = new(Maximum: MaxLuminance, Minimum: 0f);
+    private const string TemperatureWhy = "a colour temperature in kelvin, on the black-body locus between a candle's and a blue sky's";
+    private const string IntensityWhy = "a luminous intensity in candela";
+    private const string PowerWhy = "a luminous power in lumens";
+    private const string LuminanceWhy = "a luminance in nits";
+
     /// <summary>Explicit diffuse light admitted to indirect transport.</summary>
     public static WorldValueField IndirectLights { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Lights), WorldValueDomain.Unit);
     /// <summary>Material emission admitted to indirect transport.</summary>
@@ -43,8 +63,42 @@ public static class WorldValueFields {
     public static WorldValueField IndirectContact { get; } = new(typeof(WorldRenderIndirectApply), nameof(WorldRenderIndirectApply.Contact), WorldValueDomain.Unit);
     /// <summary>A light's indirect diffuse gain.</summary>
     public static WorldValueField LightBounce { get; } = new(typeof(WorldRenderLight), nameof(WorldRenderLight.Bounce), WorldValueDomain.NonNegative);
-    /// <summary>A directional light's weight.</summary>
-    public static WorldValueField DirectionalWeight { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Weight), WorldValueDomain.NonNegative);
+    /// <summary>A directional light's illuminance, in lux, up to twice the brightest sunlight at the Earth's surface.</summary>
+    public static WorldValueField DirectionalIlluminance { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Illuminance), new WorldValueDomain(
+        Maximum: MaxIlluminance,
+        Minimum: 0f
+    ), Why: "an illuminance in lux, which no sun exceeds");
+    /// <summary>A directional light's colour temperature, in kelvin.</summary>
+    public static WorldValueField DirectionalTemperature { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Temperature), Temperature, Why: TemperatureWhy);
+    /// <summary>A point light's luminous intensity, in candela.</summary>
+    public static WorldValueField PointIntensity { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Intensity), Intensity, Why: IntensityWhy);
+    /// <summary>A point light's luminous power, in lumens.</summary>
+    public static WorldValueField PointPower { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Power), Power, Why: PowerWhy);
+    /// <summary>A point light's colour temperature, in kelvin.</summary>
+    public static WorldValueField PointTemperature { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Temperature), Temperature, Why: TemperatureWhy);
+    /// <summary>A spot light's luminous intensity along its aim, in candela.</summary>
+    public static WorldValueField SpotIntensity { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.Intensity), Intensity, Why: IntensityWhy);
+    /// <summary>A spot light's luminous power, in lumens.</summary>
+    public static WorldValueField SpotPower { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.Power), Power, Why: PowerWhy);
+    /// <summary>A spot light's colour temperature, in kelvin.</summary>
+    public static WorldValueField SpotTemperature { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.Temperature), Temperature, Why: TemperatureWhy);
+    /// <summary>A spot light's outer half angle, in radians, above zero and up to a quarter turn.</summary>
+    public static WorldValueField SpotAngle { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.Angle), new WorldValueDomain(
+        Maximum: (MathF.PI / 2f),
+        Minimum: 0f,
+        MinimumOpen: true
+    ), Why: "a cone wider than a hemisphere is a point light");
+    /// <summary>A spot light's inner half angle, in radians, up to a quarter turn.</summary>
+    public static WorldValueField SpotInnerAngle { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.InnerAngle), new WorldValueDomain(
+        Maximum: (MathF.PI / 2f),
+        Minimum: 0f
+    ));
+    /// <summary>A sky layer's luminance, in nits.</summary>
+    public static WorldValueField SkyLayerLuminance { get; } = new(typeof(WorldRenderSkyLayer), nameof(WorldRenderSkyLayer.Luminance), Luminance, Why: LuminanceWhy);
+    /// <summary>The fog's luminance, in nits.</summary>
+    public static WorldValueField FogLuminance { get; } = new(typeof(WorldRenderFog), nameof(WorldRenderFog.Luminance), Luminance, Why: LuminanceWhy);
+    /// <summary>The medium's luminance, in nits.</summary>
+    public static WorldValueField MediumLuminance { get; } = new(typeof(WorldRenderMedium), nameof(WorldRenderMedium.Luminance), Luminance, Why: LuminanceWhy);
     /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.</summary>
     public static WorldValueField DirectionalAngularRadius { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.AngularRadius), new WorldValueDomain(
         Maximum: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
@@ -59,14 +113,10 @@ public static class WorldValueFields {
     public static WorldValueField PanelIntensity { get; } = new(typeof(WorldRenderSkyLayer.Panel), nameof(WorldRenderSkyLayer.Panel.Intensity), WorldValueDomain.NonNegative);
     /// <summary>A sky panel's blur.</summary>
     public static WorldValueField PanelBlur { get; } = new(typeof(WorldRenderSkyLayer.Panel), nameof(WorldRenderSkyLayer.Panel.Blur), WorldValueDomain.NonNegative);
-    /// <summary>A rim light's weight.</summary>
-    public static WorldValueField RimWeight { get; } = new(typeof(WorldRenderLight.Rim), nameof(WorldRenderLight.Rim.Weight), WorldValueDomain.NonNegative);
+    /// <summary>A rim light's luminance, in nits.</summary>
+    public static WorldValueField RimLuminance { get; } = new(typeof(WorldRenderLight.Rim), nameof(WorldRenderLight.Rim.Luminance), Luminance, Why: LuminanceWhy);
     /// <summary>A rim light's power.</summary>
     public static WorldValueField RimPower { get; } = new(typeof(WorldRenderLight.Rim), nameof(WorldRenderLight.Rim.Power), WorldValueDomain.NonNegative);
-    /// <summary>A point light's radius.</summary>
-    public static WorldValueField PointRadius { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Radius), WorldValueDomain.Positive);
-    /// <summary>A point light's weight.</summary>
-    public static WorldValueField PointWeight { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Weight), WorldValueDomain.NonNegative);
     /// <summary>An occluder's radius.</summary>
     public static WorldValueField OccluderRadius { get; } = new(typeof(WorldRenderLight.Occluder), nameof(WorldRenderLight.Occluder.Radius), WorldValueDomain.Positive);
     /// <summary>An occluder's weight.</summary>
@@ -224,16 +274,26 @@ public static class WorldValueFields {
     public static IReadOnlyList<WorldValueField> All { get; } = [
         IndirectLights, IndirectEmission, IndirectScreens, IndirectSky, IndirectFeedback, IndirectIntensity, IndirectContact,
         LightBounce,
-        DirectionalWeight,
+        DirectionalIlluminance,
+        DirectionalTemperature,
         DirectionalAngularRadius,
         PanelIntensity,
         PanelBlur,
         EnvironmentAmbient,
         EnvironmentReflection,
-        RimWeight,
+        RimLuminance,
         RimPower,
-        PointRadius,
-        PointWeight,
+        PointIntensity,
+        PointPower,
+        PointTemperature,
+        SpotIntensity,
+        SpotPower,
+        SpotTemperature,
+        SpotAngle,
+        SpotInnerAngle,
+        SkyLayerLuminance,
+        FogLuminance,
+        MediumLuminance,
         OccluderRadius,
         OccluderWeight,
         CurvatureCavity,

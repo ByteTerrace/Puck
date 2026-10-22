@@ -41,16 +41,15 @@ public readonly record struct SdfCurvature(float Cavity, float Rim, float Ink, f
 public sealed class SdfLights {
     /// <summary>The pinned penumbra half-slope.</summary>
     public const float DefaultPenumbraSlope = (1f / 9f);
-    /// <summary>The default point-light falloff radius, in world units.</summary>
-    public const float DefaultPointRadius = 1f;
-    /// <summary>The default point-light weight.</summary>
-    public const float DefaultPointWeight = 1f;
+    /// <summary>The default point or spot light's luminous intensity, in candela: about a 1,000-lumen bulb's.</summary>
+    public const float DefaultPointIntensity = 80f;
     /// <summary>The default rim exponent.</summary>
     public const float DefaultRimPower = 3f;
-    /// <summary>The pinned sun diffuse weight.</summary>
-    public const float DefaultSunWeight = 0.85f;
-    /// <summary>The most lights a frame carries: the records of the lights table.</summary>
-    public const int MaxLights = 8;
+    /// <summary>The pinned sun's illuminance, in lux: a clear midday sun.</summary>
+    public const float DefaultSunIlluminance = 100000f;
+    /// <summary>The most lights a frame carries: the records of the lights table. Each view shades only the lights it
+    /// can see (<see cref="SdfLightSelection"/>), whose mask its pass block carries one bit a record.</summary>
+    public const int MaxLights = 128;
     /// <summary>The largest penumbra half-slope a directional light admits; the shadow gather's cone is three times
     /// it and must stay a valid chord.</summary>
     public const float MaxPenumbraSlope = 0.3f;
@@ -105,7 +104,7 @@ public sealed class SdfLights {
                 Kind: SdfLightKind.Directional,
                 Direction: DefaultSunDirection,
                 Color: Vector3.One,
-                Weight: DefaultSunWeight,
+                Weight: SdfPhotometry.DirectionalWeight(lux: DefaultSunIlluminance),
                 Param: DefaultPenumbraSlope,
                 Shadows: true
             )

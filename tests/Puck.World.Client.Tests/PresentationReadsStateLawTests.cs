@@ -143,7 +143,7 @@ public sealed class PresentationReadsStateLawTests {
                 ), new WorldRenderSkyStop(
                     Elevation: 1f,
                     Color: new BindableColor(Raw: "#1B2350FF")
-                )])]),
+                )]) { Luminance = new BindableScalar(literal: 1f) }]),
             },
         };
 
@@ -181,7 +181,7 @@ public sealed class PresentationReadsStateLawTests {
                 ), new WorldRenderSkyStop(
                     Elevation: 1f,
                     Color: new BindableColor(Raw: "state.colors.zenith")
-                )])]);
+                )]) { Luminance = new BindableScalar(literal: 1f) }]);
         var colorsRow = new WorldStateRow(
             Name: CellName.Parse(candidate: "colors"),
             Kind: CellKind.Text,
