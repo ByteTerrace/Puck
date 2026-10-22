@@ -90,6 +90,35 @@ public sealed class ReplayMachineDriveLawTests {
 
         Assert.Single(collection: tape.StartCheckpoint!.Machines!.Instances);
         Assert.Single(collection: tape.StartCheckpoint.Machines.Slots);
+        // The tape pins the core at its end: the re-drive's core digests to it, and a doctored digest names the machine.
+        Assert.Equal(expected: Machine, actual: Assert.Single(collection: tape.RecordedMachineDigests).Name);
+        Assert.Equal(expected: 1, actual: stop.Verdict.Primary.MachinesCompared);
+        WorldReplaySnapshot.WriteFile(
+            path: harness.Tape.PathFor(name: "doctored"),
+            recording: new WorldReplaySnapshot {
+                Authority = tape.Authority,
+                DefinitionJson = tape.DefinitionJson,
+                DocumentDirectory = tape.DocumentDirectory,
+                DocumentPath = tape.DocumentPath,
+                Instance = tape.Instance,
+                MountedAddons = tape.MountedAddons,
+                PipelineSourceDirectory = tape.PipelineSourceDirectory,
+                RecordedAuthoritativeHashes = tape.RecordedAuthoritativeHashes,
+                RecordedComponentHashes = tape.RecordedComponentHashes,
+                RecordedHashes = tape.RecordedHashes,
+                RecordedMachineDigests = [new WorldReplayMachineDigest(Digest: (tape.RecordedMachineDigests[0].Digest ^ 1UL), Name: Machine)],
+                Seats = tape.Seats,
+                SimulationRate = tape.SimulationRate,
+                StartCheckpoint = tape.StartCheckpoint,
+                Ticks = tape.Ticks,
+            }
+        );
+
+        var doctored = harness.Tape.Verify(name: "doctored");
+
+        Assert.False(condition: doctored.Passing);
+        Assert.True(condition: (doctored.Primary.DivergedAt < 0));
+        Assert.Contains(expectedSubstring: $"machine '{Machine}' core image", actualString: doctored.Primary.MachineDivergence!);
 
         for (var drive = 0; (drive < 2); drive++) {
             // The live world has moved on past the recording since the last drive, machines included.

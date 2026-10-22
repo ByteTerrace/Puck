@@ -97,6 +97,16 @@ public sealed partial class WorldReplaySnapshot {
             reader: ref reader,
             what: "component hash row"
         );
+        // 10 = a one-character name's length prefix and byte plus the digest.
+        var recordedMachineDigests = ReadTapeArray(
+            minimumBytesEach: 10,
+            readItem: static (ref WireReader r) => new WorldReplayMachineDigest(
+                Name: r.ReadRequiredString(field: "machine digest name"),
+                Digest: r.ReadUInt64()
+            ),
+            reader: ref reader,
+            what: "machine digest"
+        );
         var definitionJson = reader.ReadBlock(
             field: "definition",
             maxBytes: WireLimits.MaxDocumentBytes
@@ -242,6 +252,9 @@ public sealed partial class WorldReplaySnapshot {
         ) {
             throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedComponentHashes.Length} per-component hash rows for {ticks.Length} ticks, or a row not {WorldStateHashComposition.Authoritative.Count} components wide.");
         }
+        if (recordedMachineDigests.Select(selector: static digest => digest.Name).Distinct(comparer: StringComparer.Ordinal).Count() != recordedMachineDigests.Length) {
+            throw new InvalidDataException(message: "Corrupt .puckreplay recording: a machine is digested twice at the tape's end.");
+        }
 
         // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
         // tape holds is doctored or truncated after the header.
@@ -304,6 +317,7 @@ public sealed partial class WorldReplaySnapshot {
             RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
             RecordedComponentHashes = recordedComponentHashes,
             RecordedHashes = recordedHashes,
+            RecordedMachineDigests = recordedMachineDigests,
             Seats = seats,
             SimulationRate = simulationRate,
             StartCheckpoint = startCheckpoint,
@@ -408,6 +422,13 @@ public sealed partial class WorldReplaySnapshot {
                 items: row,
                 writeItem: static (w2, hash) => w2.WriteUInt64(value: hash)
             )
+        );
+        writer.WriteArray(
+            items: recording.RecordedMachineDigests,
+            writeItem: static (w, digest) => {
+                w.WriteString(value: digest.Name);
+                w.WriteUInt64(value: digest.Digest);
+            }
         );
         writer.WriteBlock(value: recording.DefinitionJson);
 

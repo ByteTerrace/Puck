@@ -145,6 +145,22 @@ public sealed partial class WorldReplayTape {
             : $"first divergence at tick {drive.DivergedAt}"
         );
 
+        // A drive that reached the tape's end stands where the recording stopped, so the live cores are read against
+        // the digests the tape pins there; the capture drains every queued machine once.
+        if (
+            completed &&
+            (drive.Target == drive.Source.TickCount) &&
+            (drive.Source.RecordedMachineDigests.Count > 0)
+        ) {
+            var live = WorldReplaySnapshot.MachineDigests(machines: m_liveServer.Machines);
+
+            verdict += ((live.Count == 0)
+                ? "; machine cores not compared (the live host cannot capture them)"
+                : ((WorldReplaySnapshot.DescribeMachineDivergence(recorded: drive.Source.RecordedMachineDigests, replayed: live) is { } divergence)
+                    ? $"; {divergence}"
+                    : $"; machine cores matched ({drive.Source.RecordedMachineDigests.Count})"));
+        }
+
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
                 channel: "replay.drive",

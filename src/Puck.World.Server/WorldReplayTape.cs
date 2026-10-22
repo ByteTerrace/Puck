@@ -226,6 +226,13 @@ public sealed partial class WorldReplayTape {
                     left: liveComponents[divergedAt],
                     right: shadowComponents[divergedAt]
                 )
+                : null),
+            MachinesCompared: recording.RecordedMachineDigests.Count,
+            MachineDivergence: ((recording.RecordedMachineDigests.Count > 0)
+                ? WorldReplaySnapshot.DescribeMachineDivergence(
+                    recorded: recording.RecordedMachineDigests,
+                    replayed: replayedTrace.Machines
+                )
                 : null)
         );
     }
@@ -571,7 +578,12 @@ public sealed partial class WorldReplayTape {
         // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.
         // The verify side re-drives a fresh world and compares against THIS, so a MATCH is a genuine live-vs-replay
         // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
-        var recording = SnapshotRecording(companions: StopCompanions());
+        // The live cores' digests at the last recorded tick, the one point a tape pins them: the capture drains every
+        // queued machine once, here, never per tick.
+        var recording = SnapshotRecording(
+            companions: StopCompanions(),
+            machineDigests: WorldReplaySnapshot.MachineDigests(machines: m_liveServer.Machines)
+        );
         string path;
 
         try {

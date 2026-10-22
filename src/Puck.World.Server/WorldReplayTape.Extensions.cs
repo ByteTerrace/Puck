@@ -33,7 +33,7 @@ public sealed partial class WorldReplayTape {
         return ("puck-replay:" + Convert.ToBase64String(inArray: stream.ToArray()));
     });
 
-    private WorldReplaySnapshot SnapshotRecording(IReadOnlyList<WorldReplaySnapshot>? companions = null) {
+    private WorldReplaySnapshot SnapshotRecording(IReadOnlyList<WorldReplaySnapshot>? companions = null, IReadOnlyList<WorldReplayMachineDigest>? machineDigests = null) {
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_definitionJson is null) ||
@@ -59,6 +59,7 @@ public sealed partial class WorldReplayTape {
                 ? [.. m_liveComponentHashes]
                 : []),
             RecordedHashes = [.. m_liveHashes],
+            RecordedMachineDigests = (machineDigests ?? []),
             Seats = [.. m_seats],
             SimulationRate = m_recordRateHz,
             StartCheckpoint = m_startCheckpoint,

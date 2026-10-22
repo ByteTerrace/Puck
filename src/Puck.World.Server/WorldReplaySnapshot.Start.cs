@@ -70,6 +70,7 @@ public sealed partial class WorldReplaySnapshot {
         RecordedAuthoritativeHashes = RecordedAuthoritativeHashes,
         RecordedComponentHashes = RecordedComponentHashes,
         RecordedHashes = pose,
+        RecordedMachineDigests = RecordedMachineDigests,
         Seats = Seats,
         SimulationRate = SimulationRate,
         StartCheckpoint = StartCheckpoint,

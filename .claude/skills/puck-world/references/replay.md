@@ -389,7 +389,16 @@ are derived again from authored kit/producer names and current state handles on
 restore; their diagnostic evaluation/failure counters do not enter the hash.
 It excludes the rest of the document, grants, journal, HUD/presentation,
 pending transport work, and screen-machine cores. It is not a whole-world
-checkpoint comparison. A kit's `dynamics`-shaped planar follower state rides alongside the hashed pose
+checkpoint comparison. The cores are pinned once instead, at the tape's end:
+`replay.stop` captures the live host's checkpoint (one drain of every queued
+machine) and records each core image's FNV-1a digest
+(`WorldReplaySnapshot.RecordedMachineDigests`, `MachineDigests`); the stop and
+verify re-drives digest the shadow's cores after the last tick and a drive
+that reaches the tape's end digests the live host's, each naming a core that
+re-derived another state (`WorldReplayVerdict.MachineDivergence`, the verdict
+reads `machine cores MATCH (3)` otherwise). A per-tick core digest would wait
+on every queued machine worker every tick, so the history keeps none and says
+so (`MachineCoresOutsideProof`). A kit's `dynamics`-shaped planar follower state rides alongside the hashed pose
 (`WorldBody`'s own Q32 follower raws feed `m_planarVelocity`, which the
 tracked pose derives from every tick), so a follower divergence still surfaces
 as a hash MISMATCH on the very next tick it moves the pose — but the follower

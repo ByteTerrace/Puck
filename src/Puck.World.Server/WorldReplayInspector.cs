@@ -142,6 +142,14 @@ public sealed class WorldReplayInspector {
         foreach (var receipt in recording.MountedAddons) {
             lines.Add(item: $"{Prefix}addon '{receipt.Name}' hash={receipt.Hash} fuel={receipt.Fuel}/tick]");
         }
+
+        if (recording.RecordedMachineDigests.Count == 0) {
+            lines.Add(item: $"{Prefix}machine cores none pinned]");
+        }
+
+        foreach (var digest in recording.RecordedMachineDigests) {
+            lines.Add(item: $"{Prefix}machine '{digest.Name}' core=0x{digest.Digest:X16} at the tape's end]");
+        }
     }
     // One entity's changed channels against its previous submission — appended as "p1 forward=1 strafe=-0.5" (seats)
     // or "body:7 turn=0.25" (everything else); nothing when the vector is unchanged. `previous` is advanced either way.

@@ -160,7 +160,9 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 ? "every authority replayed, but a crossing's other half is on no tape in this set, so the crossing is not verified"
                 : ((verdict.Primary.DivergedAtStart || verdict.Companions.Any(predicate: static companion => companion.Verdict.DivergedAtStart))
                     ? "the start the re-drive restored is not where the live session stood when the recording armed"
-                    : "the start matched, so this is TRAJECTORY drift — investigate the tick above"
+                    : (((verdict.Primary.DivergedAt < 0) && verdict.Companions.All(predicate: static companion => (companion.Verdict.DivergedAt < 0)))
+                        ? "every authoritative tick matched; a machine core re-derived another state than the recording pinned at the tape's end"
+                        : "the start matched, so this is TRAJECTORY drift — investigate the tick above")
                 )
             );
 
@@ -215,7 +217,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.stop",
-            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH at tick 0 = the start the re-drive restored is not where the session stood at the arm; later = trajectory drift; either names the authoritative hash components that differ at that tick, which only this in-session comparison can read) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
+            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH at tick 0 = the start the re-drive restored is not where the session stood at the arm; later = trajectory drift; either names the authoritative hash components that differ at that tick; the live machine cores' image digests are pinned at the tape's end and the re-drive's cores are read against them, so a core that re-derived another state is named) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
@@ -239,7 +241,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.verify",
-            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check). Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
+            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check) and each machine core's image digest at the tape's end against the one the recording pinned. Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
             handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
