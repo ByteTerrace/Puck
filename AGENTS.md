@@ -116,7 +116,7 @@ settles a question, decide by that principle and say why.
 3. **The game is greenfield.** `Puck.World` and everything under
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`
-   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2`;
+   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 2`;
    0 or less runs until the window closes). `Puck.World` boots only the world
    it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
@@ -221,6 +221,9 @@ tools. In brief:
 - Run every `puck` verb from a copy of the head's own built CLI in a directory
   only your lane uses, never the global `puck` tool.
 - Never test binaries a failed build left behind.
+- Boot every World you start with `--devices none`: a World opens the owner's
+  pads and reads their keyboard and mouse otherwise
+  ([the ruling](.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 - GPU legs run one at a time per GPU, under a grant the lead issues, and CPU
   work runs beside them: a correctness leg's verdict does not depend on load,
   and two GPU-bound jobs never overlap. A failed leg is re-run once alone: a

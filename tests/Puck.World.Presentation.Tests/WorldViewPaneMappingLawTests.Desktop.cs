@@ -103,6 +103,47 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(expected: (returned + 1), actual: desktop.Returned);
     }
 
+    // --devices none: a seat that frames a desktop still never claims the system-wide chord, and a press of it leaves nothing.
+    [Fact]
+    public void ADeviceFreeDoorNeverClaimsTheSystemChord() {
+        var (screens, instance) = EngageableScreen();
+        var desktop = new DesktopWindow();
+        var anchor = new WorldPerceptionAnchor();
+        var seats = new Seats(feel: null);
+        var passthrough = Door(
+            anchor: anchor,
+            seats: seats,
+            windows: new InstanceWindows(
+                name: instance,
+                window: desktop
+            )
+        );
+        var deviceFree = new WorldSourcePassthrough(
+            anchor: anchor,
+            graphs: m_host,
+            seats: seats,
+            time: new ManualTime(),
+            viewports: new WorldSeatViewports(),
+            windows: new InstanceWindows(
+                name: instance,
+                window: desktop
+            )
+        ) { ClaimsSystemChord = false };
+
+        m_host.Screens = screens;
+        m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: WholeDisplay));
+        FramedFrame(framed: true);
+        FramedFrame(framed: true);
+        anchor.PublishEngagedScreen(screenIndex: 0, slot: 0);
+        desktop.Chords++;
+
+        Assert.Null(@object: deviceFree.TakeWarp());
+        Assert.False(condition: desktop.ClaimsChord);
+        Assert.Empty(collection: seats.Left);
+        Assert.Null(@object: passthrough.TakeWarp());
+        Assert.True(condition: desktop.ClaimsChord);
+    }
+
     // A 200 by 100 pixel desktop that records what it is given.
     private sealed class DesktopWindow : ISourcePassthroughDesktop {
         public List<(int Button, bool Pressed)> Buttons { get; } = [];

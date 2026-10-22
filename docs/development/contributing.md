@@ -529,8 +529,12 @@ that runner.
 Run the application to check composed game behavior, alongside relevant World tests:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 2
 ```
+
+`--devices none` opens no gamepad and drops the window's keyboard and mouse
+events, so the person at the machine never drives the run; agents always pass it
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 
 Use `Puck.World` for game verification. Do not add a `--validate-*` mode or
 a `Puck.Post` stage for game-specific behavior unless explicitly requested.

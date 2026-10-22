@@ -82,14 +82,18 @@ public static partial class CanaryCommand {
     // The boot-shape arguments of one leg process. An offscreen leg lets its world's host.presentation decide the shape
     // (a --headless value would force windowed or none over it), names the backend explicitly, and carries the run's
     // validation-layer choice for that backend. A windowed leg forces a window, and when its proof declares backends it
-    // names the backend and carries the validation-layer choice the same way.
+    // names the backend and carries the validation-layer choice the same way. Both boot with the physical input devices
+    // off (WorldDevices), so the owner's pads never drive a gate.
     private static string[] BootShapeArguments(CanaryManifest manifest, string? backend, bool debugLayers) => manifest.BootShape switch {
-        CanaryBootShape.Offscreen => BackendArguments(
-            backend: backend!,
-            debugLayers: debugLayers
-        ),
+        CanaryBootShape.Offscreen => [
+            .. WorldDevices.NoneArguments,
+            .. BackendArguments(
+                backend: backend!,
+                debugLayers: debugLayers
+            ),
+        ],
         CanaryBootShape.Headless => ["--headless", "true"],
-        _ => ["--headless", "false", .. ((backend is null)
+        _ => [.. WorldDevices.NoneArguments, "--headless", "false", .. ((backend is null)
             ? []
             : BackendArguments(
                 backend: backend,
