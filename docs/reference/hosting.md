@@ -267,6 +267,28 @@ brought forward stays composed at the signal until its swap chain is recreated
 (a resize recreates it). Direct3D 12 engages it whenever the window comes to
 the front.
 
+A World runs the same whether anyone can see its window, because agents' Worlds
+almost always run behind other windows. A window behind others, fully
+occluded, never activated or never shown keeps presenting into its swap chain,
+and the composed refresh paces it. A minimized window has no client area
+(`WM_SIZE` reports 0×0) and nothing to present into, so the windowed host
+composes each frame at the last extent the window had, skips the presenter's
+`BeginFrame` and `Present`, and the timer paces the iteration. The render root
+keeps its own frames in flight, as it does on the offscreen host, so readiness,
+bakes and captures (settled, presented and scheduled) progress while minimized
+exactly as in front. On the RTX 4070 (Direct3D 12, a 60 Hz signal on a
+48–165 Hz range, warm mesh store), each state stepped 30 ticks a second: 322
+ticks in 10.1 s with the window never shown, 354 in 10.05 s at the bottom of
+the z-order under two maximized windows, and 314 to 332 in 10 s minimized,
+booted minimized or minimized mid-run. A World booted minimized reported
+`[engine: ready at tick 38]` and `[bakes: settled at tick 43]`, and served a
+settled capture and a burst of four presented frames while still minimized.
+One booted minimized with an empty mesh store baked the world's 1,275 groups
+in 269 s without ever being shown and settled its bakes at tick 19,310, 668 s
+after launch, boot included.
+`host.frames` read an average of 16.65 to 16.77 ms over 300 to 600
+iterations in each state, the minimized ones with a present phase of zero.
+
 The simulation's fixed tick is unchanged by this. The pump still hands
 `FixedStepPump.Advance` the wall interval each iteration sampled and runs
 every whole step it covers, so a 30 Hz simulation steps on alternate 60 Hz
