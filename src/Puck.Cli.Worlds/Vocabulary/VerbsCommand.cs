@@ -45,6 +45,7 @@ public static class VerbsCommand {
             arguments: [
                 artifact,
                 "--world", Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
+                .. WorldDevices.NoneArguments,
                 "--headless", (headless ? "true" : "false"),
                 "--exit-after-seconds", "60",
                 "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),

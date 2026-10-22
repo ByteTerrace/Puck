@@ -106,6 +106,18 @@ public sealed partial class Win32DesktopPassthroughTests {
         desktop.ReturnForeground();
         Assert.Equal(expected: 6, actual: sent.Count);
     }
+    // THE LAW: a click on the host's own frame runs its caption button's command, the maximize button restoring a
+    // maximized window, and any other part of the frame runs none.
+    [Fact]
+    public void TheHostsOwnFrameRunsItsCaptionButtonsCommands() {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 14393)) { Assert.Skip(reason: "Requires Win32 with per-thread DPI contexts."); return; }
+
+        Assert.Equal(expected: 0xF020u, actual: Win32DesktopPassthrough.FrameCommandOf(hit: 8, zoomed: false));
+        Assert.Equal(expected: 0xF030u, actual: Win32DesktopPassthrough.FrameCommandOf(hit: 9, zoomed: false));
+        Assert.Equal(expected: 0xF120u, actual: Win32DesktopPassthrough.FrameCommandOf(hit: 9, zoomed: true));
+        Assert.Equal(expected: 0xF060u, actual: Win32DesktopPassthrough.FrameCommandOf(hit: 20, zoomed: true));
+        Assert.Null(@object: Win32DesktopPassthrough.FrameCommandOf(hit: 2, zoomed: false));
+    }
     // THE LAW: a monitor that is gone describes nothing and has no height, and refuses a zero handle by name.
     [Fact]
     public void AMonitorThatIsGoneDescribesNothing() {

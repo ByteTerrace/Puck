@@ -105,8 +105,13 @@ granted the GPU share it through one lease on the lead machine: before booting
 a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/gpu-lease`
 (atomic: it fails while another lane holds the lease), writes its lane name and
 the time into `gpu-lease/holder`, and removes the directory as soon as its
-World stops. A lane that finds the lease taken does CPU work and tries again
+World stops. Chain the boot on the `mkdir` (`mkdir … && …`), never run it as a
+separate step: a lane that carried on after a failed `mkdir` overwrote another
+lane's holder and then removed its lease. A lane that finds the lease taken does CPU work and tries again
 later, and never holds it longer than its batch of checks, at most 20 minutes.
+Every World a lane boots passes `--devices none`, so the owner's pads and
+keyboard never drive it
+([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 A lease older than an hour whose World is gone is stale and may be removed. The
 same rule gives `Puck.World.Tests` one run at a time (`.claude/heavy-lease`),
 since a run takes about 7 GB of the lead machine's 32 GB. Investigating
@@ -249,8 +254,8 @@ lead's HEAD (`worktree.baseRef` in `.claude/settings.json`), so their edits
 never touch the checkout the owner is pairing in. Every agent reaches the live
 World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
-the lead merges and reloads, or in a World of its own under a GPU grant, named
-by `world` on every call. Reads and captures of the live World are always
+the lead merges and reloads, or in a World of its own under a GPU grant (booted
+with `--devices none`), named by `world` on every call. Reads and captures of the live World are always
 allowed; a brief names the live mutations a lane may make. The machine belongs
 to the agents (the owner's ruling): the lead boots a World for a check and stops
 it when the check ends, and it leaves one running for the owner only when the

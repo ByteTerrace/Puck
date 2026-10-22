@@ -354,6 +354,16 @@ path is taken as-is), so the `.ico` travels beside the world file:
 Authoring neither wears the executable's own icon and `Puck: World`. An icon
 this OS cannot read falls back the same way rather than refusing the boot.
 
+**Physical devices.** A windowed World opens every gamepad and receives the
+window's keyboard and mouse events. `--devices none` opens no pad (no gamepad
+manager, arbiter or capture is registered) and drops every OS key, text and
+pointer event before a seat sees it; stdin, `player.signal`, `body.*`, schedule
+rows and MCP are unaffected, and stderr opens with `[world.host] physical input
+devices are off`. It is an operator's per-run choice with no document member, and
+the default is `all`. Agents and `puck` verbs that boot a World pass it
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+A headless or offscreen boot opens no device either way.
+
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device—the
 authoritative server, console, and tape only:
@@ -1804,8 +1814,11 @@ turn likewise, a move reaches nothing, and the desktop takes no keyboard: keys
 go wherever Windows sends them. A press whose point shows the World's own
 window, mirrored in the picture, is sent nowhere. Over a framed desktop the pad
 is the desktop's mouse, moving the system cursor across the monitor, and the
-leaving chord is claimed system-wide; leaving brings the World's window to the
-front. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
+leaving chord is claimed system-wide; leaving, however the seat leaves, brings
+the World's window to the front. The pad never holds a press on the World's
+own window frame, which Windows would answer with a modal loop on the World's
+window thread that only the pad's unsent release could end: a click there runs
+the caption button's command at once. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
 the worked case.
 A headless or offscreen boot has no window and no such verb.
 

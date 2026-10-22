@@ -77,6 +77,10 @@ public sealed partial class WorldSourcePassthrough : IWindowInputFilter, ISource
 
     /// <summary>Gets the router that hosts the keyboard focus.</summary>
     public SourcePassthroughRouter Router { get; }
+    /// <summary>Gets whether a framed desktop may claim the reserved chord system-wide, which reads the keyboard
+    /// whichever window has it. Defaults to <see langword="true"/>; a boot with no physical input devices sets it
+    /// <see langword="false"/>, so the host registers no system hotkey and ignores the chord.</summary>
+    public bool ClaimsSystemChord { get; init; } = true;
     /// <summary>Gets whether the pointer belongs to a passthrough source's window rather than the game
     /// (<see cref="SourcePassthroughRouter.HoldsPointer"/>), or lies on the framed picture of a window a local seat may
     /// open, read against the panes the display published last, so a pane hidden or moved under a resting pointer gives

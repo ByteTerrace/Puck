@@ -26,6 +26,8 @@ public sealed partial class WorldSourcePassthrough {
     private readonly Dictionary<KeyCode, Opened> m_padKeys = [];
     // The desktop the reserved chord is claimed for while a local seat frames it.
     private ISourcePassthroughDesktop? m_chordDesktop;
+    // The local seat that frames the chord's desktop.
+    private int m_chordSlot = -1;
     private long? m_lastAdvance;
     // The pad's exact pointer, in display pixels, while the pointer is where the pad last put it.
     private Vector2? m_padPosition;
@@ -128,9 +130,16 @@ public sealed partial class WorldSourcePassthrough {
         return false;
     }
     // Claims the reserved chord system-wide for the desktop a local seat frames, gives it back from one no seat frames,
-    // and leaves when the chord was pressed, whichever window had the keyboard.
+    // and leaves when the chord was pressed, whichever window had the keyboard. A desktop given back because its seat
+    // left the engagement brings the host's window back to the front, however the seat left (the pad's context button,
+    // the console), while one a reload replaced leaves the keyboard where it is.
     private void ClaimChord() {
+        if (!ClaimsSystemChord) {
+            return;
+        }
+
         ISourcePassthroughDesktop? framed = null;
+        var framedSlot = -1;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (TryFramedDesktop(
@@ -139,6 +148,7 @@ public sealed partial class WorldSourcePassthrough {
                 slot: slot
             )) {
                 framed = desktop;
+                framedSlot = slot;
 
                 break;
             }
@@ -149,10 +159,16 @@ public sealed partial class WorldSourcePassthrough {
         )) {
             if (m_chordDesktop is { } released) {
                 released.ClaimsChord = false;
+
+                if (m_anchor.EngagedScreen(slot: m_chordSlot) < 0) {
+                    released.ReturnForeground();
+                }
             }
 
             m_chordDesktop = framed;
         }
+
+        m_chordSlot = framedSlot;
         if (framed is null) {
             return;
         }

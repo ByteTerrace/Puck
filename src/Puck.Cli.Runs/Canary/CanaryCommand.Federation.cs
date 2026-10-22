@@ -461,6 +461,7 @@ public static partial class CanaryCommand {
                 artifact,
                 "--world", patchedWorldPaths[role.Id],
                 "--federation-key-file", keyPaths[role.Id],
+                "--devices", "none",
                 "--state-dir", stateDirectory,
                 "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
                 "--headless", ((manifest.BootShape == CanaryBootShape.Headless)

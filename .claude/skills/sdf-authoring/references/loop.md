@@ -84,7 +84,7 @@ against a threshold, never by bytes.
 
 ```bash
 dotnet run --project src/Puck.World -c Release -- \
-  --world <path> --exit-after-seconds N --state-dir <tmp> \
+  --world <path> --devices none --exit-after-seconds N --state-dir <tmp> \
   < script.txt > out.log 2> err.log
 ```
 
