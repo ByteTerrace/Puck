@@ -1,10 +1,10 @@
-// The garden: the debug world's portal destination, a small sunset plot with a green floor and a golden obelisk, so a
-// window onto it reads at a glance. The debug world's frame (`portal`) opens onto the arrival frame here, and the two
-// map as the identity: a body walking -Z through the debug frame arrives here at the same point, still walking -Z.
-// Turn round and the arrival frame is the way back. Walk on and the far frame, twelve metres further along the line the
-// spawn camera looks through the debug frame, shows the debug world turned about, so it is also a frame seen through a
-// frame from the debug world's spawn. Boot the debug world, never this one: it is reached through the debug world's
-// frame, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
+// The garden: a destination of the debug world's painting wing, a small sunset plot with a green floor and a golden
+// obelisk, so a window onto it reads at a glance. The debug world's garden painting (`painting-garden`, hung on the
+// north wall of the wing, paintings.puck) opens onto the arrival frame here: a body walking +Z into the painting comes
+// out of the arrival frame walking -Z. Turn round and the arrival frame is the way back. Walk on and the far frame,
+// twelve metres further along the line the painting's window looks along, shows the debug world again, so it is also a
+// frame seen through a frame from the wing. Boot the debug world, never this one: it is reached through the debug
+// world's painting, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -24,7 +24,7 @@ let frameGold = 0 // #C9A43A
 
 metadata {
   title: "Garden"
-  description: "The debug world's portal destination: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
+  description: "A destination of the debug world painting wing: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
 }
 
 // A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
@@ -86,8 +86,8 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The debug frame's counterpart, at its position and facing -Z, so the pair maps as the identity. Its glass is the
-  // way back: walking +Z into it arrives out of the debug frame walking +Z, towards the debug world's spawn.
+  // The garden painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
+  // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
   placement "arrival" {
     prototype: "frame"
     position [3, 0, -8]
@@ -98,7 +98,7 @@ placements {
         filter: linear
         portal {
           arrival: "mapped"
-          counterpart: "portal/glass"
+          counterpart: "painting-garden/glass"
           destination: "debug"
           travel: "body"
         }
@@ -112,9 +112,9 @@ placements {
     ]
   }
 
-  // The far frame stands on the line the spawn camera looks along through the debug frame and faces back along it, so
-  // the debug world's window onto the garden shows it. It also maps onto the debug frame, turned about: a body walking
-  // -Z into it arrives out of the debug frame walking +Z.
+  // The far frame stands on the line the painting's window looks along and faces back along it, so the debug world's
+  // window onto the garden shows it. It also maps onto the garden painting, face to face: a body walking -Z into it
+  // arrives out of the painting walking -Z, in front of the wing's north wall.
   placement "far" {
     prototype: "frame"
     position [5.5, 0, -20]
@@ -125,7 +125,7 @@ placements {
         filter: linear
         portal {
           arrival: "mapped"
-          counterpart: "portal/glass"
+          counterpart: "painting-garden/glass"
           destination: "debug"
           travel: "body"
         }

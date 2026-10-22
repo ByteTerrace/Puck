@@ -1,0 +1,284 @@
+// The night field: a destination of the debug world's painting wing, a small snowfield under stars with a row of glowing
+// lanterns and a pale crystal, so a window onto it reads at a glance beside the garden's sunset. The debug world's night
+// painting (`painting-night`, hung on the north wall of the wing, paintings.puck) opens onto the arrival frame here: a
+// body walking +Z into the painting comes out of the arrival frame walking -Z. Turn round and the arrival frame is the
+// way back. Boot the debug world, never this one: it is reached through the debug world's painting, and `world.reload`
+// there recompiles only the debug world. See debug.md beside this file.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "night"
+
+// The debug world's chrome, so a traveller keeps its bar and wheel here.
+import "theme"
+import "controls"
+
+// The night field draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
+metadata {
+  title: "Night field"
+  description: "A destination of the debug world painting wing: a snowfield under stars with lanterns, a pale crystal and a frame back to the debug world."
+}
+
+// A traveller from the debug world arrives here, and the debug world's window onto the night field observes it whole.
+admission [
+  {
+    algorithm: ""
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+    publicKey: ""
+    subject: null
+  }
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+// The lanterns' positions: two rows of four along the line the arrival frame looks down, 4.5 m either side of it.
+let lanternZ = [-12, -18, -24, -30]
+
+placements {
+  // One derived face screen: the arrival frame's glass.
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  // The night painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
+  // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0, -6]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-night/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#10141B"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  for z in lanternZ {
+    placement $"lantern-west-{z}" {
+      prototype: "lantern"
+      position [-4.5, 0, z]
+    }
+    placement $"lantern-east-{z}" {
+      prototype: "lantern"
+      position [4.5, 0, z]
+    }
+  }
+
+  placement "crystal" {
+    prototype: "crystal"
+    position [0, 0, -38]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        {
+          color: "#C9D3E6"
+          roughness: 0.8
+          specular: 0.12
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, -0.2, 0]
+        scale [32, 0.2, 48]
+      }
+    }
+  }
+
+  // A black frame round a canvas whose bottom reaches the ground, so a body's feet cross the glass. Face 0, the rim,
+  // names the glass, which shows through the opening carved out of it.
+  prototype "frame" {
+    document {
+      behavior {
+        faces [
+          {
+            name: "glass"
+            shapeId: 0
+          }
+        ]
+      }
+      name: "frame"
+      palette [
+        {
+          color: "#15171B"
+          roughness: 0.45
+          specular: 0.2
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "rim" {
+        material: 0
+        position [0, 1.3, 0]
+        scale [1.12, 1.42, 0.04]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: 0
+        position [0, 1.3, 0]
+        scale [1.1, 1.4, 0.3]
+      }
+      shape Box "frame-left" {
+        material: 0
+        position [-1.2, 1.38, 0]
+        scale [0.08, 1.48, 0.08]
+      }
+      shape Box "frame-right" {
+        material: 0
+        position [1.2, 1.38, 0]
+        scale [0.08, 1.48, 0.08]
+      }
+      shape Box "frame-top" {
+        material: 0
+        position [0, 2.78, 0]
+        scale [1.1, 0.08, 0.08]
+      }
+    }
+  }
+
+  // A post with a glowing lantern on it.
+  prototype "lantern" {
+    document {
+      name: "lantern"
+      palette [
+        {
+          color: "#2B2F36"
+          roughness: 0.7
+        }
+        {
+          color: "#FFC27A"
+          emissive: 450
+          roughness: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "post" {
+        material: 0
+        position [0, 0.9, 0]
+        scale [0.05, 0.9, 0.05]
+      }
+      shape Sphere "lamp" {
+        material: 1
+        position [0, 2, 0]
+        scale [0.2, 0.2, 0.2]
+      }
+    }
+  }
+
+  // The landmark at the far end of the lanterns: a tall pale crystal, faintly lit from inside.
+  prototype "crystal" {
+    document {
+      name: "crystal"
+      palette [
+        {
+          color: "#9FD8FF"
+          emissive: 90
+          roughness: 0.2
+          specular: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "shard" {
+        material: 0
+        position [0, 3.5, 0]
+        scale [0.8, 3.5, 0.8]
+      }
+      shape Box "shard-small" {
+        material: 0
+        position [1.5, 1.5, 0.4]
+        scale [0.5, 1.5, 0.5]
+      }
+    }
+  }
+}
+
+render {
+  farDistance: 120
+  lighting {
+    lights [
+      directional(name: "key", direction: [-3, 3.5, -5], color: "#9DB4FF", illuminance: 300lx, shadow: always, angularRadius: 0.2)
+      directional(direction: [0.7, 0.3, 0.65], color: "#7C8CC8", illuminance: 120lx)
+    ]
+  }
+  // A moonlit night brightened for the eye: a 300-lux moon and a 150-nit sky, which the Moth's darkest exposure (EV100 7)
+  // shows as the dark blue it is, and which a painting's window onto it shows beside the gallery's lit room.
+  sky {
+    layers [
+      gradient(name: "air", luminance: 150nit, stops: [
+        { elevation: -1, color: "#04060C" }
+        { elevation: 0, color: "#101A33" }
+        { elevation: 0.5, color: "#070B16" }
+        { elevation: 1, color: "#02030A" }
+      ]
+      )
+      stars(name: "stars", luminance: 150nit, density: 90, brightness: 1.3, seed: 7, twinkle: { share: 0.3, depth: 0.5, rate: 1 })
+      sunDisc(name: "moon", luminance: 150nit, light: 0, radius: 1.6deg, intensity: 4, color: "#DDE8FF")
+    ]
+  }
+  atmosphere {
+    fog {
+      density: 0.006
+    }
+  }
+}

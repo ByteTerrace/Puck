@@ -61,10 +61,14 @@ public sealed class SdfMeshCullLawTests {
             CarryRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: MathF.PI),
         });
         var moved = (At(position: new Vector3(x: 0f, y: 0f, z: -10f)) with { CarryTranslation = new Vector3(x: 0f, y: 0f, z: 30f) });
+        // Carried through a door onto one a quarter its size: from past the far distance to a quarter of the way out.
+        var shrunk = (At(position: new Vector3(x: 0f, y: 0f, z: -60f)) with { CarryScale = 0.25f });
 
         Assert.True(condition: Keeps(cull: in view, draw: in stretched));
         Assert.True(condition: Keeps(cull: in view, draw: in carried));
         Assert.False(condition: Keeps(cull: in view, draw: in moved));
+        Assert.False(condition: Keeps(cull: in view, draw: At(position: new Vector3(x: 0f, y: 0f, z: -60f))));
+        Assert.True(condition: Keeps(cull: in view, draw: in shrunk));
     }
     [Fact]
     public void ADrawWhoseVerticesRideMembersHasNoBoxAndIsAlwaysDrawn() {

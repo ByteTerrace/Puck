@@ -2172,6 +2172,50 @@ public sealed partial class FederationTransferLawTests {
             actual: actual.CatalogRig
         );
     }
+    // A carried crossing through a pair of two sizes keeps its scale on the wire, and a scale no crossing makes (zero,
+    // negative or not finite) is refused as malformed.
+    [InlineData(0.25f, true)]
+    [InlineData(-1f, false)]
+    [InlineData(float.NaN, false)]
+    [Theory]
+    public void SnapshotWire_CarriesACrossingsScale_AndRefusesOneNoCrossingMakes(float scale, bool admitted) {
+        var snapshot = new WorldSnapshot(
+            Tick: 17,
+            Revision: 19,
+            StepTicks: 210,
+            Entries: new[] { new EntitySnapshot(
+                Index: 3,
+                Position: Vector3.Zero,
+                Orientation: Quaternion.Identity,
+                BodyColor: Vector3.One,
+                Active: true,
+                Kit: 0,
+                Look: 0,
+                CatalogRig: 2,
+                Continuity: EntityContinuity.Carry(carried: new WorldPoseCarry(
+                    Rotation: Quaternion.Identity,
+                    Translation: new Vector3(x: 1f, y: 0f, z: 0f),
+                    Scale: scale
+                )),
+                Generation: 1,
+                PlacementId: null
+            ) },
+            Authority: "destination/world"
+        );
+        var decoded = WorldFederationCodec.TryDecodeSnapshot(
+            body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot),
+            failure: out var failure,
+            snapshot: out var back
+        );
+
+        Assert.Equal(expected: admitted, actual: decoded);
+
+        if (admitted) {
+            Assert.Equal(expected: scale, actual: back.Entries.Span[0].Continuity.Carried!.Value.Scale);
+        } else {
+            Assert.Equal(expected: WireRefusal.PayloadMalformed, actual: failure.Refusal);
+        }
+    }
     [Fact]
     public void SnapshotWire_RefusesATruncatedRecordByName() {
         var snapshot = new WorldSnapshot(

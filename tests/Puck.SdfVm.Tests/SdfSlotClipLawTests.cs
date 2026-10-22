@@ -17,6 +17,7 @@ public sealed class SdfSlotClipLawTests {
     private static readonly SdfSlotClip Straddle = new(
         CopyPlane: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f),
         CopyRotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: MathF.PI),
+        CopyScale: 0.25f,
         CopyTranslation: new Vector3(x: 0f, y: 6f, z: 0f),
         FirstSlot: 10,
         Plane: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f),
@@ -47,7 +48,8 @@ public sealed class SdfSlotClipLawTests {
 
         var copy = draws[3];
 
-        Assert.Equal(expected: (Straddle.CopyRotation, Straddle.CopyTranslation, Straddle.CopyPlane), actual: (copy.CarryRotation, copy.CarryTranslation, copy.ClipPlane));
+        Assert.Equal(expected: (Straddle.CopyRotation, Straddle.CopyTranslation, Straddle.CopyScale, Straddle.CopyPlane), actual: (copy.CarryRotation, copy.CarryTranslation, copy.CarryScale, copy.ClipPlane));
+        Assert.Equal(expected: 1f, actual: draws[0].CarryScale);
         Assert.Equal(expected: 12, actual: copy.FrameSlot);
         Assert.NotEqual(expected: draws[0].Identity, actual: copy.Identity);
 
@@ -85,12 +87,13 @@ public sealed class SdfSlotClipLawTests {
         var copy = words.AsSpan(length: SdfMeshRecord.DrawWords, start: (2 * SdfMeshRecord.DrawWords));
 
         Assert.True(condition: copy[..16].SequenceEqual(other: original[..16]));
-        Assert.False(condition: copy.Slice(length: 7, start: SdfMeshRecord.CarryRotationWord).SequenceEqual(other: original.Slice(length: 7, start: SdfMeshRecord.CarryRotationWord)));
+        Assert.False(condition: copy.Slice(length: 8, start: SdfMeshRecord.CarryRotationWord).SequenceEqual(other: original.Slice(length: 8, start: SdfMeshRecord.CarryRotationWord)));
     }
     [Fact]
     public void TheRecordCarriesTheCarryAndTheClipPlaneWhereTheKernelsReadThem() {
         var draw = (Draw(identity: "body", slot: 12) with {
             CarryRotation = Straddle.CopyRotation,
+            CarryScale = Straddle.CopyScale,
             CarryTranslation = Straddle.CopyTranslation,
             ClipPlane = Straddle.CopyPlane,
         });
@@ -104,6 +107,7 @@ public sealed class SdfSlotClipLawTests {
 
         Assert.Equal(expected: Straddle.CopyRotation, actual: new Quaternion(x: Word(index: SdfMeshRecord.CarryRotationWord), y: Word(index: (SdfMeshRecord.CarryRotationWord + 1)), z: Word(index: (SdfMeshRecord.CarryRotationWord + 2)), w: Word(index: (SdfMeshRecord.CarryRotationWord + 3))));
         Assert.Equal(expected: Straddle.CopyTranslation, actual: new Vector3(x: Word(index: SdfMeshRecord.CarryTranslationWord), y: Word(index: (SdfMeshRecord.CarryTranslationWord + 1)), z: Word(index: (SdfMeshRecord.CarryTranslationWord + 2))));
+        Assert.Equal(expected: Straddle.CopyScale, actual: Word(index: SdfMeshRecord.CarryScaleWord));
         Assert.Equal(expected: Straddle.CopyPlane, actual: new Vector4(x: Word(index: SdfMeshRecord.ClipPlaneWord), y: Word(index: (SdfMeshRecord.ClipPlaneWord + 1)), z: Word(index: (SdfMeshRecord.ClipPlaneWord + 2)), w: Word(index: (SdfMeshRecord.ClipPlaneWord + 3))));
         Assert.Equal(actual: (SdfMeshRecord.ClipPlaneWord + 4), expected: SdfMeshRecord.DrawWords);
     }

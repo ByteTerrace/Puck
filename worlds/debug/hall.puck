@@ -7,6 +7,7 @@
 //   x 14 .. 18, z 36 .. 40   the lift shaft, its door facing south onto each level's landing
 //   x 10 .. 20, z 12 .. 35   the lobby on level 0 (the map board, the entrance) and the landing on each level above
 //   x 20 .. 70                the exhibition halls, the gallery's rows running along +X (shapes.md lists them)
+//   x 51 .. 69.7, level 0     the painting wing (paintings.puck); level 1's slab is holed over it at (66, 22.6)
 //
 // Every piece of the shell is a box: walls with door and window openings and floors with stair and shaft holes are
 // unions of boxes, never a subtraction, because the analytic contact provider collides a carved shape as its whole
@@ -53,15 +54,6 @@ let hallPaletteDark = [
 // Off (the placement's `respond` facet), and its lit one otherwise.
 let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
-// One box given its world bounds.
-template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
-  shape Box $"{label}" {
-    material: slot
-    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
-    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
-  }
-}
-
 // The window bands: below level 0's sills, between each level's window heads and the next level's sills, and the
 // parapet above level 3's heads. Windows run from 0.9 m to 3.3 m over each floor.
 let upperBands = [[3.3, 5.4], [7.8, 9.9], [12.3, 14.4], [16.8, parapet]]
@@ -78,6 +70,15 @@ let stairStart = 34.5
 let tread = 0.4
 let riser = 0.25
 let landingSouth = 37.7
+
+// Level 1's south slab in four boxes round the hole over the endless fall (shapes.puck's fallX, fallZ and fallHole): the
+// ceiling twin of the painting wing's fall hangs in it, and a body falling out of that twin has air over its head.
+let fallSlab = [
+  { x0: 10.3, x1: 69.7, z0: 12.3, z1: (fallZ - fallHole) }
+  { x0: 10.3, x1: (fallX - fallHole), z0: (fallZ - fallHole), z1: (fallZ + fallHole) }
+  { x0: (fallX + fallHole), x1: 69.7, z0: (fallZ - fallHole), z1: (fallZ + fallHole) }
+  { x0: 10.3, x1: 69.7, z0: (fallZ + fallHole), z1: stairStart }
+]
 
 // The z of each viewing aisle's ceiling strip on levels 0, 1 and 2 (level 3's hang under the roof's south and north
 // spans, beside its skylights).
@@ -154,8 +155,9 @@ let blindPalette = [{ color: "#D8CFBD", roughness: 0.9, specular: 0.03 }]
 let blindSeams = 8
 
 // The ceiling fixtures a level owns, by `hallLamps` key, with the luminous power, in lumens, each emits while its level
-// is On: every level's downlights (a recessed LED downlight's 1,500 lm), and the stairwell's pendant (800 lm, a 60 W
-// bulb's) on level 1's switch.
+// is On: every level's downlights (a recessed LED downlight's 1,500 lm, a neutral 4,000 K), and the stairwell's pendant
+// (800 lm, a 60 W bulb's) on level 1's switch. A fixture neither occludes nor is occluded, so a brighter one would light
+// the level below through its slab.
 let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 1500 }), [{ key: "stairs", level: 1, lumens: 800 }])
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
@@ -238,7 +240,9 @@ prototypes {
           name: $"hall-floor-{k}{look.suffix}"
           schema: "puck.creation.v1"
           palette: look.palette
-          hallBox(label: $"slab-{k}-south", x0: 10.3, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: 12.3, z1: stairStart, slot: hallFloor)
+          for (piece, n) in ((k == 1) ? fallSlab : [{ x0: 10.3, x1: 69.7, z0: 12.3, z1: stairStart }]) {
+            hallBox(label: $"slab-{k}-south-{n}", x0: piece.x0, x1: piece.x1, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: piece.z0, z1: piece.z1, slot: hallFloor)
+          }
           hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
           hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
           hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
@@ -549,8 +553,8 @@ placements {
 }
 
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
-// light the inside: a warm downlight every 12 m along each strip, a pendant in the stairwell and a lamp riding the lift
-// car's body under its ceiling. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
+// light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
+// car's body under its ceiling and a wash over the painting wing. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
 // A point or spot light never occludes and is never occluded, and reaches only as far as its light still shows at the
 // darkest exposure the world takes; each view shades only the fixtures that reach what it sees. The rooms' light is
 // also the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the
@@ -562,8 +566,9 @@ render {
         directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
         point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], temperature: 3500K, power: 400lm)
+        point(name: "hall-wing", position: [60.4, 3.4, 26], color: "#FFE9CC", power: 2000lm)
       ],
-      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 3000K, power: $"state.hallLamps.level{hallDownlights[i].level}"))
+      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}"))
     )
   }
 }

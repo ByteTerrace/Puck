@@ -225,6 +225,13 @@ other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
 verdicts decide which to keep, and a Claude partner writes the brief and
 checks verifiable constraints, overruling only a hard-constraint violation.
+Concept art a modeller builds from carries no glaring mistake (the owner's
+ruling): every panel passes a written audit by both partners covering
+attachment and continuity, joint range, physical coherence of the pose (thrust
+against motion, weight over the feet), agreement with the turnaround, the
+camera's perspective, compositing seams and the character's fixed facts. A panel
+that fails is regenerated or removed, never kept with a caveat, and the lead
+reviews every panel before merging.
 
 Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
 agentic coding on a hard lane, `max` only when correctness outweighs cost.

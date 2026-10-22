@@ -203,7 +203,7 @@ public sealed class TabletopEngagementLawTests {
         // The policy body.engage applies names each refusal: the radius, a body that is not live, and a placement
         // carrying no engageable tabletop.
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 0, reason: out var far, target: GrantSubject.Placement(id: TableId)));
-        Assert.Contains(expectedSubstring: "outside tabletop 'table''s engage radius (3)", actualString: far);
+        Assert.Contains(expectedSubstring: "outside tabletop 'table''s engage radius (3 at its size)", actualString: far);
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 99, reason: out var gone, target: GrantSubject.Placement(id: TableId)));
         Assert.Equal(expected: "body 99 is not live", actual: gone);
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 0, reason: out var none, target: GrantSubject.Placement(id: "chair")));

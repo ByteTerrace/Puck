@@ -184,6 +184,9 @@ public sealed partial class SdfMeshBakeClosure {
         private readonly HashSet<(Module, TypeDefinitionHandle)> m_typesSeen = [];
         private readonly Queue<(Module, TypeDefinitionHandle)> m_types = new();
         private readonly HashSet<(Module, TypeDefinitionHandle)> m_constructed = [];
+        // The fields the closure's code loads, stores or takes the address of, and the types whose layout counts only those.
+        private readonly HashSet<(Module, FieldDefinitionHandle)> m_touched = [];
+        private readonly List<(Module, TypeDefinitionHandle)> m_byTouch = [];
         // Each type of the indexed assemblies by the types it derives from or implements directly.
         private readonly Dictionary<(Module, TypeDefinitionHandle), List<(Module, TypeDefinitionHandle)>> m_derived = [];
         // The member each entity was first reached from, and the member being hashed, which reaches whatever it names.
@@ -209,6 +212,9 @@ public sealed partial class SdfMeshBakeClosure {
 
                     HashMethod(method: method, module: module);
                 }
+            }
+            foreach (var (module, type) in m_byTouch) {
+                HashLayout(module: module, type: type, touchedOnly: !m_constructed.Contains(item: (module, type)) || !IsRecord(module: module, type: type));
             }
 
             return m_members;
@@ -350,7 +356,25 @@ public sealed partial class SdfMeshBakeClosure {
             }
         }
 
+        // A value type's layout is the bytes its code moves, so it counts whole; any other type's layout counts the fields
+        // the closure's code reads or writes (HashLayout, once the walk ends and every such field is known), and a field the
+        // code never touches cannot change what it does.
         private void HashType(Module module, TypeDefinitionHandle type) {
+            var definition = module.Metadata.GetTypeDefinition(handle: type);
+            var baseName = (definition.BaseType.IsNil ? string.Empty : Quiet(name: () => TypeName(handle: definition.BaseType, module: module)));
+
+            m_current = (module.Name + "!" + module.FullName(handle: type) + " [layout]");
+            Reasons[m_current] = m_from[(module, type)];
+            if (!definition.BaseType.IsNil && (Resolve(handle: definition.BaseType, module: module) is { } parent)) { Mention(module: parent.Item1, type: parent.Item2); }
+            if (baseName is "System.ValueType" or "System.Enum") {
+                // A value type is made wherever it is named, with no constructor call to show it.
+                Construct(module: module, type: type);
+                HashLayout(module: module, type: type, touchedOnly: false);
+            } else {
+                m_byTouch.Add(item: (module, type));
+            }
+        }
+        private void HashLayout(Module module, TypeDefinitionHandle type, bool touchedOnly) {
             var reader = module.Metadata;
             var definition = reader.GetTypeDefinition(handle: type);
             var text = new StringBuilder();
@@ -358,19 +382,29 @@ public sealed partial class SdfMeshBakeClosure {
             var key = (module.Name + "!" + module.FullName(handle: type) + " [layout]");
             var baseName = (definition.BaseType.IsNil ? string.Empty : Quiet(name: () => TypeName(handle: definition.BaseType, module: module)));
 
-            m_current = key;
-            Reasons[key] = m_from[(module, type)];
             text.Append(value: (int)definition.Attributes).Append(value: ' ').Append(value: layout.PackingSize).Append(value: ' ').Append(value: layout.Size).Append(value: " : ").Append(value: baseName);
             foreach (var handle in definition.GetFields()) {
+                if (touchedOnly && !m_touched.Contains(item: (module, handle))) { continue; }
+
                 var field = reader.GetFieldDefinition(handle: handle);
 
                 text.Append(value: '\n').Append(value: (int)field.Attributes).Append(value: ' ').Append(value: reader.GetString(handle: field.Name)).Append(value: ' ').Append(value: Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))).Append(value: ' ').Append(value: field.GetOffset());
             }
-            if (!definition.BaseType.IsNil && (Resolve(handle: definition.BaseType, module: module) is { } parent)) { Mention(module: parent.Item1, type: parent.Item2); }
-            // A value type is made wherever it is named, with no constructor call to show it.
-            if (baseName is "System.ValueType" or "System.Enum") { Construct(module: module, type: type); }
 
             m_members[key] = XxHash128.HashToUInt128(source: Encoding.UTF8.GetBytes(s: text.ToString()));
+        }
+        // A record's synthesized equality, hash and printing read every field, and run through the runtime where the walk
+        // does not follow, so a record the closure makes counts its whole layout.
+        private static bool IsRecord(Module module, TypeDefinitionHandle type) => module.Metadata.GetTypeDefinition(handle: type).GetMethods()
+            .Any(predicate: handle => module.Metadata.StringComparer.Equals(handle: module.Metadata.GetMethodDefinition(handle: handle).Name, value: "<Clone>$"));
+        // A record's synthesized clone and copy constructor move every field and decide nothing: they are hashed by their
+        // signatures, so a field the closure never reads does not change them.
+        private bool IsCopy(Module module, MethodDefinitionHandle method, string signature) {
+            var definition = module.Metadata.GetMethodDefinition(handle: method);
+            var declaring = definition.GetDeclaringType();
+            var name = module.Metadata.GetString(handle: definition.Name);
+
+            return (IsRecord(module: module, type: declaring) && ((name == "<Clone>$") || ((name == ".ctor") && signature.EndsWith(value: ("(" + module.FullName(handle: declaring) + ")Void instance"), comparisonType: StringComparison.Ordinal))));
         }
         private void HashMethod(Module module, MethodDefinitionHandle method) {
             var reader = module.Metadata;
@@ -383,7 +417,7 @@ public sealed partial class SdfMeshBakeClosure {
             Reasons[key] = m_from[(module, method)];
             Mention(module: module, type: definition.GetDeclaringType());
             text.Append(value: (int)definition.Attributes).Append(value: ' ').Append(value: (int)definition.ImplAttributes).Append(value: ' ').Append(value: signature);
-            if (definition.RelativeVirtualAddress != 0) {
+            if ((definition.RelativeVirtualAddress != 0) && !IsCopy(method: method, module: module, signature: signature)) {
                 var body = module.Pe.GetMethodBody(relativeVirtualAddress: definition.RelativeVirtualAddress);
 
                 text.Append(value: "\ninit ").Append(value: body.LocalVariablesInitialized);
@@ -446,31 +480,38 @@ public sealed partial class SdfMeshBakeClosure {
                 case HandleKind.MemberReference: {
                     var (owner, field, fieldModule) = FieldToken(handle: (EntityHandle)handle, module: module);
 
-                    if ((field is { } resolved) && !Stopped(module: fieldModule!, type: resolved.GetDeclaringType())) {
-                        Mention(module: fieldModule!, type: resolved.GetDeclaringType());
-                        if ((code == OpCodes.Ldsfld) || (code == OpCodes.Ldsflda) || (code == OpCodes.Stsfld)) { Initialize(module: fieldModule!, type: resolved.GetDeclaringType()); }
+                    if (field is { } handled) {
+                        var resolved = fieldModule!.Metadata.GetFieldDefinition(handle: handled);
+
+                        if (!Stopped(module: fieldModule, type: resolved.GetDeclaringType())) {
+                            _ = m_touched.Add(item: (fieldModule, handled));
+                            Mention(module: fieldModule, type: resolved.GetDeclaringType());
+                            if ((code == OpCodes.Ldsfld) || (code == OpCodes.Ldsflda) || (code == OpCodes.Stsfld)) { Initialize(module: fieldModule, type: resolved.GetDeclaringType()); }
+                        }
+
+                        return (owner + FieldData(field: resolved, module: fieldModule));
                     }
 
-                    return (owner + ((field is { } data) ? FieldData(field: data, module: fieldModule!) : string.Empty));
+                    return owner;
                 }
                 default:
                     return TypeName(handle: (EntityHandle)handle, module: module);
             }
         }
         // A field token's name and the Puck field definition it resolves to, if any.
-        private (string Name, FieldDefinition? Field, Module? Module) FieldToken(Module module, EntityHandle handle) {
+        private (string Name, FieldDefinitionHandle? Field, Module? Module) FieldToken(Module module, EntityHandle handle) {
             var reader = module.Metadata;
 
             if (handle.Kind == HandleKind.FieldDefinition) {
                 var field = reader.GetFieldDefinition(handle: (FieldDefinitionHandle)handle);
 
-                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + reader.GetString(handle: field.Name) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), field, module);
+                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + reader.GetString(handle: field.Name) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), (FieldDefinitionHandle)handle, module);
             }
 
             var member = reader.GetMemberReference(handle: (MemberReferenceHandle)handle);
             var name = (TypeName(handle: member.Parent, module: module) + "." + reader.GetString(handle: member.Name) + " " + Quiet(name: () => member.DecodeFieldSignature(genericContext: null, provider: this)));
             var parent = Resolve(handle: member.Parent, module: module);
-            var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetFields().Select(selector: owner.Item1.Metadata.GetFieldDefinition).Where(predicate: field => owner.Item1.Metadata.StringComparer.Equals(handle: field.Name, value: reader.GetString(handle: member.Name))).Cast<FieldDefinition?>().FirstOrDefault() : null);
+            var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetFields().Where(predicate: field => owner.Item1.Metadata.StringComparer.Equals(handle: owner.Item1.Metadata.GetFieldDefinition(handle: field).Name, value: reader.GetString(handle: member.Name))).Cast<FieldDefinitionHandle?>().FirstOrDefault() : null);
 
             return (name, match, parent?.Item1);
         }

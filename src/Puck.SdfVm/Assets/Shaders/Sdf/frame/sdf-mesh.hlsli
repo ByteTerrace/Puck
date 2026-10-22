@@ -85,13 +85,13 @@ float3 sdfMeshCarryDirection(uint record, float3 v) {
 
     return rotatePointByQuaternion(v, asfloat(uint4(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)], sdfMeshRegion[(word + 3u)])));
 }
-// A world point under the draw's carry: its rotation, then its translation (SDF_MESH_CARRY_TRANSLATION_WORD). The carry is
-// the last step of every world position the draw resolves, so a copy of a body drawn through a portal pair is the body,
-// moved through the pair.
+// A world point under the draw's carry: its rotation, its scale (SDF_MESH_CARRY_SCALE_WORD), then its translation
+// (SDF_MESH_CARRY_TRANSLATION_WORD). The carry is the last step of every world position the draw resolves, so a copy of a
+// body drawn through a portal pair is the body, moved and scaled through the pair.
 float3 sdfMeshCarryPoint(uint record, float3 p) {
     uint word = (record + SDF_MESH_CARRY_TRANSLATION_WORD);
 
-    return (sdfMeshCarryDirection(record, p) + asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)])));
+    return ((sdfMeshCarryDirection(record, p) * asfloat(sdfMeshRegion[(record + SDF_MESH_CARRY_SCALE_WORD)])) + asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)])));
 }
 // A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
 // drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.

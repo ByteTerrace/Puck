@@ -78,31 +78,43 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        var refusals = new List<(int Slot, string Reason)>();
         var crossed = source.Server.ExecuteAuthorityOperation(operation: () => {
-            var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position)>(capacity: members.Length);
+            var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position, FixedQ4816 Scale)>(capacity: members.Length);
 
             foreach (var slot in members) {
-                if (
-                    source.Server.ApplyInPlaceCrossing(crossing: new WorldInPlaceCrossing(
+                if (!source.Server.TryApplyInPlaceCrossing(
+                    crossing: new WorldInPlaceCrossing(
                         Destination: counterpartFrame,
                         Slot: slot,
                         Source: sourceFrame
-                    )) &&
-                    (source.Server.Population.EntryBody(index: slot) is { } body)
-                ) {
-                    moved.Add(item: (slot, body.CaptureTransferState(), body.FixedPosition));
+                    ),
+                    reason: out var refusal
+                )) {
+                    refusals.Add(item: (slot, refusal));
+                } else if (source.Server.Population.EntryBody(index: slot) is { } body) {
+                    moved.Add(item: (slot, body.CaptureTransferState(), body.FixedPosition, body.Scale));
                 }
             }
 
             return moved;
         });
+
+        if (m_narration.HasNarrationSink) {
+            foreach (var (slot, refusal) in refusals) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} body:{slot} did not cross {border} -> {counterpart} ({refusal})]"
+                );
+            }
+        }
         var localSeats = source.Server.Population.LocalSeatCount;
         var turn = WorldFrameIsometry.YawDelta(
             destination: in counterpartFrame,
             source: in sourceFrame
         );
 
-        foreach (var (slot, state, position) in crossed) {
+        foreach (var (slot, state, position, scale) in crossed) {
             // A turning pair turns the view of the seat routed to the body, as a mapped arrival does; a pair that
             // keeps the heading leaves the chase boom as it was, and the camera rides the carried body.
             if (
@@ -125,7 +137,7 @@ public sealed partial class WorldInstanceHost {
 
                 m_narration.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)state.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s]"
+                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)state.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s, scale {Format(value: ((double)scale))}]"
                 );
             }
         }

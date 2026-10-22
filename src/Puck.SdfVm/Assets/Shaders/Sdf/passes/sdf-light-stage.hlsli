@@ -79,10 +79,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
             // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge. A
             // display is reactive only over its picture: its bezel band is as steady as the device around it, and keeps
-            // its history, so the face's jittered edge resolves like any other edge.
-            ScreenMappingData opening = worldScreenMapping((uint)(material - SDF_SCREEN_MATERIAL - 1));
+            // its history, so the face's jittered edge resolves like any other edge. An opening that ripples is the one
+            // reactive opening: its refraction moves on its own, and a history would smear it.
+            uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
+            ScreenMappingData opening = worldScreenMapping(screenIndex);
+            bool isOpening = ((opening.imageU.w != 0.0) && (opening.state.w == 0.0));
+            bool ripples = (isOpening && (worldScreenRipple(screenIndex).state.x > 0.0));
 
-            reactivity = (((opening.imageU.w != 0.0) && (opening.state.w == 0.0)) ? 0.0 : (reactivity * picture));
+            reactivity = (ripples ? 1.0 : (isOpening ? 0.0 : (reactivity * picture)));
             // A picture value of one shows at the screen's luminance in nits (one for an opening, whose image is the
             // luminance beyond it). The view's screen fidelity eases it to the value that leaves the composite's exposure
             // as the picture itself, so a framed screen shows its source exactly.

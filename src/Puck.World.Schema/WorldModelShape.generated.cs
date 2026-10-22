@@ -5287,6 +5287,7 @@ public static partial class WorldModelShape {
                 M("projection", typeof(global::Puck.World.WorldScreenProjection), typeof(global::Puck.World.WorldScreenSource.Session), "Projection", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Projection),
                 M("resolution", typeof(global::System.Nullable<global::Puck.World.WorldScreenResolution>), typeof(global::Puck.World.WorldScreenSource.Session), "Resolution", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Resolution),
                 M("fallback", typeof(global::System.String), typeof(global::Puck.World.WorldScreenSource.Session), "Fallback", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Fallback),
+                M("ripple", typeof(global::System.Boolean), typeof(global::Puck.World.WorldScreenSource.Session), "Ripple", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Ripple),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenSource.Text), true, JsonTypeInfoKind.Object, null,

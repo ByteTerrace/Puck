@@ -6,19 +6,22 @@ namespace Puck.SdfVm;
 /// flag into the kernels. A record is <see cref="DrawWords"/> words: the row-vector object-to-world matrix row by row
 /// (words 0 to 15), the material, the word the mesh's first index sits at, its index count, the word its first vertex sits
 /// at, its attribute flags, the word its first triangle material sits at, the normal matrix row by row (nine words), the
-/// frame slot or -1, the word the mesh's members sit at, the rigid carry every world position and normal the draw
-/// resolves goes through last (a unit rotation quaternion, then a translation), and the world-space clip plane
-/// (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros draws everything).
+/// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
+/// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
+/// translation), and the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
+/// draws everything).
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 44;
+    public const int DrawWords = 45;
     /// <summary>The first of the carry rotation's four words (x, y, z, w).</summary>
     public const int CarryRotationWord = 33;
     /// <summary>The first of the carry translation's three words.</summary>
     public const int CarryTranslationWord = 37;
+    /// <summary>The carry's uniform scale, as a float: one for a draw drawn where it stands.</summary>
+    public const int CarryScaleWord = 40;
     /// <summary>The first of the clip plane's four words (the normal, then the offset).</summary>
-    public const int ClipPlaneWord = 40;
+    public const int ClipPlaneWord = 41;
     /// <summary>The record's material.</summary>
     public const int MaterialWord = 16;
     /// <summary>The word the mesh's first index sits at.</summary>

@@ -1,47 +1,53 @@
-# Debug world device row
+# Debug world devices
 
-The debug world shows one of each gaming device the World hosts on a row of
-labelled stands in the gallery hall's lobby ([`shapes.md`](shapes.md#the-hall)),
-on its level 0 floor at z = 28, 2.5 m apart and facing -Z, toward the entrance,
-so their screens light the lobby's floor and walls; the lobby's room lights
-start off so that light shows, and its wall switch or `gallery.lights 0 on`
-turns them on ([the hall's lighting](shapes.md#the-hall)). Each stand carries
-the device's own name. `debug.go devices` stands you in front of the middle one.
-[`devices.puck`](devices.puck) holds the row; `debug.puck` imports it whole
+The debug world shows one of each gaming device the World hosts in Wonderland
+([`wonderland.md`](wonderland.md)), the room beyond the gallery lobby's west
+wall that the Moth reaches a quarter her size through the lobby's big painting.
+Every device faces +X, toward the mouse hole she comes out of: the deck's
+television on the west wall 7.8 m ahead of her, the Advanced Gaming Brick on
+its plinth to her right and the Humble Gaming Brick on the floor to her left.
+At a quarter her size the plinth stands over her head and the television
+towers over her; walking in at full size through the room's own doorway, she
+looms over them. `debug.go devices` stands you 2.3 m in front of the
+television, at whatever size you are.
+[`devices.puck`](devices.puck) holds the devices; `debug.puck` imports it whole
 (`import "devices"`). Each device is a named `machines` row whose screen shows
 it running, and each lists the folders its swappable content comes from in
 `contentFolders`: its shipped folders, then the owner's local folder under the
 git-ignored `roms/` at the repository root.
 
-| x | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
+| At (x, z) | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
 |---|---|---|---|---|---|---|
-| 17.5 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
-| 15 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
-| 12.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
+| 6.6, 29.4 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
+| 5, 31.6 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
+| 1.4, 30.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
 
 ## The devices
 
 Each device is modelled in its real millimetres, as its own prototype beside
 its stand's, so the bake meshes it at its own scale rather than at the
-stand's. Every device is shown at its real size (the owner's ruling). A real
-handheld is small, so the two stand on low display plinths drawn 0.6 m nearer
-the walkway than the deck's cabinet (z 27.4, `handheldZ`), the way a museum
-shows a small object: a player walks up and reads the screen from arm's length,
-and each plinth's name sits on a placard tipped 35 degrees up toward a standing
-reader.
+stand's. Every device is shown at its real size (the owner's ruling). The
+Advanced Gaming Brick stands on a low display plinth whose name sits on a
+placard tipped 35 degrees up toward a standing reader. The Humble Gaming Brick
+leans back on its own machined rest on the floor, so at a quarter her size the
+Moth walks right up to its face. Every placement turns -90 degrees about up
+(`deviceYaw`), and each screen row's origin and axes turn with it.
 
 | Device | Body | On | Screen glass (exactly the picture) |
 |---|---|---|---|
-| Humble Gaming Brick: a Color brick whose shell is clear atomic-orange glass over its green board, chips, speaker, cartridge and two AA cells; leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm | a 0.4 m square plinth 0.8 m tall | 160 by 144 at 0.275 mm square pixels: 44 by 39.6 mm |
-| Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed | a plinth like the brick's | 240 by 160 at 0.255 mm square pixels: 61.2 by 40.8 mm |
+| Humble Gaming Brick: a Color brick whose shell is clear atomic-orange glass over its green board, chips, speaker, cartridge and two AA cells; leaning back 20 degrees on a machined rest | 75 by 133 by 27.5 mm | the floor | 160 by 144 at 0.275 mm square pixels: 44 by 39.6 mm |
+| Advanced Gaming Brick: an anodised aluminium clamshell, chamfered 1.2 mm, edge-to-edge dark glass on its upper half, a polished hinge barrel; open to its 150-degree stop, the lower half on a 30-degree rest | 84.6 by 82 by 23.7 mm closed | a 0.4 m square plinth 0.8 m tall | 240 by 160 at 0.255 mm square pixels: 61.2 by 40.8 mm |
 | Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 27-inch flat-faced television (silver bezel, black body, tapered tube housing, a speaker grille under the picture) | console 160 by 168 by 64 mm; television 740 by 621 mm, 505 mm deep | a walnut AV cabinet 1.2 by 0.58 m whose 50 mm top is 0.65 m up | 256 by 240 at 2.143 by 1.875 mm (8:7) pixels: 548.6 by 450 mm, so the 224 lines a set shows are a 548.6 by 420 mm, 4:3 picture |
 
-The plinths put a handheld's screen about 0.95 m up, turned up toward the
-Moth's eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall). The
-cabinet puts the television's picture centre 1.06 m up, a little under her eye
-seated and 0.74 m under it standing, about 16 degrees down from 2.5 m away. The
-stands are solid and the devices are not: the analytic contact provider
-collides each stand as its boxes.
+The plinth puts the Advanced Brick's screen about 0.95 m up, turned up toward
+the Moth's eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall),
+and twice her height when she is a quarter her size. The cabinet puts the
+television's picture centre 1.06 m up, 0.74 m under her eye standing at full
+size and 0.6 m over it at a quarter. The stands are solid and the devices are
+not: the analytic contact provider collides each stand as its boxes, and a
+quarter-size Moth can step up into the cabinet's open right-hand bay, where the
+spare cartridges lie, or climb the game cases at its south end to its top
+(wonderland.md).
 
 Each screen row's glass is exactly the picture, never the case: `halfWidth`
 is the source's width times the horizontal pixel pitch over 2, `halfHeight` its
@@ -170,15 +176,15 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Reset a device on its current content | `machine.operation <instance> <generation> machine.reset {"schema":"puck.<engine>.machine-reset.v1"}` |
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
 | Change a brick's revision live | `machine.operation <instance> <generation> device.model {"schema":"puck.gaming-brick.device-model-set.v1","model":"sgb"}` |
-| Stand at a device, facing it | `body.pose <x> 0.05 26.5 180 0 0` |
-| Engage it (within 3 m), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
+| Stand at a device, facing it | `body.pose <x + 1> 0.05 <z> 90 0 0`, with the device's `x` and `z` from the first table |
+| Engage it (within 3 m at full size, 0.75 m at a quarter), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
-| Frame the whole row | `view.override camera look 15 1.8 25.2 15 0.9 27.8`, then `view.override camera auto` |
-| Frame the Humble Gaming Brick, square to its face | `view.override camera look 17.5 1.143 26.897 17.5 0.955 27.414` |
-| Frame the Advanced Gaming Brick | `view.override camera look 15 1.227 26.959 15 0.952 27.436` |
-| Frame the deck and its television | `view.override camera look 12.5 1.45 26.4 12.5 0.95 28` |
+| Frame the whole room from the mouse hole, at a quarter-size Moth's eye | `view.override camera look 8.8 0.45 30.5 1.4 0.9 30.5`, then `view.override camera auto` |
+| Frame the Humble Gaming Brick, square to its face | `view.override camera look 7.103 0.343 29.4 6.586 0.155 29.4` |
+| Frame the Advanced Gaming Brick | `view.override camera look 5.441 1.227 31.6 4.964 0.952 31.6` |
+| Frame the deck and its television | `view.override camera look 3 1.45 30.5 1.4 0.95 30.5` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
 `advanced-gaming-brick` or `humble-gaming-deck`. `machine.state <instance>`

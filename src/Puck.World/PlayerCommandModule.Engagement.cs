@@ -181,12 +181,12 @@ internal sealed partial class PlayerCommandModule {
                     X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
                     Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
                 );
-                var radius = FixedQ4816.FromDouble(value: screen.Route.EngageRadius);
+                var radius = player.EngageReach(radius: screen.Route.EngageRadius);
 
                 if (delta.LengthSquared > (radius * radius)) {
                     return CommandResult.Error(output: string.Create(
                         provider: CultureInfo.InvariantCulture,
-                        handler: $"[body.engage: body:{index} is {((double)delta.Length):0.0}u from screen {screenIndex} — within {screen.Route.EngageRadius:0.0}u to engage (body.pose closer)]"
+                        handler: $"[body.engage: body:{index} is {((double)delta.Length):0.00}u from screen {screenIndex} — within {((double)radius):0.00}u to engage at its size (body.pose closer)]"
                     ));
                 }
             }

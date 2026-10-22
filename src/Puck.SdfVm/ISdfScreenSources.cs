@@ -34,6 +34,15 @@ public interface ISdfScreenSources {
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound
     /// glass.</returns>
     SourceMapping? MappingOf(int screen);
+    /// <summary>Returns the ripple a screen shows this frame, for an opening that opts in.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <param name="ripple">The screen's clock and contacts, or <see langword="default"/> when it does not ripple.</param>
+    /// <returns><see langword="true"/> when the screen ripples; the default is a screen that never does.</returns>
+    bool TryRippleOf(int screen, out SdfScreenRipple ripple) {
+        ripple = default;
+
+        return false;
+    }
     /// <summary>Returns the name of the render-graph instance a screen samples in one view of the residency's frame.</summary>
     /// <param name="view">The view's index in the residency's frame (<see cref="SdfWorldView.View"/>).</param>
     /// <param name="screen">The program-declared screen index.</param>

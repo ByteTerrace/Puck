@@ -1,12 +1,14 @@
 // The debug world: a flat 256 m ground under a clear day, with axis markers beside the spawn, reference cubes and
-// the Moth avatar to walk it, an open-fronted coloured room beside them for judging indirect light, and a picture
-// frame ahead of the spawn whose glass is a portal onto the garden (garden.puck). It is the plain starting point the
-// island is built up from, in engine: boot its package with `--world worlds/debug`, edit this
-// source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals. The
-// standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play wheel)
-// are imported documents, as are the device row (devices.puck), the Claude desktop app's window as a pane and a screen
-// (desktop.puck), the chess table (chess.puck), the loop shaft's floor and ceiling portals (loop.puck) and the named
-// places with the `debug.go` console command that reaches them (places.puck), each with notes beside it.
+// the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. Its portals
+// are paintings in the gallery hall's east wing (paintings.puck): two onto other lands, the garden (garden.puck) and
+// the night field (night.puck), two facing each other across the room, and the endless fall's floor and ceiling. It is
+// the plain starting point the island is built up from, in engine: boot its package with `--world worlds/debug`, edit
+// this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
+// The standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
+// wheel) are imported documents, as are the gaming devices (devices.puck) in Wonderland, the room a portal pair of two
+// sizes shrinks the Moth into (wonderland.puck), the Claude desktop app's window as a pane and a screen
+// (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
+// `debug.go` console command that reaches them (places.puck), each with notes beside it.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -21,7 +23,8 @@ import "devices"
 import "desktop"
 import "hall"
 import "chess"
-import "loop"
+import "paintings"
+import "wonderland"
 import "places"
 
 // The test room's palette slots.
@@ -29,15 +32,13 @@ let roomWhite = 0 // #E6E2DA
 let roomRed = 1 // #C8322B
 let roomGreen = 2 // #2FA84A
 
-// The portal frame's palette slot.
-let frameGold = 0 // #C9A43A
-
 metadata {
   title: "Debug"
-  description: "A flat 256 m ground under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a portal frame onto the garden."
+  description: "A flat 256 m ground under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
 }
 
-// A traveller coming back from the garden arrives here, and the garden's windows onto this world observe it whole.
+// A traveller coming back from the garden or the night field arrives here, and their windows onto this world observe
+// it whole.
 admission [
   {
     algorithm: ""
@@ -66,6 +67,10 @@ references [
     document: "garden"
     name: "garden"
   }
+  {
+    document: "night"
+    name: "night"
+  }
 ]
 
 destinations [
@@ -73,6 +78,12 @@ destinations [
     durability: persisted
     name: "garden"
     reference: "garden"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "night"
+    reference: "night"
     scope: global
   }
 ]
@@ -84,8 +95,9 @@ text {
 }
 
 // How many levels of windows inside windows the presentation draws; a face past it shows its session's fallback colour.
+// Six paintings that each show a world holding the six make every level six times the one before, so two levels.
 views {
-  nestingDepth: 3
+  nestingDepth: 2
   studioLayouts()
 }
 
@@ -103,54 +115,28 @@ commands: galleryCommands
 
 // The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck), the chess
 // board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
-// settles it.
+// settles it. Each body's size is its cell of `bodyScale` (the state below).
 bodies {
   capacity: 42
+  scaleRow: bodyScale
 }
 
 placements {
-  // Three derived face screens: the portal frame's glass and the loop shaft's two (loop.puck).
+  // Eight derived face screens: the painting wing's six canvases (paintings.puck) and the Wonderland doors' two
+  // (wonderland.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 3
+    derivedFaceScreens: 8
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
   }
 
-  // Eight metres ahead of the spawn and three to the right, so the avatar at the spawn does not hide it from the chase
-  // camera, facing +Z. Its glass shows the garden through the frame, as a window, and is a door: walking -Z through it
-  // arrives at the garden's arrival frame, which stands at the same point facing away, so the crossing maps as the
-  // identity and the walk carries straight on.
-  placement "portal" {
-    prototype: "frame"
-    position [3, 0, -8]
-    yawDegrees: 180
-    faceSources [
-      {
-        face: "glass"
-        filter: linear
-        portal {
-          arrival: "mapped"
-          counterpart: "arrival/glass"
-          destination: "garden"
-          travel: "body"
-        }
-        source {
-          $type: "session"
-          destination: "garden"
-          fallback: "#FF00FF"
-          projection: window
-        }
-      }
-    ]
-  }
-
   // The axis markers meet at (2, 0, 0), two metres to the spawn's +X side, so the up pole stands beside the avatar in
-  // every spawn and chase view rather than through it, and clear of the chase camera's sight of the portal frame.
+  // every spawn and chase view rather than through it.
   placement "axis-x" {
     prototype: "axis-x"
     position [10, 0.02, 0]
@@ -201,6 +187,17 @@ placements {
 state {
   world {
     galleryState()
+    // Each body's size, the multiplier bodies.scaleRow names: one for the local seats at boot, written by a crossing of
+    // a pair of two sizes (wonderland.puck), within the envelope a quarter to one. A body with no cell is its authored
+    // size.
+    row {
+      name: "bodyScale"
+      kind: "Fixed"
+      capacity: 8
+      min: "0.25"
+      max: "1"
+      cells: map(range(0, 3), i => { key: $"{i}", value: "1" })
+    }
   }
 }
 
@@ -376,40 +373,6 @@ prototypes {
         material: roomWhite
         position [-0.7, 1.1, -0.7]
         scale [0.5, 1, 0.5]
-      }
-    }
-  }
-
-  // A gilt picture frame round an open aperture. Face 0, the rim, carries the glass a face source shows on.
-  prototype "frame" {
-    document {
-      behavior {
-        faces [
-          {
-            name: "glass"
-            shapeId: 0
-          }
-        ]
-      }
-      name: "frame"
-      palette [
-        {
-          color: "#C9A43A"
-          roughness: 0.4
-          specular: 0.4
-        }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "rim" {
-        material: frameGold
-        position [0, 1.75, 0]
-        scale [1.25, 1.75, 0.08]
-      }
-      shape Box "opening" {
-        blend: Subtraction
-        material: frameGold
-        position [0, 1.75, 0]
-        scale [1.1, 1.6, 0.3]
       }
     }
   }

@@ -66,10 +66,10 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        var radius = FixedQ4816.FromDouble(value: screen.Route.EngageRadius);
+        var radius = body.EngageReach(radius: screen.Route.EngageRadius);
 
         if (PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) {
-            reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({screen.Route.EngageRadius.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})";
+            reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
             return false;
         }
 
@@ -100,12 +100,12 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        var radius = FixedQ4816.FromDouble(value: engage.Radius);
+        var radius = body.EngageReach(radius: engage.Radius);
 
         distanceSquared = PlanarDistanceSquared(body: body, centre: WorldTabletopFrame.Centre(topology: topology));
 
         if (distanceSquared > (radius * radius)) {
-            reason = $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({engage.Radius.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})";
+            reason = $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
 
             return false;
         }

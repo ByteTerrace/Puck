@@ -1,0 +1,378 @@
+// The painting wing: five paintings in the gallery hall's east end on level 0, each a framed canvas that is a door.
+// Walk or jump into the canvas and you pass through it, as into a Mario 64 painting; its glass shows where it leads
+// while you stand outside. The debug world imports this file whole, and paintings.md beside it says how to get in,
+// what each painting does and how to get out.
+//
+//   x 51 .. 69.7, z 12.3 .. 39.7   the wing: a partition wall at x 51 (doorway z 24 .. 28) shuts it off from the exhibit
+//                                  rows, and a lining over the south, north and east walls hides their windows
+//   north wall, x = 57             the garden: a sunset plot (garden.puck)
+//   north wall, x = 64             the night field: a snowfield under stars (night.puck)
+//   west and east walls, z = 34.5  two paintings facing each other: step into either and step out of the other
+//   floor and ceiling, (66, 22.6)  the endless fall: a painting in the floor under its twin in the ceiling, in this
+//                                  world itself, so a body that steps onto the floor glass drops out of the ceiling
+//                                  glass still falling, and falls through the floor again, forever; level 1's floor is
+//                                  holed over the ceiling twin and railed (hall.puck)
+//
+// A wall painting hangs on its wall's face and its canvas reaches the floor, so a body's feet cross the glass. The wall
+// behind the glass holds nothing back while the body stands in the opening (Puck.World.Server.WorldPortalHoleContactField).
+// Both faces of a same-world pair name the destination `self`, which references the debug world's own document, so the
+// transfer resolves to the running World rather than a second copy of it.
+
+import "shapes"
+
+// The wing's shell bounds: the walls' inner faces and the slab above (hall.puck: level 0's floor top 0.05, level 1's
+// slab underside 4.25).
+let wingX0 = 51.3
+let wingX1 = 69.4
+let wingZ0 = 12.6
+let wingZ1 = 39.4
+let wingTop = 4.25
+let wingFloor = 0.05
+
+// The canvas of a wall painting: a thin rim box 2.24 m wide and 2.84 m tall whose centre is carved away, so the glass,
+// which fills the face shape a centimetre short of its faces, shows through. Its lower 0.12 m is below the floor so a
+// body's feet stand within the opening. `canvasRim` is the rim's width, and the carve leaves the rest.
+let canvasHalfWidth = 1.12
+let canvasHalfHeight = 1.42
+let canvasCenter = 1.3
+let canvasRim = 0.02
+let canvasProud = 0.03
+
+// What a glass shows past the deepest level of windows inside windows, by destination.
+let fallbackGarden = "#FF9A4D"
+let fallbackNight = "#070B16"
+let fallbackSelf = "#10141B"
+
+// Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
+// floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
+// and up axes with the floor's, so a crossing keeps the traveller's heading.
+let faceUp = [-0.707107, 0, 0, 0.707107]
+let faceDown = [0.707107, 0, 0, 0.707107]
+
+// Palette slots every painting prototype shares.
+let paintGilt = 0
+let paintLip = 1
+let paintBlack = 2
+let paintMat = 3
+let paintBrass = 4
+let paintBoard = 5
+let paintInk = 6
+let paintingPalette = [
+  { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
+  { color: "#5C2B26", roughness: 0.55, specular: 0.2 }
+  { color: "#15171B", roughness: 0.45, specular: 0.2 }
+  { color: "#EDEAE3", roughness: 0.7 }
+  { color: "#B58F4F", roughness: 0.35, specular: 0.5 }
+  { color: "#F2EEE4", roughness: 0.6 }
+  { color: "#3A3F47", roughness: 0.6 }
+]
+
+// The frames: a dark lip against the canvas, an optional mat, then the border, each a ring of the given width.
+let ornate = { lip: paintLip, lipWidth: 0.05, mat: paintMat, matWidth: 0, border: paintGilt, borderWidth: 0.22 }
+let modern = { lip: paintBlack, lipWidth: 0, mat: paintMat, matWidth: 0.14, border: paintBlack, borderWidth: 0.07 }
+let brass = { lip: paintBlack, lipWidth: 0.03, mat: paintMat, matWidth: 0, border: paintBrass, borderWidth: 0.12 }
+
+// The wall paintings. `x` and `z` stand the painting's foot on the wall it hangs on, `yaw` turns its front (yaw 0 faces
+// -Z, 180 faces +Z, 90 faces -X, 270 faces +X), and `counterpart` is the face a crossing arrives out of.
+let wallPaintings = [
+  {
+    name: "garden", x: 57, z: wingZ1, yaw: 0, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
+    title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
+  }
+  {
+    name: "night", x: 64, z: wingZ1, yaw: 0, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
+    title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
+  }
+  {
+    name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
+    title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
+  }
+  {
+    name: "link-east", x: wingX1, z: 34.5, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
+    title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
+  }
+]
+
+// The floor and ceiling paintings of the endless fall (shapes.puck's fallX and fallZ) stand over the same point; the
+// ceiling one hangs under the slab, in the hole level 1's floor leaves over it (hall.puck), and a rail rings that hole.
+let fallHalf = 1.12
+let railGap = 0.15
+let railTop = 5.5
+
+template paintBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+// Three bars round a wall painting's canvas, from `y0` up to `y1` and out by `w`, standing `depth` proud of the wall;
+// the floor closes the fourth side.
+template wallRing(label, ix, y0, y1, w, depth, slot) {
+  paintBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  paintBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  paintBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+}
+
+// Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`.
+template flatRing(label, ix, w, y0, y1, slot) {
+  paintBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
+  paintBox(label: $"{label}-south", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: (0 - (ix + w)), z1: (0 - ix), slot: slot)
+  paintBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+  paintBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+}
+
+// A wall painting: face 0, the rim, names the glass, which stands `canvasProud` out from the wall; the frame is the
+// rings round it and the plaque stands on the wall to its right.
+template wallPainting(label, frame, title, note) {
+  behavior {
+    faces [{ name: "glass", shapeId: 0 }]
+  }
+  name: label
+  schema: "puck.creation.v1"
+  palette: paintingPalette
+  shape Box "rim" {
+    material: paintBlack
+    position [0, canvasCenter, canvasProud]
+    scale [canvasHalfWidth, canvasHalfHeight, 0.04]
+  }
+  shape Box "opening" {
+    blend: Subtraction
+    material: paintBlack
+    position [0, canvasCenter, canvasProud]
+    scale [(canvasHalfWidth - canvasRim), (canvasHalfHeight - canvasRim), 0.3]
+  }
+  for width in ((frame.lipWidth > 0) ? [frame.lipWidth] : []) {
+    wallRing(label: "lip", ix: canvasHalfWidth, y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight), w: width, depth: 0.08, slot: frame.lip)
+  }
+  for width in ((frame.matWidth > 0) ? [frame.matWidth] : []) {
+    wallRing(label: "mat", ix: (canvasHalfWidth + frame.lipWidth), y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight + frame.lipWidth), w: width, depth: 0.05, slot: frame.mat)
+  }
+  wallRing(label: "border", ix: (canvasHalfWidth + frame.lipWidth + frame.matWidth), y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight + frame.lipWidth + frame.matWidth), w: frame.borderWidth, depth: 0.11, slot: frame.border)
+  // The plaque: a cream board on the wall, a hand's width beyond the frame.
+  paintBox(label: "plaque", x0: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15), x1: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15), y0: 1.0, y1: 1.4, z0: 0, z1: 0.025, slot: paintBoard)
+  textRuns [
+    { text: title, position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.31, 0.025], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94 }
+    { text: note, position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.22, 0.025], rotation [0, 0, 0, 1], emHeight: 0.028, depth: 0.003, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
+  ]
+}
+
+// A door onto `destination` and a window showing what lies past it, rippling like an event horizon: a slow shimmer all
+// the time and rings from every body that touches or passes through. A crossing arrives out of `counterpart`, a face of
+// the destination's document, or of this world's own for the destination `self`.
+template paintingFace(destination, counterpart, fallback) {
+  faceSources [
+    {
+      face: "glass"
+      filter: linear
+      portal {
+        arrival: "mapped"
+        counterpart: counterpart
+        destination: destination
+        travel: "body"
+      }
+      source {
+        $type: "session"
+        destination: destination
+        fallback: fallback
+        projection: window
+        ripple: true
+      }
+    }
+  ]
+}
+
+// The wing's shell: a partition wall with a doorway, and a lining over the south, north and east walls, up to the slab
+// above. Every piece is a box, never a subtraction: the analytic contact provider collides a carved shape as its whole
+// bounding box (hall.puck).
+let wingWall = 0
+let wingTrim = 1
+let wingBoard = 2
+let wingInk = 3
+let wingPalette = [
+  { color: "#4A5360", roughness: 0.85, specular: 0.04 }
+  { color: "#1B1F25", roughness: 0.6, specular: 0.15 }
+  { color: "#F2EEE4", roughness: 0.6 }
+  { color: "#3A3F47", roughness: 0.6 }
+]
+let doorZ0 = 24
+let doorZ1 = 28
+let doorTop = 3
+
+references [
+  {
+    document: "debug"
+    name: "self"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "self"
+    reference: "self"
+    scope: global
+  }
+]
+
+prototypes {
+  prototype "wing-shell" {
+    document {
+      name: "wing-shell"
+      schema: "puck.creation.v1"
+      palette: wingPalette
+      // The partition: x 51 .. 51.3, solid but for the doorway.
+      hallBox(label: "partition-south", x0: 51, x1: wingX0, y0: wingFloor, y1: wingTop, z0: 12.3, z1: doorZ0, slot: wingWall)
+      hallBox(label: "partition-north", x0: 51, x1: wingX0, y0: wingFloor, y1: wingTop, z0: doorZ1, z1: 39.7, slot: wingWall)
+      hallBox(label: "partition-lintel", x0: 51, x1: wingX0, y0: doorTop, y1: wingTop, z0: doorZ0, z1: doorZ1, slot: wingWall)
+      // The lining over the three outer walls.
+      hallBox(label: "lining-south", x0: wingX0, x1: 69.7, y0: wingFloor, y1: wingTop, z0: 12.3, z1: wingZ0, slot: wingWall)
+      hallBox(label: "lining-north", x0: wingX0, x1: 69.7, y0: wingFloor, y1: wingTop, z0: wingZ1, z1: 39.7, slot: wingWall)
+      hallBox(label: "lining-east", x0: wingX1, x1: 69.7, y0: wingFloor, y1: wingTop, z0: wingZ0, z1: wingZ1, slot: wingWall)
+      // Skirting along the inside of every wall.
+      hallBox(label: "skirting-south", x0: wingX0, x1: wingX1, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: 12.7, slot: wingTrim)
+      hallBox(label: "skirting-north", x0: wingX0, x1: wingX1, y0: wingFloor, y1: 0.2, z0: 39.3, z1: wingZ1, slot: wingTrim)
+      hallBox(label: "skirting-east", x0: 69.3, x1: wingX1, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: wingZ1, slot: wingTrim)
+      hallBox(label: "skirting-west", x0: wingX0, x1: 51.4, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: wingZ1, slot: wingTrim)
+      // The board over the doorway, on the partition's west face.
+      hallBox(label: "doorboard", x0: 50.97, x1: 51, y0: 3.25, y1: 3.95, z0: 24.2, z1: 27.8, slot: wingBoard)
+      textRuns [
+        { text: "PAINTING WING", position [-50.968, 3.72, -26], rotation [0, 0.707107, 0, 0.707107], emHeight: 0.2, depth: 0.004, mode: "emboss", material: wingInk, align: "center" }
+        { text: "walk or jump into a canvas", position [-50.968, 3.46, -26], rotation [0, 0.707107, 0, 0.707107], emHeight: 0.1, depth: 0.003, mode: "emboss", material: wingInk, align: "center" }
+      ]
+    }
+  }
+
+  for painting in wallPaintings {
+    prototype $"painting-{painting.name}" {
+      document {
+        wallPainting(label: $"painting-{painting.name}", frame: painting.frame, title: painting.title, note: painting.note)
+      }
+    }
+  }
+
+  // The floor painting of the endless fall: a gilt square lying flat, its canvas a hand proud of the floor, with a
+  // plaque lying on the floor before it, read from the south.
+  prototype "painting-fall-floor" {
+    document {
+      behavior {
+        faces [{ name: "glass", shapeId: 0 }]
+      }
+      name: "painting-fall-floor"
+      schema: "puck.creation.v1"
+      palette: paintingPalette
+      shape Box "rim" {
+        material: paintBlack
+        position [0, 0, 0]
+        rotation: faceUp
+        scale [fallHalf, fallHalf, 0.04]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: paintBlack
+        position [0, 0, 0]
+        rotation: faceUp
+        scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
+      }
+      flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: 0, y1: 0.05, slot: paintLip)
+      flatRing(label: "border", ix: (fallHalf + 0.05), w: 0.22, y0: 0, y1: 0.07, slot: paintGilt)
+      paintBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: 1.55, z1: 2.15, slot: paintBoard)
+      textRuns [
+        { text: "THE ENDLESS FALL", position [0, 0.02, 1.98], rotation: faceUp, emHeight: 0.07, depth: 0.004, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94 }
+        { text: "Step onto the glass and you fall, out of the ceiling and through the floor again. Backspace or L3 gets you out.", position [0, 0.02, 1.86], rotation: faceUp, emHeight: 0.03, depth: 0.003, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
+      ]
+    }
+  }
+
+  // The rail round the hole over the ceiling painting on level 1: a black parapet with a gilt cap, so nobody drops into
+  // the wing by accident, and a line of text on its south face. Written in world bounds (hallBox), solid.
+  prototype "painting-fall-rail" {
+    document {
+      name: "painting-fall-rail"
+      schema: "puck.creation.v1"
+      palette: paintingPalette
+      hallBox(label: "north", x0: (fallX - fallHole - railGap), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ + fallHole), z1: (fallZ + fallHole + railGap), slot: paintBlack)
+      hallBox(label: "south", x0: (fallX - fallHole - railGap), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole - railGap), z1: (fallZ - fallHole), slot: paintBlack)
+      hallBox(label: "east", x0: (fallX + fallHole), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole), z1: (fallZ + fallHole), slot: paintBlack)
+      hallBox(label: "west", x0: (fallX - fallHole - railGap), x1: (fallX - fallHole), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole), z1: (fallZ + fallHole), slot: paintBlack)
+      hallBox(label: "cap", x0: (fallX - fallHole - railGap - 0.03), x1: (fallX + fallHole + railGap + 0.03), y0: railTop, y1: (railTop + 0.05), z0: (fallZ - fallHole - railGap - 0.03), z1: (fallZ + fallHole + railGap + 0.03), slot: paintGilt)
+      textRuns [
+        { text: "THE ENDLESS FALL", position [(0 - fallX), 5.12, (0 - (fallZ - fallHole - railGap - 0.001))], rotation [0, 0, 0, 1], emHeight: 0.1, depth: 0.004, mode: "emboss", material: paintGilt, align: "center" }
+        { text: "below, in the wing", position [(0 - fallX), 4.95, (0 - (fallZ - fallHole - railGap - 0.001))], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: paintMat, align: "center" }
+      ]
+    }
+  }
+
+  // The ceiling painting: the same square hanging face down against the slab above.
+  prototype "painting-fall-ceiling" {
+    document {
+      behavior {
+        faces [{ name: "glass", shapeId: 0 }]
+      }
+      name: "painting-fall-ceiling"
+      schema: "puck.creation.v1"
+      palette: paintingPalette
+      shape Box "rim" {
+        material: paintBlack
+        position [0, 0, 0]
+        rotation: faceDown
+        scale [fallHalf, fallHalf, 0.04]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: paintBlack
+        position [0, 0, 0]
+        rotation: faceDown
+        scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
+      }
+      flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: -0.05, y1: 0, slot: paintLip)
+      flatRing(label: "border", ix: (fallHalf + 0.05), w: 0.22, y0: -0.07, y1: 0, slot: paintGilt)
+    }
+  }
+}
+
+placements {
+  placement "wing-shell" {
+    prototype: "wing-shell"
+    position [0, 0, 0]
+    solid
+  }
+
+  for painting in wallPaintings {
+    placement $"painting-{painting.name}" {
+      prototype: $"painting-{painting.name}"
+      position [painting.x, wingFloor, painting.z]
+      yawDegrees: painting.yaw
+      paintingFace(destination: painting.destination, counterpart: painting.counterpart, fallback: painting.fallback)
+    }
+  }
+
+  placement "painting-fall-rail" {
+    prototype: "painting-fall-rail"
+    position [0, 0, 0]
+    solid
+  }
+
+  placement "painting-fall-floor" {
+    prototype: "painting-fall-floor"
+    position [fallX, wingFloor, fallZ]
+    paintingFace(destination: "self", counterpart: "painting-fall-ceiling/glass", fallback: fallbackSelf)
+  }
+
+  placement "painting-fall-ceiling" {
+    prototype: "painting-fall-ceiling"
+    position [fallX, (wingTop - 0.03), fallZ]
+    yawDegrees: 180
+    paintingFace(destination: "self", counterpart: "painting-fall-floor/glass", fallback: fallbackSelf)
+  }
+}
+
+// A spawn point before each painting, facing it, and one at the doorway facing in: `debug.go portals` and its kin.
+spawnPoints [
+  { id: "portals", position [53.5, wingFloor, 26], yawDegrees: 270 }
+  { id: "portal-garden", position [57, wingFloor, 36.3], yawDegrees: 180 }
+  { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
+  { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
+  { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }
+]

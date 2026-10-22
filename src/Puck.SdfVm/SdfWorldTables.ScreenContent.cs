@@ -183,7 +183,7 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenLuminance(int screenIndex, float luminance) {
         RequireScreenIndex(screenIndex: screenIndex);
-        var row = (screenIndex * ScreenMappingByteLength);
+        var row = (screenIndex * ScreenMappingStride);
         var glass = MemoryMarshal.Read<float>(source: m_screenMappingRegion.Contents[(row + ScreenGlassOffset)..]);
         var value = ((glass == 0f) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
 
@@ -208,7 +208,7 @@ public sealed partial class SdfWorldTables {
         m_screenBound[screenIndex] = bound;
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in flag)),
-            offset: ((screenIndex * ScreenMappingByteLength) + ScreenBoundOffset)
+            offset: ((screenIndex * ScreenMappingStride) + ScreenBoundOffset)
         );
     }
     /// <summary>Supplies (or clears) the mapping screen <paramref name="screenIndex"/> is drawn from for the next produced
@@ -266,15 +266,15 @@ public sealed partial class SdfWorldTables {
 
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: (screenIndex * ScreenMappingByteLength)
+            offset: (screenIndex * ScreenMappingStride)
         );
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in sampler)),
-            offset: ((screenIndex * ScreenMappingByteLength) + ScreenSamplerOffset)
+            offset: ((screenIndex * ScreenMappingStride) + ScreenSamplerOffset)
         );
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in glass)),
-            offset: ((screenIndex * ScreenMappingByteLength) + ScreenGlassOffset)
+            offset: ((screenIndex * ScreenMappingStride) + ScreenGlassOffset)
         );
         m_screenMappings[screenIndex] = mapping;
 
@@ -284,6 +284,42 @@ public sealed partial class SdfWorldTables {
             var length = MathF.Sqrt(x: ((x * x) + (y * y)));
 
             return ((length > 0f) ? (1f / length) : 0f);
+        }
+    }
+    /// <summary>Sets (or clears) the ripple screen <paramref name="screenIndex"/> shows for the next produced frame: the
+    /// clock and contacts an opening that opts in refracts its image by. A screen with no ripple shades undistorted.
+    /// Pure host-side buffer state, so a call that reproduces the record already stored writes nothing.</summary>
+    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="ripple">The screen's ripple, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    public void SetScreenRipple(int screenIndex, SdfScreenRipple? ripple) {
+        RequireScreenIndex(screenIndex: screenIndex);
+
+        // The first row's x is whether the screen ripples and its y the clock; one row a contact follows (u, v, age,
+        // strength). KEEP IN SYNC with ScreenRippleData in frame/sdf-screen-mapping.hlsli.
+        Span<float> floats = stackalloc float[(SdfScreenRipple.Rows * 4)];
+
+        floats.Clear();
+
+        if (ripple is { } set) {
+            floats[0] = 1f;
+            floats[1] = set.Clock;
+            Pack(contact: set.Contact0, destination: floats[4..]);
+            Pack(contact: set.Contact1, destination: floats[8..]);
+            Pack(contact: set.Contact2, destination: floats[12..]);
+            Pack(contact: set.Contact3, destination: floats[16..]);
+        }
+
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: floats),
+            offset: ((screenIndex * ScreenMappingStride) + ScreenRippleOffset)
+        );
+
+        static void Pack(Vector4 contact, Span<float> destination) {
+            destination[0] = contact.X;
+            destination[1] = contact.Y;
+            destination[2] = contact.Z;
+            destination[3] = contact.W;
         }
     }
     /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the next produced
