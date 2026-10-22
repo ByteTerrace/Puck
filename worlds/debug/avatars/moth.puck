@@ -2459,10 +2459,10 @@ prototypes {
               parent: "chestSlab"
               type: "Prism"
               position [0, -0.005, 0.055]
-              scale [0.115, 0.105, 0.06]
+              scale [0.125, 0.105, 0.06]
               profile {
-                kind: "ChamferedRectangle"
-                cornerRadius: 0.5
+                kind: "Polygon"
+                sides: 6
               }
               color: lavenderPlate
             }

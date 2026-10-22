@@ -162,7 +162,7 @@ headroom round her face reads as padded interior. The braid's root sweep starts
 at her cheek and bridges to the unscaled braid below it.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
-lavender centre, above the segmented charcoal waist and the ochre belt; the
+lavender hexagon, above the segmented charcoal waist and the ochre belt; the
 ochre collar stands above it at the neck. A lavender plate (`pelvicShield`)
 narrows below the belt. The slab inherits the torso's breathing and lean; the
 belt and pelvic plate inherit the pelvis.
