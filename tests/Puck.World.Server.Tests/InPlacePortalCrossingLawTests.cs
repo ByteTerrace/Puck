@@ -592,6 +592,24 @@ public sealed class InPlacePortalCrossingLawTests {
 
             Assert.True(condition: Resolve(field: field, position: ref position, sweep: sweep, velocity: ref velocity).Grounded);
             Assert.Equal(expected: FixedQ4816.Zero, actual: position.Y);
+
+            // In the opening, a body that fits it falls through; one too big for it, a box wider than the door or a
+            // capsule reaching past its rim, meets the ground round it.
+            FixedBodyColliderVolume[][] bodies = [
+                [new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Capsule, Center: FixedVector3.Zero, Endpoint: (FixedVector3.UnitY * FixedQ4816.FromInteger(value: 2)), HalfExtents: FixedVector3.Zero, Rotation: FixedQuaternion.Identity, Radius: FixedQ4816.FromDouble(value: 0.35))],
+                [new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Box, Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero, HalfExtents: new FixedVector3(X: FixedQ4816.FromInteger(value: 2), Y: FixedQ4816.One, Z: FixedQ4816.One), Rotation: FixedQuaternion.Identity, Radius: FixedQ4816.Zero)],
+                [new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Capsule, Center: FixedVector3.Zero, Endpoint: (FixedVector3.UnitX * FixedQ4816.FromInteger(value: 3)), HalfExtents: FixedVector3.Zero, Rotation: FixedQuaternion.Identity, Radius: FixedQ4816.FromDouble(value: 0.35))],
+            ];
+
+            for (var body = 0; (body < bodies.Length); body++) {
+                position = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -0.25), Z: FixedQ4816.FromDouble(value: DoorZ));
+                velocity = falling;
+
+                Assert.Equal(
+                    actual: Resolve(field: field, position: ref position, sweep: sweep, velocity: ref velocity, volumes: bodies[body]).Grounded,
+                    expected: (body > 0)
+                );
+            }
         }
 
         Assert.True(condition: field.TryUp(position: FixedVector3.Zero, up: out var up));
@@ -599,9 +617,9 @@ public sealed class InPlacePortalCrossingLawTests {
         Assert.False(condition: field.TryHoldableSurfaceAlongDirection(candidate: out _, direction: -FixedVector3.UnitY, grantedByOverride: out _, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
         Assert.False(condition: field.TryNearestSurfaceAlongDirection(assistHalfAngle: FixedQ4816.Zero, candidate: out _, direction: -FixedVector3.UnitY, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
 
-        static ContactResolution Resolve(IContactField field, ref FixedVector3 position, ref FixedVector3 velocity, bool sweep) => (sweep
-            ? field.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [])
-            : field.Resolve(orientation: FixedQuaternion.Identity, position: ref position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: []));
+        static ContactResolution Resolve(IContactField field, ref FixedVector3 position, ref FixedVector3 velocity, bool sweep, FixedBodyColliderVolume[]? volumes = null) => (sweep
+            ? field.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: (volumes ?? []))
+            : field.Resolve(orientation: FixedQuaternion.Identity, position: ref position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: (volumes ?? [])));
     }
 
     // Solid ground under y = 0: a foot point below it stands on it, its fall stopped.
