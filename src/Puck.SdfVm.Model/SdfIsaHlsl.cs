@@ -226,6 +226,7 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
         declarations.Real(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
         declarations.Real(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
+        declarations.Real(name: "SDF_REFERENCE_WHITE", value: SdfExposure.ReferenceWhite);
         declarations.Real(name: "SDF_SKY_PEAK_TARGET", value: SdfExposure.SkyPeakTarget);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
@@ -297,6 +298,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHT_WORDS", value: SdfMeshIrradianceProbe.LightWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_DEPTH_WORD", value: SdfMeshIrradianceProbe.DepthWord);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_FADE", value: SdfMeshIrradianceProbe.DepthFade);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD", value: SdfMeshIrradianceProbe.NeighboursWord);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_LOW", value: SdfMeshIrradianceProbe.MutualLow);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_HIGH", value: SdfMeshIrradianceProbe.MutualHigh);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_BEHIND", value: SdfMeshIrradianceProbe.Behind);

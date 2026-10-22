@@ -60,7 +60,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   over a 4×4 window (`sdfViewsFilter`, `passes/sdf-views-stage.hlsli`) before
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
-  nothing; the window and the pattern's tile are a pair. `world.debug-view ao`
+  nothing; the window and the pattern's tile are a pair. A side turned from a
+  light is never queried and stores full visibility, so the window's shadow
+  average leaves out neighbours whose normal turns away, and a lit band along a
+  crease is that average's. A sunlit spot on a wall's top under a slab is the
+  filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
+  light's cone over the point, and the penumbra is the nearest in-cone
+  blocker's. `world.debug-view ao`
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
 - **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
@@ -108,7 +114,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   (`SdfMeshIrradiance.Filter`), and a probe lights only what lies within its
   depth cube along one axis (`sdfMeshProbeDepthVisibility`): a leak through a
   wall off the axes, or a storey the 2 m lattice straddles, is the lattice's
-  coarseness. The views stage's local adaptation (`render.exposure.local`, in
+  coarseness. The depth's fade (`SdfMeshIrradianceProbe.DepthFade`, metres)
+  stays thinner than the thinnest floor: a wall pixel where it meets a floor or
+  ceiling is pushed along the wall, level with that surface, and a softer fade
+  draws the far side's light along every junction as a bright line. Debug a
+  probe artefact by splitting the gather in a scratch edit of the `indirect`
+  case in `debug/sdf-debug-views.hlsli` (each corner's share, or magenta where
+  no probe answers) and `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
   `sdfLightStage`) reads the same gather's indirect light as part of each
   surface's illumination, so a surface lit wrongly by the volume is also
   exposed wrongly by it. A nested

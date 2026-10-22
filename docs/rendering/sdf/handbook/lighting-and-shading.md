@@ -37,13 +37,19 @@ key light and one along the second slot's light, and the cascade passes draw
 every mesh into them ([the shadow cascades](frame-rendering.md#the-shadow-cascades)).
 The surface pass answers each light with a percentage-closer soft shadow from
 the first cascade holding the point: a blocker search over a rotated disk finds
-the mean depth of the occluders, the gap to them times the light's authored
-penumbra half-slope (`worldShadowPenumbraSlope(lightIndex)`) sizes the
-penumbra, and a filter of that width answers. Both disks turn and space their
+the nearest occluder inside the light's cone over the point, the gap to it
+times the light's authored penumbra half-slope
+(`worldShadowPenumbraSlope(lightIndex)`) sizes the penumbra, and a filter of
+that width answers. Both disks turn and space their
 taps by the pixel's cell of the same 4×4 tile the ambient occlusion uses, and
 views averages each light's visibility over the same plane-aware 4×4 window
 (`sdfViewsFilter`), so a penumbra carries no per-pixel grain with or without
 temporal reconstruction ([ambient occlusion](#ambient-occlusion-screen-space-obscurance)).
+The window's shadow average also leaves out a neighbour whose normal turns more
+than 60 degrees from the pixel's, because the surface pass leaves full
+visibility on a side turned from the light, which it does not query: averaged
+across the crease where a wall meets the ceiling, it would light a band along
+the wall's top.
 `world.debug-view shadow` shows the key light's filtered visibility. The
 ambient term still fills shadowed regions, so shadows read soft and colored,
 never black.
@@ -54,12 +60,17 @@ side of the disk, and a curved receiver such as a shin curls toward it. Each tap
 therefore compares against the receiver's own plane, extended to that tap's
 texel centre from the hit triangle's normal (`sdfMeshShadowGap`); the triangle
 is what the cascade holds, while the smoothed shading normal tilts away from it
-across an edge the bake rounded. A filter tap then counts a caster only inside
-the light's penumbra cone over the receiver, since one outside it cannot shadow
-the receiver, and within a texel and a half only one rising toward the light at
-least 2.5 times as steeply as it lies aside, so the foot of a wall facing the
-light does not darken the floor before it. The blocker search counts every
-caster in front of the plane, so the penumbra estimate still sees them all.
+across an edge the bake rounded. A filter tap sees the light when no caster
+stands in front of that plane by 2.5 texels per texel it lies aside, so the
+foot of a wall facing the light does not darken the floor before it; it hides
+the light when its caster also lies inside the light's penumbra cone over the
+receiver point itself; and a tap whose caster lies outside that cone says
+nothing about the point and takes no part in the average. The cone is measured
+from the point rather than the extended plane, which runs on past the corner
+where a wall meets the slab over it, and the penumbra is sized by the nearest
+blocker in the cone rather than the blockers' mean: under a soft sun, a slab's
+top seen through a window beside higher floors would otherwise widen the
+filter past the slab's own cone and light the wall under it.
 
 Each light reads its own visibility from its K lane. A directional outside the
 slots is unshadowed, scaled by the surface's ambient occlusion. During a
@@ -160,21 +171,39 @@ in the frame.
   across an edge, an eighth across a corner, `SdfMeshIrradiance.FilterWeights`),
   so a sunlit patch a few rays catch does not show as a band; a neighbour
   behind a wall or inside geometry takes no part, and the light visibility bits
-  are each probe's own. A probe also stores a depth cube, the mean distance its
-  rays within 35 degrees of each axis travel before they meet geometry.
+  are each probe's own. A probe also stores a depth cube, how far it sees
+  along each axis before geometry: the farther of a ray cast along the axis and
+  the mean distance along the axis that its rays within 35 degrees of it
+  travel. A slab or wall across the axis answers its exact distance, a wall
+  beside the probe that cuts the cone short leaves the axis ray's, and a small
+  object on the axis leaves the cone's.
 - **A probe lights only what lies within its depth.** A read weights each of
   the eight probes about a point by whether the point, pushed off its surface,
-  lies nearer along the axis it mostly lies in than the probe's depth there,
-  fading over a quarter of a cell past it (`SdfMeshIrradianceProbe.DepthFade`,
-  `sdfMeshProbeDepthVisibility`): a probe in the storey above a wall's top, or
-  the room beyond a partition, stops at the slab or wall and lights nothing
-  past it, which the preference for the probes in front of a surface cannot
-  tell for a wall. The test is one axis wide, so architecture off the axes
-  resolves at the lattice's coarseness.
+  lies nearer along each axis than the probe's depth that way, fading over
+  4 cm past it (`SdfMeshIrradianceProbe.DepthFade`,
+  `sdfMeshProbeDepthVisibility`): a probe in the storey above a wall's top, the
+  room beyond a partition or the void under a floor stops at the slab, wall or
+  floor and lights nothing past it, which the preference for the probes in
+  front of a surface cannot tell for a wall. The fade is thinner than the
+  thinnest floor, because a point on a wall where it meets a floor or ceiling
+  is pushed along the wall, level with the floor's surface, and a probe on the
+  far side of that floor sees it only the floor's thickness past its depth; a
+  softer fade would draw the far side's light along every junction. Where every probe about a point stands across a
+  wall or slab from it, the point takes no indirect light, rather than the open
+  sky a point no probe has traced takes. The test is one axis wide, so a
+  window or doorway on a probe's axis lets its depth pass a wall the probe
+  stands across from the point; each answering probe's weight therefore also
+  fades out as the share of the other answering probes' weight it sees and is
+  seen by along the lattice falls from three quarters to a quarter (the
+  neighbour bits the trace records, `SdfMeshIrradianceProbe.NeighboursWord`,
+  `MutualLow`, `MutualHigh`, `sdfMeshProbeMutualShares`), so a probe outside a
+  room's corner, which sees in through a window above it and may hold the
+  sunlit day, gives way entirely to the probes inside. Architecture off the axes that no neighbour's sight
+  line crosses still resolves at the lattice's coarseness.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
   probes about the shaded point once (`sdfMeshProbesAt`), pushed 0.35 of a cell
-  along its normal, weighted trilinearly and by how far each lies in front of
-  the surface. The sky term is the live sky's irradiance over π under the
+  along its normal, weighted trilinearly, by how far each lies in front of the
+  surface and by its depth. The sky term is the live sky's irradiance over π under the
   volume's sky visibility, so the sky can change without a retrace; the
   reflected term adds as stored. The sum replaces the harmonic sky ambient and
   the authored fill, under the `apply` intensity, tint and contact. A static
@@ -302,9 +331,8 @@ arriving at the surface, the lights' diffuse terms and the volume's indirect
 light, is read against the view's meter reading taken as a scene of
 `SdfExposure.LocalReflectance` albedo, and the surface's exposure moves that
 share of the way from the view's toward the one that illumination would meter,
-within `SdfExposure.LocalRange` stops, before the display-referred curvature
-and grid terms, so a dark paint under the same light stays dark and no outline
-is scaled with it. The composite scales a display-referred view's sky share so
+within `SdfExposure.LocalRange` stops, before the curvature and grid terms, so
+a dark paint under the same light stays dark. The composite scales a display-referred view's sky share so
 the sky's brightest texel (`skyPeakLuminance`, which the volume's lighting
 measures over its environment map) reaches display white
 (`SdfExposure.SkyPeakTarget`) rather than clipping; a view a window shows
@@ -317,8 +345,13 @@ view, publishes its luminance raised by its own exposure to the window share
 (`SdfViewSnapshot.Unexposed`, the pass block's `exposeShare`,
 `SdfPhotometry.WindowAdaptation`), and the view looking through it applies the
 rest of its own to the opening, so the window shows the world beyond at an
-exposure between the two. The ink line, the editor grid and an unbound
-screen's glass are display-referred: they apply to the exposed colour. The lit
+exposure between the two. The editor grid and an unbound screen's glass are
+display-referred: they apply to the exposed colour. The curvature terms apply
+to the exposed colour too, at the strength of the surface's exposed
+illumination against a white surface lit as the meter aims for
+(`SdfExposure.ReferenceWhite`, about a quarter of display white): the ridge
+light and the ink colour scale by it, so a lit room keeps its edge highlights
+and ink while a dim room's edges stay as dim as its walls. The lit
 images store half floats, so a view holds its luminance below
 `SdfPhotometry.LuminanceCeiling`.
 
@@ -390,7 +423,10 @@ and ink lines where curvature spikes, from the record's curvature. The surface
 pass estimates it from the interpolated vertex normals in world units
 ([surface pass](frame-rendering.md#one-render-pipeline)). Authored
 `render.lighting.curvature` gains use that same estimate as edge weathering;
-flat normals and meshes without vertex normals contribute zero.
+flat normals and meshes without vertex normals contribute zero. The rim light
+and the ink colour follow the surface's exposed light
+([photometric units](#photometric-units-and-exposure)), so they draw no light
+lines in a dark room.
 
 ---
 

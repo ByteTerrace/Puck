@@ -240,21 +240,24 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // terms and the volume's, what a white surface here would show) against the view's meter reading taken as
             // a scene of SDF_LOCAL_REFLECTANCE albedo, within SDF_LOCAL_ADAPTATION_RANGE stops: a dim ceiling lifts
             // and a sunlit floor compresses, while a dark paint under the same light stays dark. It precedes the
-            // display-referred terms below, which keep their colour at every exposure.
-            if ((passGroup.localAdaptation > 0.0) && (passGroup.meterLuminance > 0.0)) {
-                float incoming = dot((radiance + indirect), float3(0.2126, 0.7152, 0.0722));
+            // display-referred terms below.
+            float incoming = dot((radiance + indirect), float3(0.2126, 0.7152, 0.0722));
+            float localGain = 1.0;
 
-                if (incoming > 0.0) {
-                    float reference = (passGroup.meterLuminance / SDF_LOCAL_REFLECTANCE);
+            if ((passGroup.localAdaptation > 0.0) && (passGroup.meterLuminance > 0.0) && (incoming > 0.0)) {
+                float reference = (passGroup.meterLuminance / SDF_LOCAL_REFLECTANCE);
 
-                    color *= exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
-                }
+                localGain = exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
+                color *= localGain;
             }
 
-            // The stylized curvature terms (cavity darkening, ridge light, ink outline), display-referred: they apply to
-            // the color the view's exposure shows, so an ink line reads as its color at every exposure.
+            // The stylized curvature terms (cavity darkening, ridge light, ink outline) apply to the color the view's
+            // exposure shows, at the strength the surface's exposed illumination reaches against a white surface the
+            // meter aims for: a lit room keeps its edge highlights and ink, and a dim room's edges stay dim.
             if (curvatureShading) {
-                color = (applyCurvatureShading((color * passGroup.exposure), s.curvature) / max(passGroup.exposure, 1.0e-12));
+                float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);
+
+                color = (applyCurvatureShading((color * passGroup.exposure), s.curvature, lit) / max(passGroup.exposure, 1.0e-12));
             }
         }
     }

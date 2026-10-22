@@ -440,20 +440,21 @@ public sealed class SdfMeshIrradiance {
         for (var pair = 0; (pair < 3); pair++) {
             words[(SdfMeshIrradianceProbe.DepthWord + pair)] = Pack(low: probe.Depth[(2 * pair)], high: probe.Depth[((2 * pair) + 1)]);
         }
+        words[SdfMeshIrradianceProbe.NeighboursWord] = probe.Neighbours;
         m_dirty = true;
     }
     // How far a probe lets a point at `toward` from its centre take its light: one while the point lies nearer along
-    // every axis than the probe's depth that way, each axis fading to nothing over DepthFade of a cell past its depth,
+    // every axis than the probe's depth that way, each axis fading to nothing over DepthFade metres past its depth,
     // where the wall or slab the probe's rays stop at along that axis stands between them. KEEP IN SYNC with
     // sdfMeshProbeDepthVisibility.
-    private static float DepthVisibility(Probe probe, Vector3 toward, float spacing) {
+    private static float DepthVisibility(Probe probe, Vector3 toward) {
         var visibility = 1f;
 
         for (var axis = 0; (axis < 3); axis++) {
             var along = ((axis == 0) ? toward.X : ((axis == 1) ? toward.Y : toward.Z));
             var depth = probe.Depth[((2 * axis) + ((along < 0f) ? 1 : 0))];
 
-            visibility *= (1f - Math.Clamp(value: ((MathF.Abs(x: along) - depth) / (SdfMeshIrradianceProbe.DepthFade * spacing)), min: 0f, max: 1f));
+            visibility *= (1f - Math.Clamp(value: ((MathF.Abs(x: along) - depth) / SdfMeshIrradianceProbe.DepthFade), min: 0f, max: 1f));
         }
 
         return visibility;
@@ -623,7 +624,7 @@ public sealed class SdfMeshIrradiance {
                 if (open) { sky[axis] += weight; }
                 radiance[axis] += (light * weight);
                 if (weight >= SdfMeshIrradianceProbe.DepthCone) {
-                    depth[axis] += (hit ? distance : lighting.Reach);
+                    depth[axis] += ((hit ? distance : lighting.Reach) * weight);
                     depthRays[axis]++;
                 }
             }
@@ -639,8 +640,13 @@ public sealed class SdfMeshIrradiance {
             Sweeps: (sweep + 1)
         );
 
+        // Each axis's depth is the farther of the cone's mean travel along the axis and the axis ray's own: a slab across
+        // the axis answers its exact distance either way, a wall beside the probe that cuts the cone short leaves the
+        // axis ray's, and a small object on the axis leaves the cone's.
         for (var axis = 0; (axis < 6); axis++) {
-            probe.Depth[axis] = ((depthRays[axis] > 0) ? (depth[axis] / depthRays[axis]) : lighting.Reach);
+            var along = (scene.Intersect(origin: origin, direction: Axes[axis], maximum: lighting.Reach, distance: out var axisDistance, material: out _, normal: out _) ? axisDistance : lighting.Reach);
+
+            probe.Depth[axis] = MathF.Max(x: along, y: ((depthRays[axis] > 0) ? (depth[axis] / depthRays[axis]) : lighting.Reach));
             if (total[axis] <= 0f) { continue; }
             probe.Sky[axis] = (sky[axis] / total[axis]);
             probe.Radiance[axis] = (radiance[axis] / total[axis]);
@@ -723,7 +729,7 @@ public sealed class SdfMeshIrradiance {
     // only those inside the window (the volume the views pass holds), each weighted trilinearly, by how far it lies in
     // front of the surface and by whether the pushed point lies within its depth; the sky visibility and the reflected
     // light fade to the open sky and to none across the window's last cell, and the open sky answers where no probe
-    // takes part. It reads each probe's own cubes, which the filtered volume averages over its neighbours.
+    // is traced. It reads each probe's own cubes, which the filtered volume averages over its neighbours.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
         var pushed = (point + (normal * (SdfMeshIrradianceProbe.NormalBias * layout.Spacing)));
         var sample = ((pushed / layout.Spacing) - new Vector3(value: 0.5f));
@@ -731,13 +737,12 @@ public sealed class SdfMeshIrradiance {
         var fraction = (sample - floor);
         var squared = (normal * normal);
         var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
-        // The probes in front of the surface, and apart those behind it, which answer only where none lies in front.
-        var sky = 0f;
-        var bounce = Vector3.Zero;
-        var total = 0f;
-        var behindSky = 0f;
-        var behindBounce = Vector3.Zero;
-        var behindTotal = 0f;
+        Span<float> cornerWeights = stackalloc float[8];
+        Span<bool> cornerFront = stackalloc bool[8];
+        Span<uint> cornerNeighbours = stackalloc uint[8];
+        var cornerProbes = new Corners();
+        var anyFront = false;
+        var held = false;
 
         for (var corner = 0; (corner < 8); corner++) {
             var offset = new Vector3(x: (corner & 1), y: ((corner >> 1) & 1), z: ((corner >> 2) & 1));
@@ -761,26 +766,35 @@ public sealed class SdfMeshIrradiance {
             var toward = (probePoint - point);
             var length = toward.Length();
             var facing = ((length > 0f) ? ((Vector3.Dot(vector1: (toward / length), vector2: normal) + 1f) * 0.5f) : 1f);
-            var weight = ((((weights.X * weights.Y) * weights.Z) * ((facing * facing) + 0.2f)) * DepthVisibility(probe: probe, spacing: layout.Spacing, toward: (pushed - probePoint)));
+            var weight = ((((weights.X * weights.Y) * weights.Z) * ((facing * facing) + 0.2f)) * DepthVisibility(probe: probe, toward: (pushed - probePoint)));
 
+            held = true;
             if (weight <= 0f) { continue; }
 
-            if (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing)) {
-                sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
-                bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
-                total += weight;
-            } else {
-                behindSky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
-                behindBounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
-                behindTotal += weight;
-            }
+            cornerProbes[corner] = probe;
+            cornerNeighbours[corner] = probe.Neighbours;
+            cornerWeights[corner] = weight;
+            cornerFront[corner] = (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing));
+            anyFront |= cornerFront[corner];
         }
 
-        if (total <= 0f) {
-            (sky, bounce, total) = (behindSky, behindBounce, behindTotal);
+        // The probes in front of the surface answer, and apart those behind it, which answer only where none lies in
+        // front; each by the share of the others' weight it sees (MutualShares).
+        for (var corner = 0; (corner < 8); corner++) {
+            if ((cornerProbes[corner] is null) || (cornerFront[corner] != anyFront)) { cornerWeights[corner] = 0f; }
         }
-        if (total <= 0f) {
-            return skyIrradiance;
+        MutualShares(neighbours: cornerNeighbours, weights: cornerWeights);
+
+        var sky = 0f;
+        var bounce = Vector3.Zero;
+        var total = 0f;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            if ((cornerWeights[corner] <= 0f) || (cornerProbes[corner] is not { } probe)) { continue; }
+
+            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * cornerWeights[corner]);
+            bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * cornerWeights[corner]);
+            total += cornerWeights[corner];
         }
 
         var inside = Vector3.Min(
@@ -788,9 +802,61 @@ public sealed class SdfMeshIrradiance {
             value2: (new Vector3(x: ((low.X + layout.Dims.X) - 1), y: ((low.Y + layout.Dims.Y) - 1), z: ((low.Z + layout.Dims.Z) - 1)) - sample)
         );
         var fade = float.Clamp(max: 1f, min: 0f, value: MathF.Min(x: inside.X, y: MathF.Min(x: inside.Y, y: inside.Z)));
+
+        // Probes about the point that all stand across a wall or slab from it say nothing about it but that it is
+        // enclosed: it takes no indirect light rather than the open sky.
+        if (total <= 0f) {
+            return (held ? (skyIrradiance * (1f - fade)) : skyIrradiance);
+        }
+
         var visibility = (1f + (fade * ((sky / total) - 1f)));
 
         return ((skyIrradiance * visibility) + ((bounce / total) * fade));
+    }
+    // Scales each of the eight corner probes' weights (zero for one that does not answer) by how much of the other
+    // answering probes' weight it sees and is seen by across the lattice (their neighbour bits), faded in from MutualLow
+    // to MutualHigh of it, so a probe that stands across a wall from the rest, which a window or doorway on one of its
+    // axes let its depth pass, gives way to them. Where that would leave no weight at all (no answering probe sees
+    // another) the weights stand. KEEP IN SYNC with sdfMeshProbeMutualShares.
+    private static void MutualShares(ReadOnlySpan<uint> neighbours, Span<float> weights) {
+        Span<float> shares = stackalloc float[8];
+        var kept = 0f;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            shares[corner] = 1f;
+            if (weights[corner] <= 0f) { continue; }
+
+            var others = 0f;
+            var visible = 0f;
+
+            for (var other = 0; (other < 8); other++) {
+                if ((other == corner) || (weights[other] <= 0f)) { continue; }
+                others += weights[other];
+
+                var index = NeighbourIndex(x: (((other & 1) - (corner & 1))), y: ((((other >> 1) & 1) - ((corner >> 1) & 1))), z: ((((other >> 2) & 1) - ((corner >> 2) & 1))));
+
+                if ((((neighbours[corner] >> index) & 1u) != 0u) && (((neighbours[other] >> (25 - index)) & 1u) != 0u)) { visible += weights[other]; }
+            }
+
+            if (others > 0f) {
+                var t = Math.Clamp(value: (((visible / others) - SdfMeshIrradianceProbe.MutualLow) / (SdfMeshIrradianceProbe.MutualHigh - SdfMeshIrradianceProbe.MutualLow)), min: 0f, max: 1f);
+
+                shares[corner] = ((t * t) * (3f - (2f * t)));
+            }
+            kept += (weights[corner] * shares[corner]);
+        }
+        if (kept <= 0f) { return; }
+
+        for (var corner = 0; (corner < 8); corner++) {
+            weights[corner] *= shares[corner];
+        }
+    }
+    // The neighbour bit of the offset (x, y, z), each in -1, 0 and 1 and not all zero (NeighbourOffsets' order).
+    // KEEP IN SYNC with sdfMeshProbeNeighbourIndex.
+    private static int NeighbourIndex(int x, int y, int z) {
+        var index = (((9 * (x + 1)) + (3 * (y + 1))) + (z + 1));
+
+        return ((index > 13) ? (index - 1) : index);
     }
     private static float Cube(float[] cube, Vector3 normal, Vector3 squared) =>
         (((squared.X * cube[((normal.X >= 0f) ? 0 : 1)]) + (squared.Y * cube[((normal.Y >= 0f) ? 2 : 3)])) + (squared.Z * cube[((normal.Z >= 0f) ? 4 : 5)]));
@@ -858,6 +924,12 @@ public sealed class SdfMeshIrradiance {
     // index), the neighbouring probes it sees (one bit an entry of NeighbourOffsets), the sweeps it holds and whether it
     // lies inside geometry.
     private sealed record Probe(float[] Sky, Vector3[] Radiance, float[] Depth, uint[] Lights, uint Neighbours, int Sweeps, bool Invalid);
+
+    // The eight probes about a point a read gathers, held without an allocation on the trace's hot path.
+    [System.Runtime.CompilerServices.InlineArray(8)]
+    private struct Corners {
+        private Probe? m_first;
+    }
 
     // A static point or spot light the probes trace: its index in the lights table, and its record's position, colour,
     // intensity over pi, range, cone and bounce gain.
