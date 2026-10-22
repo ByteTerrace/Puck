@@ -572,7 +572,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, WorldScreen? engaged = null, float share = 1f, Vector2 offset = default) {
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
         // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
@@ -777,11 +777,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             dynamics: chase.Dynamics,
             eye: ref eye,
             fieldOfViewRadians: fieldOfView,
+            held: held,
             offset: offset,
             screen: engaged,
             share: share,
             target: ref target
         );
+
+        fieldOfView = m_screenFraming[slot].FieldOfView;
         // A seat sitting at a tabletop of the world it is presented in looks down on the board (the board view).
         var tabletopNear = m_tabletopFraming[slot].Apply(
             aspectRatio: (placed.X / placed.Y),
@@ -829,24 +832,81 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         return null;
     }
     // The screen row the seat is captured on, where its picture is this frame (in its carrier's hands while a body
-    // carries it), or null when it engages none or the row is gone.
-    private WorldScreen? EngagedScreenRow(int slot) {
+    // carries it), or null when it engages none or the row is gone. A carried screen whose carry authors a camera row
+    // names it in held, which is the view the engagement starts on (WorldPerceptionAnchor.ScreenFramed).
+    private WorldScreen? EngagedScreenRow(int slot, out WorldCamera? held) {
         var index = m_anchor.EngagedScreen(slot: slot);
+
+        held = null;
 
         if (index < 0) {
             return null;
         }
 
         foreach (var screen in m_client.Definition.Screens) {
-            if (screen.Index == index) {
-                return m_animator.Carried(
-                    client: m_client,
-                    screen: screen
-                );
+            if (screen.Index != index) {
+                continue;
             }
+            if (m_animator.TryCarriedScreen(
+                carried: out var carried,
+                client: m_client,
+                screen: screen
+            )) {
+                if (screen.Carry?.Camera is { } name) {
+                    foreach (var camera in m_client.Definition.Cameras) {
+                        if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                            held = camera;
+
+                            break;
+                        }
+                    }
+                }
+
+                return carried;
+            }
+
+            return screen;
         }
 
         return null;
+    }
+    // Where the held camera of a carried screen stands this frame: its rig run against an anchor at the picture's face, in
+    // the picture's own axes (+X right, +Y up, +Z toward the body looking at it).
+    private WorldHeldView HeldView(WorldCamera camera, WorldScreen carried) {
+        var right = Vector3.Normalize(value: carried.Right);
+        var up = Vector3.Normalize(value: carried.Up);
+        var normal = Vector3.Normalize(value: Vector3.Cross(
+            vector1: right,
+            vector2: up
+        ));
+        var rig = ResolveNamedCameraRig(
+            definition: m_client.Definition,
+            name: camera.Name,
+            program: camera.Rig
+        );
+        var anchor = new SdfAnchor(
+            Orientation: Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
+                m11: right.X, m12: right.Y, m13: right.Z, m14: 0f,
+                m21: up.X, m22: up.Y, m23: up.Z, m24: 0f,
+                m31: normal.X, m32: normal.Y, m33: normal.Z, m34: 0f,
+                m41: 0f, m42: 0f, m43: 0f, m44: 1f
+            )),
+            Position: carried.Origin
+        );
+        var clock = new SdfCameraClock(
+            PresentationSeconds: m_elapsedSeconds,
+            AuthoritativeTick: m_simulation.Tick
+        );
+        var (eye, target, fieldOfView) = rig.Resolve(
+            anchor: in anchor,
+            clock: in clock
+        );
+
+        return new WorldHeldView(
+            Eye: eye,
+            FieldOfViewRadians: fieldOfView,
+            Target: target
+        );
     }
     private static WorldScreenFraming[] NewScreenFraming() {
         var framing = new WorldScreenFraming[PlayerRoster.MaxSlots];
@@ -1614,9 +1674,27 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A seat engaged on a screen of the world it is presented in frames the screen's picture onto the matte,
             // refitted to the display every frame. Once the ease has settled on that screen the root shows only the
             // matte's part of its view: the picture already fills it, so the picture stays where it was and only what
-            // lay around it turns to the matte's fill.
-            var engaged = ((m_continuum.PresentedElsewhere(slot: slot) is null)
-                ? EngagedScreenRow(slot: slot)
+            // lay around it turns to the matte's fill. A screen a body carries with a held camera starts on the view that
+            // shows the body holding it, and a toggle (WorldPerceptionAnchor.ToggleFrame) switches between the two.
+            WorldCamera? holdCamera = null;
+
+            var carried = ((m_continuum.PresentedElsewhere(slot: slot) is null)
+                ? EngagedScreenRow(slot: slot, held: out holdCamera)
+                : null);
+
+            m_anchor.PublishHoldView(
+                holdView: (holdCamera is not null),
+                slot: slot
+            );
+
+            var engaged = (m_anchor.ScreenFramed(slot: slot)
+                ? carried
+                : null);
+            WorldHeldView? held = (((carried is not null) && (holdCamera is not null))
+                ? HeldView(
+                    camera: holdCamera,
+                    carried: carried
+                )
                 : null);
             var matte = ((engaged is null)
                 ? region
@@ -1640,6 +1718,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 engaged: engaged,
                 eye: out var eye,
                 height: height,
+                held: held,
                 interpolationAlpha: interpolationAlpha,
                 offset: ((engaged is null)
                     ? Vector2.Zero

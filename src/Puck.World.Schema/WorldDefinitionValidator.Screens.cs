@@ -694,6 +694,12 @@ public static partial class WorldDefinitionValidator {
 
             return;
         }
+        if (
+            (carry.Camera is { } camera) &&
+            !definition.Cameras.Any(predicate: row => string.Equals(a: row.Name, b: camera, comparisonType: StringComparison.Ordinal))
+        ) {
+            errors.Add(item: $"{path}.camera '{camera}' names no cameras row.");
+        }
         if ((look.Motion.Poses is not { } poses) || !poses.ContainsKey(key: carry.Pose)) {
             errors.Add(item: $"{path}.pose '{carry.Pose}' is not a pose of look '{carry.Look}' (its motion.poses names the frames a body holds).");
         }

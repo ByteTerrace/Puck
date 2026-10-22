@@ -299,6 +299,37 @@ internal sealed partial class PlayerCommandModule {
             verb: CameraCommand
         );
     }
+    // The frame toggle a key or button fires: the seat's view of the screen it engages switches between the framed
+    // picture and the other view (the held view of a carried screen, else the room). Presentation only.
+    private CommandResult FrameHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
+            return CommandResult.Error(output: $"[{FrameCommand}: expected [seat]]");
+        }
+
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: 0,
+            context: context,
+            verb: FrameCommand
+        );
+
+        if (error is { } resolveError) {
+            return resolveError;
+        }
+        if (!m_anchor.ToggleFrame(slot: slot)) {
+            return CommandResult.Error(output: $"[{FrameCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} engages no screen]");
+        }
+
+        return SeatCommandArgs.Echo(
+            detail: $"view = {(m_anchor.ScreenFramed(slot: slot)
+                ? "picture"
+                : (m_anchor.HoldView(slot: slot)
+                ? "held"
+                : "room"))}",
+            slot: slot,
+            verb: FrameCommand
+        );
+    }
     // The no-token build toggle a key or button fires: the seat's editor family flips between play and build through
     // the same ApplyMode player.mode editor takes. A seat whose principal may not change the placements still builds,
     // and the echo says it is read-only, as its refused edits will.
@@ -340,6 +371,13 @@ internal sealed partial class PlayerCommandModule {
             description: $"Flips a seat between playing and building: player.build [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1), the same flip player.mode editor build|play makes. While a seat builds, its bindings resolve in the engine's build group (the build page: the toggle, the grid and snapping, placing, and nudging and turning the seat's current placement) and its view draws its grid. A seat whose principal may not mutate placements still builds, and the echo marks it read-only.",
             handler: BuildHandler,
             routing: CommandRouting.Simulation
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: FrameCommand,
+            description: $"Switches a seat's view of the screen it is engaged on: player.frame [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
+            handler: FrameHandler,
+            routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,

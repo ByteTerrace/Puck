@@ -424,12 +424,19 @@ public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float 
 /// look's <see cref="Pose"/> frame, the screen's own slab is not drawn and its source shows on the face of the look's
 /// box <see cref="Shape"/>, riding the body's hands every frame, and a seat engaged on the screen frames the picture
 /// there. The box's face is its front (author <c>-Z</c>, the side a body holding it looks at) and its half-extents are
-/// the picture's. Presentation only: the simulation's screen row, its engage radius and its pointer mapping keep the
-/// authored frame.</summary>
+/// the picture's. A seat engaged on a carried screen starts on <paramref name="Camera"/>, a view that shows the body
+/// holding the device, and a bound control toggles between that view and the framed picture (<c>player.frame</c>).
+/// Presentation only: the simulation's screen row, its engage radius and its pointer mapping keep the authored
+/// frame.</summary>
 /// <param name="Look">The look row whose wearer carries the picture; a creation look.</param>
 /// <param name="Pose">The look's <see cref="WorldLookMotion.Poses"/> frame that holds while the body carries it.</param>
 /// <param name="Shape">The name of the ungrouped box in the look's creation that shows the picture.</param>
-public sealed record WorldScreenCarry(string Look, string Pose, string Shape);
+/// <param name="Camera">The name of a <see cref="WorldDefinition.Cameras"/> row whose rig frames the body holding the
+/// device, or <see langword="null"/> for none (a seat engaged on the carried screen then starts on the framed picture, as
+/// at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its
+/// right, +Y its up and +Z its normal, toward the body looking at it (<c>offset</c> and <c>lookAt</c> without
+/// <c>worldAxes</c> read in those axes).</param>
+public sealed record WorldScreenCarry(string Look, string Pose, string Shape, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null);
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/

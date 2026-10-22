@@ -173,7 +173,7 @@ public sealed class WorldScreenFramingLawTests {
         var eye = chaseEye;
         var target = chaseTarget;
 
-        Assert.Equal(expected: 0f, actual: framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: null, share: 1f, target: ref target));
+        Assert.Equal(expected: 0f, actual: framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target));
         Assert.Equal(expected: chaseEye, actual: eye);
 
         // Engaged, the weight (the view's screen fidelity) climbs monotonically and settles on the framing; only the
@@ -183,7 +183,7 @@ public sealed class WorldScreenFramingLawTests {
         for (var frame = 0; (frame < 120); frame++) {
             eye = chaseEye;
             target = chaseTarget;
-            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: screen, share: 0.8f, target: ref target);
+            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: screen, share: 0.8f, target: ref target);
             Assert.True(condition: (framing.Weight >= last));
             Assert.Equal(expected: (framing.Weight >= 1f), actual: (framing.Framed is not null));
             last = framing.Weight;
@@ -196,7 +196,7 @@ public sealed class WorldScreenFramingLawTests {
         // Left, it eases back to the seat's camera, from the framing it last held, matting nothing.
         eye = chaseEye;
         target = chaseTarget;
-        _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: null, share: 1f, target: ref target);
+        _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target);
         Assert.InRange(actual: framing.Weight, high: 0.999f, low: 0.001f);
         Assert.Null(@object: framing.Framed);
         Assert.NotEqual(expected: chaseEye, actual: eye);
@@ -204,7 +204,7 @@ public sealed class WorldScreenFramingLawTests {
         for (var frame = 0; (frame < 120); frame++) {
             eye = chaseEye;
             target = chaseTarget;
-            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: null, share: 1f, target: ref target);
+            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target);
         }
 
         Assert.Equal(expected: 0f, actual: framing.Weight);
@@ -213,11 +213,68 @@ public sealed class WorldScreenFramingLawTests {
         // A rig reporting no dynamics cuts straight to the framing.
         eye = chaseEye;
         target = chaseTarget;
-        var near = framing.Apply(deltaSeconds: (1f / 60f), dynamics: SdfCameraDynamics.None, eye: ref eye, fieldOfViewRadians: FieldOfView, screen: screen, share: 1f, target: ref target);
+        var near = framing.Apply(deltaSeconds: (1f / 60f), dynamics: SdfCameraDynamics.None, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: screen, share: 1f, target: ref target);
 
         Assert.Equal(expected: 1f, actual: framing.Weight);
         Assert.Same(expected: screen, actual: framing.Framed);
         Assert.True(condition: (near > 0f));
+    }
+    [Fact]
+    public void AHeldViewIsStoodOnFirstAndTheFramingEasesFromItWithTheLensGoingBack() {
+        var screen = Screen();
+        var chaseEye = new Vector3(x: 0f, y: 2f, z: 5f);
+        var chaseTarget = new Vector3(x: 0f, y: 1f, z: 1f);
+        var held = new WorldHeldView(Eye: new Vector3(x: -3f, y: 1.5f, z: 2f), FieldOfViewRadians: 0.5f, Target: new Vector3(x: -3f, y: 1.5f, z: 0f));
+        var dynamics = new SdfCameraDynamics(Damping: 1f, Frequency: 4f, Response: 0f);
+        var framing = new WorldScreenFraming();
+        var eye = chaseEye;
+        var target = chaseTarget;
+        var near = 0f;
+
+        // The held view with nothing framed settles on the held camera: the picture's fidelity and the near plane stay off.
+        for (var frame = 0; (frame < 240); frame++) {
+            eye = chaseEye;
+            target = chaseTarget;
+            near = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: held, screen: null, share: 1f, target: ref target);
+        }
+
+        Assert.Equal(expected: held.Eye, actual: eye);
+        Assert.Equal(expected: held.Target, actual: target);
+        Assert.Equal(expected: 0.5f, actual: framing.FieldOfView);
+        Assert.Equal(expected: 0f, actual: framing.Weight);
+        Assert.Equal(expected: 0f, actual: near);
+        Assert.Null(@object: framing.Framed);
+
+        // Framed on top of it, the framing eases from the held view and takes the seat camera's lens.
+        for (var frame = 0; (frame < 240); frame++) {
+            eye = chaseEye;
+            target = chaseTarget;
+            near = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: held, screen: screen, share: 1f, target: ref target);
+        }
+
+        Assert.Equal(expected: FieldOfView, actual: framing.FieldOfView);
+        Assert.Equal(expected: 1f, actual: framing.Weight);
+        Assert.Same(expected: screen, actual: framing.Framed);
+        Assert.Equal(expected: (Vector3)screen.Origin, actual: target);
+        Assert.True(condition: (near > 0f));
+
+        // Back to the held view, then out of it to the seat's camera.
+        for (var frame = 0; (frame < 240); frame++) {
+            eye = chaseEye;
+            target = chaseTarget;
+            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: held, screen: null, share: 1f, target: ref target);
+        }
+
+        Assert.Equal(expected: held.Eye, actual: eye);
+
+        for (var frame = 0; (frame < 240); frame++) {
+            eye = chaseEye;
+            target = chaseTarget;
+            _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target);
+        }
+
+        Assert.Equal(expected: chaseEye, actual: eye);
+        Assert.Equal(expected: FieldOfView, actual: framing.FieldOfView);
     }
     [Fact]
     public void TheMatteIsTheDisplaysFillOrBlack() {

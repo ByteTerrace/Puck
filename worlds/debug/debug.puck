@@ -105,7 +105,7 @@ views {
   studioLayouts()
 }
 
-cameras: studioCameras
+cameras: concat(studioCameras, motionCameras)
 
 // Recovery at the hero spawn lands above the studio platform. The gallery adds a spawn point per exhibit
 // (shapes.puck's gallerySpawns) and the gallery.* commands (galleryCommands) that walk, inspect and flag them.

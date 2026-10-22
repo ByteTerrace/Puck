@@ -81,8 +81,10 @@ engaging it (E or the pad's X beside it) sets her `pilotHold` cell through
 `devices.puck`'s `brick-pick-up` rule, which reads the engagement as
 `engaged(each, 0)`. The brick's placement then shows nothing on its rest, and
 screen 0's `carry` puts the device's live picture on `brickPicture` in her
-hands, where the engaged camera frames it. Leaving puts it back on its rest and
-lowers her arms. In the suit, or at a quarter her size, she plays it where it
+hands. The engagement starts on a view of her holding it (the `brick-hold`
+camera, which the carry names), and the Frame control (the pad's East, `L`) goes
+to the picture alone and back ([devices](../devices.md)). Leaving puts it back on
+its rest and lowers her arms. In the suit, or at a quarter her size, she plays it where it
 stands. Setting the cell by hand holds the brick the same way, its live picture
 included:
 

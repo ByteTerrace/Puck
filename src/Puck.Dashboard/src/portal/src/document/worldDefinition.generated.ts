@@ -1562,7 +1562,7 @@ export type MutationKindMask = string;
 /**
  * A presentation fact an overlay element's OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.
  */
-export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication" | "ScreenEngaged";
+export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication" | "ScreenFramed";
 
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
@@ -11068,6 +11068,10 @@ export type WorldScreenCarry = {
    * The name of the ungrouped box in the look's creation that shows the picture.
    */
   shape: string;
+  /**
+   * The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its right, +Y its up and +Z its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).
+   */
+  camera?: string | null;
 };
 
 export type WorldScreenDisplay = {
