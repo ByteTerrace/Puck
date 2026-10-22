@@ -39,6 +39,33 @@ material blending at smooth seams do not survive the bake: the mesh carries no
 curvature, a rasterized pixel is covered or not, and the bake point-samples a
 quad's winning material.
 
+## A raster pass draws only what it can show
+
+Every raster pass skips the mesh draws it cannot show any of, by a world box per
+draw tested on the host (`SdfMeshBox`, `SdfMeshCull`): a view's mesh and glass
+passes against the view's frustum before the frame's far distance, a shadow
+cascade against its light's box and, swept along the light, against the
+receivers the view shows. A skipped draw lies wholly outside what the pass's
+rasterizer keeps, or casts only where no visible receiver reads, so the cull
+changes no pixel and needs no authoring: every world gets it, and every nested
+view culls by its own camera, which for a portal window is the frustum fitted
+through its glass. On the debug world it removed 31% to 95% of a frame's
+triangles across eight indoor, outdoor and through-portal views
+([P20](../plans/rendering.md#p20--visibility-areas-and-residency)). The test
+is conservative where exactness would risk a pixel: a pixel margin past the
+temporal jitter, a thousandth of the near distance in front of the near plane,
+the shadow filter's reach around receivers, and no box at all for a skinned
+draw whose vertices the GPU places. Occlusion, levels of detail and residency
+build on the same per-draw box; authored areas are not assumed, because the
+debug world's levels are open plan and name no rooms. Hidden geometry is found
+by a depth-based occlusion test that needs no authoring, not by authored rooms.
+
+Anything that trades a visible change for cost, such as a level of detail, an
+unloaded residency ring or a culled small object, switches only beyond the
+distance at which the switch is barely perceptible (the owner's ruling). The
+switch distance is derived from the change's size on screen at the view's
+resolution, not fixed in metres.
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable

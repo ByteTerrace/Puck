@@ -189,6 +189,11 @@ public sealed record SdfFrame(
     /// <c>sdf.screen-lights</c> bench toggle. The pass block carries it as <c>disableScreenLights</c>
     /// (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }
+    /// <summary>Engine-bench lever: every view's mesh and glass passes and every shadow cascade draw every mesh draw,
+    /// with no cull by box (<see cref="SdfMeshCull"/>). Default <see langword="false"/> culls: a pass skips each draw it
+    /// cannot show any of, which changes no pixel, so the lever measures the cull's saving and checks it shows the same
+    /// image. The cadence signature folds it, so a change re-renders.</summary>
+    public bool DrawUnseen { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
     /// passes and re-composites from the retained views output — pixel-identical to a

@@ -47,7 +47,8 @@ public static partial class GpuWork {
     internal const int EnvironmentProjectionsColumn = (SkyTextureLoadsColumn + 1);
     internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
-    internal const int SubmissionColumnCount = (ShapeGradientsColumn + 1);
+    internal const int VerticesColumn = (ShapeGradientsColumn + 1);
+    internal const int SubmissionColumnCount = (VerticesColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -63,6 +64,9 @@ public static partial class GpuWork {
     public static WorkKind IndirectDispatches { get; } = new(name: "gpu.dispatches.indirect", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting draws, indexed or not.</summary>
     public static WorkKind Draws { get; } = new(name: "gpu.draws", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the vertices draws ask for: each draw's vertex count times its instance count,
+    /// or an indexed draw's index count, so a triangle-list draw's triangles are a third of it.</summary>
+    public static WorkKind Vertices { get; } = new(name: "gpu.vertices", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting render pass instances begun.</summary>
     public static WorkKind RenderPasses { get; } = new(name: "gpu.render-passes", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting command buffers begun for recording.</summary>
@@ -199,6 +203,7 @@ public static partial class GpuWork {
             kinds[SkyTextureLoadsColumn] = SkyTextureLoads;
             kinds[ShapesEvaluatedColumn] = ShapesEvaluated;
             kinds[ShapeGradientsColumn] = ShapeGradients;
+            kinds[VerticesColumn] = Vertices;
 
             return kinds;
         }

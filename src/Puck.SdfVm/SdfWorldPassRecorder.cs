@@ -410,6 +410,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (IsMesh) {
             RecordMesh(
                 cascadeTexels: cascades.Texels,
+                cull: (frame.DrawUnseen
+                    ? SdfMeshCull.None
+                    : (IsShadowCascade
+                        ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[m_part switch {
+                            SdfWorldPackage.Parts.ShadowNear => 0,
+                            SdfWorldPackage.Parts.ShadowFar => 1,
+                            _ => 2,
+                        }], far: frame.FarDistance, height: recording.RenderHeight, texels: cascades.Texels, width: recording.RenderWidth)
+                        : SdfMeshCull.Of(camera: frame.Views[view].Camera, far: frame.FarDistance, height: height, width: width))),
                 recording: in recording,
                 tables: tables
             );
@@ -594,7 +603,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // a set never rewrites what it binds once written.
     private static int MeshSetOf(int slot, SdfWorldTables tables) =>
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels) {
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull) {
         var draws = tables.MeshDraws;
         var count = ((draws is null) ? 0u : tables.MeshDrawCount);
         var slot = recording.Slot;
@@ -655,8 +664,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
         if (count > 0) {
             RecordMeshDraws(
+                boxes: tables.MeshDrawBoxes,
                 commandBuffer: commandBuffer,
                 count: count,
+                cull: in cull,
                 draws: draws!,
                 pipeline: pipeline,
                 recorder: recorder,
@@ -665,9 +676,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
     }
-    // Binds a pipeline and the pass set, then draws every draw of the part's kind: the glass pass the glass draws, every
-    // other raster part the opaque ones, each pushed by its index in the staged list.
-    private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
+    // Binds a pipeline and the pass set, then draws every draw of the part's kind the pass's cull keeps: the glass pass
+    // the glass draws, every other raster part the opaque ones, each pushed by its index in the staged list.
+    private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, in SdfMeshCull cull, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBuffer,
@@ -682,7 +693,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         for (var draw = 0u; (draw < count); draw++) {
-            if (draws[((int)draw)].Glass != IsGlass) {
+            if ((draws[((int)draw)].Glass != IsGlass) || !cull.Keeps(box: in boxes[((int)draw)])) {
                 continue;
             }
             BinaryPrimitives.WriteUInt32LittleEndian(

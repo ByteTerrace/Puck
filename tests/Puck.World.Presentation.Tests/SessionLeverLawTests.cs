@@ -280,6 +280,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
+            WorldSessionLevers.Cull,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,

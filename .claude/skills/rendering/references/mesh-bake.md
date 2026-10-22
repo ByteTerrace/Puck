@@ -290,7 +290,15 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
   members they name, its locals, exception regions and loaded field data, and
-  each named type's layout. It stops at `SdfMeshLibrary` and `SdfMeshStore`,
+  each named type's layout. A value type's layout counts whole (the bytes its
+  code moves); any other type's counts only the fields the closure's code loads,
+  stores or takes the address of, so a field the bake never reads (a
+  presentation-only flag on `SdfFrame`) leaves the identity as it was, and a
+  record the code merely copies with `with` has its synthesized clone and copy
+  constructor hashed by signature (they read no field). A record the bake
+  constructs counts its whole layout, since its synthesized equality and
+  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
+  stops at `SdfMeshLibrary` and `SdfMeshStore`,
   which hold meshes, and at the runtime. So an edit to `Puck.Maths` code the
   contour calls re-bakes, while an edit to the rest of the renderer, a new
   public member of a referenced assembly, a comment or another checkout path
