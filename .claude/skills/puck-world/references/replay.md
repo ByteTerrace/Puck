@@ -568,7 +568,8 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
 - `--poses`: re-drives through the untouched `WorldReplaySnapshot.Drive`,
   observing the shadow population at the addon seam's third pump point
   (`IWorldAddonHost.ResolveReads`, after the population advanced) through a
-  forwarding host around the ordinary factory's product; each printed line
+  forwarding host around the ordinary factory's product, indexed from the tick
+  after the tape's start checkpoint (tick 1 for a boot-image tape); each printed line
   gains ` | body:0 pos=(x, y, z) yaw=…° pitch=…° roll=…°` per active body,
   and a pose that MOVED (the recorded hash differs from the previous
   tick's; tick 0 always) counts as an edge, so a body advancing under a

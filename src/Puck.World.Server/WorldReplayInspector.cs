@@ -263,6 +263,9 @@ public sealed class WorldReplayInspector {
         var poses = new string[]?[recording.TickCount];
         var observed = new ulong[recording.TickCount];
         var observedCount = 0;
+        // The shadow's tick numbers continue the live world's: a boot-image tape starts them at 0, a checkpoint tape at
+        // the tick its checkpoint was taken after.
+        var firstTick = ((recording.StartTick ?? 0UL) + 1UL);
         WorldPopulation? shadow = null;
         var trace = recording.Drive(
             addonHostFactory: (definition, server) => {
@@ -275,7 +278,7 @@ public sealed class WorldReplayInspector {
                     ),
                     onResolved: tick => {
                         // ResolveReads receives context.Tick + 1 (the tick that just advanced, 1-based).
-                        var index = ((int)(tick - 1UL));
+                        var index = ((int)(tick - firstTick));
 
                         if (
                             (((uint)index) >= ((uint)poses.Length)) ||
