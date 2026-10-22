@@ -1,0 +1,81 @@
+// The Moth's suit on and off (suit.puck), each scenario booted in the whole debug world:
+// `puck test worlds/debug/suit-tests.puck --reproduce`. `suit[0]` is body 0's cell, which selects her kit (walker in
+// the suit, pilot out of it) and her look (moth, or the moth-pilot stand-in). Flight mode is the walker's: pressing
+// flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "suit-tests"
+
+test "the Moth starts in the suit" {
+  when {
+    ticks 30
+  }
+  expect {
+    suit[0] == 1
+  }
+}
+
+test "in the suit, flight lifts her off the ground" {
+  when {
+    ticks 30
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.press rise 1 1 0
+    ticks 30
+  }
+  expect {
+    suit[0] == 1
+    bodyState(body, 0, flightFuel) > 0
+    bodyPosition(body, 0, y) > 1
+  }
+}
+
+test "a press on the ground takes the suit off and refuses flight" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.press rise 1 1 0
+    ticks 30
+  }
+  expect {
+    suit[0] == 0
+    bodyState(body, 0, flightFuel) == 0
+    airPose[0] == 0
+    bodyPosition(body, 0, y) < 0.5
+  }
+}
+
+test "a second press puts the suit back on and flight works again" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.press flight 1 0.2 0
+    ticks 15
+    seat1: body.press rise 1 1 0
+    ticks 30
+  }
+  expect {
+    suit[0] == 1
+    bodyPosition(body, 0, y) > 1
+  }
+}
+
+test "a press in the air leaves the suit on" {
+  when {
+    ticks 30
+    seat1: body.press jump 1 0.3 0
+    ticks 6
+    seat1: body.press suit 1 0.1 0
+    ticks 45
+  }
+  expect {
+    suit[0] == 1
+  }
+}

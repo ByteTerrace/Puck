@@ -238,7 +238,7 @@ public sealed partial class WorldPopulation {
             (flock.Source.AlignmentAffinity is not null)
         ) {
             if (!m_flockAffinities.TryGetValue(
-                key: (m_kitRows[entry.KitIndex].Name, producer.Program.Name),
+                key: (m_kitRows[KitIndex(index: entry.Index)].Name, producer.Program.Name),
                 value: out affinities
             )) {
                 throw new InvalidOperationException(message: "Flock affinity expressions require an authority binding for the current definition.");

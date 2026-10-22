@@ -2624,7 +2624,7 @@ case must cover the largest live body—refused by name otherwise) whose
 cells, keyed by 0-based body index, carry each body's live scale multiplier:
 absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
 forever, at no per-tick cost. Every cell key must parse as an integer inside
-`0..bodies.capacity-1`—the SAME parse `WorldPopulation.SyncBodyScale` runs at
+`0..bodies.capacity-1`—the SAME parse `WorldPopulation.SyncBodyCells` runs at
 every resync, which silently skips a key that fails it; refusing the mismatch
 at validation instead of leaving an authored cell nothing ever reads. A cell
 may not declare an `advance`/`cycle`/`dynamics` value-over-time trait—every
@@ -2649,7 +2649,7 @@ paired with a self-resetting flag row, which is the same per-tick-write
 anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against. The garden's
 `drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry) are
 one authored instance of this primitive, not engine surface of their own.
-`WorldPopulation.SyncBodyScale` resyncs every active body's `Scale` wholesale
+`WorldPopulation.SyncBodyCells` resyncs every active body's `Scale` wholesale
 from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
 resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
 `WorldPopulation.Restore` rebuilds every body at the constructed default) and
@@ -2749,6 +2749,33 @@ the count actually run is derived DOWN from this ceiling by
 divided by the first pass's own resolved-pair count, so a lightly loaded tick
 gets every authored pass and a crowded one stays bounded. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+
+### Kit and look selected by a body's cell
+
+`kits.assignment` and `looks.assignment` each take an optional `select`
+(`WorldRowSelector`): `state` names a keyed `state.world` row of kind Int or
+Bool whose cells are keyed by 0-based body index, and `cases` maps a cell value
+to a kit or look row (`{ value: 0, row: "pilot" }`). A body whose cell holds a
+value a case names wears that look, or runs that kit, outranking the sequence
+and, for a local seat, the seat kit; a body with no cell, or a value no case
+names, keeps what the sequence gives it. The validator refuses, by name, a
+`state` the document does not declare, a row of another kind or with a
+value-over-time trait, a key outside `0..bodies.capacity-1`, an empty or
+repeated case value, and a case row naming no kit or look.
+
+The cell is simulation state, so the choice follows it deterministically: a
+rule's write, a `world.state.cell.set`, a replay and `puck test --reproduce`
+all move it at the same tick. `WorldPopulation.SyncBodyCells` resolves it at
+the same choke points as `bodies.scaleRow` and whenever the end-of-tick
+publication moves the selector's row; a body whose kit moves recompiles it in
+place (pose, velocity and action state kept), and a moved kit or look bumps the
+population revision, so the client rebuilds and re-latches the body's stamp. A
+checkpoint carries the cell, not the selection, and the restore resolves it
+again. A look never changes a kit: a collider change is the kit assignment's
+own mapping, authored beside the look's. `world.assign` replaces the sequence
+and rows and keeps the authored `select`; `world.population` echoes each
+assignment's selector and `world.looks` the bodies each look holds. The debug
+world's suit toggle (`worlds/debug/suit.puck`) selects both by a `suit` table.
 
 ### Body sleep
 
