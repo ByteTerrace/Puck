@@ -272,6 +272,14 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   piece and the board cursor as the Moth, and the debug world planned 7,322
   groups, 6,880 dynamic, in place of about 1,286 and 844. The validator refuses
   such a case (`WorldDefinitionValidator.ValidateRowSelector`); `body.rig <n>` names the creation a body wears.
+- **A group a later program drops before it lands is never stored,** so it bakes
+  again on every boot. A boot whose second `[sdf.mesh-bake] start` line plans
+  fewer groups than its first, and whose next boot's first start still reads
+  `baking=` above zero, presented a document its first tick then changed. A
+  placement's response mask is settled into the booting document
+  (`WorldStateSettlement.SettleResponses`), so the debug world's raised blinds
+  never reach the first plan; look for another tick-one change (a rule, a deal)
+  when the line comes back.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
   field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample
   counts five), and a longer frame takes a share for each whole 60 Hz frame it

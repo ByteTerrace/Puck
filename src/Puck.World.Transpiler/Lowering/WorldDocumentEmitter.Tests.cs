@@ -28,6 +28,125 @@ public sealed record WorldTestWorld(string Name, string Test, JsonObject Json, s
     /// composition it stands at the root of, armed by the boot document's own <c>schedule.instances</c>. Empty for a
     /// test over one world.</summary>
     public IReadOnlyList<WorldTestSibling> Siblings { get; init; } = [];
+    /// <summary>Gets the expectations the test addresses to a sibling document by name (<c>garden { … }</c>), in the
+    /// order written. The document is not part of this test's world: a crossing starts it, so each expectation is
+    /// lowered into that document's staged copy with <see cref="WorldTestForeign.TryApply"/>. Empty for a test that
+    /// addresses none.</summary>
+    public IReadOnlyList<WorldTestForeign> Foreign { get; init; } = [];
+}
+/// <summary>One expectation of a test about a sibling document: a claim judged in the document a crossing starts,
+/// rather than in the world the run boots.</summary>
+/// <param name="Document">The document the expectation names.</param>
+/// <param name="Line">The 1-based line of the test's <c>expect</c> block, which names the verdict row
+/// (<c>expect$&lt;line&gt;</c>).</param>
+/// <param name="Gate">The gate as written, which the verdict reports.</param>
+/// <param name="Reads">Every row and key the gate reads.</param>
+/// <param name="Rule">The rule that writes the verdict whenever the gate holds, lowered and without the effects that
+/// copy what the gate read into the verdict's rows.</param>
+public sealed record WorldTestForeign(string Document, int Line, string Gate, IReadOnlyList<(string State, string? Key)> Reads, JsonObject Rule) {
+    /// <summary>Returns the expectations as one JSON array, the form a compile cache holds them in.</summary>
+    /// <param name="expectations">The expectations.</param>
+    /// <returns>The JSON text; <see cref="FromJson"/> reads it back.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="expectations"/> is <see langword="null"/>.</exception>
+    public static string ToJson(IReadOnlyList<WorldTestForeign> expectations) {
+        ArgumentNullException.ThrowIfNull(argument: expectations);
+
+        var array = new JsonArray();
+
+        foreach (var expectation in expectations) {
+            array.AppendNode(item: new JsonObject {
+                ["document"] = expectation.Document,
+                ["gate"] = expectation.Gate,
+                ["line"] = expectation.Line,
+                ["reads"] = new JsonArray([.. expectation.Reads.Select(selector: static read => (JsonNode?)new JsonObject {
+                    ["key"] = read.Key,
+                    ["state"] = read.State,
+                })]),
+                ["rule"] = expectation.Rule.DeepClone(),
+            });
+        }
+
+        return array.ToJsonString();
+    }
+    /// <summary>Reads expectations written by <see cref="ToJson"/>.</summary>
+    /// <param name="json">The JSON text.</param>
+    /// <returns>The expectations, in the order written.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
+    /// <exception cref="System.Text.Json.JsonException"><paramref name="json"/> is not text <see cref="ToJson"/>
+    /// wrote.</exception>
+    public static IReadOnlyList<WorldTestForeign> FromJson(string json) {
+        ArgumentNullException.ThrowIfNull(argument: json);
+
+        var expectations = new List<WorldTestForeign>();
+
+        foreach (var node in JsonNode.Parse(json: json)!.AsArray()) {
+            var entry = node!.AsObject();
+
+            expectations.Add(item: new WorldTestForeign(
+                Document: entry["document"]!.GetValue<string>(),
+                Gate: entry["gate"]!.GetValue<string>(),
+                Line: entry["line"]!.GetValue<int>(),
+                Reads: [.. entry["reads"]!.AsArray().Select(selector: static read => (read!["state"]!.GetValue<string>(), read["key"]?.GetValue<string>()))],
+                Rule: (JsonObject)entry["rule"]!.DeepClone()
+            ));
+        }
+
+        return expectations;
+    }
+    /// <summary>Gets the name of the verdict row this expectation declares in its document.</summary>
+    public string Row => WorldDocumentEmitter.VerdictRow(line: Line);
+
+    /// <summary>Adds this expectation to a sibling document: its verdict row, the witness rows for what the gate reads
+    /// of rows that are not Int, and the rule that passes the verdict on every tick the claim holds, so a document
+    /// where it never holds reports the verdict as never evaluated.</summary>
+    /// <param name="world">The sibling document as it compiles, which this call adds rows and a rule to.</param>
+    /// <param name="reason">The refusal when the document already carries the verdict's name, otherwise
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the expectation was added.</returns>
+    public bool TryApply(JsonObject world, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: world);
+
+        if (world["state"] is not JsonObject state) {
+            state = [];
+            world["state"] = state;
+        }
+
+        if (state["world"] is not JsonArray rows) {
+            rows = [];
+            state["world"] = rows;
+        }
+
+        if (world["rules"] is not JsonArray rules) {
+            rules = [];
+            world["rules"] = rules;
+        }
+
+        var row = Row;
+
+        if (
+            rules.OfType<JsonObject>().Any(predicate: candidate => (candidate["name"]?.GetValue<string>() == row)) ||
+            rows.OfType<JsonObject>().Any(predicate: candidate => (candidate["name"]?.GetValue<string>() == row))
+        ) {
+            reason = $"the document '{Document}' already declares '{row}'";
+
+            return false;
+        }
+
+        var rule = (JsonObject)Rule.DeepClone();
+
+        WorldDocumentEmitter.AddVerdictRows(
+            effects: rule["effects"]!.AsArray(),
+            gate: Gate,
+            reads: Reads,
+            row: row,
+            rows: rows,
+            state: state
+        );
+        rules.AppendNode(item: rule);
+        reason = null;
+
+        return true;
+    }
 }
 // A `test` block reaches no member of the document it is written in: it is collected while that document lowers
 // and each collected test is lowered afterwards against the finished document, so a world compiled without
@@ -445,7 +564,7 @@ public static partial class WorldDocumentEmitter {
             when: test.Declaration.When
         );
 
-        ApplyExpectations(
+        var foreign = ApplyExpectations(
             expectations: expectations,
             exportTick: exportTick,
             scope: scope,
@@ -474,6 +593,7 @@ public static partial class WorldDocumentEmitter {
                 : null),
             Test: test.Name
         ) {
+            Foreign = foreign,
             Siblings = [
                 .. targets.Skip(count: 1).Select(selector: static target => new WorldTestSibling(
                     Json: ((JsonObject)DocumentLowering.Canonicalize(node: target.Json)!),
@@ -877,11 +997,28 @@ public static partial class WorldDocumentEmitter {
     // One verdict row and one rule per expectation. The rule's gate is the export tick and nothing else, so it
     // fires exactly once: an expectation that is false before it becomes true would otherwise settle the verdict
     // at fail on the first tick, since a failed verdict stays failed.
-    private static void ApplyExpectations(TestExpectBlockNode expectations, IReadOnlyList<TestTarget> targets, DocumentScope scope, CollectedTest test, ulong exportTick) {
+    //
+    // A line addressed by name in a test about one world is a claim about the sibling document of that name, which a
+    // crossing starts: it cannot be decided at a tick, since the document starts whenever the traveller arrives. Its
+    // rule is gated on the claim itself and writes the verdict whenever the claim holds, and the lines are returned
+    // for `puck test` to lower into the document once it has composed it.
+    private static List<WorldTestForeign> ApplyExpectations(TestExpectBlockNode expectations, IReadOnlyList<TestTarget> targets, DocumentScope scope, CollectedTest test, ulong exportTick) {
+        var foreign = new List<WorldTestForeign>();
         var line = 0;
 
         foreach (var (addressed, expectation) in expectations.Lines) {
             line++;
+
+            if ((addressed is not null) && (targets[0].World is null)) {
+                foreign.Add(item: LowerForeign(
+                    document: addressed,
+                    expectation: expectation,
+                    line: line,
+                    scope: scope
+                ));
+
+                continue;
+            }
 
             if (ResolveTarget(
                 keyword: "expect",
@@ -937,12 +1074,10 @@ public static partial class WorldDocumentEmitter {
                 node: condition
             );
 
-            var cells = new JsonArray();
             var effects = new JsonArray();
             var pass = new JsonArray();
             var fail = new JsonArray();
 
-            cells.AppendNode(item: new JsonObject { ["key"] = VerdictStatusKey, ["value"] = WorldVerdict.NotEvaluated });
             fail.AppendNode(item: SetVerdictCell(
                 key: VerdictStatusKey,
                 row: row,
@@ -959,85 +1094,14 @@ public static partial class WorldDocumentEmitter {
                 ["else"] = fail,
                 ["then"] = pass,
             });
-            var folded = new HashSet<(CellKind Kind, string Key)> { (CellKind.Int, VerdictStatusKey) };
-            var witnesses = new SortedDictionary<CellKind, JsonArray>();
-
-            foreach (var (readState, readKey) in reads) {
-                // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
-                // read of a Fixed or a Bool row is a cell of that kind's witness.
-                if (
-                    (KindOfRow(
-                        name: readState,
-                        state: state
-                    ) is not { } kind) ||
-                    ((kind != CellKind.Int) && (UnseenValue(kind: kind) is null))
-                ) {
-                    continue;
-                }
-
-                if ((SawKey(
-                    key: readKey,
-                    state: readState
-                ) is not { } key) || !folded.Add(item: (kind, key))) {
-                    continue;
-                }
-
-                var into = row;
-
-                if (kind == CellKind.Int) {
-                    cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
-                } else {
-                    into = WitnessRow(
-                        kind: kind,
-                        verdict: row
-                    );
-
-                    if (!witnesses.TryGetValue(
-                        key: kind,
-                        value: out var witnessCells
-                    )) {
-                        witnessCells = [];
-                        witnesses[kind] = witnessCells;
-                    }
-                    witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
-                }
-
-                var fold = new JsonObject {
-                    ["$type"] = "setState",
-                    ["fromState"] = readState,
-                    ["key"] = key,
-                    ["state"] = into,
-                };
-
-                if (readKey is not null) {
-                    fold["fromKey"] = readKey;
-                }
-                effects.AppendNode(item: fold);
-            }
-            // No `generated` flag: `StateRow.Generated` is engine-minted and no document member carries it, so
-            // what marks these rows as machinery is the verdict trait itself.
-            rows.AppendNode(item: new JsonObject {
-                ["cells"] = cells,
-                ["kind"] = "Int",
-                ["name"] = row,
-                ["verdict"] = new JsonObject {
-                    ["gate"] = Trimmed(gate: gate),
-                    ["status"] = VerdictStatusKey,
-                },
-            });
-            foreach (var (kind, witnessCells) in witnesses) {
-                var witness = WitnessRow(
-                    kind: kind,
-                    verdict: row
-                );
-
-                rows.AppendNode(item: new JsonObject {
-                    ["cells"] = witnessCells,
-                    ["kind"] = kind.ToString(),
-                    ["name"] = witness,
-                    ["witness"] = row,
-                });
-            }
+            AddVerdictRows(
+                effects: effects,
+                gate: gate,
+                reads: reads,
+                row: row,
+                rows: rows,
+                state: state
+            );
             rules.AppendNode(item: new JsonObject {
                 ["effects"] = effects,
                 ["gate"] = new JsonObject {
@@ -1052,6 +1116,139 @@ public static partial class WorldDocumentEmitter {
                 },
                 ["mode"] = "Level",
                 ["name"] = row,
+            });
+        }
+
+        return foreign;
+    }
+    // A line about a sibling document, lowered as far as the test's own document can: the rule that records the claim
+    // holding, with the rows its gate reads left for the document to answer once it is composed.
+    private static WorldTestForeign LowerForeign(string document, TestExpectationNode expectation, int line, DocumentScope scope) {
+        var condition = LowerPredicate(
+            node: expectation.Predicate,
+            scope: scope
+        );
+        var reads = new List<(string State, string? Key)>();
+
+        CollectGateReads(
+            into: reads,
+            node: condition
+        );
+
+        var row = VerdictRow(line: line);
+        var rule = new JsonObject {
+            ["effects"] = new JsonArray(SetVerdictCell(
+                key: VerdictStatusKey,
+                row: row,
+                value: WorldVerdict.Pass
+            )),
+            ["gate"] = condition,
+            ["mode"] = "Level",
+            ["name"] = row,
+        };
+        var holder = new JsonObject { ["rules"] = new JsonArray(rule) };
+
+        WorldExpressionJson.Lower(
+            diagnostics: scope.Diagnostics,
+            node: holder
+        );
+        WorldChannelNodes.Lower(
+            document: holder,
+            type: typeof(WorldDefinition)
+        );
+        holder["rules"]!.AsArray().Clear();
+
+        return new WorldTestForeign(
+            Document: document,
+            Gate: PuckPrinter.PrintGate(predicate: expectation.Predicate),
+            Line: line,
+            Reads: reads,
+            Rule: rule
+        );
+    }
+    // The verdict row for one expectation, and one witness row for each kind other than Int its gate read, appended to
+    // `rows`; the effects that copy what the gate read into them are appended to `effects`, after the one that decides
+    // the verdict.
+    internal static void AddVerdictRows(JsonObject state, JsonArray rows, JsonArray effects, string row, string gate, IReadOnlyList<(string State, string? Key)> reads) {
+        var cells = new JsonArray();
+
+        cells.AppendNode(item: new JsonObject { ["key"] = VerdictStatusKey, ["value"] = WorldVerdict.NotEvaluated });
+
+        var folded = new HashSet<(CellKind Kind, string Key)> { (CellKind.Int, VerdictStatusKey) };
+        var witnesses = new SortedDictionary<CellKind, JsonArray>();
+
+        foreach (var (readState, readKey) in reads) {
+            // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
+            // read of a Fixed or a Bool row is a cell of that kind's witness.
+            if (
+                (KindOfRow(
+                    name: readState,
+                    state: state
+                ) is not { } kind) ||
+                ((kind != CellKind.Int) && (UnseenValue(kind: kind) is null))
+            ) {
+                continue;
+            }
+
+            if ((SawKey(
+                key: readKey,
+                state: readState
+            ) is not { } key) || !folded.Add(item: (kind, key))) {
+                continue;
+            }
+
+            var into = row;
+
+            if (kind == CellKind.Int) {
+                cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+            } else {
+                into = WitnessRow(
+                    kind: kind,
+                    verdict: row
+                );
+
+                if (!witnesses.TryGetValue(
+                    key: kind,
+                    value: out var witnessCells
+                )) {
+                    witnessCells = [];
+                    witnesses[kind] = witnessCells;
+                }
+                witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
+            }
+
+            var fold = new JsonObject {
+                ["$type"] = "setState",
+                ["fromState"] = readState,
+                ["key"] = key,
+                ["state"] = into,
+            };
+
+            if (readKey is not null) {
+                fold["fromKey"] = readKey;
+            }
+            effects.AppendNode(item: fold);
+        }
+        // No `generated` flag: `StateRow.Generated` is engine-minted and no document member carries it, so
+        // what marks these rows as machinery is the verdict trait itself.
+        rows.AppendNode(item: new JsonObject {
+            ["cells"] = cells,
+            ["kind"] = "Int",
+            ["name"] = row,
+            ["verdict"] = new JsonObject {
+                ["gate"] = Trimmed(gate: gate),
+                ["status"] = VerdictStatusKey,
+            },
+        });
+        foreach (var (kind, witnessCells) in witnesses) {
+            rows.AppendNode(item: new JsonObject {
+                ["cells"] = witnessCells,
+                ["kind"] = kind.ToString(),
+                ["name"] = WitnessRow(
+                    kind: kind,
+                    verdict: row
+                ),
+                ["witness"] = row,
             });
         }
     }

@@ -130,7 +130,16 @@ named by its `documentId`, with every document its `references` reach composed
 beside it, so a door onto a sibling (the debug world's garden painting) crosses,
 and the sibling's way back, naming the test world's id, returns to the booted
 instance; a test world under another id would come home to a second world.
-Verdicts read the booted world, so a crossing scenario latches a witness there
-(`away` in `worlds/debug/suit-tests.puck`). `puck test` takes
+A line in a `garden { … }` block of a one-world test's `expect` is judged in the
+sibling document of that name, in the instance the crossing starts:
+`WorldTestWorld.Foreign` carries it, `TryStageTestWorld` lowers it into the
+sibling's staged copy as `expect$<line>` with a rule gated on the claim (it
+passes on any tick the claim holds, since the instance starts when the traveller
+arrives), and `WorldScheduleRunner` exports every instance the run started whose
+document carries a verdict row, recording its document id in the manifest so the
+report reads `garden/expect$1`. A run that started no such instance fails the
+claim by name; an absent body reads `0`, so a claim of `0` pairs with a
+presence claim (`size == 1`). The instance must outlive the visit
+(`durability: persisted`). Anything outside a block reads the booted world. `puck test` takes
 the `.puck` source directly and runs the worlds its tests generated — see
 [Testing a world](../../../../docs/authoring/testing-a-world.md).

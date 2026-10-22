@@ -12,9 +12,11 @@ basis: "debug"
 documentId: "debug"
 
 // The round trip's witnesses, for the scenario that leaves through the garden painting. A live body's size never falls
-// below a quarter (size.puck), so body 0's size reads 0 only while she is in another world: `away` latches that she left.
-// `homeSmall` latches that she then stood in front of the garden painting a quarter her size, which only the garden's
-// frame back sets her down at.
+// below a quarter (size.puck), so body 0's size reads 0 only while she is in another world: `away` latches that she
+// left, so the pose she takes before the painting is not mistaken for her return. `homeSmall` latches that she then
+// stood in front of the garden painting a quarter her size, which only the garden's frame back sets her down at.
+// What she is in the garden reads in the garden: `garden { … }` is judged in the document the crossing starts, and
+// holds when it held on any tick the garden ran.
 state {
   world {
     table away {
@@ -121,7 +123,9 @@ test "a quarter her size she crosses the garden and back, and the mouse hole set
     ticks 60
   }
   expect {
-    away[0] == 1
+    garden {
+      bodyState(body, 0, size) == 0.25
+    }
     homeSmall[0] == 1
     bodyState(body, 0, size) == 1
   }

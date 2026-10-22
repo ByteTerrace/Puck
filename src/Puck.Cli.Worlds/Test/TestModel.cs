@@ -1,4 +1,5 @@
 using Puck.World;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.Cli.Test;
 
@@ -13,7 +14,12 @@ internal enum TestHost {
 /// <summary>One world a <c>puck test</c> run boots: the name it is reported under and the document the leg boots.</summary>
 /// <param name="Name">The world's name: the generated world's name, or a document's own file name.</param>
 /// <param name="Path">The full path of the document the leg boots.</param>
-internal sealed record TestWorld(string Name, string Path) {
+/// <param name="Foreign">The expectations the test addresses to sibling documents, which the run must find a verdict
+/// for in the world a crossing starts.</param>
+internal sealed record TestWorld(string Name, string Path, IReadOnlyList<WorldTestForeign>? Foreign = null) {
+    /// <summary>Gets the expectations the test addresses to sibling documents.</summary>
+    public IReadOnlyList<WorldTestForeign> Expectations => (Foreign ?? []);
+
     /// <summary>Returns a document that runs as it stands, reported under its file name.</summary>
     /// <param name="path">The document's full path.</param>
     /// <returns>The world.</returns>
@@ -57,14 +63,17 @@ public sealed record TestSubmission(ulong Tick, string Principal, string Command
 /// qualification.</param>
 /// <param name="ExportTick">The tick this world's export was taken at.</param>
 /// <param name="Verdicts">Every verdict row this world's export declares.</param>
-public sealed record TestWorldExport(string World, byte[] ExportBytes, ulong ExportTick, IReadOnlyList<TestVerdict> Verdicts) {
+/// <param name="Document">The document an instance a crossing started runs, or <see langword="null"/> for the booted
+/// world and for a sibling the document armed.</param>
+public sealed record TestWorldExport(string World, byte[] ExportBytes, ulong ExportTick, IReadOnlyList<TestVerdict> Verdicts, string? Document = null) {
     /// <summary>Gets a value indicating whether this world is the one the leg booted with.</summary>
     public bool IsBoot => (World == WorldScheduleSection.BootWorldName);
-    /// <summary>Gets the prefix a verdict of this world is reported under: nothing for the booted world, and the
-    /// world's own name for a sibling, so one report names which world answered.</summary>
+    /// <summary>Gets the prefix a verdict of this world is reported under: nothing for the booted world, the
+    /// document's name for an instance a crossing started (its own name is minted by the host), and the world's own
+    /// name for an armed sibling, so one report names which world answered.</summary>
     public string Label => (IsBoot
         ? string.Empty
-        : $"{World}/"
+        : $"{(Document ?? World)}/"
     );
 }
 /// <summary>One leg's whole reading of a world: the export bytes the run wrote and what they say.</summary>

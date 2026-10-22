@@ -311,12 +311,13 @@ public class CompositionTestLawTests {
         ),
         expectedSubstring: expected
     );
-    // A world block only ever addresses a world of a composition; a test about one world has no such name to reach.
+    // A given or a step only ever addresses a world of a composition; in a test about one world the only block that
+    // names another document is an expectation, which is judged in the sibling document of that name.
     [Fact]
     public void AWorldBlockInASingleWorldSourceIsRefusedByName() => Assert.Contains(
         actualString: Refusal(
             code: PuckDiagnosticCodes.TestStepInadmissible,
-            source: TestConstructLawTests.Doc(body: "test \"a probe\" {\n    expect {\n        alpha {\n            hp == 1\n        }\n    }\n}")
+            source: TestConstructLawTests.Doc(body: "test \"a probe\" {\n    when {\n        alpha {\n            seat1: world.state.cell.set hp $value 2\n        }\n    }\n    expect {\n        hp == 1\n    }\n}")
         ),
         expectedSubstring: "this test is about a single world"
     );

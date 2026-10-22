@@ -311,6 +311,47 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             actual: PrototypeOf(fixture: fixture)
         );
     }
+    /// <summary>A booting document is born with its state entries settled: before any tick, the row already shows
+    /// what its condition reads in the authored state, whichever mask the document carried, so the first presented
+    /// frame plans the prototype the first sweep keeps.</summary>
+    [Theory]
+    [InlineData(2, 0, TargetCreation, 1)]
+    [InlineData(3, 1, BaseCreation, 0)]
+    public void ABootingRowShowsWhatItsStateEntriesHold(int threshold, int authoredHolding, string shown, int holding) {
+        var document = CrossingDocument();
+        var placement = document.Placements[0];
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            Rules = [],
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: CounterRow),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: StateRow.SlotKey,
+                        Value: CellValue.Int(value: 2L)
+                    )]
+            ),
+            ]),
+            PlacementRowsRaw = [(placement with {
+                Holding = authoredHolding,
+                Respond = [(placement.Respond![0] with {
+                    When = new WorldPlacementResponseCondition.StateCondition(
+                        State: CounterRow,
+                        Comparison: ExpressionOp.GreaterOrEqual,
+                        Value: threshold
+                    ),
+                })],
+            })],
+        }));
+        var row = WorldDefinitionRows.FindPlacement(
+            id: PlacementId,
+            placements: fixture.Server.Definition.Placements
+        )!;
+
+        Assert.Equal(expected: shown, actual: row.ShownPrototypeId);
+        Assert.Equal(expected: holding, actual: row.Holding);
+    }
     /// <summary>A response lasts exactly as long as its condition: the row shows the entry while the slot holds and
     /// its authored prototype once it stops, and the authored prototype itself is never overwritten.</summary>
     [Fact]
