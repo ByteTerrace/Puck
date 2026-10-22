@@ -250,7 +250,7 @@
 #define SDF_R2_ALPHA2           0x91E10DA6u
 
 // The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).
-#define SDF_MESH_DRAW_WORDS             44u
+#define SDF_MESH_DRAW_WORDS             45u
 #define SDF_MESH_MATERIAL_WORD          16u
 #define SDF_MESH_INDEX_WORD             17u
 #define SDF_MESH_INDEX_COUNT_WORD       18u
@@ -262,7 +262,8 @@
 #define SDF_MESH_SKIN_WORD              32u
 #define SDF_MESH_CARRY_ROTATION_WORD    33u
 #define SDF_MESH_CARRY_TRANSLATION_WORD 37u
-#define SDF_MESH_CLIP_PLANE_WORD        40u
+#define SDF_MESH_CARRY_SCALE_WORD       40u
+#define SDF_MESH_CLIP_PLANE_WORD        41u
 #define SDF_MESH_VERTEX_WORDS           6u
 #define SDF_MESH_MEMBER_WORDS           8u
 #define SDF_MESH_NORMALS_FLAG           0x00000001u

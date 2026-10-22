@@ -416,11 +416,14 @@ public sealed class InPlacePortalCrossingLawTests {
             Up: FixedVector3.UnitY
         );
 
-        Assert.False(condition: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.ApplyInPlaceCrossing(crossing: new WorldInPlaceCrossing(
-            Destination: frame,
-            Slot: -1,
-            Source: frame
-        ))));
+        Assert.False(condition: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.TryApplyInPlaceCrossing(
+            crossing: new WorldInPlaceCrossing(
+                Destination: frame,
+                Slot: -1,
+                Source: frame
+            ),
+            reason: out _
+        )));
     }
     [Fact]
     public void ATurningPairTurnsTheViewOfTheSeatRoutedToTheBody() {

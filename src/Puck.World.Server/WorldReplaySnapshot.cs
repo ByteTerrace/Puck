@@ -171,7 +171,8 @@ public abstract record WorldReplayEntry {
     /// <summary>One body an in-place crossing moved through a portal pair standing in this world
     /// (<see cref="WorldServer.CrossingTap"/>), at the position among the tick's authority entries where the authority
     /// applied it. A re-drive applies the recorded crossing through the same
-    /// <see cref="WorldServer.ApplyInPlaceCrossing"/>; one the shadow cannot apply leaves its body in place, and the
+    /// <see cref="WorldServer.TryApplyInPlaceCrossing"/>, which writes a scaled pair's body size into its row as live
+    /// play does; one the shadow cannot apply leaves its body in place, and the
     /// tick's hash reports the divergence.</summary>
     /// <param name="Value">The crossing.</param>
     internal sealed record Crossing(WorldInPlaceCrossing Value) : WorldReplayEntry;
@@ -553,7 +554,10 @@ public sealed partial class WorldReplaySnapshot {
                 case WorldReplayEntry.Crossing crossing:
                     // A crossing the shadow cannot apply leaves its body where it stood, which the tick's own hash
                     // then reports as the divergence it is.
-                    _ = server.ExecuteAuthorityOperation(operation: () => server.ApplyInPlaceCrossing(crossing: crossing.Value));
+                    _ = server.ExecuteAuthorityOperation(operation: () => server.TryApplyInPlaceCrossing(
+                        crossing: crossing.Value,
+                        reason: out _
+                    ));
 
                     break;
                 default:

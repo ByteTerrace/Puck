@@ -16,8 +16,9 @@ public sealed partial class WorldBody {
     private FixedQ4816 m_broadphaseRadius;
 
     /// <summary>Gets this body's live scale multiplier — 1 unless <c>bodies.scaleRow</c> names a keyed state row
-    /// carrying this body's own cell. Collider volumes, resolved move speed and turn rate, and hold probe/standoff/
-    /// reach all read it; presentation multiplies it into the rendered rig independently (the same state row read
+    /// carrying this body's own cell. Collider volumes, resolved move speed, authored launch and impulse velocities,
+    /// gravity, engage reach and hold probe/standoff/reach all read it; turn rates do not, an angle being the same at
+    /// every size. Presentation multiplies it into the rendered rig independently (the same state row read
     /// client-side).</summary>
     public FixedQ4816 Scale => m_scale;
     /// <summary>Gets the rotation-independent sphere enclosing <see cref="ScaledColliderVolumes"/>
@@ -28,6 +29,12 @@ public sealed partial class WorldBody {
     /// or collider, and never on a tick that writes neither.</summary>
     public long BroadphaseRadiusComputations { get; private set; }
 
+    /// <summary>Returns how far this body reaches for an authored engage radius: the radius, in metres, times its live
+    /// <see cref="Scale"/>, so a body a quarter its authored size must stand a quarter as far from a screen or a
+    /// table to engage it.</summary>
+    /// <param name="radius">The authored engage radius, in metres.</param>
+    /// <returns>The reach, in metres.</returns>
+    public FixedQ4816 EngageReach(double radius) => (FixedQ4816.FromDouble(value: radius) * m_scale);
     /// <summary>Sets this body's live scale multiplier — called only by <c>WorldPopulation.SyncBodyScale</c>'s
     /// resync. A non-positive candidate is refused in favor of <see cref="FixedQ4816.One"/> rather than admitting a
     /// degenerate or inverted body: the declared envelope (bodies.scaleRow's own row Min/Max) is a document-authoring
@@ -90,7 +97,7 @@ public sealed partial class WorldBody {
         m_broadphaseRadius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: ScaledColliderVolumes());
         BroadphaseRadiusComputations++;
     }
-    // The one seat-time turn-rate resolve, mirroring ResolveMoveSpeed: the seated profile's claimed rate, else the
-    // kit's own, scaled by this body's live Scale.
-    private FixedQ4816 ResolveTurnRate() => ((Profile?.FixedTurnSpeed ?? m_tuning.Turn.Rate) * m_scale);
+    // The one seat-time turn-rate resolve: the seated profile's claimed rate, else the kit's own. An angular rate is
+    // the same at every size, so unlike ResolveMoveSpeed it does not read this body's live Scale.
+    private FixedQ4816 ResolveTurnRate() => (Profile?.FixedTurnSpeed ?? m_tuning.Turn.Rate);
 }

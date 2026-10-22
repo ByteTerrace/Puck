@@ -926,7 +926,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
                             m_previousPosition[index] = carried.Point(point: m_currentPosition[index]);
                             m_previousOrientation[index] = carried.Attitude(attitude: m_currentOrientation[index]);
-                            m_easers[index].Carry(rotation: carried.Rotation);
+                            m_easers[index].Carry(carry: carried);
                             Carries.Record(
                                 carry: carried,
                                 index: index
@@ -1378,16 +1378,15 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 }
             }
         }
-        // Turn any in-flight offset with an in-place crossing, so it eases on in the carried frame.
-        public void Carry(Quaternion rotation) {
+        // Turn and scale any in-flight offset with an in-place crossing, so it eases on in the carried frame.
+        public void Carry(WorldPoseCarry carry) {
             if (m_remaining <= 0f) {
                 return;
             }
 
-            m_position = Vector3.Transform(
-                rotation: rotation,
-                value: m_position
-            );
+            var rotation = carry.Rotation;
+
+            m_position = (carry.Direction(direction: m_position) * carry.Scale);
             m_orientation = Quaternion.Normalize(value: ((rotation * m_orientation) * Quaternion.Conjugate(value: rotation)));
         }
         // Drop any in-flight offset (a hard teleport) so it never drags the avatar off an authoritative jump.

@@ -9,10 +9,15 @@ namespace Puck.World;
 /// <param name="PlanarVelocity">The mapped planar velocity.</param>
 /// <param name="VerticalVelocity">The mapped vertical velocity.</param>
 public readonly record struct WorldFrameArrival(FixedVector3 Position, FixedQ4816 YawRadians, FixedVector3 PlanarVelocity, FixedQ4816 VerticalVelocity);
-/// <summary>The fixed-point frame isometry shared by handoff, adjacency rendering/contact, and compiler topology
+/// <summary>The fixed-point frame map shared by handoff, adjacency rendering/contact, and compiler topology
 /// proofs. A boundary mapping reverses the local right and normal axes while preserving local up; keeping it here prevents the
 /// validator and runtime from growing merely similar transform math.</summary>
 /// <remarks>
+/// <para>The map is a similarity: a rotation, a uniform scale and a translation. The scale is the counterpart face's
+/// size over the source face's (<see cref="Scale"/>), so a door paired with one a quarter its size shrinks what crosses
+/// it to a quarter, and the pair back grows it again. Two faces of one size, which every adjacency pair is held to,
+/// scale by exactly one and map as the rigid isometry. Points scale (<see cref="MapPoint"/>), rates scale
+/// (<see cref="MapArrival"/>), and directions only turn (<see cref="MapVector"/>).</para>
 /// <para>A reciprocal pair's composed rotation preserves world up — the validator refuses a pair that does not — so
 /// the map is always a yaw rotation about world up composed with the two frames' translation, whatever the
 /// boundaries' own pitch. Walking out of the source face along its outward normal walks IN through the destination
@@ -58,7 +63,7 @@ public static class WorldFrameIsometry {
             Y: travelerVerticalVelocity,
             Z: travelerPlanarVelocity.Z
         );
-        var mappedVelocity = MapVector(
+        var mappedVelocity = MapRate(
             destination: destination,
             source: source,
             value: velocity
@@ -82,12 +87,104 @@ public static class WorldFrameIsometry {
             VerticalVelocity: mappedVelocity.Y
         );
     }
+    /// <summary>Maps a point through the pair: its offset from the source face turns with <see cref="MapVector"/>,
+    /// scales by <see cref="Scale"/>, and lands at that offset from the counterpart face.</summary>
+    /// <param name="point">The point, in the source world.</param>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <returns>The mapped point.</returns>
     public static FixedVector3 MapPoint(FixedVector3 point, in WorldFaceFrame source, in WorldFaceFrame destination) {
-        return (destination.Origin + MapVector(
+        return (destination.Origin + MapRate(
             value: (point - source.Origin),
             source: source,
             destination: destination
         ));
+    }
+    /// <summary>Maps a displacement or a rate (a velocity, an acceleration) through the pair: it turns with
+    /// <see cref="MapVector"/> and scales by <see cref="Scale"/>, so a body a quarter its size moves a quarter as
+    /// fast.</summary>
+    /// <param name="value">The displacement or rate.</param>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <returns>The mapped displacement or rate.</returns>
+    public static FixedVector3 MapRate(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) {
+        var turned = MapVector(
+            destination: destination,
+            source: source,
+            value: value
+        );
+        var scale = Scale(
+            destination: destination,
+            source: source
+        );
+
+        return ((scale == FixedQ4816.One)
+            ? turned
+            : (turned * scale)
+        );
+    }
+    /// <summary>Returns the pair's uniform scale: the counterpart face's width over the source face's. Two faces of
+    /// one width scale by exactly one.</summary>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <returns>The scale.</returns>
+    public static FixedQ4816 Scale(in WorldFaceFrame source, in WorldFaceFrame destination) => ((destination.HalfWidth == source.HalfWidth)
+        ? FixedQ4816.One
+        : (destination.HalfWidth / source.HalfWidth)
+    );
+    /// <summary>Returns whether a traveller can cross the pair at its scale (<see cref="Scale"/>): the two faces are
+    /// the same rectangle at two sizes, and the scale and its inverse are exact in fixed point, so a body that crosses
+    /// and crosses back returns at exactly the size it left with. A ratio of a power of two (a quarter, a half, two,
+    /// four) between two sizes fixed point holds exactly passes; a third does not.</summary>
+    /// <param name="source">The source boundary frame.</param>
+    /// <param name="destination">The destination counterpart's boundary frame.</param>
+    /// <param name="scale">The pair's scale, on success.</param>
+    /// <param name="reason">Why the pair cannot be crossed, on failure.</param>
+    /// <returns><see langword="true"/> when the pair can be crossed.</returns>
+    public static bool TryScale(in WorldFaceFrame source, in WorldFaceFrame destination, out FixedQ4816 scale, out string reason) {
+        scale = Scale(
+            destination: destination,
+            source: source
+        );
+
+        if (scale == FixedQ4816.One) {
+            if (destination.HalfHeight != source.HalfHeight) {
+                reason = $"the two faces are one width and two heights ({Size(frame: in source)} and {Size(frame: in destination)}), so no one scale maps one onto the other";
+
+                return false;
+            }
+
+            reason = string.Empty;
+
+            return true;
+        }
+        if (
+            (source.HalfWidth <= FixedQ4816.Zero) ||
+            (destination.HalfWidth <= FixedQ4816.Zero) ||
+            (((Int128)destination.HalfWidth.Value * source.HalfHeight.Value) != ((Int128)destination.HalfHeight.Value * source.HalfWidth.Value))
+        ) {
+            reason = $"the two faces are not one rectangle at two sizes ({Size(frame: in source)} and {Size(frame: in destination)}), so no one scale maps one onto the other";
+
+            return false;
+        }
+
+        var inverse = (source.HalfWidth / destination.HalfWidth);
+
+        if (
+            ((source.HalfWidth * scale) != destination.HalfWidth) ||
+            ((destination.HalfWidth * inverse) != source.HalfWidth) ||
+            ((scale * inverse) != FixedQ4816.One)
+        ) {
+            reason = $"the two faces' sizes ({Size(frame: in source)} and {Size(frame: in destination)}) are in a ratio fixed point does not hold exactly both ways, so a round trip would not return a traveller to its size; author sizes a power of two apart";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+
+        static string Size(in WorldFaceFrame frame) => $"{(((double)frame.HalfWidth) * 2):0.#####}x{(((double)frame.HalfHeight) * 2):0.#####}";
     }
     /// <summary>Maps a direction through a reciprocal boundary. The seam's local up is continuous while local right
     /// and outward normal reverse, yielding a proper rotation for arbitrarily oriented boundary planes.</summary>
