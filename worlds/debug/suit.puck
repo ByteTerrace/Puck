@@ -110,7 +110,7 @@ kits {
           }
         ]
         speed {
-          value: 2.5
+          value: 5
           held {
             channel: "run"
             multiplier: 2

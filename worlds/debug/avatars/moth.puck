@@ -2025,9 +2025,9 @@ kits {
             turnScale: 1
           }
         ]
-        // She walks at 2.5 m/s and runs at 5 while the run channel is held, the pace her gait curves reach a run at.
+        // She walks at 5 m/s and runs at 10 while the run channel is held.
         speed {
-          value: 2.5
+          value: 5
           held {
             channel: "run"
             multiplier: 2

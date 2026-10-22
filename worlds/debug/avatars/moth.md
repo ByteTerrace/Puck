@@ -50,7 +50,7 @@ rule): the bar is the debug world's only on-screen UI.
 | Left mouse drag | | Orbit the gameplay camera |
 | Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
 | Left and right mouse buttons held | | Walk forward while the right button steers |
-| Left Shift (hold) | West (hold) | Run: 5 m/s where she walks at 2.5, and 10 where she flies at 5 |
+| Left Shift (hold) | West (hold) | Run: 10 m/s where she walks at 5, and 10 where she flies at 5 |
 | N | Left stick press | Switch running on or off |
 | Z held, then N | Left trigger held, then left stick press | Autorun: switch walking forward on or off; it keeps going with the trigger released, and the stick still steers and strafes |
 | F | North | Switch flight mode on or off |

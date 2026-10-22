@@ -4,3 +4,9 @@ args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/puck
 startup_timeout_sec = 600
 tool_timeout_sec = 120
 enabled = true
+
+# A Codex lane's GPU legs take the shared leases under .claude/leases/, outside its worktree. Codex takes writable
+# roots as absolute paths only, so each machine's checkout adds its own entry; a path no machine has is inert. Codex
+# keeps .git read-only whatever this says, so the lead commits a Codex lane's work.
+[sandbox_workspace_write]
+writable_roots = ["D:/Source/ByteTerrace/Puck/.claude/leases"]
