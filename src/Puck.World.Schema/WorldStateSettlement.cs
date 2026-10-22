@@ -1,7 +1,8 @@
 namespace Puck.World;
 
 /// <summary>Settles the rows an installed state section is born with: a clock on every cell whose effective behavior
-/// is timed and whose record carries none, and the cells of every derived board.</summary>
+/// is timed and whose record carries none, and the cells of every derived board. A booting document also settles
+/// which state entries of its responsive placements hold (<see cref="SettleResponses"/>).</summary>
 /// <remarks>An install is a birth, so a rotation, an accumulation, or an ease runs from the tick the cell was
 /// installed at rather than from the origin, and a derived board holds what its own tokens and codes rows recompute.
 /// Every other field of every row stays the document's own, and settling an already-settled document returns the
@@ -59,13 +60,69 @@ public static class WorldStateSettlement {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         try {
-            return Settle(
-                definition: definition,
-                time: BootTime(definition: definition)
+            var time = BootTime(definition: definition);
+
+            return SettleResponses(
+                definition: Settle(
+                    definition: definition,
+                    time: in time
+                ),
+                time: in time
             );
         } catch (Exception) {
             return definition;
         }
+    }
+    /// <summary>Settles which state entries of each responsive placement hold in the document's own state, so a
+    /// document is born showing the prototypes its first response sweep would show and its first presented frame plans
+    /// no mesh that sweep then drops. Each <see cref="WorldPlacementResponseCondition.StateCondition"/> entry's bit is
+    /// its <see cref="WorldPlacementResponseCondition.StateCondition.Holds"/> reading; a field entry's bit stays as the
+    /// document carries it, since the field lattice is the server's and steps before the first sweep reads it.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static WorldDefinition SettleResponses(WorldDefinition definition, in ArenaTime time) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var rows = definition.Placements;
+        List<WorldPlacement>? settled = null;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var placement = rows[index];
+
+            if (placement.Respond is not { Count: > 0 } responses) {
+                continue;
+            }
+
+            var holding = placement.Holding;
+
+            for (var entry = 0; (entry < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); entry++) {
+                if (responses[entry]?.When is not WorldPlacementResponseCondition.StateCondition state) {
+                    continue;
+                }
+
+                var bit = (1 << entry);
+
+                holding = (state.Holds(
+                    definition: definition,
+                    engineTick: time.EngineTick,
+                    tick: time.Tick
+                )
+                    ? (holding | bit)
+                    : (holding & ~bit)
+                );
+            }
+
+            if (holding == placement.Holding) {
+                continue;
+            }
+
+            settled ??= new List<WorldPlacement>(collection: rows);
+            settled[index] = (placement with { Holding = holding });
+        }
+
+        return ((settled is null)
+            ? definition
+            : (definition with { PlacementRowsRaw = settled })
+        );
     }
     /// <summary>Settles a document against an arena a caller already seeded from it.</summary>
     /// <param name="definition">The document to settle.</param>
