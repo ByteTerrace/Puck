@@ -186,7 +186,7 @@ template paintingFace(destination, counterpart, fallback) {
 // The wing's shell: a partition wall with a doorway, and a lining over the south, north and east walls, up to the slab
 // above. Every piece is a box, never a subtraction: the analytic contact provider collides a carved shape as its whole
 // bounding box (hall.puck). The walls are a warm stone a shade under the hall's cream, so the wing reads as its own
-// room and still carries the washes' light (hall.puck's wingWashes) about each canvas.
+// room and still carries its fixtures' light (hall.puck's wingDownlights and wingWashes) about each canvas.
 let wingWall = 0
 let wingTrim = 1
 let wingBoard = 2
