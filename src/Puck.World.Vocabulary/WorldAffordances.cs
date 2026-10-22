@@ -12,11 +12,15 @@ namespace Puck.World;
 /// </summary>
 /// <remarks><para>The command registry is ambient by necessity, not preference: the document validators are static
 /// and also run where no registry can exist (the offline replay rehydrator, a pre-container boot parse), so it is a
-/// lookup that is present once the composition root installs it and absent elsewhere. Absent means the command half
-/// of validation is skipped — structural validation still runs — never that it passed; the composition root's
-/// post-build sweep (<c>WorldSeatBindings.ValidateAffordancesLoudly</c>) re-covers the documents that entered
-/// before install. It is also genuinely process-scoped: there is exactly one console, so every world instance in this
-/// process dispatches through the same verb set.</para>
+/// lookup that is present once the composition root installs it and absent elsewhere. Where none is installed the
+/// command half judges by the generated <see cref="WorldConsoleVerbCatalog"/>, every verb any boot shape registers
+/// (<c>puck compile --validate</c>), except in a host that sets <see cref="DeferUnknownVerbsToRegistry"/>, which skips
+/// the half — never passes it — until its registry exists; the composition root's post-build sweep
+/// (<c>WorldSeatBindings.ValidateAffordancesLoudly</c>) re-covers the documents that entered before install. With a
+/// registry the same catalog answers for a verb only another shape registers, so a binding to a rendered-only verb
+/// (<c>world.debug-view</c>) validates in a headless boot as it does offline, stays inert there and is dropped from the
+/// seat's composition with a narrated line. It is also genuinely process-scoped: there is exactly one console, so every
+/// world instance in this process dispatches through the same verb set.</para>
 /// <para>The channel vocabulary is deliberately not ambient, and the asymmetry is the point. A channel table is a
 /// pure function of the document that declares it, so it is a required parameter of <see cref="Validate"/>: a
 /// document's binding overlays are always checked against that document's own channels. Holding it in a static
@@ -141,21 +145,22 @@ public static class WorldAffordances {
     }
 
     // A document's own authored commands answer for it; with them supplied, the live world's authored names answer
-    // nothing, so a document that drops a command is judged without it.
-    private static CommandMetadata? Lookup(AuthoredCommandSet? commands, string name, CommandRegistry registry) {
+    // nothing, so a document that drops a command is judged without it. A verb the registry lacks is judged by the
+    // catalog's facts (every verb any boot shape registers), so the document validates the same in every shape.
+    private static CommandMetadata? Lookup(AuthoredCommandSet? commands, string name, CommandRegistry? registry) {
         if (commands is not null) {
             if (commands.TryGet(command: out var authored, name: name)) {
                 return CommandRegistry.AuthoredMetadata(name: authored!.Name);
             }
 
-            if (registry.NamesAuthoredCommand(name: name)) {
+            if (registry?.NamesAuthoredCommand(name: name) ?? false) {
                 return null;
             }
         }
 
-        return (registry.TryGetMetadata(metadata: out var metadata, name: name)
-            ? metadata
-            : null);
+        return (registry is null)
+            ? WorldConsoleVerbCatalog.Lookup(name: name)
+            : registry.MetadataForDocument(name: name);
     }
 
     /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set against the
@@ -266,7 +271,7 @@ public static class WorldAffordances {
         errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
             lookups: new BindingVocabularyLookups(
-                Command: ((registry is null)
+                Command: ((registry is null) && DeferUnknownVerbsToRegistry
             ? null
             : name => Lookup(commands: commands, name: name, registry: registry)),
                 SourceKind: SourceKind,

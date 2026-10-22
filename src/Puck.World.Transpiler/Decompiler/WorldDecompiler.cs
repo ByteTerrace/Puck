@@ -769,7 +769,7 @@ public static partial class WorldDecompiler {
 
         var names = string.Join(
             separator: ", ",
-            values: arr.Select(selector: n => (n?.ToString() ?? ""))
+            values: arr.Select(selector: n => Puck.Transpiler.Ast.QualifiedName.Parse(text: (n?.ToString() ?? "")).Print(segment: PuckPrinter.PrintName))
         );
 
         sb.AppendLine(

@@ -308,6 +308,11 @@ public sealed record WorldBindingBarBank(
 /// while held. <see langword="false"/> drops the row and leaves the slot clusters alone. While the row draws, it
 /// places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord
 /// whose members are all in <paramref name="SlotSet"/>.</param>
+/// <param name="DeclaredModifiersOnly">Whether the modifier row (and the chord hints it places) keeps to the modifiers the
+/// binding document DECLARES in its <c>modifiers</c> section — the page-holding triggers an author named — and leaves out
+/// the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a
+/// shoulder). <see langword="false"/> draws every one. It shapes only what <paramref name="Modifiers"/> draws, so it does
+/// nothing while that is off.</param>
 /// <param name="PageLabel">Whether the bar names the active page under its anchor while <paramref name="Text"/> is on;
 /// <see langword="false"/> keeps every badge label and chord hint and drops only the page's name.</param>
 /// <param name="SlotSet">The physical controls this bar shows, by input source id (<c>gamepad.buttonSouth</c>,
@@ -345,6 +350,7 @@ public sealed record WorldBindingBarAuthoring(
     bool Enabled = true,
     bool Text = true,
     bool Modifiers = true,
+    bool DeclaredModifiersOnly = false,
     bool PageLabel = true,
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,

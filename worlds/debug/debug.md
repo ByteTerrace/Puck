@@ -141,11 +141,11 @@ wheel are [`controls.puck`](controls.puck), and the key layout is
 
 | Hold | Page | What the twelve plates do |
 |---|---|---|
-| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)) |
+| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)); LB opens the play wheel (`WH`) and RB the gallery's (`GW`) |
 | LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face, head, boots, shoulder), the chase camera, annotation, the jetpack alone |
-| RT or X | Debug | Where, channels, console, build, the inspector, the debug view, frame hold and compare, stop, and the suit toggle |
+| RT or X | Debug | Where, history on, console, capture (`world.screenshot` to the state root's `screenshots/`), the inspector, the debug view, frame hold and compare, stop, and the suit toggle |
 | LT then RT | Go | `debug.go` to the stage, gallery, portals, Wonderland, hero studio, devices, chess, computer and the four gallery levels |
-| RT then LT | Tour | The gallery tour (next, previous, flag, debug view, slice, entrance), its lights and motion, and the garden and night paintings |
+| RT then LT | Tour | The gallery tour (next, previous, flag, slice), `world.quality next`, `world.rates toggle`, its lights and motion, and the garden and night paintings |
 
 The press order picks the page, so the two double squeezes are two pages. Keys
 under a held Z or X are the arrow keys for the d-pad, I, J, K, L for North,

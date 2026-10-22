@@ -78,14 +78,27 @@ bar draws. The live example is `worlds/debug/controls.puck`, which the debug wor
 and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
 right stick's press, an `iconRow` keyed by entry id, and one bank per page of the trigger-held pages with
-`modelCell` reading `single`, so the bar swaps pages in place; `modifiers` and `pageLabel` draw the modifier row on the
-layout anchor and the page's name under it, while each bank's own `anchor` stands the plates above them), authors the
+`modelCell` reading `single`, so the bar swaps pages in place; `modifiers`, `declaredModifiersOnly` and `pageLabel` draw
+the modifier row on the layout anchor (only the modifiers the document declares, the two triggers, not the implicit one
+the compiler mints for each raw source a chord names: a key, a shoulder, a mouse button) and the page's name under it, while each bank's own `anchor` stands the plates above them), authors the
 `icons` table, and appends a `play-wheel` row and the `pad-pages` row of the chord pages. The first world row, when one
 is authored, supplies the world
 floor; the selected identity's own first row may replace it for that seat,
 matching the existing first-row binding-layer consumer in `WorldIdentity`.
 `world.binding-bar [on|off|auto] [player]` reads the resolved policy and controls
 its live visibility override.
+
+`declaredModifiersOnly` (default `false`) narrows what `modifiers` draws. The compiler mints a single-source modifier
+for every raw source a chord or held row names, so a bar over a profile with a Tab-or-LB wheel, a both-mouse-buttons
+walk and a Q chord lists them all beside the page-holding triggers (`BindingModifierView.Declared` tells them apart);
+with the flag on, the row and the chord hints it places keep to the declared ones, and a chord of minted modifiers
+shows only where `slotSet` places each member.
+
+**Openers.** A plate whose control the active page leaves unbound but whose hold opens a deeper page of the group (a
+chord row whose members are this page's plus that control) reads as that page's opener: bright, wearing the icon the
+bar's `iconRow` names for the OPENED PAGE'S ID (`state.barIcons."wheel-pad"`; `BindingPageView.Openers`). The Move
+page's LB opens the play wheel this way, as `WH`, and RB the gallery's wheel (`GW`). `WorldPresentationManifest`
+registers each page id as an icon key.
 
 `bindingBar.slotSet` (required, non-empty) names the physical controls the bar
 shows by INPUT SOURCE ID (`gamepad.buttonSouth`, `gamepad.leftTrigger`,
@@ -316,7 +329,11 @@ and movement keys while it rebinds the rest. A binding document validates its ch
 its own `modifiers`, so every overlay that adds entries to a trigger page declares the
 modifiers again (`let padModifiers` in `pad-kit.puck`); entries from several overlays on the
 same page id merge by source. A binding to a verb only a rendered World registers
-(`world.debug-view`) refuses a headless boot, so route it through an authored command. An
+(`world.debug-view`, `world.quality`) is judged by the verb catalog in every shape: `puck compile --validate` checks every
+binding's command (named, Bindable, accepting `text`, the value kind) against it, a typo is refused there, and a headless
+boot admits the document and drops that entry from the seat's composition with one narrated line, as the seat recompose
+already does for any command a leaner shape lacks. The bar's Debug and Tour pages bind the render levers
+(`world.quality next`, `world.rates toggle`), `world.screenshot`, `world.history on` and `world.debug-view` directly. An
 imported module's state rows are private, so a binding in another module that reads one
 (`pad.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
 `WorldWheelFeed` owns presentation;

@@ -8,7 +8,6 @@
 // the `moth-pilot` look: the 1.68 m woman inside the suit (avatars/moth-pilot.puck), the same head on a body of her
 // own. Her look raises the `hold` frame while her `pilotHold` cell is set, and blinks otherwise.
 
-schema: "puck.world.definition.v1"
 import "avatars/moth-pilot"
 import "pad-kit"
 
