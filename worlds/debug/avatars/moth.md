@@ -55,6 +55,7 @@ rule): the bar is the debug world's only on-screen UI.
 | Space | South | Jump, twice before landing; in flight mode, rise |
 | Ctrl | East | In flight mode, descend and land |
 | E | West | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
+| T | Right trigger | In the debug world, take the suit off or put it back on while standing; out of it she walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)) |
 | 1 | | Native three-quarter inspection |
 | 2 | | Native front inspection |
 | 3 | | Native rear inspection |
@@ -162,7 +163,7 @@ headroom round her face reads as padded interior. The braid's root sweep starts
 at her cheek and bridges to the unscaled braid below it.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
-lavender centre, above the segmented charcoal waist and the ochre belt; the
+lavender hexagon, above the segmented charcoal waist and the ochre belt; the
 ochre collar stands above it at the neck. A lavender plate (`pelvicShield`)
 narrows below the belt. The slab inherits the torso's breathing and lean; the
 belt and pelvic plate inherit the pelvis.

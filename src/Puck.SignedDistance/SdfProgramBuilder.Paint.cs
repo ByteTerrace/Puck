@@ -18,8 +18,9 @@ public sealed partial class SdfProgramBuilder {
                 table.Add(item: vertex.X);
                 table.Add(item: vertex.Y);
             }
-            // The table offset is the paint's own, written when the program packs it; the count rides beside it.
-            shape = shape with { Data0 = shape.Data0 with { X = BitConverter.UInt32BitsToSingle(value: (uint)vertices.Length) } };
+            // The table offset is the paint's own, written when the program packs it; the count rides beside it, less one,
+            // in the lane's low ConvexCountBits as the shader reads it.
+            shape = shape with { Data0 = shape.Data0 with { X = BitConverter.UInt32BitsToSingle(value: SdfPrismProfile.PackConvexReference(count: vertices.Length, tableVector: 0)) } };
         }
         foreach (var curve in m_sweepCurves) {
             table.AddRange(collection: [curve.A.X, curve.A.Y, curve.A.Z, curve.RadiusStart, curve.B.X, curve.B.Y, curve.B.Z, curve.RadiusEnd, curve.C.X, curve.C.Y, curve.C.Z, curve.Bulge]);

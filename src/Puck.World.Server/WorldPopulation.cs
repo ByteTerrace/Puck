@@ -379,6 +379,7 @@ public sealed partial class WorldPopulation {
 
         // The look table resolves after the entries exist (it writes each entry's LookIndex).
         ResolveLookIndices(definition: definition);
+        _ = ResolveSelections(definition: definition);
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(index: index);
@@ -443,6 +444,11 @@ public sealed partial class WorldPopulation {
         // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices
         // on construction and on every Rebuild.
         public byte LookIndex { get; set; }
+        // The kit and look rows this body's own cell of an assignment selector picks, or -1 where none does. They
+        // outrank KitIndex/LookIndex and the seat kit, and are derived from state (ResolveSelections), so a checkpoint
+        // carries the cell rather than these.
+        public int SelectedKit { get; set; } = -1;
+        public int SelectedLook { get; set; } = -1;
         // The stable cross-authority incarnation/epoch and the local generation whose occupant owns it. The stamp
         // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.
         public WorldMobilityIdentity? Mobility { get; set; }
