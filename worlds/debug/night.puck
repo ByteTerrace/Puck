@@ -9,10 +9,11 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "night"
 
-// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle.
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
 import "theme"
 import "controls"
 import "suit"
+import "size"
 
 // The night field draws no HUD panels; controls.puck supplies its cursor.
 hud {

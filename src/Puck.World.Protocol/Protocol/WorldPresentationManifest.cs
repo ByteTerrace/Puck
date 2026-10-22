@@ -189,11 +189,11 @@ public sealed class WorldPresentationManifest {
 
         var builder = new Builder { Definition = definition };
 
-        if (definition.Population.ScaleRow is { } scaleRow) {
+        if (definition.Population.Scale is { } scale) {
             builder.Owner = definition;
             builder.AddBody(binding: new StateBinding(
                 Key: StateBinding.BodyKey,
-                Row: scaleRow,
+                Row: WorldBodyStateReads.BindingRow(slot: scale),
                 Target: false
             ));
             builder.Owner = null;

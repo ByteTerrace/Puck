@@ -14,10 +14,10 @@ public sealed partial class WorldPopulation {
     // still clears what they selected, and a document without one costs nothing per tick.
     private bool m_selecting;
 
-    /// <summary>Resyncs what every body takes from its own state: its live <see cref="WorldBody.Scale"/> from
-    /// <c>bodies.scaleRow</c>, and its kit and look from the assignments' selectors (<see cref="SyncBodySelections"/>).
-    /// Called from the same <c>WorldServer.Install</c>/<c>InstallRuntimeStateValue</c> choke points
-    /// <c>WorldGrants.SyncState</c> is, and from the end-of-tick publication when the scale row moved.</summary>
+    /// <summary>Resyncs what every body takes from its own registers: its live <see cref="WorldBody.Scale"/> from the
+    /// register <c>bodies.scale</c> names (<see cref="SyncBodyScale"/>), and its kit and look from the assignments'
+    /// selectors (<see cref="SyncBodySelections"/>). Called from the same <c>WorldServer.Install</c> choke points
+    /// <c>WorldGrants.SyncState</c> is, once a tick after the world rules, and when a crossing lands a body.</summary>
     /// <param name="definition">The live document.</param>
     public void SyncBodyCells(WorldDefinition definition) {
         SyncBodyScale(definition: definition);

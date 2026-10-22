@@ -35,7 +35,7 @@ public static class WorldPredicate {
 public static class WorldEffect {
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
     /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
-    /// whose live scale (<c>bodies.scaleRow</c>) is not one launches at this times its scale, so under the gravity
+    /// whose live scale (<c>bodies.scale</c>) is not one launches at this times its scale, so under the gravity
     /// that scales with it the jump rises the same number of its own heights.</param>
     /// <param name="Key">The body a world rule names — an index, a <c>$cell:</c> indirection, or a bound key. A kit's
     /// action names none: it acts on its own body, or on <paramref name="Target"/>.</param>

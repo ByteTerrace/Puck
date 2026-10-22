@@ -4,9 +4,8 @@ using Puck.Physics;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
-    // Resynced wholesale from bodies.scaleRow at the same Install choke points WorldGrants.SyncState is (see
-    // WorldPopulation.Scale.cs); never written per tick. One is the inert value every body not named by the row —
-    // or every body under a world authoring no scaleRow at all — reads forever.
+    // Resynced from the register bodies.scale names (see WorldPopulation.Scale.cs), never written elsewhere. One is the
+    // inert value every body under a world naming no register reads forever.
     private FixedQ4816 m_scale = FixedQ4816.One;
     // m_collider's volumes scaled by m_scale, or null while the scale is one and the kit's own volumes serve. Derived
     // wholly from those two fields, so it is rebuilt wherever either is written and never carried by a checkpoint.
@@ -15,8 +14,8 @@ public sealed partial class WorldBody {
     // input is written, so the per-tick broadphase reads it instead of taking three roots per volume per body.
     private FixedQ4816 m_broadphaseRadius;
 
-    /// <summary>Gets this body's live scale multiplier — 1 unless <c>bodies.scaleRow</c> names a keyed state row
-    /// carrying this body's own cell. Collider volumes, resolved move speed, authored launch and impulse velocities,
+    /// <summary>Gets this body's live scale multiplier — 1 unless <c>bodies.scale</c> names a <c>state.body</c> register
+    /// carrying this body's size. Collider volumes, resolved move speed, authored launch and impulse velocities,
     /// gravity, engage reach and hold probe/standoff/reach all read it; turn rates do not, an angle being the same at
     /// every size. Presentation multiplies it into the rendered rig independently (the same state row read
     /// client-side).</summary>
@@ -37,9 +36,8 @@ public sealed partial class WorldBody {
     public FixedQ4816 EngageReach(double radius) => (FixedQ4816.FromDouble(value: radius) * m_scale);
     /// <summary>Sets this body's live scale multiplier — called only by <c>WorldPopulation.SyncBodyScale</c>'s
     /// resync. A non-positive candidate is refused in favor of <see cref="FixedQ4816.One"/> rather than admitting a
-    /// degenerate or inverted body: the declared envelope (bodies.scaleRow's own row Min/Max) is a document-authoring
-    /// concern already enforced at write time, so this floor is a last-resort guard against a raw value that could
-    /// never have come from a validated cell.</summary>
+    /// degenerate or inverted body: the register's envelope is enforced at write time, so this floor is a last-resort
+    /// guard against a raw value that could never have come from a validated register.</summary>
     /// <param name="value">The candidate scale.</param>
     internal void SetScale(FixedQ4816 value) {
         var scale = ((value > FixedQ4816.Zero)

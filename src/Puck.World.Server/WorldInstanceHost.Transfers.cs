@@ -530,7 +530,8 @@ public sealed partial class WorldInstanceHost {
                 destination: in counterpartFrame,
                 source: transfer.SourceFrame.Value
             ) != FixedQ4816.One) {
-                // A body's size lives in its own world's bodies.scaleRow, which another world does not hold.
+                // A scaled pair multiplies the size register of a crossing within one world; a transfer carries the
+                // register unchanged, so it cannot apply the pair's scale to it.
                 abortReason = $"mapped arrival's counterpart '{transfer.Counterpart}' in '{targetName}' is a different size from its source face, and a scaled pair carries a traveller's size only within one world";
             }
         }

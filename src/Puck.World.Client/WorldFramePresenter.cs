@@ -543,6 +543,26 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         m_builtDefinitionRevision = definitionRevision;
     }
+    // The presentation row of the scale register, rebuilt only when the document names another, so a frame allocates
+    // none.
+    private string? m_scaleRegister;
+    private string? m_scaleBindingRow;
+
+    private string? ScaleBindingRow(string? register) {
+        if (!string.Equals(
+            a: register,
+            b: m_scaleRegister,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            m_scaleRegister = register;
+            m_scaleBindingRow = ((register is null)
+                ? null
+                : WorldBodyStateReads.BindingRow(slot: register)
+            );
+        }
+
+        return m_scaleBindingRow;
+    }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
     // The rig is the seat's chase rig by default; while its camera control application is active, views.cameraRig
     // frames it instead. The anchor is the render pose (interpolated and error-eased,
@@ -657,7 +677,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             liveScale = WorldGaitDrivers.LiveBodyScale(
                 reads: reads,
-                scaleRow: definition.Population.ScaleRow
+                scaleRow: ScaleBindingRow(register: definition.Population.Scale)
             );
 
             if (

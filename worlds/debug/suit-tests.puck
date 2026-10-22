@@ -3,17 +3,31 @@
 // selects her kit (walker in the suit, pilot out of it) and her look (moth, or moth-pilot). Flight mode is the walker's:
 // pressing flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
 //
-// The crossing scenarios walk her through the garden painting and back. A headless seat's camera faces -Z, so
+// The crossing scenarios walk her at the garden painting and back. A headless seat's camera faces -Z, so
 // `body.fly -1 …` walks +Z: from the pose before the painting (z 36.3) into its glass, and in the garden from just past
-// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways, so
-// what she did in the garden reads here: a flight press there turns flight mode on only in the suit, and flightFuel
-// comes home with whatever it did.
+// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways in
+// the running world, so what she did in the garden reads here: a flight press there turns flight mode on only in the
+// suit, and flightFuel comes home with whatever it did. This harness cannot cross yet: it writes no sibling worlds
+// beside its generated ones, so the garden is refused for want of its file and the walk stays in this world (the open
+// item on crossing worlds in `puck test` in docs/plans/open-items.md).
 
 schema: "puck.world.definition.v1"
 basis: "debug"
 // The debug world's own id: the garden's way back names the document `debug`, so a scenario world under another id
 // would send her home to a second world rather than to this one.
 documentId: "debug"
+
+// The two-seat scenarios seat a second body: the toggle is one rule per local seat (suit-toggle.puck), and this world
+// seats two where the Moth worlds seat one, so it instantiates the second seat's own.
+import "suit-toggle"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+suitToggle(seat: 2, index: 1)
 
 test "the Moth starts in the suit" {
   when {
@@ -154,5 +168,47 @@ test "suited up in the garden, she comes home suited and flies" {
     bodyState(body, 0, suit) == 1
     bodyPosition(body, 0, y) > 1
     bodyPosition(body, 0, z) > 38
+  }
+}
+
+// Each seat toggles its own body: a press on the second seat's suit channel takes off the second body's suit and leaves
+// the first seat's body in hers, and a press from each takes off both.
+test "the second seat's press takes off only its own suit" {
+  when {
+    ticks 30
+    seat2: body.press suit 1 0.2 1
+    ticks 15
+  }
+  expect {
+    bodyState(body, 1, size) == 1
+    bodyState(body, 0, suit) == 1
+    bodyState(body, 1, suit) == 0
+  }
+}
+
+test "the first seat's press leaves the second seat in her suit" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+  }
+  expect {
+    bodyState(body, 1, size) == 1
+    bodyState(body, 0, suit) == 0
+    bodyState(body, 1, suit) == 1
+  }
+}
+
+test "a press from each seat takes off both suits" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    seat2: body.press suit 1 0.2 1
+    ticks 15
+  }
+  expect {
+    bodyState(body, 1, size) == 1
+    bodyState(body, 0, suit) == 0
+    bodyState(body, 1, suit) == 0
   }
 }

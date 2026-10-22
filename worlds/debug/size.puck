@@ -1,0 +1,25 @@
+// A body's size. `size` is a body register (state.body) holding the multiplier of the body's authored size: one at full
+// size, a quarter after the Wonderland door (wonderland.puck). `bodies.scale` names it, so the body's collider, speeds,
+// jump, reach, drawn form and chase camera follow it, and a crossing through a pair of two sizes writes it. The register
+// is the body's own, so it crosses with her through a painting: every world she can walk into imports this file and
+// declares the same register, and she arrives the size she left in. The envelope is the world's own size range, a
+// quarter to one; a crossing that would leave it is refused by name, and a size carried into a world is clamped to it.
+
+state {
+  body [
+    {
+      name: "size"
+      kind: "Counter"
+      initial: 1
+      envelope {
+        $type: "range"
+        maximum: 1
+        minimum: 0.25
+      }
+    }
+  ]
+}
+
+bodies {
+  scale: "size"
+}

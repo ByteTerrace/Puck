@@ -102,7 +102,7 @@
       "additionalProperties": false,
       "title": "WorldObserverDisclosure"
     },
-    "scaleRow": {
+    "scale": {
       "type": [
         "string",
         "null"

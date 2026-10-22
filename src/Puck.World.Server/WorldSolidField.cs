@@ -211,8 +211,8 @@ public sealed class WorldSolidField : IContactField {
         );
     }
     // The farthest any kit's contact sample compares the field against, at the largest scale a body can wear: a
-    // sphere's or capsule's radius, a box's half-extent length. A body absent from the scale row reads scale 1, so
-    // the row's ceiling never shrinks the reach below the unscaled collider.
+    // sphere's or capsule's radius, a box's half-extent length. A world naming no scale register reads scale 1, so
+    // the register's ceiling never shrinks the reach below the unscaled collider.
     private static FixedQ4816 KitReach(WorldDefinition definition) {
         var reach = FixedQ4816.Zero;
 
@@ -237,15 +237,19 @@ public sealed class WorldSolidField : IContactField {
         var scale = FixedQ4816.One;
 
         if (
-            (definition.Population.ScaleRow is { } scaleRow) &&
-            (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: scaleRow
-        ) is { Max: { } scaleMax })
+            (definition.Population.Scale is { } scaleRegister) &&
+            WorldBodyStateReads.TryResolveSlot(
+            definition: definition,
+            kind: out _,
+            name: scaleRegister,
+            slot: out var scaleSlot
+        ) &&
+            (scaleSlot < definition.BodyState.Count) &&
+            (definition.BodyState[scaleSlot].Envelope is ActionStateEnvelope.Range scaleRange)
         ) {
             scale = FixedQ4816.Max(
                 x: scale,
-                y: FixedQ4816.FromRawBits(value: scaleMax)
+                y: FixedQ4816.FromDouble(value: scaleRange.Maximum)
             );
         }
 

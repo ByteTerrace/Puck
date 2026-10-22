@@ -165,7 +165,7 @@ public sealed partial class WorldBody {
     /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
     /// <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same
     /// mask the snapshot publishes. <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world
-    /// authoring no <c>bodies.scaleRow</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
+    /// authoring no <c>bodies.scale</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
     /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
     /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
     /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry

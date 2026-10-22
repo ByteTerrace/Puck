@@ -2543,7 +2543,7 @@ public static partial class WorldModelShape {
                 M("reconnectGraceSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldBodiesDefaults), "ReconnectGraceSeconds", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).ReconnectGraceSeconds),
                 M("capacityRow", typeof(global::System.String), typeof(global::Puck.World.WorldBodiesDefaults), "CapacityRow", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).CapacityRow),
                 M("disclosure", typeof(global::Puck.World.WorldObserverDisclosure), typeof(global::Puck.World.WorldBodiesDefaults), "Disclosure", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).Disclosure),
-                M("scaleRow", typeof(global::System.String), typeof(global::Puck.World.WorldBodiesDefaults), "ScaleRow", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).ScaleRow),
+                M("scale", typeof(global::System.String), typeof(global::Puck.World.WorldBodiesDefaults), "Scale", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).Scale),
                 M("sleepAfterSeconds", typeof(global::System.Decimal), typeof(global::Puck.World.WorldBodiesDefaults), "SleepAfterSeconds", Read | Write, static value => ((global::Puck.World.WorldBodiesDefaults)value).SleepAfterSeconds),
                 M("observerDisclosure", typeof(global::Puck.World.WorldObserverDisclosure), typeof(global::Puck.World.WorldBodiesDefaults), "ObserverDisclosure", None),
             ],

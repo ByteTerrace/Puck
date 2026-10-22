@@ -37,7 +37,7 @@ public enum WorldPortalArrival {
     /// name when absent). The map's scale is the counterpart face's size over this face's
     /// (<see cref="WorldFrameIsometry.Scale"/>): a door paired with one a quarter its size sets a traveller down a
     /// quarter its size, moving a quarter as fast, and the window through the door shows the far side at that scale.
-    /// A scaled pair stands in one world, which authors <c>bodies.scaleRow</c> to hold each body's size; its two faces
+    /// A scaled pair stands in one world, which authors <c>bodies.scale</c> to name the register holding each body's size; its two faces
     /// are one rectangle at two sizes a power of two apart, so a round trip returns a traveller to exactly its
     /// size.</summary>
     Mapped,

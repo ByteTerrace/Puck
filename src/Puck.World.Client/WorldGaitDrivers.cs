@@ -536,12 +536,14 @@ public static class WorldGaitDrivers {
 
         return true;
     }
-    /// <summary>Reads a body's live scale multiplier — the same <c>bodies.scaleRow</c> cell
+    /// <summary>Reads a body's live scale multiplier — the register <c>bodies.scale</c> names, which
     /// <c>WorldPopulation.SyncBodyScale</c> reads server-side, eased, through the state mirror slot the body's lease
     /// holds — for a presentation consumer that scales something other than the rendered stamp itself (a chase camera's
-    /// orbit distance, say). A world authoring no scale row, or a body with no cell of its own, reads 1.</summary>
+    /// orbit distance, say). A world naming no scale register, or a body whose slot the mirror does not carry, reads
+    /// 1.</summary>
     /// <param name="reads">The body's reads of the state mirror, bound to the body.</param>
-    /// <param name="scaleRow">The world's <c>bodies.scaleRow</c>, or <see langword="null"/> when it authors none.</param>
+    /// <param name="scaleRow">The presentation row of the world's <c>bodies.scale</c> register
+    /// (<see cref="WorldBodyStateReads.BindingRow"/>), or <see langword="null"/> when it names none.</param>
     /// <returns>The body's live scale, or 1 when unauthored.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reads"/> is <see langword="null"/>.</exception>
     public static float LiveBodyScale(WorldStateLease reads, string? scaleRow) {

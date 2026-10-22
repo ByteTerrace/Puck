@@ -674,7 +674,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         m_tick.PaintLatticeDraws(definition: definition);
         // AFTER ReconcileInhabitants above: every boot-declared body (seats and inhabited placements alike) now has
-        // a WorldBody to resync bodies.scaleRow's cells onto.
+        // a WorldBody to resync from its registers.
         m_population.SyncBodyCells(definition: definition);
     }
 

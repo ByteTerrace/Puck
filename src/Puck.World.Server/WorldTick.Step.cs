@@ -539,8 +539,8 @@ public sealed partial class WorldTick {
             stepTicks: context.StepTicks
         );
         // A kit action this tick's advance fired and a rule's setBodyState have both written by now, so a body whose
-        // selecting register moved takes its kit and look before the snapshot and its next advance.
-        Host.Population.SyncBodySelections(definition: Host.Document.Definition);
+        // size or selecting register moved takes its scale, kit and look before the snapshot and its next advance.
+        Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
         Host.StepSearch(tick: tick);

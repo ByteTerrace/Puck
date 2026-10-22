@@ -35,10 +35,10 @@ public sealed class InPlacePortalCrossingLawTests {
         Wall,
         /// <summary>A placement the world does not hold.</summary>
         Missing,
-        /// <summary>The ceiling door at half the floor door's size, in a world whose bodies.scaleRow holds each size
+        /// <summary>The ceiling door at half the floor door's size, in a world whose bodies.scale register holds each size
         /// from a quarter to one, so each crossing halves the traveller until the third would leave the row.</summary>
         HalfCeiling,
-        /// <summary>The half-size ceiling door in a world that authors no bodies.scaleRow.</summary>
+        /// <summary>The half-size ceiling door in a world that authors no bodies.scale.</summary>
         HalfCeilingUnscaled,
         /// <summary>A ceiling door as wide as the floor door and half as deep, which no one scale maps onto it.</summary>
         StretchedCeiling,
@@ -132,25 +132,13 @@ public sealed class InPlacePortalCrossingLawTests {
             return shaft;
         }
 
-        // Each body's size, a quarter to one; seat 0 starts at one.
-        var scaleRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: FixedQ4816.FromDouble(value: 0.25).Value,
-            Max: FixedQ4816.One.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                Key: CellName.Parse(candidate: "0"),
-                Value: CellValue.Fixed(rawBits: FixedQ4816.One.Value)
-            )]
+        // Each body's size, a quarter to one; every body starts at one.
+        return Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            maximum: 1d,
+            minimum: 0.25d,
+            source: shaft
         );
-
-        return (shaft with {
-            PopulationRaw = (shaft.Population with { ScaleRow = "scale" }),
-            StateRaw = ((shaft.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (shaft.StateRaw?.World ?? []), scaleRow],
-            }),
-        });
     }
     private static WorldDefinition Shaft(string ownPath, Counterpart counterpart, WorldDefinition source) => (source with {
         CreationsRaw = [
@@ -446,7 +434,7 @@ public sealed class InPlacePortalCrossingLawTests {
         var crossings = 0;
         var size = FixedQ4816.One;
 
-        for (var tick = 0; ((tick < LoopBound) && (scenario.Count(text: "outside bodies.scaleRow") == 0)); tick++) {
+        for (var tick = 0; ((tick < LoopBound) && (scenario.Count(text: "outside bodies.scale") == 0)); tick++) {
             var body = scenario.Server.Body(index: 0)!;
             var entering = body.CaptureTransferState().VerticalVelocity;
 
@@ -456,7 +444,7 @@ public sealed class InPlacePortalCrossingLawTests {
                 crossings++;
                 size *= half;
 
-                // Half the size, falling half as fast, its row cell written with it.
+                // Half the size, falling half as fast, its register written with it.
                 Assert.Equal(
                     actual: body.Scale,
                     expected: size
@@ -465,26 +453,25 @@ public sealed class InPlacePortalCrossingLawTests {
                     actual: body.CaptureTransferState().VerticalVelocity,
                     expected: (entering * half)
                 );
-                Assert.True(condition: WorldStateReader.TryRead(
+                Assert.True(condition: WorldBodyStateReads.TryResolveSlot(
                     definition: scenario.Server.Definition,
-                    engineTick: 0UL,
-                    key: "0",
-                    rawValue: out var raw,
-                    row: out _,
-                    rowName: "scale",
-                    text: out _,
-                    tick: 0UL
+                    kind: out _,
+                    name: Fixtures.BodyScaleRegister,
+                    slot: out var slot
                 ));
                 Assert.Equal(
-                    actual: raw,
-                    expected: size.Value
+                    actual: scenario.Server.Population.ActionStateLane.Counter(
+                        ordinal: 0,
+                        slot: slot
+                    ),
+                    expected: size
                 );
             }
 
             scenario.Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         }
 
-        // A quarter is the row's floor: the third crossing would make an eighth, so it is refused and the body keeps its
+        // A quarter is the register's floor: the third crossing would make an eighth, so it is refused and the body keeps its
         // size.
         Assert.Equal(
             actual: crossings,
@@ -505,7 +492,7 @@ public sealed class InPlacePortalCrossingLawTests {
     }
     [InlineData(Counterpart.Wall, "do not map world up onto itself")]
     [InlineData(Counterpart.Missing, "names no placement 'missing'")]
-    [InlineData(Counterpart.HalfCeilingUnscaled, "authors no bodies.scaleRow")]
+    [InlineData(Counterpart.HalfCeilingUnscaled, "authors no bodies.scale")]
     [InlineData(Counterpart.StretchedCeiling, "no one scale maps one onto the other")]
     [Theory]
     public void AFloorDoorWhoseCounterpartCannotTakeAFallRefusesByName_AndTheBodyFallsOnThroughTheFloor(Counterpart counterpart, string refusal) {

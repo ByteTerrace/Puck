@@ -285,28 +285,12 @@ public sealed class WorldMediumLawTests {
         Depth: depth,
         Layers: 1
     );
-    // Declares bodies.scaleRow over the fixture's own seat-1 cell (index "0"), matching BodyScaleLawTests' own
-    // pattern, so seat-1's live Scale reads the cell's value while every other seat stays at the unauthored default.
-    private static WorldDefinition WithScaleRow(WorldDefinition document, FixedQ4816 cellValue) {
-        var scaleRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: FixedQ4816.FromDouble(value: 0.05).Value,
-            Max: FixedQ4816.One.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                    Key: CellName.Parse(candidate: "0"),
-                    Value: CellValue.Fixed(rawBits: cellValue.Value)
-                )]
-        );
-
-        return document with {
-            PopulationRaw = (document.Population with { ScaleRow = "scale" }),
-            StateRaw = ((document.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (document.StateRaw?.World ?? []), scaleRow],
-            }),
-        };
-    }
+    // Declares bodies.scale over a register born at the value, matching BodyScaleLawTests' own pattern, so every body's
+    // live Scale reads it.
+    private static WorldDefinition WithScaleRegister(WorldDefinition document, FixedQ4816 cellValue) => Fixtures.WithBodyScale(
+        initial: cellValue,
+        source: document
+    );
 
     [Fact]
     public void ABodyStandingInAMediumCellReadsInMediumAfterAStep_AndABodyOnDryCellsDoesNot() {
@@ -898,7 +882,7 @@ public sealed class WorldMediumLawTests {
     /// <summary>The medium's whole vertical-channel envelope scales with the body's own live <c>Scale</c>, the same
     /// way <c>ApplyHoldGravity</c>'s acceleration and terminal both do: a scaled body's idle drift and its in-band
     /// settle target (<c>error * SettleRate</c>) answer proportionally, and a scale of exactly 1 reproduces the
-    /// unscaled document's own first-tick answer bit for bit through the scaleRow path.</summary>
+    /// unscaled document's own first-tick answer bit for bit through the scale register path.</summary>
     [Fact]
     public void TheMediumsIdleDriftAndSettleTargetScaleWithTheBodysOwnScale_WhereScaleOneReproducesTheUnscaledAnswer() {
         var topology = Topology();
@@ -933,18 +917,18 @@ public sealed class WorldMediumLawTests {
 
         void AssertScales(WorldDefinition document, string branch) {
             var unscaledSpeed = FirstTickImpliedVerticalSpeed(definition: document);
-            var scaleOneSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRow(
+            var scaleOneSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRegister(
                 document: document,
                 cellValue: FixedQ4816.One
             ));
-            var scaledSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRow(
+            var scaledSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRegister(
                 cellValue: scale,
                 document: document
             ));
 
             Assert.True(
                 condition: (Math.Abs(value: (scaleOneSpeed - unscaledSpeed)) < 0.01),
-                userMessage: $"a scaleRow cell of exactly 1 must reproduce the {branch}'s unscaled answer ({unscaledSpeed:0.####}), read {scaleOneSpeed:0.####}"
+                userMessage: $"a scale register of exactly 1 must reproduce the {branch}'s unscaled answer ({unscaledSpeed:0.####}), read {scaleOneSpeed:0.####}"
             );
 
             var expectedScaledSpeed = (unscaledSpeed * ((double)scale));

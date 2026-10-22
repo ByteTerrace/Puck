@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -18,15 +19,15 @@ public sealed partial class WorldServer {
     /// <summary>Moves one body through a portal pair whose two faces both stand in this world
     /// (<see cref="WorldBody.CrossInPlace"/>), keeping its body index, kit, grants, motion and action state and tape,
     /// and accumulates the pair's turn into the body's arrival turn. A pair whose counterpart face is a different size
-    /// scales the body by the pair's scale (<see cref="WorldFrameIsometry.TryScale"/>): its cell of
-    /// <c>bodies.scaleRow</c> is multiplied by it and published before the next step, so its collider, speeds, jump,
-    /// reach and drawn form all follow. Reports a crossing it applied to <see cref="CrossingTap"/>. A live crossing and
+    /// scales the body by the pair's scale (<see cref="WorldFrameIsometry.TryScale"/>): the register
+    /// <c>bodies.scale</c> names is multiplied by it and the body resynced before the next step, so its collider,
+    /// speeds, jump, reach and drawn form all follow, and the size goes with the body to the next world. Reports a crossing it applied to <see cref="CrossingTap"/>. A live crossing and
     /// a replay's re-drive both apply here. The caller holds the authority gate.</summary>
     /// <param name="crossing">The crossing.</param>
     /// <param name="reason">Why the body did not move, when it did not.</param>
     /// <returns><see langword="true"/> when the index held an active body and it moved; <see langword="false"/> when
     /// it held none, or the pair cannot be crossed at its scale: the faces are not one rectangle at two sizes, the
-    /// world authors no <c>bodies.scaleRow</c>, or the scaled size would leave that row's envelope.</returns>
+    /// world authors no <c>bodies.scale</c> register, or the scaled size would leave that register's envelope.</returns>
     public bool TryApplyInPlaceCrossing(in WorldInPlaceCrossing crossing, out string reason) {
         if (
             (((uint)crossing.Slot) >= ((uint)m_population.Capacity)) ||
@@ -74,9 +75,9 @@ public sealed partial class WorldServer {
         );
 
         if (scale != FixedQ4816.One) {
-            // The row is the body's size; publishing it resyncs the body (WorldPopulation.SyncBodyScale) before the
-            // next step moves it, and delivers the size to presentation with the same tick's state.
-            _ = PublishArena();
+            // The register is the body's size; the resync brings the body to it before the next step moves it, and the
+            // next snapshot delivers it to presentation with the body's other registers.
+            m_population.SyncBodyScale(definition: m_document.Definition);
         }
 
         CrossingTap?.Invoke(obj: crossing);
@@ -84,50 +85,49 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    // Writes the body's scaled size into its bodies.scaleRow cell, refusing a world that authors no row and a size
-    // outside the row's envelope before anything moves.
+    // Writes the body's scaled size into the register bodies.scale names, refusing a world that authors none and a size
+    // outside the register's envelope before anything moves.
     private bool TryWriteCrossingScale(WorldBody body, int slot, FixedQ4816 scale, out string reason) {
         var definition = m_document.Definition;
 
         if (
-            (definition.Population.ScaleRow is not { } scaleRow) ||
-            (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: scaleRow
-            ) is not { } row)
+            (definition.Population.Scale is not { } register) ||
+            !WorldBodyStateReads.TryResolveSlot(
+            definition: definition,
+            kind: out var kind,
+            name: register,
+            slot: out var registerSlot
+        ) ||
+            (kind != ActionStateKind.Counter)
         ) {
-            reason = $"the pair scales a traveller by {Format(value: scale)}, and the world authors no bodies.scaleRow to hold a body's size";
+            reason = $"the pair scales a traveller by {Format(value: scale)}, and the world authors no bodies.scale register to hold a body's size";
 
             return false;
         }
 
-        var scaled = (body.Scale * scale);
+        var lane = m_population.ActionStateLane;
+        var current = lane.Counter(
+            ordinal: slot,
+            slot: registerSlot
+        );
+        var scaled = (current * scale);
 
         if (
-            ((row.Min is { } minimum) && (scaled.Value < minimum)) ||
-            ((row.Max is { } maximum) && (scaled.Value > maximum))
+            (lane.Definitions[registerSlot].Envelope is { } envelope) &&
+            !envelope.Contains(value: scaled.Value)
         ) {
-            reason = $"the pair scales body {slot} from {Format(value: body.Scale)} to {Format(value: scaled)}, outside bodies.scaleRow '{scaleRow}' {Format(value: FixedQ4816.FromRawBits(value: row.Min ?? 0L))}..{Format(value: FixedQ4816.FromRawBits(value: row.Max ?? 0L))}";
-
-            return false;
-        }
-        if (!m_arena.Catalog.TryResolve(
-            handle: out var handle,
-            lane: StateLane.Document,
-            name: CellName.Parse(candidate: scaleRow)
-        )) {
-            reason = $"bodies.scaleRow '{scaleRow}' is not in the state catalog";
+            reason = $"the pair scales body {slot} from {Format(value: current)} to {Format(value: scaled)}, outside bodies.scale '{register}' {Format(value: FixedQ4816.FromRawBits(value: envelope.Minimum))}..{Format(value: FixedQ4816.FromRawBits(value: envelope.Maximum))}";
 
             return false;
         }
 
-        return m_arena.TryWriteOrMint(
-            evicted: out _,
-            key: m_arena.Keys.Intern(name: CellName.Parse(candidate: slot.ToString(provider: CultureInfo.InvariantCulture))),
-            reason: out reason,
-            rowOrdinal: handle.Ordinal,
-            value: CellValue.Fixed(rawBits: scaled.Value)
+        body.ApplyCrossingState(
+            requested: scaled.Value,
+            slot: registerSlot
         );
+        reason = string.Empty;
+
+        return true;
 
         static string Format(FixedQ4816 value) => ((double)value).ToString(
             format: "0.#####",

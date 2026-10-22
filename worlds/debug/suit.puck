@@ -12,6 +12,7 @@
 
 import "avatars/moth-pilot"
 import "pad-kit"
+import "suit-toggle"
 
 channels [
   {
@@ -176,12 +177,9 @@ looks {
   ]
 }
 
-// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands.
-rule "suit-toggle" {
-  when channel(1, suit) >= 1 and fact(body, 0, Airborne) == 0
-  mode: Edge
-  setBodyState(key: 0, state: "suit", expression: 1 - bodyState(body, 0, suit))
-}
+// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands. The
+// toggle is one rule per local seat (suit-toggle.puck): every Moth world seats one.
+suitToggle(seat: 1, index: 0)
 
 // The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.
 rule "airborne-on" {

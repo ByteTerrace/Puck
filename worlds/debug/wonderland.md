@@ -23,14 +23,16 @@ Advanced Brick's plinth stands twice your height.
 A mapped portal pair's map is a similarity
 (`WorldFrameIsometry`): its scale is the counterpart face's width over the
 source face's. The mouse hole is the big painting at a quarter, so the pair's scale
-is a quarter one way and four the other. A crossing multiplies the body's cell
-of `bodyScale` (`bodies.scaleRow`, in `debug.puck`) by it, and maps her
+is a quarter one way and four the other. A crossing multiplies the body's `size`
+register (`bodies.scale`, declared in `size.puck`) by it, and maps her
 position, velocity and heading through the pair. Her collider, walk speed,
 gravity, jump, step height, engage reach, drawn form and chase camera all
-follow the cell. A crossing that would take the cell outside the row's 0.25 to
-1 is refused by name, on `world.transfer`. The two faces must be one rectangle
-at two sizes a power of two apart, so a round trip returns her exactly to the
-size she left with.
+follow the register. A crossing that would take it outside the register's 0.25
+to 1 is refused by name, on `world.transfer`. The two faces must be one
+rectangle at two sizes a power of two apart, so a round trip returns her
+exactly to the size she left with. The register is her own state, so it goes
+with her through the painting wing's paintings: she arrives in the garden or
+the night field the size she left in, and comes home that size.
 
 Each canvas is a window as well as a door, rippling as the painting wing's do.
 The big painting shows the room as it looks from the mouse hole at a quarter
@@ -60,7 +62,7 @@ glass. To loom over the devices, walk in through the room's own doorway
 - Each crossing narrates on stderr, scale last:
   `[world.transfer: transfer=0 'boot' seat 1 crossed wonderland-door/glass -> wonderland-mouse-hole/glass in place, at (9.38, 0.06, 30.50) moving (-1.25, 0.00, 0.00) m/s, scale 0.25]`.
 - `body.where 0` reports `scale=0.25` after the big painting and `scale=1.00` after
-  the mouse hole; `world.state bodyScale` shows the cell.
+  the mouse hole; `body.state 0` shows the `size` register.
 - At a quarter size the context button (E, X on a pad) engages a device from
   within 0.75 m, on the ground plane; `body.engage <screen>` from farther says
   how near she must stand at her size.

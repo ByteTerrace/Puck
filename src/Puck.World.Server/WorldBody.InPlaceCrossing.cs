@@ -12,7 +12,7 @@ public sealed partial class WorldBody {
     /// snapshot reports <see cref="EntityContinuityKind.Carry"/> so presentation carries what it latched the same way.
     /// Every value is fixed point. The pair must map world up onto itself
     /// (<see cref="WorldFrameIsometry.PreservesWorldUp"/>). The body's own size is not written here: a scaled pair's
-    /// crossing writes it into <c>bodies.scaleRow</c> beside this call (<see cref="WorldServer.TryApplyInPlaceCrossing"/>).</summary>
+    /// crossing writes it into the register <c>bodies.scale</c> names beside this call (<see cref="WorldServer.TryApplyInPlaceCrossing"/>).</summary>
     /// <param name="source">The frame of the face the body entered.</param>
     /// <param name="destination">The frame of that face's counterpart.</param>
     public void CrossInPlace(in WorldFaceFrame source, in WorldFaceFrame destination) {
