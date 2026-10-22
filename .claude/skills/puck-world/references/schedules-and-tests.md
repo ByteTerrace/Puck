@@ -7,8 +7,68 @@ hazards stay in the main [SKILL.md](../SKILL.md).
 
 ## Contents
 
+- Tick-exact debug capture
 - Captures
 - Schedules, verdicts, and `test` blocks
+
+## Tick-exact debug capture
+
+The way an agent captures motion, over MCP or stdin. Each MCP call is a round
+trip during which the World keeps stepping, so separate calls never land a
+fixed number of ticks apart; pin everything that must land on a tick in one
+call instead.
+
+1. Boot your own World (`--devices none --control --state-dir <lane dir>`), or
+   use the live one when the brief allows mutations. Wait for `world.wait
+   bakes <seconds>`, then `world.lockstep on` (windowed only; the offscreen host
+   always presents this way) so presentation animation (gait, foot plants,
+   exposure adaptation) advances exactly one step a tick and never by wall
+   time.
+2. Arm the whole script in one line with `world.at` (`WorldTickScript`):
+
+   ```text
+   world.at {"start": 600, "steps": [
+     {"at": 0, "run": "view.override layout motion"},
+     {"at": 0, "run": "body.pose 0 0 0 0 0 0"},
+     {"at": 1, "run": "view.reseed 0"},
+     {"at": 150, "run": "body.fly 1 0 0 0.4 0 0 2"},
+     {"at": 160, "run": "world.screenshot <dir>/s10.png slots"},
+     {"at": 200, "run": "world.screenshot <dir>/s50.png slots"}]}
+   ```
+
+   (one line in practice). `start` is an absolute boot tick or `"+<n>"` after
+   the completed tick; each step runs in the drain right after tick `start +
+   at` completes, before the next tick steps. An Immediate line (a read, a
+   capture) sees that tick's state; a Simulation line (`body.*`,
+   `view.override`, a state write) applies in the tick after it. Lines of one
+   tick run in arming order and none waits behind another. A start the world
+   has already passed is refused, nothing armed. Reset the body with
+   `body.pose` and its presentation-only animation with `view.reseed <body>`
+   (a teleport keeps the gait's phases, so without it a repeat strides
+   differently), and let 150 ticks pass before the motion so a camera view
+   the layout switch creates has adapted its exposure.
+3. Wait with `world.wait until <last tick + 1>` (give the call a `timeoutMs`
+   that covers it), then read `world.at`: every line with its tick and answer.
+4. Each settled still holds the World at its tick until a frame of that tick
+   serves it, and stderr carries `[still] <path> tick=<T> hash=<capture hash>
+   pose=<pose hash> shown=<T>`; `slots` adds `<stem>-<camera>.png` per slot of
+   the active layout (`studio.puck`'s `motion` layout: four cameras riding body
+   0). `puck_capture_frame` with `tick: <T>` is the same still as an MCP image,
+   its output carrying the same stamp.
+
+What repeats, and what to compare:
+
+| Compare | Tick lists | `hash` (capture scope) | `pose` hash | Slot PNGs |
+|---|---|---|---|---|
+| Same script, two fresh Worlds, same absolute `start` | identical | identical | identical | byte-identical or within a few levels at most stills; at a still taken mid-turn, silhouette edges differ (up to ~100 levels on ~15% of pixels, mean under 0.5) |
+| Same script twice in one World (`+<n>` start) | identical offsets | differs: it folds the tick and the world's clocks | identical | silhouette edges as above, plus scene content that animates with the absolute tick (mean under 2 levels) |
+| Either, without `world.lockstep on` | as above | as above | as above | not comparable: gait phase and exposure adaptation integrate wall-clock frame time, so up to every pixel differs |
+
+So the proof of a repeat is the tick list and the `pose` hash per still (and
+the capture `hash` across fresh Worlds pinned to the same absolute ticks);
+compare slot PNGs by changed-pixel count and mean difference, and read the
+flagged ones, never by bytes. Two settled captures held at one tick show the
+same pose; a residual edge difference is presentation, not state.
 
 ## Captures
 

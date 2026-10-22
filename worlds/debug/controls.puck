@@ -10,9 +10,11 @@
 // the View page, the right trigger (X) the Debug page, the left then the right trigger the Go page and the right then the
 // left trigger the Tour page, pressed in that order: the press order picks the page, so the two double squeezes are two
 // pages. Every page binds the bar's twelve controls; the Go and Tour pages bind the debug world's places and gallery
-// (pad.puck) and read empty elsewhere. The suit toggle sits on the Debug page (suit.puck). The Debug page also holds the
-// capture to the state root's screenshots folder, the history switch and the inspector; the render levers (quality, update
-// rates) sit on the Tour page. LB and RB on Move open the play wheel and the gallery's wheel, and wear their icons.
+// (pad.puck) and read empty elsewhere. The View page is the old look modifier's: camera layouts, autorun and autofly on the
+// stick presses, recenter, free look and the engaged screen's frame toggle. The suit toggle sits on the Debug page
+// (suit.puck). The Debug page also holds the capture to the state root's screenshots folder, the history switch and the
+// inspector; the render levers (quality, update rates) sit on the Tour page. LB on Move opens the play wheel and wears its
+// icon; RB on Move is the context button.
 //
 // Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
 // under the pointer; releasing at the hub cancels. The wheel has three rings, Act, View and Places (Places in the debug
@@ -176,7 +178,11 @@ icons {
     { name: "act.view", label: "DV" }
     { name: "act.slice", label: "SL" }
     { name: "act.wheel", label: "WH" }
-    { name: "act.galleryWheel", label: "GW" }
+    { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }
+    { name: "act.autorun", label: "AR" }
+    { name: "act.fly", glyph { font: mono, glyph: "U+21D1" } }
+    { name: "act.autofly", label: "AF" }
+    { name: "act.frame", label: "FM" }
     // The View page and ring: the chase view and the inspection layouts, the camera, the close-ups.
     { name: "view.play", label: "PL" }
     { name: "view.quarter", label: "3Q" }
@@ -185,9 +191,6 @@ icons {
     { name: "view.wide", label: "WD" }
     { name: "view.auto", label: "AU" }
     { name: "view.face", label: "FC" }
-    { name: "view.boots", label: "BT" }
-    { name: "view.head", label: "HD" }
-    { name: "view.shoulder", label: "SH" }
     // The Debug page: the inspector panel, the frame comparison, stopping, the suit.
     { name: "dbg.inspect", label: "IN" }
     { name: "dbg.inspectOff", label: "IO" }
@@ -322,6 +325,10 @@ state {
       steer = "act.steer"
       flight = "act.flight"
       rise = "act.rise"
+      run = "act.run"
+      runToggle = "act.run"
+      fly = "act.fly"
+      frame = "act.frame"
       descend = "act.descend"
       jump = "act.jump"
       interact = "act.interact"
@@ -341,9 +348,8 @@ state {
       gallerySlice = "act.slice"
 
       // A wheel's opener, keyed by the page it opens: a plate whose hold opens that page wears the icon (LB opens the play
-      // wheel; RB opens the gallery's wheel, hall.puck, in the debug world).
+      // wheel).
       "wheel-pad" = "act.wheel"
-      "gallery-wheel-pad" = "act.galleryWheel"
 
       // The View page.
       viewPlay = "view.play"
@@ -351,13 +357,13 @@ state {
       viewFront = "view.front"
       viewRear = "view.rear"
       viewWide = "view.wide"
-      viewAuto = "view.auto"
-      viewAnnotate = "act.annotate"
+      autorun = "act.autorun"
+      viewRecenter = "act.recenter"
       viewIsolate = "act.isolate"
       viewFace = "view.face"
-      viewBoots = "view.boots"
-      viewHead = "view.head"
-      viewShoulder = "view.shoulder"
+      viewFrame = "act.frame"
+      viewFreeLook = "act.look"
+      autofly = "act.autofly"
 
       // The Debug page.
       dbgWhere = "act.where"
@@ -546,8 +552,9 @@ bindingOverlays [
   }
 
   // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
-  // the build toggle again under an id, so its plate carries an icon. While it is open the arrow keys (Tab) or the d-pad
-  // (LB) step its ring, Up to the next and Down to the previous, and the mouse wheel steps it too.
+  // the keyboard's build toggle and respawn, whose pad doors are the wheel's Build and Respawn sectors (the pad's Back is
+  // a device's select, and the left stick's press is run). While it is open the arrow keys (Tab) or the d-pad (LB) step
+  // its ring, Up to the next and Down to the previous, and the mouse wheel steps it too.
   {
     id: "play-wheel"
     document {
@@ -565,15 +572,15 @@ bindingOverlays [
                 command: "player.build"
                 id: "build"
                 label: "Build"
-                sources ["keyboard.f2", "gamepad.back"]
+                sources ["keyboard.f2"]
               }
-              // Back to the spawn from anywhere, a fall or a portal loop included: Backspace or the left stick's press.
+              // Back to the spawn from anywhere, a fall or a portal loop included.
               {
                 command: "body.pose"
                 id: "respawn"
                 label: "Respawn"
                 text: "spawn:stage"
-                sources ["keyboard.backspace", "gamepad.leftStickPress"]
+                sources ["keyboard.backspace"]
               }
             ]
           }
@@ -667,6 +674,8 @@ bindingOverlays [
   // (or Z) holds View, the right trigger (or X) holds Debug, and the two together hold Go when the left went down first
   // and Tour when the right did. The debug world's places and gallery fill Go and Tour (pad.puck); the suit toggle joins
   // Debug (suit.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
+  // Close-ups the View page has no plate for (head, boots, shoulder) are `view.override layout <name>`, and the chase
+  // camera and annotation are the play wheel's.
   {
     id: "pad-pages"
     document {
@@ -686,13 +695,15 @@ bindingOverlays [
               { command: "view.override", id: "viewFront", label: "Front", text: "layout front", value: neverRead, sources: padDown }
               { command: "view.override", id: "viewRear", label: "Rear", text: "layout rear", value: neverRead, sources: padLeft }
               { command: "view.override", id: "viewWide", label: "Wide", text: "layout flight-stage", value: neverRead, sources: padLeftShoulder }
-              { command: "view.override", id: "viewAuto", label: "Chase camera", text: "camera auto", value: neverRead, sources: padLeftStick }
-              { command: "view.annotate", id: "viewAnnotate", label: "Annotate", text: "toggle", sources: padNorth }
+              // Autorun and autofly: each press switches her walking forward, or flying (flight mode on and climbing), on or
+              // off, and the latch outlives the page, so she keeps going with the trigger released.
+              { channel: "forward", id: "autorun", label: "Autorun", mode: Toggle, scale: 1, sources: padLeftStick }
+              { command: "player.look.recenter", id: "viewRecenter", label: "Recenter", sources: padNorth }
               { command: "view.isolate", id: "viewIsolate", label: "Jetpack alone", text: "toggle moth pod* nozzle*", sources: padWest }
               { command: "view.override", id: "viewFace", label: "Face", text: "layout face", value: neverRead, sources: padSouth }
-              { command: "view.override", id: "viewBoots", label: "Boots", text: "layout boots", value: neverRead, sources: padEast }
-              { command: "view.override", id: "viewHead", label: "Head", text: "layout head", value: neverRead, sources: padRightShoulder }
-              { command: "view.override", id: "viewShoulder", label: "Shoulder", text: "layout shoulder", value: neverRead, sources: padRightStick }
+              { command: "player.frame", id: "viewFrame", label: "Frame", sources: padEast }
+              { command: "player.look.free", id: "viewFreeLook", label: "Free look", sources: padRightShoulder }
+              { channel: "rise", id: "autofly", label: "Autofly", mode: Toggle, scale: 1, sources: padRightStick }
             ]
           }
         }

@@ -25,7 +25,7 @@
 // calculation: to move a part, edit its local position in that frame and turn it by the tilt again, rotation included.
 // Each prototype's comment names its frame.
 //
-// Walk up to a device and press the context button (E, or X on a pad) to engage it: the camera frames its screen and
+// Walk up to a device and press the context button (E, or RB on a pad) to engage it: the camera frames its screen and
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list, swap,
 // engage, reset and eject each one, and the camera lines that frame each device.
 

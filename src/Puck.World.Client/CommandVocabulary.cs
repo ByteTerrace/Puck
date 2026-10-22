@@ -32,8 +32,6 @@ public static class PlayerCommandNames {
     public const string MoveStrafeCommand = "player.move.strafe";
     /// <summary>The held pointer-orbit command: while held, pointer motion orbits the seat camera.</summary>
     public const string OrbitCommand = "player.orbit";
-    /// <summary>The look-swap command: turns the seat camera a half-turn about the body — look behind; again to
-    /// look forward.</summary>
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = "player.look.recenter";
     /// <summary>The held pointer-steer command: while held, pointer motion orbits the seat camera and the body faces

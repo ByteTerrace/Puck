@@ -177,7 +177,7 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
 | Change a brick's revision live | `machine.operation <instance> <generation> device.model {"schema":"puck.gaming-brick.device-model-set.v1","model":"sgb"}` |
 | Stand at a device, facing it | `body.pose <x + 1> 0.05 <z> 90 0 0`, with the device's `x` and `z` from the first table |
-| Engage it (within 3 m at full size, 0.75 m at a quarter), playing it with the Moth's controls | the context button: E, or X on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
+| Engage it (within 3 m at full size, 0.75 m at a quarter), playing it with the Moth's controls | the context button: E, or RB on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
@@ -193,7 +193,7 @@ machine under a new generation.
 
 ## Engaging a device
 
-Walk up to a device and press the context button, E on a keyboard or X on a
+Walk up to a device and press the context button, E on a keyboard or RB on a
 pad (the Moth's `interact` channel, which every screen route here names as its
 `engageChannel`). A press engages the nearest free device within its route's
 3 m (on the ground plane, the earlier in document order on a tie); no prompt shows, since the controller bar is the
@@ -223,12 +223,12 @@ her eyes, the brick's placement shows nothing on its machined rest (its
 moves the live picture onto the brick in her hands. Engaging starts on a view of
 her holding the brick (`brick-hold`, the camera screen 0's `carry` names: at her
 side and a little above her hands, brick, picture, hands and face in frame), so
-the pickup shows; the Frame control (the pad's East, or `L` on a keyboard; the
-console line `player.frame`) goes to the picture alone, filling the window as at
-any device, and back. The device's controls play in both views. On any other
-engaged screen the same control goes between the picture and the room. The
-controller bar labels it Frame on the Move page, and steps aside only while the
-picture is framed. Leaving puts the brick back on
+the pickup shows; the Frame control (`L` on a keyboard, or the pad's East with
+the left trigger held; the console line `player.frame`) goes to the picture
+alone, filling the window as at any device, and back. The device's controls play
+in both views. On any other engaged screen the same control goes between the
+picture and the room. The controller bar labels it Frame on the View page (the
+left trigger's), and steps aside only while the picture is framed. Leaving puts the brick back on
 its rest and lowers her arms. In the suit, or at
 a quarter her size, where the brick is a third her height, she plays it where
 it stands.

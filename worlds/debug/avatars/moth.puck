@@ -289,13 +289,13 @@ bindingOverlays [
                   "gamepad.rightStick"
                 ]
               }
+              // The pad's recenter is the View page's North (controls.puck): the right stick's press is fly.
               {
                 command: "player.look.recenter"
                 id: "recenter"
                 label: "Recenter"
                 sources [
                   "keyboard.r"
-                  "gamepad.rightStickPress"
                 ]
               }
               {
@@ -313,13 +313,51 @@ bindingOverlays [
                   "mouse.button2"
                 ]
               }
+              // Run while held (Left Shift, West), or switched on and off (N, the left stick's press). The View page's
+              // left stick press (controls.puck) is autorun.
+              {
+                channel: "run"
+                id: "run"
+                label: "Run"
+                scale: 1
+                sources [
+                  "keyboard.shiftLeft"
+                  "gamepad.buttonWest"
+                ]
+              }
+              {
+                channel: "run"
+                id: "runToggle"
+                label: "Run on/off"
+                mode: Toggle
+                scale: 1
+                sources [
+                  "keyboard.n"
+                  "gamepad.leftStickPress"
+                ]
+              }
               {
                 channel: "flight"
                 id: "flight"
+                label: "Flight"
                 scale: 1
                 sources [
                   "keyboard.f"
                   "gamepad.buttonNorth"
+                ]
+              }
+              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly-1` rule reads as
+              // switching flight mode on, so she takes off and climbs, and letting go hovers. The View page's right stick
+              // press (controls.puck) is autofly.
+              {
+                channel: "rise"
+                id: "fly"
+                label: "Fly"
+                scale: 1
+                sources [
+                  "keyboard.controlLeft"
+                  "keyboard.m"
+                  "gamepad.rightStickPress"
                 ]
               }
               {
@@ -343,10 +381,10 @@ bindingOverlays [
               {
                 channel: "rise"
                 id: "descend"
+                label: "Descend"
                 scale: -1
                 sources [
-                  "keyboard.controlLeft"
-                  "keyboard.controlRight"
+                  "keyboard.c"
                   "gamepad.buttonEast"
                 ]
               }
@@ -368,24 +406,24 @@ bindingOverlays [
                   "gamepad.back"
                 ]
               }
+              // The context button: engage the device in reach, and leave it again.
               {
                 channel: "interact"
                 id: "interact"
+                label: "Interact"
                 scale: 1
                 sources [
                   "keyboard.e"
-                  "gamepad.buttonWest"
+                  "gamepad.rightShoulder"
                 ]
               }
-              // The engaged screen's view: the pad's East (B on an Xbox layout, the circle button on a PlayStation one) and
-              // L on a keyboard switch between the framed picture and the other view, which is the held view of a
-              // carried screen and the room for any other. A device plays on neither, and East keeps the descend above.
+              // The engaged screen's view: L switches between the framed picture and the other view, which is the held
+              // view of a carried screen and the room for any other. The pad's is the View page's East (controls.puck).
               {
                 command: "player.frame"
                 id: "frame"
                 label: "Frame"
                 sources [
-                  "gamepad.buttonEast"
                   "keyboard.l"
                 ]
               }
@@ -1647,6 +1685,12 @@ channels [
     name: "flight"
     shape: Binary
   }
+  // Held, it multiplies her speed (the kits' `speed.held`).
+  {
+    composition: true
+    name: "run"
+    shape: Binary
+  }
   {
     composition: false
     name: "rise"
@@ -1945,6 +1989,8 @@ kits {
             hold: Lift
             forward: Heading
             lift: 1
+            // She flies at her running pace, and running in the air doubles it.
+            speed: 5
             gravity {
               fall: 46
               rise: 28
@@ -1979,8 +2025,13 @@ kits {
             turnScale: 1
           }
         ]
+        // She walks at 2.5 m/s and runs at 5 while the run channel is held, the pace her gait curves reach a run at.
         speed {
-          value: 5
+          value: 2.5
+          held {
+            channel: "run"
+            multiplier: 2
+          }
         }
         // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
         stepHeight: 0.3
@@ -7464,6 +7515,14 @@ render {
     ambient: 0.4
     reflection: 1
   }
+}
+
+// Fly: seat 1 pressing rise without jump (the fly bindings, not Space or South, which press both) switches flight mode
+// on, so she takes off and climbs. One rule a local seat, since a rule reads a seat as a literal (`bodies.localSeats`).
+rule "fly-1" {
+  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0
+  mode: Level
+  setBodyState(key: 0, state: "flightFuel", expression: 1000)
 }
 
 // The flight pose and wings deploy only in flight mode; an ordinary jump keeps her upright.

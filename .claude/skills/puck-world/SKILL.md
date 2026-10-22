@@ -316,8 +316,9 @@ check the flag: the owner may be holding the pad.
 - **Screenshots arm, they do not capture.** `world.screenshot <path.png>`
   echoes `pending` on stdout; the file is announced on stderr
   (`[capture] … -> <path>`). Fence a frame with `world.wait` before reading it.
-  Two windowed captures are never byte-identical; compare by changed-pixel
-  count.
+  Compare windowed captures by changed-pixel count: outside the tick-exact
+  procedure below two are never byte-identical, and inside it most are but
+  silhouette edges can still differ.
 - **A capture is a settled still unless asked otherwise.** The ordinary capture
   (`world.screenshot`, `puck_capture_frame`) holds presentation and lets
   temporal views converge, so it never shows flicker, ghosting or trails. For
@@ -326,6 +327,15 @@ check the flag: the owner may be holding the pad.
   `world.screenshot <path.png> presented 8`, which report each frame's changed
   pixels and luma change against the one before
   ([console](references/console.md#settled-stills-and-presented-bursts)).
+- **Capture motion on exact ticks.** Calls over MCP land wherever the World
+  has stepped to, so a script whose inputs and stills must land on exact ticks
+  is armed in one line with `world.at` and waited for with `world.wait until
+  <tick>`; `world.lockstep on` makes a windowed World's presentation repeat
+  with the ticks, and `view.reseed <body>` beside a `body.pose` restarts its
+  gait. Every settled still names its tick and state hashes
+  (`[still] … tick= hash= pose= shown=`), and `slots` writes each viewport of a
+  multi-camera layout. The procedure and what repeats:
+  [tick-exact debug capture](references/schedules-and-tests.md#tick-exact-debug-capture).
 - **A denial check needs a control.** Pair it with an actor who holds the grant
   and succeeds, and keep actor and target different (every seat is seeded wide).
 - **Pixels are not a replay proof.** `replay.verify` MATCH proves the hashed

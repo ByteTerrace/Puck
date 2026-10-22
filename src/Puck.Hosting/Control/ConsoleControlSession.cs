@@ -79,11 +79,37 @@ public sealed class ConsoleControlSession : IControlSession {
             )
             : new FrameCaptureRequest(path: path));
         FrameCaptureRequest? capture = null;
+        var pinned = options?.Tick;
+        TaskCompletionSource<CommandResult>? waited = null;
 
         try {
+            // A pinned capture holds this session until its tick completes; the capture behind the hold then arms in
+            // the drain before the next tick steps, so the still shows exactly that tick.
+            if (pinned is { } due) {
+                waited = new TaskCompletionSource<CommandResult>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+                Volatile.Write(
+                    location: ref m_result,
+                    value: waited
+                );
+                m_session.Enqueue(line: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"world.wait until {due}"));
+            }
             // The engine barrier orders this behind this session's prior simulation submissions and waits.
             capture = await m_session.InvokeAsync(
-                () => { m_capture(request); return request; },
+                () => {
+                    // The wait settles on the pump before this runs, so a refused one is seen here.
+                    if (waited?.Task is { IsCompleted: true, Result: { IsError: true } refusal }) {
+                        throw new InvalidOperationException(message: $"The capture pinned to tick {pinned} was not armed: {refusal.Output}");
+                    }
+
+                    m_capture(request);
+
+                    // A pin the world had already passed arms a still of a later tick: withdrawn, never answered as the pin.
+                    if ((pinned is { } at) && (request.StateTick is { } held) && (held != at)) {
+                        _ = request.TryFail(error: new InvalidOperationException(message: $"the world had completed tick {held} when the capture pinned to tick {at} armed; pin a later tick"));
+                    }
+
+                    return request;
+                },
                 token
             ).ConfigureAwait(continueOnCapturedContext: false);
             var result = await capture.Completion.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
@@ -132,7 +158,9 @@ public sealed class ConsoleControlSession : IControlSession {
                 "completed",
                 (presented
                     ? $"Next presented frame, read as the display showed it; completion does not certify an earlier mutation or an exact simulation tick.\n{PresentedFrameReport.Format(frames: result.Presented, region: result.Region)}"
-                    : "Next composed frame; completion does not certify an earlier mutation or an exact simulation tick."),
+                    : ((request.StateStamp is { } stamp)
+                        ? $"Settled still held at {stamp}; the frame shows tick {(result.Tick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")}."
+                        : "Next composed frame; completion does not certify an earlier mutation or an exact simulation tick.")),
                 Png: png
             );
         } finally {

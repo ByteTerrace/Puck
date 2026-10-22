@@ -493,12 +493,15 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-The island binds the left stick to `player.move.strafe`, the right stick to
-`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
-and South and Space to `jump`; East and West switch the view layout. It binds
-no run channel, no autorun and no free-look chord. An author gets autorun from
-a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
-`player.look.free` command suppresses body steering while camera look continues.
+The debug world's Moth (`worlds/debug/avatars/moth.puck`, with the bar's pages
+in `worlds/debug/controls.puck`) binds the left stick to `player.move.strafe`,
+the right stick to `player.look.steer`, mouse buttons 1 and 2 to `player.orbit`
+and `player.steer`, the `run` channel held on West and Left Shift and toggled
+(`BindingEntryMode.Toggle`) on the left stick's press and N, and, on the left
+trigger's page, autorun and autofly as toggles of `forward` and `rise` and the
+held `player.look.free`, which suppresses body steering while camera look
+continues. Its full control table is
+[the Moth's controls](../../worlds/debug/avatars/moth.md#controls).
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -948,7 +951,9 @@ Facts a script needs:
   ([`Puck.Mcp`](../Puck.Mcp/README.md#tools-and-results)).
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
-  after a `world.wait` that releases at tick R runs before tick R+1. The
+  after a `world.wait` that releases at tick R runs before tick R+1;
+  `world.wait until <tick>` releases at an absolute tick, and `world.at <tick>
+  <line>` pins a line to one whatever ingress armed it. The
   [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
   owns this contract. End a script with `quit` to stop the World when the script
   ends; `--exit-after-seconds` stops it after a wall-clock time instead.
@@ -1971,7 +1976,7 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
-`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
+`interact` channel, E or a pad's RB; [`devices.md`](../../worlds/debug/devices.md)).
 While a seat is captured on a screen, its own camera eases in on the screen's
 picture, square-on, derived from the row's own frame, with nothing between the
 camera and the glass drawn, until each source row is a whole number of window
@@ -2608,6 +2613,32 @@ luma that changed from the frame before, over the region or the whole frame.
 The host's clock runs on during it; `world.wait captures <seconds>` fences it.
 The MCP form is `puck_capture_frame` with `mode: "presented"`
 ([Puck.Mcp](../Puck.Mcp/README.md#tools-and-results)).
+
+A settled still is exact to its tick. It records the tick it is held at and that
+tick's state hashes, and once it lands stderr carries `[still] <path> tick=<T>
+hash=<capture hash, as world.state.hash reads it> pose=<pose hash> shown=<tick
+the frame shows>` (`WorldCaptureScheduler.Stamp`); the operator attachment's
+answer carries the same stamp. `world.screenshot <path.png> slots` also cuts
+the frame at each slot of the active layout and writes `<stem>-<camera>.png`
+per slot (`WorldSlotStills`), so a four-camera layout (`view.override layout
+motion`) gives four stills of one tick. To land stills and inputs on chosen
+ticks, pin console lines to boot ticks with `world.at`
+(`WorldTickScript`): `world.at <tick>|+<n> <line>`, or a whole script in one line,
+`world.at {"start": "+30", "steps": [{"at": 0, "run": "body.pose 0 0 0 0 0 0"},
+{"at": 45, "run": "world.screenshot <path.png> slots"}]}`. Each line runs in the
+drain right after its tick completes, whatever ingress armed it, so a script
+armed over MCP lands on the same ticks as one piped on stdin. `world.wait until
+<tick>` holds a session until an absolute tick has completed, and `world.at`
+alone reads back what ran. Two presentation levers make the stills of a repeat
+match: `world.lockstep on` has the windowed host step at most once a frame and
+hand presentation exactly the ticks it stepped, as the offscreen host does
+(`PresentPacingControl.TickLocked`), so gait and exposure adaptation advance
+with the ticks rather than wall time; and `view.reseed <body>`
+(`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
+followers as for a new occupant, which a `body.pose` teleport deliberately does
+not. The procedure and its measured repeatability are in
+the `puck-world` skill's
+[captures reference](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture).
 
 `world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
 the gallery and anything else a document names by a token; `near` names the

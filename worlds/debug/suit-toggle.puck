@@ -14,4 +14,12 @@ template suitToggle(seat, index) {
     mode: Edge
     setBodyState(key: $"{index}", state: "suit", expression: 1 - bodyState(body, index, suit))
   }
+
+  // Out of the suit she has no flight pack, so flight mode is off (the basis's `fly-1` would otherwise switch it on for
+  // the pilot), and she puts the suit back on standing.
+  rule $"suit-off-flight-{seat}" {
+    when bodyState(body, index, suit) == 0 and bodyState(body, index, flightFuel) > 0
+    mode: Level
+    setBodyState(key: $"{index}", state: "flightFuel", expression: 0)
+  }
 }

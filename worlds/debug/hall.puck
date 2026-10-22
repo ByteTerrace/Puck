@@ -119,7 +119,7 @@ let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15
 // variant, so its ceiling strips stop glowing, and darkens the fixtures that level owns (`hallLamps`); the lift
 // car's lamp rides the car whatever its level. A level's switch stands on the west wall at z = switchZ, 1.1 to 1.46 m
 // over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
-// E or X on a pad) flips it while seat 1's body stands in the switch's reach box before it.
+// E or RB on a pad) flips it while seat 1's body stands in the switch's reach box before it.
 let switchZ = 32.5
 let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (switchZ - 0.6), z1: (switchZ + 0.6), y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
 // On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
@@ -848,10 +848,10 @@ commands [
 ]
 
 // The gallery's keys, on the debug world's own resting page: = steps the tour on, - steps it back, G flags the
-// exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. Holding the right shoulder or Q
-// opens the gallery wheel, aimed with the right stick or the mouse and committed on release, as the left shoulder and
-// Tab open the play wheel: its ring holds every gallery action, so a pad reaches them all. The garden shares the
-// Moth's base page and has no gallery, so these live here.
+// exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. Holding Q opens the gallery
+// wheel, aimed with the mouse and committed on release, as Tab opens the play wheel. A pad reaches the tour through the
+// bar's Tour page (pad.puck); its right shoulder is the context button. The garden shares the Moth's base page and has
+// no gallery, so these live here.
 bindingOverlays [
   {
     id: "gallery-keys"
@@ -875,26 +875,6 @@ bindingOverlays [
                 command: "player.wheel.commit"
                 activateOn: Completed
                 sources ["keyboard.q"]
-              }
-            ]
-          }
-        }
-        {
-          chord ["gamepad.rightShoulder"]
-          group: "play"
-          page {
-            id: "gallery-wheel-pad"
-            inherits: "base"
-            label: "Gallery"
-            entries [
-              {
-                command: "player.wheel.select"
-                sources ["gamepad.rightStick"]
-              }
-              {
-                command: "player.wheel.commit"
-                activateOn: Completed
-                sources ["gamepad.rightShoulder"]
               }
             ]
           }
@@ -943,7 +923,7 @@ bindingOverlays [
         {
           id: "gallery"
           group: "play"
-          holdPages ["gallery-wheel-keys", "gallery-wheel-pad"]
+          holdPages ["gallery-wheel-keys"]
           labelRow: "state.galleryWheelLabels"
           iconRow: "state.galleryWheelIcons"
           style {

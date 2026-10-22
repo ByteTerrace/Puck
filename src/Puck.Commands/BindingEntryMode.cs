@@ -13,7 +13,7 @@ namespace Puck.Commands;
 /// the latch lives here, in the input/compose layer (<see cref="InputRouter"/>), never downstream. Only meaningful
 /// on a CHANNEL destination (a dispatched command has no "held" reading for a toggle to replace) —
 /// <see cref="BindingProfile.Compile"/> refuses <see cref="Toggle"/> on a command destination.
-/// Author-facing auto-actions such as autorun and auto-jetpack are therefore ordinary channel bindings using
+/// Author-facing auto-actions such as autorun and autofly are therefore ordinary channel bindings using
 /// <see cref="Toggle"/>, not bespoke commands or simulation state.
 /// </remarks>
 [System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingEntryMode>))]

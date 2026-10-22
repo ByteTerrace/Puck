@@ -103,6 +103,14 @@ public sealed class FrameCaptureRequest {
     /// <summary>Gets the region a presented capture measures its frame-to-frame differences over, or
     /// <see langword="null"/> for the whole frame.</summary>
     public FrameCaptureRegion? Region { get; }
+    /// <summary>Gets or sets what the arming host records about the state a settled capture is held at (its tick and
+    /// state hashes, as <c>tick=&lt;T&gt; hash=&lt;H&gt; pose=&lt;P&gt;</c>), which a control answer reports beside the
+    /// image; <see langword="null"/> when the host records nothing. Set on the render pump before the capture is
+    /// served.</summary>
+    public string? StateStamp { get; set; }
+    /// <summary>Gets or sets the simulation tick the arming host holds a settled capture at, the tick
+    /// <see cref="StateStamp"/> names; <see langword="null"/> when the host records none.</summary>
+    public ulong? StateTick { get; set; }
 
     /// <summary>Returns the PNG path of one of the capture's frames: <see cref="Path"/> itself for a one-frame capture,
     /// otherwise <see cref="Path"/> with the frame's three-digit index before its extension (frame 2 of

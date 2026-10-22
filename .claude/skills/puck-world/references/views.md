@@ -101,7 +101,8 @@ faces where the camera looks) are bound on both edges like any held command
 (a press row plus an `activateOn: Completed` row on the same source). The engine
 binds nothing by default: the Moth basis's `bindingOverlays` bind
 `mouse.button1 → player.orbit`, `mouse.button2 → player.steer`, the right stick
-to `player.look.steer` and its press to `player.look.recenter`. `player.steer` writes the camera's
+to `player.look.steer` and R to `player.look.recenter` (the pad's recenter is
+North on the bar's View page, `controls.puck`). `player.steer` writes the camera's
 facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
 facing snap turns the body, so binding it needs those three channels declared and
 `seatControl.yawReference: World` (the validator refuses otherwise).
@@ -230,8 +231,10 @@ The standard right stick binds `player.look.steer`: horizontal input writes
 `FaceX`/`FaceZ`, vertical input only changes camera pitch, and neither writes
 `Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
 still write `Turn`, and a drive kit may interpret its left-stick roles
-according to their own motion program. The standard left-stick press toggles
-the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
+according to their own motion program. In the debug world the left-stick
+press (and N) toggles the `run` channel, West and Left Shift hold it, and the
+left trigger's page turns the stick presses into autorun and autofly
+([the Moth's controls](../../../../worlds/debug/avatars/moth.md#controls)).
 
 ## Camera programs and layouts
 
@@ -587,6 +590,12 @@ Free Cam do not alter the logical movement basis.
   probes ignore it. Session presentation only: no document field, nothing the
   simulation or a replay reads. Headless it records and echoes the isolation
   with nothing to draw.
+- `view.reseed [<body>]` — restarts a body's presentation-only animation (gait
+  driver phases and weights, foot plants, root and part followers) as for a new
+  occupant (`WorldStampPool.Reseed`). A `body.pose` teleport of the same
+  occupant keeps its gait phases so it never pops; pin `view.reseed` beside it
+  when a scripted motion must look the same on a repeat
+  ([tick-exact debug capture](schedules-and-tests.md#tick-exact-debug-capture)).
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).

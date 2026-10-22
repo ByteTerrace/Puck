@@ -120,7 +120,7 @@ stairwell, which is open between floors.
 | Call the lift | Step on the `CALL` pad before the lift door, or `gallery.lift <level>` |
 | Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
 | Stand on a level's landing | `gallery.level <level> [body]` |
-| Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or X on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
+| Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
@@ -141,11 +141,11 @@ has no landing doors: walking into the shaft on a level where the car is not
 drops to the car's roof or the pit.
 
 The gallery's keys live in `hall.puck`'s `gallery-keys` overlay on the debug
-world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and holding the
-right shoulder or `Q` opens the gallery wheel (aim with the right stick or the
-mouse, release to commit, as the left shoulder and Tab open the play wheel),
-whose ring carries next, previous, flag, view, slice and the entrance, so a pad
-reaches every gallery action. Each
+world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and holding `Q`
+opens the gallery wheel (aim with the mouse, release to commit, as Tab opens the
+play wheel), whose ring carries next, previous, flag, view, slice and the
+entrance. A pad reaches next, previous, flag and slice on the bar's Tour page
+(right then left trigger); its right shoulder is the context button. Each
 exhibit's and sign's in-world text is a text run on its placement: the debug
 world draws no HUD, so there is nothing to show or hide. `gallery.view` and
 `gallery.slice` call verbs only a rendered World registers, so a headless host

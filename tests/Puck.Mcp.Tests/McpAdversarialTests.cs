@@ -287,7 +287,11 @@ public sealed class McpAdversarialTests {
         Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 3, arguments: """{"mode":"settled"}""")));
         Assert.StartsWith(expectedStartString: "A settled capture is one frame", actualString: Output(result: await CaptureAsync(id: 4, arguments: """{"mode":"settled","frames":2}""")), comparisonType: StringComparison.Ordinal);
         Assert.Equal(expected: "Invalid argument: region.", actual: Output(result: await CaptureAsync(id: 5, arguments: """{"region":{"x":0}}""")));
-        Assert.Equal(expected: 3, actual: seen.Count);
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 6, arguments: """{"tick":1200}""")));
+        Assert.StartsWith(expectedStartString: "A presented capture reads the frames", actualString: Output(result: await CaptureAsync(id: 7, arguments: """{"mode":"presented","tick":1200}""")), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: "Invalid argument: tick.", actual: Output(result: await CaptureAsync(id: 8, arguments: """{"tick":-3}""")));
+        Assert.Equal(expected: (ControlCapture.Settled, (ulong?)1200UL), actual: (seen[3]!.Mode, seen[3]!.Tick));
+        Assert.Equal(expected: 4, actual: seen.Count);
         Assert.Equal(expected: (ControlCapture.Presented, 4), actual: (seen[0]!.Mode, seen[0]!.Frames));
         Assert.Equal(expected: new[] { 0, 0.25, 0.5, 0.5 }, actual: seen[0]!.Region);
         Assert.Equal(expected: (ControlCapture.Presented, 2), actual: (seen[1]!.Mode, seen[1]!.Frames));
