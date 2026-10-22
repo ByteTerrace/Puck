@@ -85,7 +85,12 @@ changes and what the lane ran to show them working before merging
 A lane lands as soon as it meets the
 [landing bar](../verification/SKILL.md#the-landing-bar): the lead merges the
 integration head into it, builds what the merge touched, and fast-forwards the
-integration branch. Never hold a finished lane for others to make a batch; a
+integration branch. "What the merge touched" includes what consumes it:
+- a change to a shader, interface or generated header builds `Puck.slnx`, test projects included;
+- a change to a world document runs every `worlds/debug/*-tests.puck` with `--reproduce`, plus the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`);
+- every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
+
+Never hold a finished lane for others to make a batch; a
 lane that cannot land alone is a dependency to name in the brief. A wait for a
 review or a review slot never holds a lane that meets the landing bar, since a
 review is optional
