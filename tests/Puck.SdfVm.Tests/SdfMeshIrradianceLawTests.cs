@@ -118,15 +118,16 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.True(condition: (upperLuminance > 0f));
         Assert.True(condition: (Luminance(face: 3, probe: lower) < (0.01f * upperLuminance)));
-        // The lower probe's depth reaches the slab's underside 2.5 m up and the floor 1.5 m down, each within the cone's
-        // spread; the upper probe's reaches the ceiling 2.8 m up.
+        // The lower probe's depth is the exact distance along each axis to the slab's underside 2.5 m up and the floor
+        // 1.5 m down, and the upper probe's to the ceiling 2.8 m up, to the half precision it is stored at, so a point
+        // on the slab's top, 0.3 m past the lower probe's depth, takes nothing from it.
         var lowerUp = Half(high: false, word: lower[(SdfMeshIrradianceProbe.DepthWord + 1)]);
         var lowerDown = Half(high: true, word: lower[(SdfMeshIrradianceProbe.DepthWord + 1)]);
         var upperUp = Half(high: false, word: upper[(SdfMeshIrradianceProbe.DepthWord + 1)]);
 
-        Assert.InRange(actual: lowerUp, low: 2.5f, high: 3.1f);
-        Assert.InRange(actual: lowerDown, low: 1.5f, high: 1.9f);
-        Assert.InRange(actual: upperUp, low: 2.8f, high: 3.5f);
+        Assert.InRange(actual: lowerUp, low: 2.49f, high: 2.51f);
+        Assert.InRange(actual: lowerDown, low: 1.49f, high: 1.51f);
+        Assert.InRange(actual: upperUp, low: 2.79f, high: 2.81f);
         // The meter reads the lit room lit and the dark room dark.
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _));
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _));

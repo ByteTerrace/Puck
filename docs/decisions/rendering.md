@@ -132,8 +132,7 @@ room and the sunlit ground through the window as ground, while a dark paint
 under the same light stays dark; the composite scales the sky share so the
 sky's brightest texel reaches display white rather than clipping, and a window
 from a dim room shows the sky's gradient. The gain reads illumination, never a
-surface's own luminance, so no outline, ridge light or dark albedo is lifted by
-it, and the volume's share of that illumination is smooth over a cell, so the
+surface's own luminance, so no dark albedo is lifted by it, and the volume's share of that illumination is smooth over a cell, so the
 adaptation carries no halo across a depth edge and agrees between views of one
 world.
 Each view's composite multiplies its output by its exposure, so a dark lobby
@@ -147,8 +146,12 @@ room reading as a garden rather than white, and a night field seen from a lit
 room as night rather than black; every level of windows within windows carries
 the same share, so the result is the same whatever the nesting. A display shows
 its picture at its peak luminance; terms that are display-referred by design
-(an ink line, the editor grid, an unbound screen's glass) are divided by the
-exposure. Exposure is presentation only: it reads presentation time and the
+(the editor grid, an unbound screen's glass) are divided by the exposure. The
+stylized curvature terms (the ridge light, the cavity and the ink line) apply
+to the exposed colour at the strength of the surface's own exposed
+illumination against the white the meter aims for (`SdfExposure.ReferenceWhite`),
+so a lit room keeps its crisp edges and a dark room's edges stay as dark as its
+walls rather than drawing light lines across them. Exposure is presentation only: it reads presentation time and the
 volume, and nothing in simulation state depends on it.
 
 **A point or spot light ends at a range derived from its intensity (the lead's
@@ -820,7 +823,16 @@ owns its layout, costs and limits.
 through walls with its back-face weight, its inside-geometry test, the read's
 preference for the probes in front of a surface and each probe's depth cube,
 which stops it at the wall or slab its rays meet along each axis; there is no
-per-probe visibility of the surfaces it lights. Each probe's cubes are averaged with the
+per-probe visibility of the surfaces it lights. The depth is the exact
+distance to a wall or slab across the axis, and a point a few centimetres past
+it takes nothing from the probe, because a point where a wall meets a floor
+lies level with the floor's surface, only the floor's thickness from a probe
+under it. A point every probe about it stands across a wall or slab from is
+enclosed and takes no indirect light; only a point no probe has traced takes
+the open sky. A probe also gives way to the other probes about a point in
+proportion to how few of them it sees, by the neighbour sight lines the trace
+already casts for the filter, so a probe outside a wall whose axis looks in
+through a window lights nothing inside. Each probe's cubes are averaged with the
 neighbouring probes its centre sees, since a probe's rays are few beside the
 contrast of a sunlit patch and the raw lattice showed as bands along a room's
 walls; a neighbour behind a wall takes no part. Moving bodies receive its light

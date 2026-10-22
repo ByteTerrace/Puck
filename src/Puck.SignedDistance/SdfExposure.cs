@@ -42,6 +42,12 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
     /// illuminance over π a surface of this albedo would show the reading at, which each surface's own illumination is
     /// measured against.</summary>
     public const float LocalReflectance = 0.4f;
+    /// <summary>The display value, before the tonemap, of a white surface under the illumination an automatic
+    /// exposure's meter aims for: the meter's calibration over the saturation headroom at ISO 100 and over
+    /// <see cref="LocalReflectance"/>, about a quarter. The stylized curvature terms take their full strength on a
+    /// surface lit this brightly and fade with its light below it, so a dim room's edges stay as dim as its
+    /// walls.</summary>
+    public const float ReferenceWhite = (SdfPhotometry.MeterCalibration / ((100f * SdfPhotometry.SaturationHeadroom) * LocalReflectance));
     /// <summary>The display value, before the tonemap, the local adaptation scales a view's sky share down to where its
     /// brightest texel would exceed it, so a window from a dim room shows the sky's gradient rather than white.</summary>
     public const float SkyPeakTarget = 1f;
