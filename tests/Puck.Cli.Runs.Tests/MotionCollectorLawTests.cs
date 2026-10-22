@@ -18,18 +18,18 @@ public sealed class MotionCollectorLawTests : IDisposable {
 
     private readonly DirectoryInfo m_directory = Directory.CreateTempSubdirectory(prefix: "puck-motion-law-");
 
-    private string Root => m_directory.FullName.Replace(oldChar: '\\', newChar: '/');
+    private string Root => m_directory.FullName.Replace(newChar: '/', oldChar: '\\');
 
     private static MotionPlan PlanOf(string root, MotionForm form = MotionForm.Suited) {
         var set = new MotionScenarioSet(Layout: "motion", Scenarios: [
-            new MotionScenario(Name: "walk", Note: "n", Form: form, Pose: new MotionPose(Spawn: null, X: 0d, Y: 0d, Z: 0d, YawDegrees: 0d), Settle: 10, Tail: 0, Steps: [], Capture: [0, 2]),
+            new MotionScenario(Name: "walk", Note: "n", Form: form, Pose: new MotionPose(Spawn: null, X: 0d, Y: 0d, YawDegrees: 0d, Z: 0d), Settle: 10, Tail: 0, Steps: [], Capture: [0, 2]),
         ]);
 
         return MotionPlan.Build(selected: set.Scenarios, set: set, startTick: 100UL, stillsRoot: root);
     }
     private static string Pixel(string path, byte value) {
         _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-        PngEncoder.Write(height: 2, path: path, rgba: Enumerable.Repeat(element: value, count: (4 * 2 * 4)).ToArray(), width: 4);
+        PngEncoder.Write(height: 2, path: path, rgba: Enumerable.Repeat(count: ((4 * 2) * 4), element: value).ToArray(), width: 4);
 
         return path;
     }
@@ -56,6 +56,8 @@ public sealed class MotionCollectorLawTests : IDisposable {
 
                 if (!dropFile || (camera != "motion-front")) {
                     _ = Pixel(path: path, value: value);
+                } else if (File.Exists(path: path)) {
+                    File.Delete(path: path);
                 }
 
                 lines.Add(item: $"[still] slot {camera} 4x2 at 0,0 -> {path}");
@@ -66,7 +68,6 @@ public sealed class MotionCollectorLawTests : IDisposable {
     }
 
     public void Dispose() => m_directory.Delete(recursive: true);
-
     [Fact]
     public void AHealthyRunHasNoProblemsAndASheetPerCameraAndOneCombined() {
         var plan = PlanOf(root: Root);
@@ -79,7 +80,7 @@ public sealed class MotionCollectorLawTests : IDisposable {
         Assert.All(collection: scenario.Sheets.Values, action: sheet => Assert.True(condition: File.Exists(path: Path.Combine(path1: Root, path2: sheet))));
         Assert.Equal(expected: "moth", actual: scenario.ObservedForm);
         Assert.Equal(expected: "walk/raw/t0000-motion-profile.png", actual: scenario.Stills[0].Slots["motion-profile"]);
-        Assert.Equal(expected: ("aa" + plan.Scenarios[0].Stills[1].Tick.ToString(provider: CultureInfo.InvariantCulture), "bb2"), actual: (scenario.Stills[1].Hash, scenario.Stills[1].Pose));
+        Assert.Equal(expected: (("aa" + plan.Scenarios[0].Stills[1].Tick.ToString(provider: CultureInfo.InvariantCulture)), "bb2"), actual: (scenario.Stills[1].Hash, scenario.Stills[1].Pose));
         Assert.Contains(expectedSubstring: "body.where", actualString: scenario.Stills[0].Where);
     }
     [Fact]
@@ -99,6 +100,22 @@ public sealed class MotionCollectorLawTests : IDisposable {
         Assert.Contains(expectedSubstring: "was refused: [unknown verb]", actualString: string.Join(separator: "|", values: Problems(lines: refused)));
         Assert.Contains(expectedSubstring: "never answered", actualString: string.Join(separator: "|", values: Problems(lines: [])));
     }
+
+    private sealed class Blocking(string message) : IMotionClearance {
+        public IReadOnlyList<string> Check(MotionPlannedScenario scenario, IReadOnlyList<MotionStillResult> stills, IReadOnlyList<string> cameras) => [$"scenario '{scenario.Scenario.Name}' {message}"];
+    }
+
+    [Fact]
+    public void ABlockedCameraFailsTheScenarioByNameAndWritesNoSheet() {
+        var plan = PlanOf(root: Root);
+        var clean = MotionCollector.Collect(bootTick: 0UL, cellWidth: 16, clearance: new Blocking(message: "x"), columns: 4, directory: Root, lines: Lines(plan: plan, value: 10), notes: [], plan: plan, seconds: 0d);
+        var scenario = Assert.Single(collection: clean.Scenarios);
+
+        Assert.False(condition: clean.Clean);
+        Assert.Equal(expected: ["scenario 'walk' x"], actual: scenario.Problems.ToArray());
+        Assert.Empty(collection: scenario.Sheets);
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: Root, path2: "walk/sheet.png")));
+    }
     [Fact]
     public void TheManifestAndTheReproduceReportCarryEachStillsHashesAndPixelCounts() {
         var plan = PlanOf(root: Root);
@@ -110,7 +127,7 @@ public sealed class MotionCollectorLawTests : IDisposable {
 
         Assert.Equal(expected: 2, actual: rows.Count);
         Assert.All(collection: rows, action: static row => Assert.True(condition: (row.PoseEqual && row.HashEqual)));
-        Assert.Equal(expected: (2L * 4 * 2), actual: rows[0].Count);
+        Assert.Equal(expected: ((2L * 4) * 2), actual: rows[0].Count);
         Assert.Equal(expected: 20, actual: rows[0].Max);
 
         var manifest = Path.Combine(path1: Root, path2: "manifest.json");

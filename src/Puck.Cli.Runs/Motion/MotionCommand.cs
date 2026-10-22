@@ -121,8 +121,11 @@ public static partial class MotionCommand {
             that differs fails the run: the motion itself is not deterministic. Pixel differences are reported and
             never fail it.
 
-            Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a body in the wrong form or a
-            pose hash that differs, 2 a refusal (a scenario file, a build or a World that did not complete).
+            Every slot camera is checked at every still: an eye in geometry, or a sight line to the aim point that meets
+            geometry, fails its scenario by name (scenario, tick, camera, what blocked it) and writes no sheet for it.
+
+            Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a blocked camera, a body in the
+            wrong form or a pose hash that differs, 2 a refusal (a scenario file, a build or a World that did not complete).
             """);
         command.SetAction(action: parseResult => Run(
             backend: parseResult.GetValue(option: backendOption),

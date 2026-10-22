@@ -7,14 +7,17 @@ namespace Puck.Cli.Motion;
 /// <param name="Pose">The pose-scope state hash, or <see langword="null"/> when the World announced no still.</param>
 /// <param name="Where">The <c>body.where 0</c> answer read at the still's tick, or empty.</param>
 /// <param name="Slots">Each camera's file, by camera, as a path relative to the run's directory.</param>
-public sealed record MotionStillResult(int Offset, ulong Tick, string? Hash, string? Pose, string Where, IReadOnlyDictionary<string, string> Slots);
+/// <param name="Rig">What <c>body.rig 0</c> read at the tick: the eased speed and each foot's plant state; <see langword="null"/> when the read never answered.</param>
+/// <param name="Contacts">The <c>world.contacts 1</c> answer read at the tick: grounded flag, planar speed and obstruction normal; empty when it never answered.</param>
+public sealed record MotionStillResult(int Offset, ulong Tick, string? Hash, string? Pose, string Where, IReadOnlyDictionary<string, string> Slots, MotionRigReading? Rig, string Contacts);
 /// <summary>What one scenario came to.</summary>
 /// <param name="Planned">The scenario as laid out on ticks.</param>
+/// <param name="Cameras">The cameras of the layout the scenario ran in, in slot order.</param>
 /// <param name="Stills">Its stills, by tick.</param>
 /// <param name="ObservedForm">Which creation body 0 wore at tick 0 (<c>moth</c> or <c>moth-pilot</c>), or empty when the read never came back.</param>
 /// <param name="Sheets">The contact sheets, by name (<c>combined</c> and each camera), as paths relative to the run's directory.</param>
 /// <param name="Problems">What went wrong: a refused line, a missing still, a body in the wrong form. Empty when nothing did.</param>
-public sealed record MotionScenarioResult(MotionPlannedScenario Planned, IReadOnlyList<MotionStillResult> Stills, string ObservedForm, IReadOnlyDictionary<string, string> Sheets, IReadOnlyList<string> Problems);
+public sealed record MotionScenarioResult(MotionPlannedScenario Planned, IReadOnlyList<string> Cameras, IReadOnlyList<MotionStillResult> Stills, string ObservedForm, IReadOnlyDictionary<string, string> Sheets, IReadOnlyList<string> Problems);
 /// <summary>One whole run's outcome.</summary>
 /// <param name="Error">Why the run could not complete, or empty. A run with an error holds no scenarios.</param>
 /// <param name="TooLateStart">The earliest start tick a retry needs, when the World had passed the start the run asked for; otherwise <see langword="null"/>.</param>
@@ -22,7 +25,7 @@ public sealed record MotionScenarioResult(MotionPlannedScenario Planned, IReadOn
 /// <param name="StartTick">The tick the run's first line was pinned to.</param>
 /// <param name="Seconds">How long the run took, boot to exit.</param>
 /// <param name="Directory">The run's directory: stills, sheets and logs.</param>
-/// <param name="Cameras">The camera names of the layout, in slot order.</param>
+/// <param name="Cameras">Every camera name any scenario's layout showed, in first-seen order.</param>
 /// <param name="Scenarios">The scenarios' outcomes.</param>
 /// <param name="Notes">Warnings that do not fail the run, such as bakes that did not settle.</param>
 public sealed record MotionRunResult(string Error, ulong? TooLateStart, ulong BootTick, ulong StartTick, double Seconds, string Directory, IReadOnlyList<string> Cameras, IReadOnlyList<MotionScenarioResult> Scenarios, IReadOnlyList<string> Notes) {

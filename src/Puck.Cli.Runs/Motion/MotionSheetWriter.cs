@@ -2,9 +2,19 @@ namespace Puck.Cli.Motion;
 
 /// <summary>Writes a scenario's contact sheets from the camera stills a run wrote.</summary>
 public static class MotionSheetWriter {
-    /// <summary>The glyph scale of a cell's label.</summary>
-    public const int LabelScale = 2;
+    /// <summary>Formats a cell's two-line label, each line clipped to what fits the cell: the camera, offset and tick, then the feet, speed and facts.</summary>
+    /// <param name="camera">The camera's name.</param>
+    /// <param name="still">The still.</param>
+    /// <param name="cellWidth">The cell's width, in pixels.</param>
+    /// <returns>The two lines, joined by a line feed.</returns>
+    public static string CellLabel(string camera, MotionStillResult still, int cellWidth) {
+        var heading = MotionSheets.Label(camera: camera, offset: still.Offset, tick: still.Tick);
+        var detail = MotionRig.Describe(facts: MotionRig.FactsOf(answer: still.Where), rig: still.Rig);
+        var headingFit = MotionSheets.CharactersThatFit(scale: MotionSheets.LabelScale, width: cellWidth);
+        var detailFit = MotionSheets.CharactersThatFit(scale: 1, width: cellWidth);
 
+        return $"{((heading.Length > headingFit) ? heading[..headingFit] : heading)}\n{((detail.Length > detailFit) ? detail[..detailFit] : detail)}";
+    }
     /// <summary>Composes one sheet per camera and one combined sheet for a scenario, and writes them beside its stills.</summary>
     /// <param name="directory">The run's directory; the sheets go in the scenario's folder under it.</param>
     /// <param name="scenario">The scenario.</param>
@@ -32,7 +42,7 @@ public static class MotionSheetWriter {
 
                 foreach (var camera in cameras) {
                     row.Add(item: MotionSheets.ScaleToWidth(source: MotionSheets.Read(path: Path.Combine(path1: directory, path2: still.Slots[camera])), width: cellWidth));
-                    names.Add(item: MotionSheets.Label(camera: camera, offset: still.Offset, tick: still.Tick));
+                    names.Add(item: CellLabel(camera: camera, cellWidth: cellWidth, still: still));
                 }
 
                 frames.Add(item: row);
@@ -40,10 +50,8 @@ public static class MotionSheetWriter {
             }
 
             var cellHeight = frames[0][0].Height;
-            var labelHeight = MotionSheets.LabelHeightFor(scale: LabelScale);
-            var fit = MotionSheets.CharactersThatFit(scale: LabelScale, width: cellWidth);
-
-            string[][] clipped = [.. labels.Select(selector: names => names.Select(selector: name => ((name.Length > fit) ? name[..fit] : name)).ToArray())];
+            var labelHeight = MotionSheets.LabelHeightFor();
+            var clipped = labels;
 
             WriteSheet(
                 directory: directory,

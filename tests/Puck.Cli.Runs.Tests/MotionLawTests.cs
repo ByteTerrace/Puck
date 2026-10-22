@@ -110,7 +110,7 @@ public sealed class MotionLawTests {
 
         var atZero = walk.Lines.Where(predicate: line => (line.Tick == walk.ZeroTick)).Select(selector: static line => line.Line).ToArray();
 
-        Assert.Equal(actual: atZero, expected: ["body.rig 0", "body.press run 1 1", "body.where 0", $"world.screenshot D:/out/walk/raw/t0000.png slots"]);
+        Assert.Equal(actual: atZero, expected: ["body.rig 0", "body.press run 1 1", "body.where 0", "body.rig 0", "world.contacts 1", "world.screenshot D:/out/walk/raw/t0000.png slots"]);
     }
     [Fact]
     public void APlanPressesTheSuitOnlyWhereTheFormChanges() {
@@ -146,6 +146,46 @@ public sealed class MotionLawTests {
 
         Assert.Equal(expected: ((long)plan.Scenarios[1].ResetTick), actual: second.RootElement.GetProperty(propertyName: "start").GetInt64());
         Assert.Equal(expected: "body.stop 0", actual: second.RootElement.GetProperty(propertyName: "steps")[0].GetProperty(propertyName: "run").GetString());
+    }
+    [Fact]
+    public void AScenarioThatChangesTheLayoutSwitchesAndWaitsForTheCamerasBeforeItsReset() {
+        var set = Parse(json: """
+            {"schema":"puck.motion.scenarios.v1","layout":"motion","scenarios":[
+              {"name":"a","capture":[0]},
+              {"name":"b","layout":"motion-course","capture":[0]},
+              {"name":"c","layout":"motion-course","capture":[0]},
+              {"name":"d","capture":[0]}
+            ]}
+            """);
+        var plan = MotionPlan.Build(selected: set.Scenarios, set: set, startTick: 1000UL, stillsRoot: "D:/out");
+        var layouts = plan.Scenarios.Select(selector: static scenario => scenario.Lines.Where(predicate: static line => line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "view.override layout ")).Select(selector: static line => line.Line["view.override layout ".Length..]).ToArray()).ToArray();
+
+        Assert.Equal(expected: ["motion-course"], actual: set.Scenarios.Select(selector: static scenario => scenario.Layout).OfType<string>().Distinct().ToArray());
+        Assert.Equal(actual: layouts, expected: [["motion"], ["motion-course"], [], ["motion"]]);
+
+        var second = plan.Scenarios[1];
+        var third = plan.Scenarios[2];
+
+        Assert.Equal(expected: (second.ArmTick + ((ulong)MotionPlan.LayoutTicks)), actual: second.ResetTick);
+        Assert.Equal(expected: third.ArmTick, actual: third.ResetTick);
+        Assert.Equal(expected: second.ArmTick, actual: (plan.Scenarios[0].ZeroTick + 1UL));
+        Assert.StartsWith(expectedStartString: $"world.at {{\"start\":{second.ArmTick}", actualString: plan.ArmingLines()[1]);
+    }
+    [Fact]
+    public void ABodyRigReadGivesTheSpeedAndEachFootsPlantState() {
+        const string Answer = "[body.rig: body:0 creation=moth speed=2.50 drivers=1 driver:pace phase=0.00 weight=1.00 effector:foot-left weight=1.00 planted=yes target=(1.00, 0.00, -2.00) align=1.00 normal=(0.00, 0.97, 0.26) effector:foot-right weight=0.50 planted=stepping target=none align=0.00 normal=(0.00, 1.00, 0.00)]";
+
+        Assert.True(condition: MotionRig.TryParse(answer: Answer, reading: out var rig));
+        Assert.Equal(expected: 2.5d, actual: rig.Speed);
+        Assert.Equal(expected: ["foot-left", "foot-right"], actual: rig.Feet.Select(selector: static foot => foot.Name).ToArray());
+        Assert.Equal(expected: ["yes", "stepping"], actual: rig.Feet.Select(selector: static foot => foot.Planted).ToArray());
+        Assert.Equal(expected: "(0.00, 0.97, 0.26)", actual: rig.Feet[0].Normal);
+        Assert.Equal(expected: "L plant R step | spd 2.50 | grounded", actual: MotionRig.Describe(facts: "grounded", rig: rig));
+        Assert.Equal(expected: "airborne|falling", actual: MotionRig.FactsOf(answer: "[body.where: body:0 pos=(0, 1, 0) facts=airborne|falling home=(0, 0, 0)]"));
+        Assert.Equal(expected: "airborne", actual: MotionRig.Describe(facts: "airborne", rig: null));
+        Assert.False(condition: MotionRig.TryParse(answer: "[body.rig: a procedural catalog rig]", reading: out _));
+        Assert.Equal(expected: "R free", actual: MotionRig.Describe(facts: string.Empty, rig: new MotionRigReading(Feet: [new MotionFoot(Name: "foot-right", Normal: "n", Planted: "no", Target: "none", Weight: 0d)], Speed: 0d)).Split(separator: " | ")[0]);
+        Assert.Equal(expected: "profile t+4 tick 99\nL plant R step | spd 2.50 | grounded", actual: MotionSheetWriter.CellLabel(camera: "motion-profile", cellWidth: 480, still: new MotionStillResult(Contacts: string.Empty, Hash: null, Offset: 4, Pose: null, Rig: rig, Slots: new Dictionary<string, string>(), Tick: 99UL, Where: "[body.where: facts=grounded]")));
     }
     [InlineData(0UL, 300UL)]
     [InlineData(42UL, 300UL)]

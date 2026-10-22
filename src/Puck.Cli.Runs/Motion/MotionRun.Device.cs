@@ -42,6 +42,11 @@ public static class MotionRun {
         _ = Directory.CreateDirectory(path: request.Directory);
         _ = Directory.CreateDirectory(path: request.StateDirectory);
 
+        // Built before the World boots, so a world the check cannot read refuses the run at once.
+        if (!MotionClearance.TryCreate(clearance: out var clearance, error: out var clearanceError, worldPath: request.World)) {
+            return Fail(clock: clock, error: $"the camera clearance check could not be built: {clearanceError}", notes: notes, request: request);
+        }
+
         List<string> arguments = [
             "--world", request.World,
             .. WorldDevices.NoneArguments,
@@ -141,6 +146,7 @@ public static class MotionRun {
         return MotionCollector.Collect(
             bootTick: bootTick,
             cellWidth: request.CellWidth,
+            clearance: clearance,
             columns: request.Columns,
             directory: request.Directory,
             lines: [.. process.LinesFrom(from: 0).Select(selector: static line => line.Text)],

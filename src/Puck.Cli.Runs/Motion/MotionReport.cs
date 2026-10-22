@@ -42,9 +42,9 @@ public static class MotionReport {
 
             foreach (var still in scenario.Stills) {
                 var match = other?.Stills.FirstOrDefault(predicate: candidate => (candidate.Tick == still.Tick));
-                var cameras = new List<MotionCameraDifference>(capacity: first.Cameras.Count);
+                var cameras = new List<MotionCameraDifference>(capacity: scenario.Cameras.Count);
 
-                foreach (var camera in first.Cameras) {
+                foreach (var camera in scenario.Cameras) {
                     MotionPixelDifference? difference = null;
 
                     if ((match is not null) && still.Slots.TryGetValue(key: camera, value: out var left) && match.Slots.TryGetValue(key: camera, value: out var right)) {
@@ -120,6 +120,8 @@ public static class MotionReport {
                 note = scenario.Planned.Scenario.Note,
                 form = scenario.Planned.Scenario.Form.ToString().ToLowerInvariant(),
                 observedForm = scenario.ObservedForm,
+                layout = scenario.Planned.Scenario.Layout,
+                cameras = scenario.Cameras,
                 resetTick = scenario.Planned.ResetTick,
                 zeroTick = scenario.Planned.ZeroTick,
                 steps = scenario.Planned.Scenario.Steps.Select(selector: static step => new { at = step.At, run = step.Run }),
@@ -131,6 +133,9 @@ public static class MotionReport {
                     hash = still.Hash,
                     pose = still.Pose,
                     where = still.Where,
+                    speed = still.Rig?.Speed,
+                    feet = still.Rig?.Feet.Select(selector: static foot => new { name = foot.Name, planted = foot.Planted, weight = foot.Weight, target = foot.Target, normal = foot.Normal }),
+                    contacts = still.Contacts,
                     files = still.Slots,
                 }),
             }),

@@ -2144,9 +2144,10 @@ state directory of its own that the run removes), waits for the bakes, turns
 `motion` layout in `studio.puck`: four cameras riding body 0, `profile`,
 `front`, `feet` and a world-axes `turn` camera), and runs each scenario from a
 reset body on exact ticks with `world.at` and settled `world.screenshot … slots`
-stills. It is GPU work: take the GPU lease and run nothing else on the GPU
-beside it. One World runs every selected scenario; the default set is 24
-scenarios and runs in about four minutes.
+stills. Every scenario runs in the avatar studio, a neutral grey room with
+judging aids ([the studio](#the-studio)). It is GPU work: take the GPU lease and
+run nothing else on the GPU beside it. One World runs every selected scenario;
+the default set runs in about three minutes.
 
 ```text
 puck motion                                 # every scenario of worlds/debug/motion.scenarios.json
@@ -2166,14 +2167,71 @@ Per scenario the output directory holds `<name>/raw/t<offset>-<camera>.png`, one
 PNG per camera per still, named by the still's tick offset; `<name>/sheet.png`,
 every camera with the frames left to right in bands of `--columns` (default 6)
 at `--cell-width` (default 480) pixels, each cell labelled with its camera, its
-offset from the scenario's tick 0 and its absolute tick; and
-`<name>/sheet-<camera>.png`, one camera's frames. `manifest.json`
-(`puck.motion.manifest.v1`) lists per scenario its steps, the form body 0 was
-observed to wear at tick 0, its sheets and, per still, the tick, the capture
-hash, the pose hash, the `body.where 0` read at that tick (position, velocity,
-facts) and the camera files. The composed four-up frame the World writes beside
-the slot files is `raw/t<offset>.png` and is kept. The World's transcripts are
-`stdout.log` and `stderr.log`.
+offset from the scenario's tick 0 and its absolute tick, with a second line
+reading `L plant R step | spd 2.50 | grounded`: each foot's plant state, the
+body's eased speed and its facts at that tick; and `<name>/sheet-<camera>.png`,
+one camera's frames. `manifest.json` (`puck.motion.manifest.v1`) lists per
+scenario its steps, the form body 0 was observed to wear at tick 0, its cameras
+and sheets and, per still, the tick, the capture hash, the pose hash, the
+`body.where 0` read at that tick (position, velocity, facts), the `body.rig 0`
+read (`speed`, and per foot effector its `planted` state, `weight`, `target` and
+ground `normal`), the `world.contacts 1` read (grounded flag, planar speed,
+obstruction normal) and the camera files. The composed four-up frame the World
+writes beside the slot files is `raw/t<offset>.png` and is kept. The World's
+transcripts are `stdout.log` and `stderr.log`.
+
+### The studio
+
+The scenarios run in `worlds/debug/studio.puck`'s avatar studio, a 48 m square
+room centred at 48, -48 with a 12 m wall, an open sky, a floor top at 0.01 and
+a 3 m radius, 0.3 m tall platform in the middle, so nothing of the debug world is
+in frame. Its aids are authored in `studio.puck` (`studioAidPrototypes`):
+
+| Aid | Where (world) | What it shows in a still |
+|---|---|---|
+| Metric floor grid | the lane at x 29.5 to 34.5, z -51 to -27 (poses start at 32, -26.5, walking toward -Z) | 1 m lines (dark), 0.25 m lines (light) and a wide orange line every 5 m, so stride length, stopping distance and a foot's slide read against the floor |
+| Height poles | x 35, z -48, -43, -38, -33, -28 | a red tick every 0.5 m and a yellow one every metre up to 3 m, behind the body in the `profile` camera: a jump's apex, the flight climb and the hip's bob |
+| Contact course | x 60, z -33 to -69 | a 0.15 m and a 0.30 m step, a 15 degree and a 30 degree ramp (up and down), and a stair of six 0.17 m risers with 0.3 m treads, a landing and the stair down: planted-foot judgement on edges, slopes and risers |
+| Platform | the room's centre | the 0.3 m step-up and step-down onto a round edge |
+
+The course scenarios set `"layout": "motion-course"`, which swaps the `front`
+camera (5.2 m ahead of her, so inside the ramps she walks toward) for `rear`,
+behind and above; switching layouts costs 150 ticks of exposure adaptation. A
+`motion.scenarios.json` pose is in world coordinates; a creation in `studio.puck`
+is authored in the creation frame, the world turned a half turn about Y.
+
+### Camera clearance
+
+A camera that stands in a wall, or looks at her through one, is a failed still, so
+the run checks every slot camera at every still, from the stills' own
+`body.where 0` reads. Each camera's rig is compiled as the World compiles it
+(`WorldCameraRigCompiler`) and resolved against body 0's pose, giving the eye and
+the aim point; the geometry is the one the seat camera's clearance keeps its eye
+out of (`WorldCameraClearance`): the world's placements as `WorldPlacementStamper.EmitStatic`
+emits them, read through the CPU field evaluator, which holds no body. An eye is
+blocked when a 0.3 m sphere about it overlaps geometry, and a sight line is
+blocked when a 0.05 m sphere swept from the eye toward the aim point (stopping
+0.2 m short, so the floor she stands on is not an obstruction) hits geometry. A
+blocked camera is a problem of its scenario that names the scenario, the tick,
+the camera, where the eye and the point are and the placement nearest the
+obstruction (`scenario 'against-the-wall' tick 612 (t+0): camera 'motion-turn' is
+blocked: the line from the eye (…) to the aim point (…) meets geometry …, nearest
+placement 'avatar-studio' …`), exits 1 and writes no contact sheet for that
+scenario; its stills stay in `raw/` as evidence. The check is built before the
+World boots, so a world it cannot read refuses the run. The shipped scenarios keep
+the eye offsets of the `motion` layout (profile 5.2 m to her left, front 5.2 m
+ahead, feet 2.2 m to the left, turn 3.8 m west and south of her in world axes) in
+open air: the lane starts 6 m from the near wall, and the course scenarios use the
+`motion-course` layout. `world.collision.probe` and the `cameraInside` capture
+refusal need a field-selecting collision provider and a world-point camera anchor,
+which the debug world's analytic provider and body-anchored cameras are not, so
+they cannot make this check.
+
+The engine exposes foot state as text, not as a drawing: `body.rig` reads each
+foot effector's `planted` state and ground normal, and `world.contacts` the
+grounded flag and obstruction normal. The run reads both at every still, prints
+the plant states on the sheet and keeps all of it in the manifest; no per-foot
+marker is drawn into the frame, since nothing in the renderer draws one.
 
 ### The scenario file
 
@@ -2204,12 +2262,12 @@ scenario is added by editing it.
 
 | Member | Meaning |
 |---|---|
-| `layout` | The `views` layout every still is captured through. Default `motion`. |
+| `layout` | The `views` layout every still is captured through. Default `motion`; a scenario may name its own, and the run switches to it (and waits 150 ticks) when it differs from the scenario before. |
 | `settle`, `tail`, `pose` | File-level defaults of the scenario members below. |
 | `name` | Lowercase words joined by hyphens; the scenario's folder. |
 | `note` | What the scenario shows and what to look for; printed by `--list` and kept in the manifest. |
 | `form` | `suited` (the 2.06 m Moth) or `pilot` (out of the suit). The run presses the suit channel before the scenario when the form differs from the form the previous scenario ended in. A step that presses the suit (`body.press suit …`) flips the form the scenario ends in. |
-| `pose` / `spawn` | `[x, y, z, yawDegrees]` or a `spawnPoints` id (`spawn` replaces `pose`). Default `[0, 0, 0, 0]`, the stage. |
+| `pose` / `spawn` | `[x, y, z, yawDegrees]` or a `spawnPoints` id (`spawn` replaces `pose`). World coordinates; the shipped file defaults to the grid lane's start, `[32, 0, -26.5, 0]`. |
 | `settle` | Ticks body 0 stands still after the reset and before tick 0, at least 8. Default 45. |
 | `steps` | `{ "at": <tick>, "run": "<console line>" }`, pinned `at` ticks after tick 0: `body.fly`, `body.press`, `player.signal`, `body.pose`, any verb `world.at` admits. `world.at`, `world.wait`, `quit` and `world.screenshot` are refused; the verb owns them. A step at a tick runs before the still of that tick, and a `body.*` step applies in the tick after it, so a still at the step's own tick shows the state before it. |
 | `capture` | The ticks to capture, counted from tick 0: whole numbers and `{ "from", "to", "step" }` ranges. |
@@ -2247,8 +2305,8 @@ mid-motion stills are not yet byte-identical
 ([tick-exact capture](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture)).
 
 Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a
-body in the wrong form or a pose hash that differs, 2 a refusal (a scenario file
-that does not parse, a build, or a World that did not complete).
+blocked camera, a body in the wrong form or a pose hash that differs, 2 a refusal
+(a scenario file that does not parse, a build, or a World that did not complete).
 
 ---
 

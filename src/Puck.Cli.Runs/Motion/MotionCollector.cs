@@ -14,8 +14,9 @@ public static class MotionCollector {
     /// <param name="bootTick">The tick the World was ready at.</param>
     /// <param name="seconds">How long the run took.</param>
     /// <param name="notes">The warnings that do not fail the run.</param>
+    /// <param name="clearance">The camera clearance check, or <see langword="null"/> to make none.</param>
     /// <returns>The outcome, with each scenario's problems.</returns>
-    public static MotionRunResult Collect(string directory, MotionPlan plan, IReadOnlyList<string> lines, int columns, int cellWidth, ulong bootTick, double seconds, IReadOnlyList<string> notes) {
+    public static MotionRunResult Collect(string directory, MotionPlan plan, IReadOnlyList<string> lines, int columns, int cellWidth, ulong bootTick, double seconds, IReadOnlyList<string> notes, IMotionClearance? clearance = null) {
         var stamps = new List<MotionStillStamp>();
         var slots = new List<MotionSlotFile>();
         var pinned = new List<MotionPinnedAnswer>();
@@ -25,20 +26,23 @@ public static class MotionCollector {
                 stamps.Add(item: stamp);
             } else if (MotionTranscript.TryParseSlot(line: line, slot: out var slot)) {
                 slots.Add(item: slot);
-            } else if (MotionTranscript.TryParsePinned(line: line, answer: out var answer)) {
+            } else if (MotionTranscript.TryParsePinned(answer: out var answer, line: line)) {
                 pinned.Add(item: answer);
             }
         }
 
-        var cameras = slots.Select(selector: static slot => slot.Camera).Distinct(comparer: StringComparer.Ordinal).ToArray();
+        List<string> cameras = [];
         var results = new List<MotionScenarioResult>(capacity: plan.Scenarios.Count);
 
         foreach (var planned in plan.Scenarios) {
             var problems = new List<string>();
             var stillResults = new List<MotionStillResult>(capacity: planned.Stills.Count);
             var last = (planned.ZeroTick + ((ulong)planned.Scenario.LastTick));
+            var scenarioCameras = slots.Where(predicate: slot => planned.Stills.Any(predicate: still => slot.Path.StartsWith(value: (still.Stem + "-"), comparisonType: StringComparison.OrdinalIgnoreCase))).Select(selector: static slot => slot.Camera).Distinct(comparer: StringComparer.Ordinal).ToArray();
 
-            foreach (var refused in pinned.Where(predicate: answer => (answer.Refused && (answer.Tick >= planned.ResetTick) && (answer.Tick <= last)))) {
+            cameras.AddRange(collection: scenarioCameras.Except(second: cameras));
+
+            foreach (var refused in pinned.Where(predicate: answer => (answer.Refused && (answer.Tick >= planned.ArmTick) && (answer.Tick <= last)))) {
                 problems.Add(item: $"tick {refused.Tick.ToString(provider: CultureInfo.InvariantCulture)}: '{refused.Line}' was refused: {refused.Answer}");
             }
 
@@ -71,18 +75,26 @@ public static class MotionCollector {
                 } else if (stamp.ShowsAnotherTick || (stamp.Shown != still.Tick.ToString(provider: CultureInfo.InvariantCulture))) {
                     problems.Add(item: $"{where}: the frame served shows tick {stamp.Shown}");
                 }
-                if (files.Count != cameras.Length) {
-                    problems.Add(item: $"{where}: {files.Count.ToString(provider: CultureInfo.InvariantCulture)} of {cameras.Length.ToString(provider: CultureInfo.InvariantCulture)} camera files written");
+                if (files.Count != scenarioCameras.Length) {
+                    problems.Add(item: $"{where}: {files.Count.ToString(provider: CultureInfo.InvariantCulture)} of {scenarioCameras.Length.ToString(provider: CultureInfo.InvariantCulture)} camera files written");
                 }
 
-                var read = pinned.LastOrDefault(predicate: answer => ((answer.Tick == still.Tick) && (answer.Line == "body.where 0")))?.Answer;
+                string? Read(string line) => pinned.LastOrDefault(predicate: answer => ((answer.Tick == still.Tick) && (answer.Line == line)))?.Answer;
 
-                stillResults.Add(item: new MotionStillResult(Hash: stamp?.Hash, Offset: still.Offset, Pose: stamp?.Pose, Slots: files, Tick: still.Tick, Where: (read ?? string.Empty)));
+                var rigAnswer = Read(line: "body.rig 0");
+                var gait = (((rigAnswer is not null) && MotionRig.TryParse(answer: rigAnswer, reading: out var parsed)) ? parsed : null);
+
+                stillResults.Add(item: new MotionStillResult(Contacts: (Read(line: "world.contacts 1") ?? string.Empty), Hash: stamp?.Hash, Offset: still.Offset, Pose: stamp?.Pose, Rig: gait, Slots: files, Tick: still.Tick, Where: (Read(line: "body.where 0") ?? string.Empty)));
             }
 
-            var sheets = MotionSheetWriter.Write(cameras: cameras, columns: columns, cellWidth: cellWidth, directory: directory, problems: problems, scenario: planned, stills: stillResults);
+            var clear = (clearance?.Check(cameras: scenarioCameras, scenario: planned, stills: stillResults) ?? []);
 
-            results.Add(item: new MotionScenarioResult(ObservedForm: observed, Planned: planned, Problems: problems, Sheets: sheets, Stills: stillResults));
+            problems.AddRange(collection: clear);
+
+            // A scenario with a blocked camera writes no sheet: the stills it names are in the folder as evidence, never as a result.
+            var sheets = ((clear.Count == 0) ? MotionSheetWriter.Write(cameras: scenarioCameras, cellWidth: cellWidth, columns: columns, directory: directory, problems: problems, scenario: planned, stills: stillResults) : ((IReadOnlyDictionary<string, string>)new Dictionary<string, string>()));
+
+            results.Add(item: new MotionScenarioResult(Cameras: scenarioCameras, ObservedForm: observed, Planned: planned, Problems: problems, Sheets: sheets, Stills: stillResults));
         }
 
         return new MotionRunResult(

@@ -11,11 +11,12 @@ namespace Puck.Cli.Motion;
 public sealed record MotionStill(int Offset, ulong Tick, string Stem);
 /// <summary>One scenario laid out on the World's absolute ticks.</summary>
 /// <param name="Scenario">The scenario.</param>
+/// <param name="ArmTick">The tick the scenario's first line is pinned to: the layout switch when it changes the layout, otherwise the reset.</param>
 /// <param name="ResetTick">The tick the reset (stop, pose, reseed) is pinned to.</param>
 /// <param name="ZeroTick">The absolute tick of the scenario's tick 0: the reset plus the settle.</param>
 /// <param name="Lines">Every console line the scenario pins, by absolute tick, in the order they run.</param>
 /// <param name="Stills">The stills, by tick.</param>
-public sealed record MotionPlannedScenario(MotionScenario Scenario, ulong ResetTick, ulong ZeroTick, IReadOnlyList<(ulong Tick, string Line)> Lines, IReadOnlyList<MotionStill> Stills);
+public sealed record MotionPlannedScenario(MotionScenario Scenario, ulong ArmTick, ulong ResetTick, ulong ZeroTick, IReadOnlyList<(ulong Tick, string Line)> Lines, IReadOnlyList<MotionStill> Stills);
 /// <summary>
 /// A whole <c>puck motion</c> run laid out on absolute World ticks: the layout switch, then each selected scenario in
 /// order, each starting from a reset body. The ticks depend only on the scenarios and <see cref="StartTick"/>, never on
@@ -43,16 +44,30 @@ public sealed record MotionPlan(ulong StartTick, ulong LastTick, string Layout, 
 
         var planned = new List<MotionPlannedScenario>(capacity: selected.Count);
         var form = MotionForm.Suited;
-        var reset = (startTick + LayoutTicks);
+        var layout = string.Empty;
+        var reset = startTick;
         var last = startTick;
 
         foreach (var scenario in selected) {
+            var arm = reset;
+            var wanted = (scenario.Layout ?? set.Layout);
+            var lines = new List<(ulong Tick, string Line)>();
+
+            // A layout the World is not showing is switched to first, and the body is reset a layout interval later, once
+            // the new cameras have adapted their exposure.
+            if (wanted != layout) {
+                lines.Add(item: (arm, $"view.override layout {wanted}"));
+                layout = wanted;
+                reset = (arm + LayoutTicks);
+            }
+
             var zero = (reset + ((ulong)scenario.Settle));
-            var lines = new List<(ulong Tick, string Line)> {
+
+            lines.AddRange(collection: [
                 (reset, "body.stop 0"),
                 (reset, scenario.Pose.ToConsoleLine()),
                 ((reset + 1UL), "view.reseed 0"),
-            };
+            ]);
 
             if (form != scenario.Form) {
                 lines.Add(item: ((reset + ((ulong)SuitPressTick)), "body.press suit 1 0.2 0"));
@@ -70,6 +85,8 @@ public sealed record MotionPlan(ulong StartTick, ulong LastTick, string Layout, 
 
                 stills.Add(item: new MotionStill(Offset: offset, Stem: stem, Tick: tick));
                 captures.Add(item: (tick, "body.where 0"));
+                captures.Add(item: (tick, "body.rig 0"));
+                captures.Add(item: (tick, "world.contacts 1"));
                 captures.Add(item: (tick, $"world.screenshot {stem}.png slots"));
             }
 
@@ -80,7 +97,7 @@ public sealed record MotionPlan(ulong StartTick, ulong LastTick, string Layout, 
 
             var ordered = lines.Select(selector: static (line, index) => (line.Tick, line.Line, Index: index)).OrderBy(keySelector: static line => line.Tick).ThenBy(keySelector: static line => line.Index).Select(selector: static line => (line.Tick, line.Line)).ToArray();
 
-            planned.Add(item: new MotionPlannedScenario(Lines: ordered, ResetTick: reset, Scenario: scenario, Stills: stills, ZeroTick: zero));
+            planned.Add(item: new MotionPlannedScenario(ArmTick: arm, Lines: ordered, ResetTick: reset, Scenario: scenario, Stills: stills, ZeroTick: zero));
             form = scenario.EndForm;
             last = ordered[^1].Tick;
             reset = (((zero + ((ulong)scenario.LastTick)) + 1UL) + ((ulong)scenario.Tail));
@@ -88,24 +105,9 @@ public sealed record MotionPlan(ulong StartTick, ulong LastTick, string Layout, 
 
         return new MotionPlan(LastTick: last, Layout: set.Layout, Scenarios: planned, StartTick: startTick);
     }
-    /// <summary>Returns the <c>world.at</c> lines that arm the run: one per scenario, and the layout switch with the first.</summary>
+    /// <summary>Returns the <c>world.at</c> lines that arm the run: one per scenario.</summary>
     /// <returns>Each line, in the order they are sent.</returns>
-    public IReadOnlyList<string> ArmingLines() {
-        var arming = new List<string>(capacity: Scenarios.Count);
-
-        for (var index = 0; (index < Scenarios.Count); index++) {
-            var scenario = Scenarios[index];
-            var origin = ((index == 0) ? StartTick : scenario.ResetTick);
-            var lines = ((index == 0)
-                ? [(StartTick, $"view.override layout {Layout}"), .. scenario.Lines]
-                : scenario.Lines
-            );
-
-            arming.Add(item: ArmLine(lines: lines, start: origin));
-        }
-
-        return arming;
-    }
+    public IReadOnlyList<string> ArmingLines() => [.. Scenarios.Select(selector: static scenario => ArmLine(lines: scenario.Lines, start: scenario.ArmTick))];
     /// <summary>Formats one <c>world.at</c> script.</summary>
     /// <param name="start">The absolute tick offsets are counted from.</param>
     /// <param name="lines">The lines with their absolute ticks, none before <paramref name="start"/>.</param>

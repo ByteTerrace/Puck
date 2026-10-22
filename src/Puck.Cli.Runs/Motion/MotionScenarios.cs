@@ -42,7 +42,8 @@ public sealed record MotionStep(int At, string Run);
 /// <param name="Tail">The ticks the scenario runs after its last step or capture before the next scenario resets.</param>
 /// <param name="Steps">The pinned console lines, by tick.</param>
 /// <param name="Capture">The ticks to capture, ascending and distinct, counted from tick 0.</param>
-public sealed record MotionScenario(string Name, string Note, MotionForm Form, MotionPose Pose, int Settle, int Tail, IReadOnlyList<MotionStep> Steps, IReadOnlyList<int> Capture) {
+/// <param name="Layout">The <c>views</c> layout this scenario captures through, or <see langword="null"/> for the file's.</param>
+public sealed record MotionScenario(string Name, string Note, MotionForm Form, MotionPose Pose, int Settle, int Tail, IReadOnlyList<MotionStep> Steps, IReadOnlyList<int> Capture, string? Layout = null) {
     /// <summary>Gets the form body 0 is in when the scenario ends: its start form, flipped once for each step that
     /// presses the suit channel.</summary>
     public MotionForm EndForm => (((Steps.Count(predicate: static step => MotionScenarioFile.TogglesSuit(line: step.Run)) % 2) == 0)
@@ -88,7 +89,7 @@ public static partial class MotionScenarioFile {
     /// <summary>The most ticks any step or capture may be placed after tick 0.</summary>
     public const int MaximumTick = 1800;
 
-    private static readonly string[] ScenarioMembers = ["capture", "form", "name", "note", "pose", "settle", "spawn", "steps", "tail"];
+    private static readonly string[] ScenarioMembers = ["capture", "form", "layout", "name", "note", "pose", "settle", "spawn", "steps", "tail"];
     private static readonly string[] SetMembers = ["layout", "pose", "scenarios", "schema", "settle", "tail"];
 
     [GeneratedRegex(pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", options: RegexOptions.CultureInvariant)]
@@ -360,7 +361,17 @@ public static partial class MotionScenarioFile {
         var note = string.Empty;
         var form = MotionForm.Suited;
         var pose = defaultPose;
+        string? layout = null;
 
+        if (element.TryGetProperty(propertyName: "layout", value: out var layoutValue)) {
+            if ((layoutValue.ValueKind != JsonValueKind.String) || string.IsNullOrWhiteSpace(value: layoutValue.GetString())) {
+                error = $"{where}'s layout is a layout name";
+
+                return false;
+            }
+
+            layout = layoutValue.GetString();
+        }
         if (element.TryGetProperty(propertyName: "note", value: out var noteValue)) {
             if (noteValue.ValueKind != JsonValueKind.String) {
                 error = $"{where}'s note is text";
@@ -417,7 +428,7 @@ public static partial class MotionScenarioFile {
             return false;
         }
 
-        scenario = new MotionScenario(Capture: capture, Form: form, Name: name, Note: note, Pose: pose, Settle: settle, Steps: steps, Tail: tail);
+        scenario = new MotionScenario(Capture: capture, Form: form, Layout: layout, Name: name, Note: note, Pose: pose, Settle: settle, Steps: steps, Tail: tail);
         error = string.Empty;
 
         return true;

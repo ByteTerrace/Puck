@@ -35,16 +35,24 @@ let studioCameras = map(studioShots, shot => {
 
 // The motion bench: four cameras that ride body 0 wherever she goes, for judging how she moves. Each eye sits at
 // `eye` in her own axes (forward -Z, right +X) and aims at `aim` above her feet, so the profile stays a profile through
-// a walk, a run or a stop. `motion-turn` keeps world axes, so a turn in place shows against a fixed frame.
+// a walk, a run or a stop. `motion-turn` keeps world axes, so a turn in place shows against a fixed frame; its eye stands
+// 3.8 m west and 3.8 m south of her, away from the poles and the contact course, and the scenarios keep 2 m of floor between it
+// and the studio's walls (`puck motion` checks every eye and sight line at every still).
 // view.override layout motion. `puck motion` runs the scenarios of motion.scenarios.json through it on exact ticks.
 let motionShots = [
   { name: "motion-profile", eye [-5.2, 1.1, 0], aim [0, 1.0, 0], fov: 0.62, worldAxes: false }
   { name: "motion-front", eye [0.9, 1.3, -5.2], aim [0, 1.0, 0], fov: 0.62, worldAxes: false }
   { name: "motion-feet", eye [-2.2, 0.35, -0.4], aim [0, 0.35, 0], fov: 0.7, worldAxes: false }
-  { name: "motion-turn", eye [3.8, 3.0, 3.8], aim [0, 1.0, 0], fov: 0.7, worldAxes: true }
+  { name: "motion-turn", eye [-3.8, 3.0, 3.8], aim [0, 1.0, 0], fov: 0.7, worldAxes: true }
 ]
 
-let motionCameras = map(motionShots, shot => {
+// The contact course's rear camera: a camera ahead of her would sit inside the ramps and stairs she walks up to, so the
+// `motion-course` layout (the course scenarios of motion.scenarios.json) swaps the front camera for one behind and above.
+let courseShots = [
+  { name: "motion-rear", eye [0.9, 3.5, 5.0], aim [0, 0.9, 0], fov: 0.75, worldAxes: false }
+]
+
+let motionCameras = map(concat(motionShots, courseShots), shot => {
   name: shot.name
   anchor: entity(index: 0)
   rig {
@@ -70,6 +78,17 @@ template studioLayouts() {
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "motion-profile" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "motion-front" }
+      { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "motion-feet" }
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "motion-turn" }
+    ]
+  }
+  layout "motion-course" {
+    seatCount: 0
+    transitionSeconds: 0
+    transitionRenderScale: 1
+    slots [
+      { x: 0, y: 0, width: 0.5, height: 0.5, camera: "motion-profile" }
+      { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "motion-rear" }
       { x: 0, y: 0.5, width: 0.5, height: 0.5, camera: "motion-feet" }
       { x: 0.5, y: 0.5, width: 0.5, height: 0.5, camera: "motion-turn" }
     ]
@@ -128,9 +147,182 @@ template studioPlacements() {
       margin: 0
     }
   }
+  // The metric grid and the height poles: seen, never touched.
+  placement "studio-grid" {
+    prototype: "studio-grid"
+    position [48, 0, -48]
+  }
+  // The contact course: steps, ramps and stairs she walks over.
+  placement "studio-course" {
+    prototype: "studio-course"
+    position [48, 0, -48]
+    solid {
+      margin: 0
+    }
+  }
+}
+
+// The studio's motion aids. A creation's frame is the world turned a half turn about Y (creation +X is world -X, +Z is
+// world -Z), so each coordinate below is the negative of its offset from the room's centre (48, -48) in the world; the
+// offsets are given here, with the world's -Z the direction she walks at yaw 0, and the floor top is 0.01. A repeat fold's
+// origin is not converted (it is in the world's orientation), so it holds the offset itself, not its negative.
+//  - The grid lane, x -18.5 to -13.5, z -3 to 21: 1 m lines (dark), 0.25 m lines (light) and a wide line every 5 m (orange),
+//    laid as thin relief so a stride's length and a foot's slide read against it in a still.
+//  - Five height poles at x -13, z 0, 5, 10, 15 and 20: a red tick every 0.5 m and a yellow one every metre up to 3 m, for a
+//    jump's apex and the hip's bob.
+//  - The contact course, x 10.5 to 13.5, walked toward -Z: a 0.15 m and a 0.30 m step (z 15 to 12 and 8 to 5), a 15 degree
+//    ramp up and down (z 1 to -6.8, 1.04 m high), a 30 degree ramp up and down (z -9 to -14.2, 1.5 m high) and a stair of
+//    six 0.17 m risers with 0.3 m treads, a landing and the stair down (z -16.5 to -21). The ramps are boxes tilted about X.
+template studioAidPrototypes() {
+  prototype "studio-grid" {
+    document {
+      schema: "puck.creation.v1"
+      name: "studio-grid"
+      palette [
+        { color: "#2E3236", specular: 0.02, roughness: 0.9 }
+        { color: "#6C7277", specular: 0.02, roughness: 0.9 }
+        { color: "#D9622B", specular: 0.02, roughness: 0.9 }
+        { color: "#22304A", specular: 0.03, roughness: 0.7 }
+        { color: "#D23A2E", specular: 0.03, roughness: 0.7 }
+        { color: "#E8B923", specular: 0.03, roughness: 0.7 }
+      ]
+      shape Box "minor-z" {
+        id: 0
+        position [16, 0.016, -9]
+        scale [2.5, 0.006, 0.008]
+        material: 1
+        domain [repeat(spacing: [1, 1, 0.25], limit: [0, 0, 48], origin: [-16, 0.016, 9])]
+      }
+      shape Box "minor-x" {
+        id: 1
+        position [16, 0.016, -9]
+        scale [0.008, 0.006, 12]
+        material: 1
+        domain [repeat(spacing: [0.25, 1, 1], limit: [10, 0, 0], origin: [-16, 0.016, 9])]
+      }
+      shape Box "major-z" {
+        id: 2
+        position [16, 0.02, -9]
+        scale [2.5, 0.01, 0.02]
+        material: 0
+        domain [repeat(spacing: [1, 1, 1], limit: [0, 0, 12], origin: [-16, 0.02, 9])]
+      }
+      shape Box "major-x" {
+        id: 3
+        position [16, 0.02, -9]
+        scale [0.02, 0.01, 12]
+        material: 0
+        domain [repeat(spacing: [1, 1, 1], limit: [2, 0, 0], origin: [-16, 0.02, 9])]
+      }
+      shape Box "five-metres" {
+        id: 4
+        position [16, 0.022, -10]
+        scale [2.7, 0.012, 0.06]
+        material: 2
+        domain [repeat(spacing: [1, 1, 5], limit: [0, 0, 2], origin: [-16, 0.022, 10])]
+      }
+      shape Box "pole" {
+        id: 5
+        position [13, 1.5, -10]
+        scale [0.06, 1.5, 0.06]
+        material: 3
+        domain [repeat(spacing: [1, 1, 5], limit: [0, 0, 2], origin: [-13, 1.5, 10])]
+      }
+      shape Box "tick-half-metre" {
+        id: 6
+        position [13, 1.5, -10]
+        scale [0.09, 0.02, 0.3]
+        material: 4
+        domain [repeat(spacing: [1, 0.5, 5], limit: [0, 3, 2], origin: [-13, 1.5, 10])]
+      }
+      shape Box "tick-metre" {
+        id: 7
+        position [13, 2, -10]
+        scale [0.1, 0.03, 0.5]
+        material: 5
+        domain [repeat(spacing: [1, 1, 5], limit: [0, 1, 2], origin: [-13, 2, 10])]
+      }
+    }
+  }
+  prototype "studio-course" {
+    document {
+      schema: "puck.creation.v1"
+      name: "studio-course"
+      palette [
+        { color: "#7C8FA3", specular: 0.03, roughness: 0.85 }
+        { color: "#B58A5C", specular: 0.03, roughness: 0.85 }
+        { color: "#A5694A", specular: 0.03, roughness: 0.85 }
+        { color: "#7F9F8A", specular: 0.03, roughness: 0.85 }
+      ]
+      shape Box "step-015" {
+        id: 0
+        position [-12, 0.085, -13.5]
+        scale [1.5, 0.075, 1.5]
+        material: 0
+      }
+      shape Box "step-030" {
+        id: 1
+        position [-12, 0.16, -6.5]
+        scale [1.5, 0.15, 1.5]
+        material: 0
+      }
+      shape Box "ramp-015-up" {
+        id: 2
+        position [-12, 0.3876, 0.9888]
+        rotation [-0.130526, 0, 0, 0.991445]
+        scale [1.5, 0.15, 2.0189]
+        material: 1
+      }
+      shape Box "ramp-015-down" {
+        id: 3
+        position [-12, 0.3876, 4.8112]
+        rotation [0.130526, 0, 0, 0.991445]
+        scale [1.5, 0.15, 2.0189]
+        material: 1
+      }
+      shape Box "ramp-030-up" {
+        id: 4
+        position [-12, 0.6306, 10.375]
+        rotation [-0.258819, 0, 0, 0.965926]
+        scale [1.5, 0.15, 1.5011]
+        material: 2
+      }
+      shape Box "ramp-030-down" {
+        id: 5
+        position [-12, 0.6306, 12.825]
+        rotation [0.258819, 0, 0, 0.965926]
+        scale [1.5, 0.15, 1.5011]
+        material: 2
+      }
+      // Six risers of 0.17 m and treads of 0.3 m from z -16.5, a landing 1.2 m long and five risers down.
+      for k in range(1, 7) {
+        shape Box $"stair-up-{k}" {
+          id: (9 + k)
+          position [-12, ((0.01 + (0.17 * k)) / 2), (16.65 + (0.3 * (k - 1)))]
+          scale [1.5, ((0.01 + (0.17 * k)) / 2), 0.15]
+          material: 3
+        }
+      }
+      shape Box "landing" {
+        id: 20
+        position [-12, 0.515, 18.9]
+        scale [1.5, 0.515, 0.6]
+        material: 3
+      }
+      for j in range(1, 6) {
+        shape Box $"stair-down-{j}" {
+          id: (20 + j)
+          position [-12, ((0.01 + (0.17 * (6 - j))) / 2), (19.65 + (0.3 * (j - 1)))]
+          scale [1.5, ((0.01 + (0.17 * (6 - j))) / 2), 0.15]
+          material: 3
+        }
+      }
+    }
+  }
 }
 
 template studioPrototypes() {
+  studioAidPrototypes()
   prototype "avatar-studio" {
     document {
       schema: "puck.creation.v1"

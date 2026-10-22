@@ -81,6 +81,9 @@ public sealed record MotionImage(int Width, int Height, byte[] Rgba);
 public sealed record MotionPixelDifference(long Count, int Max, double Mean);
 /// <summary>Reads, scales, labels and writes the images <c>puck motion</c> composes, in C# with no external tool.</summary>
 public static class MotionSheets {
+    /// <summary>The glyph scale of a cell's heading line.</summary>
+    public const int LabelScale = 2;
+
     private static readonly byte[] LabelBackground = [24, 26, 32, 255];
     private static readonly byte[] LabelText = [236, 238, 242, 255];
     private static readonly byte[] SheetBackground = [12, 13, 16, 255];
@@ -176,7 +179,13 @@ public static class MotionSheets {
             var image = frames[cell.Frame][cell.Camera];
 
             Fill(image: sheet, color: LabelBackground, height: layout.LabelHeight, left: cell.X, top: cell.LabelY, width: layout.CellWidth);
-            DrawText(color: LabelText, image: sheet, left: (cell.X + 4), text: labels[cell.Frame][cell.Camera], top: (cell.LabelY + 3), height: (layout.LabelHeight - 6));
+            var label = labels[cell.Frame][cell.Camera].Split(separator: '\n');
+
+            DrawText(color: LabelText, image: sheet, left: (cell.X + 4), scale: LabelScale, text: label[0], top: (cell.LabelY + 3));
+
+            if (label.Length > 1) {
+                DrawText(color: LabelText, image: sheet, left: (cell.X + 4), scale: 1, text: label[1], top: (((cell.LabelY + 3) + (BitmapFont.GlyphSize * LabelScale)) + 3));
+            }
 
             for (var row = 0; ((row < image.Height) && (row < layout.CellHeight)); row++) {
                 Buffer.BlockCopy(
@@ -191,8 +200,9 @@ public static class MotionSheets {
 
         return sheet;
     }
-    /// <summary>Returns the label strip height that fits one line of text.</summary>
-    public static int LabelHeightFor(int scale) => ((BitmapFont.GlyphSize * scale) + 6);
+    /// <summary>Returns the label strip height that fits a heading line at the heading scale and a line of detail beneath it at scale 1.</summary>
+    /// <returns>The height, in pixels.</returns>
+    public static int LabelHeightFor() => (((BitmapFont.GlyphSize * LabelScale) + BitmapFont.GlyphSize) + 12);
     /// <summary>Returns how many characters of text fit in a width at a scale.</summary>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="scale">The integer glyph scale.</param>
@@ -215,8 +225,7 @@ public static class MotionSheets {
             }
         }
     }
-    private static void DrawText(MotionImage image, string text, int left, int top, int height, byte[] color) {
-        var scale = Math.Max(val1: 1, val2: (height / BitmapFont.GlyphSize));
+    private static void DrawText(MotionImage image, string text, int left, int top, int scale, byte[] color) {
         var advance = (BitmapFont.GlyphSize * scale);
 
         for (var index = 0; (index < text.Length); index++) {
