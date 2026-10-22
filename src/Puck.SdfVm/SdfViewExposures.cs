@@ -23,6 +23,9 @@ public sealed class SdfViewExposures {
 
     /// <summary>Gets each view's exposure multiplier, per nit, for the frame <see cref="Stage"/> last staged.</summary>
     public ReadOnlySpan<float> Multipliers => m_multipliers.AsSpan(length: m_count, start: 0);
+    /// <summary>Gets the brightest luminance, in nits, of the sky the irradiance volume's lighting sees, for the frame
+    /// last staged; zero while the volume holds no sky.</summary>
+    public float SkyPeakLuminance { get; private set; }
 
     /// <summary>Stages a frame's exposures: each view's <c>EV100</c> eased toward its target over the frame's
     /// presentation time, and the open sky its air sees.</summary>
@@ -55,6 +58,7 @@ public sealed class SdfViewExposures {
 
         var exposure = frame.Exposure;
 
+        SkyPeakLuminance = irradiance.SkyPeakLuminance;
         for (var index = 0; (index < count); index++) {
             var view = frame.Views[index];
             var cut = (view.CutRevision != m_cuts[index]);

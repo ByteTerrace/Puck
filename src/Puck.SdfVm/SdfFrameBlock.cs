@@ -60,6 +60,7 @@ public static partial class SdfFrameBlock {
     private static readonly int AirLight = Offset(member: SdfWorldPackage.AirLight);
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
     private static readonly int LocalAdaptation = Offset(member: SdfWorldPackage.LocalAdaptation);
+    private static readonly int SkyPeakLuminance = Offset(member: SdfWorldPackage.SkyPeakLuminance);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
@@ -194,6 +195,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
         WriteSingle(block: block, offset: LocalAdaptation, value: ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f));
+        WriteSingle(block: block, offset: SkyPeakLuminance, value: (tables.Exposures?.SkyPeakLuminance ?? 0f));
         for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
             WriteUInt32(block: block, offset: (ShadowSlots + (slot * sizeof(int))), value: unchecked((uint)lights.ShadowSlots[slot]));
         }

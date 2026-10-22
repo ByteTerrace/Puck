@@ -280,8 +280,8 @@ public sealed class RenderGraphPackageCatalog {
     /// is otherwise an exact copy, by a contrast-adaptive sharpen of <see cref="PlaceSharpness"/>'s strength: a
     /// temporally resolved view asks for it. At sharpness 0 the copy stays exact; 0, the default, never sharpens.</summary>
     public const string PlaceSharpen = "sharpen";
-    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the Narkowicz
-    /// ACES-fit filmic curve inside the rect: a world's root sets it on each view's place pass when
+    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the filmic curve
+    /// (Uchimura's Gran Turismo fit) inside the rect: a world's root sets it on each view's place pass when
     /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
     /// letterbox color and every pane are not; 0, the default, writes the source as it is.</summary>
     public const string PlaceTonemap = "tonemap";

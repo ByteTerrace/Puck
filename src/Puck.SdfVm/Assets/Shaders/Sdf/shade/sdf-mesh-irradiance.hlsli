@@ -216,28 +216,6 @@ float3 sdfMeshIndirect(SdfMeshProbes probes, float3 normal) {
     }
     return (sky + radiance);
 }
-// The luminance the gathered probes see toward `direction`, in nits: the light the surfaces that way send back and the
-// sky beyond them, what a meter at the probes pointed that way would read; zero where no probe takes part.
-float sdfMeshLocalLuminance(SdfMeshProbes probes, float3 direction) {
-    bool any = false;
-
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        any = (any || sdfMeshProbeAnswers(probes, corner));
-    }
-    if (!any) {
-        return 0.0;
-    }
-
-    float skyVisibility;
-    float3 radiance;
-    sdfMeshIrradianceAt(probes, direction, skyVisibility, radiance);
-
-    float3 sky = 0.0;
-    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
-        sky = (sdfSkyPhysicalIrradiance(direction) * ((skyVisibility * passGroup.indirectSourceGains.w) / 3.141592653589793));
-    }
-    return dot((sky + radiance), float3(0.2126, 0.7152, 0.0722));
-}
 // The environment a surface reflects along a mirror direction, occluded by the volume: the lighting-visible sky as far as
 // the probes about the point see it open along that direction, and where they do not, the light the surfaces about them
 // send back that way. A room reflects its walls, not the sky outside it.

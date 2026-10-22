@@ -952,7 +952,8 @@ public sealed record WorldRenderMedium(
 public enum WorldTonemap {
     /// <summary>No remap: the stylized shaded color.</summary>
     None = 0,
-    /// <summary>A filmic (ACES-fit) curve over each view, applied by the root graph's place pass for the view.</summary>
+    /// <summary>A filmic curve (Uchimura's Gran Turismo fit: an open toe, soft midtones and a rolled shoulder) over each
+    /// view, applied by the root graph's place pass for the view.</summary>
     Filmic = 1,
 }
 /// <summary>The gains on lighting derived from the lighting-visible sky layers.</summary>

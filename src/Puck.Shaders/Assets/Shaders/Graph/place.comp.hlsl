@@ -16,10 +16,29 @@
 // destination's extent and crop the shown part as fractions of the source's: left, top, width, height.
 #include "place.interface.hlsli"
 
-// The Narkowicz ACES-fit filmic curve, and only the curve: the stylized shading is already display-referred, so no gamma
-// encode follows it, and the display encode writes its result as it is.
+// The filmic curve, Uchimura's Gran Turismo fit, and only the curve: the stylized shading is already display-referred,
+// so no gamma encode follows it, and the display encode writes its result as it is. A toe near linear (its power 1.1)
+// keeps shadows open, a linear section of slope 0.9 from middle grey keeps the midtones soft, and the shoulder rolls
+// the highlights into white from about three times middle grey.
 float3 filmicTonemap(float3 color) {
-    return saturate((color * ((2.51 * color) + 0.03)) / (((color * ((2.43 * color) + 0.59)) + 0.14)));
+    const float peak = 1.0;
+    const float contrast = 0.9;
+    const float linearStart = 0.22;
+    const float linearLength = 0.4;
+    const float toePower = 1.1;
+    const float l0 = (((peak - linearStart) * linearLength) / contrast);
+    const float S0 = (linearStart + l0);
+    const float S1 = (linearStart + (contrast * l0));
+    const float C2 = ((contrast * peak) / (peak - S1));
+    float3 x = max(color, 0.0);
+    float3 toeWeight = (1.0 - smoothstep(0.0, linearStart, x));
+    float3 shoulderWeight = step(S0, x);
+    float3 linearWeight = (1.0 - toeWeight - shoulderWeight);
+    float3 toe = (linearStart * pow((x / linearStart), toePower));
+    float3 shoulder = (peak - ((peak - S1) * exp((-C2 * (x - S0)) / peak)));
+    float3 middle = (linearStart + (contrast * (x - linearStart)));
+
+    return saturate(((toe * toeWeight) + (middle * linearWeight)) + (shoulder * shoulderWeight));
 }
 
 #include "../Shared/reconstruction.hlsli"

@@ -18,35 +18,26 @@
 // - The bounded volumes composite last over each share, the surface share's clipped at the transport's distance and the
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
-// - The local adaptation (localAdaptation, SdfExposure.Local) then moves the surface share's exposure from the view's
-//   toward the one the irradiance volume's probes about the surface would meter looking at it (sdfMeshLocalLuminance
-//   against meterLuminance, within SDF_LOCAL_ADAPTATION_RANGE stops), as the eye adapts across a scene: a dim ceiling
-//   beside a sunlit window lifts, and the sunlit ground through the window compresses. The sky share and a pixel the
-//   volume holds no probe about keep the view's exposure.
+// - With the local adaptation on (localAdaptation, SdfExposure.Local; the views stage adapts each surface), the sky
+//   share is scaled so the sky's brightest texel (skyPeakLuminance) reaches display white (SDF_SKY_PEAK_TARGET) rather
+//   than clipping, so a window from a dim room shows the sky's gradient; outdoors the sky already lies below white and
+//   is left as it is.
 // A debug view's lit image is its whole picture, so it passes through.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
-#include "../shade/sdf-sky-lighting.hlsli"
-#include "../shade/sdf-mesh-irradiance.hlsli"
 #include "../shade/shade-volumes.hlsli"
 
-// The gain the local adaptation applies to a surface share at a distance along the pixel's ray: one without a reading.
-float sdfLocalAdaptationGain(float3 origin, float3 direction, float t) {
-    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.meterLuminance > 0.0) || !(t > 0.0) || !sdfMeshIrradianceEnabled()) {
+// The factor the local adaptation scales a view's sky share by: one where the sky's brightest already lies at or below
+// white under the exposure the composite applies.
+float sdfSkyPeakGain() {
+    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.skyPeakLuminance > 0.0)) {
         return 1.0;
     }
 
-    float3 surfacePoint = (origin + (direction * t));
-    float local = sdfMeshLocalLuminance(sdfMeshProbesAt(surfacePoint, -direction), direction);
+    float exposed = (pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare) * passGroup.skyPeakLuminance);
 
-    if (!(local > 0.0)) {
-        return 1.0;
-    }
-
-    float stops = (clamp(log2(passGroup.meterLuminance / local), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
-
-    return exp2(stops);
+    return min(1.0, (SDF_SKY_PEAK_TARGET / max(exposed, 1.0e-12)));
 }
 
 [numthreads(8, 8, 1)]
@@ -109,7 +100,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
             bool summarized = sdfSkyPassRuns(id.xy, base, scales, offsets);
 
-            sky = sdfSkyCompose(direction, summarized, base, scales, offsets);
+            sky = (sdfSkyCompose(direction, summarized, base, scales, offsets) * sdfSkyPeakGain());
             if (sdfAirBeforeSky()) {
                 sky = ((skyAir.transmittance * sky) + (skyAir.weights.y * hazeColor) + (skyAir.weights.z * sdfSky[0].MediumColor));
             }
@@ -119,7 +110,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float far = worldFarDistance(view);
         float covered;
 
-        surface *= sdfLocalAdaptationGain(origin, direction, t);
         color = float3(0.0, 0.0, 0.0);
         if (!geometryOnly || (coverage > 0.0)) {
             // The far layer has no background share. Integrate the surface through the existing volume helper, then

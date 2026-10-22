@@ -96,6 +96,10 @@ public static partial class SdfWorldPackage {
     /// how far the composite moves each surface's exposure from the view's toward the one its surroundings in the
     /// irradiance volume would meter (<c>float</c>).</summary>
     public const string LocalAdaptation = "localAdaptation";
+    /// <summary>The pass-group value holding the brightest luminance, in nits, of the sky the lighting sees, which the
+    /// local adaptation scales the view's sky share by so that it reaches display white (<c>SdfExposure.SkyPeakTarget</c>)
+    /// rather than clipping; zero scales nothing (<c>float</c>).</summary>
+    public const string SkyPeakLuminance = "skyPeakLuminance";
     /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
     public const string ShadowSlots = "shadowSlots";
     /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
@@ -283,6 +287,7 @@ public static partial class SdfWorldPackage {
         Value(name: AirLight, type: ShaderValueType.Float),
         Value(name: MeterLuminance, type: ShaderValueType.Float),
         Value(name: LocalAdaptation, type: ShaderValueType.Float),
+        Value(name: SkyPeakLuminance, type: ShaderValueType.Float),
         Value(name: ShadowSlots, type: ShaderValueType.Int4),
         Value(name: ShadowSlotCount, type: ShaderValueType.Uint),
         Value(name: ShadowFadeCount, type: ShaderValueType.Uint),

@@ -71,6 +71,9 @@ public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, f
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>
     /// (0.018) — the two constants together fix the default highlight width.</summary>
     public const float DefaultRoughness = 0.20204833f;
+    /// <summary>The faintest emissive, in nits, an authoring door admits above zero: a fraction of a nit shows under no
+    /// exposure a world renders at, so a value below it is a relative weight rather than a luminance.</summary>
+    public const float MinimumVisibleEmissive = 1f;
 
     /// <summary>Returns whether an emissive lane is absent or names one of the four render lanes.</summary>
     /// <param name="lane">The lane, or <see langword="null"/> for a static emissive.</param>

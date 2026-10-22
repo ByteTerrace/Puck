@@ -1495,10 +1495,17 @@ public static partial class CreationCanonicalizer {
             }
             if (
                 (entry.Emissive is { } emissive) &&
-                !float.IsFinite(f: emissive)
+                (!float.IsFinite(f: emissive) || (emissive < 0f))
             ) {
                 errors.Add(item: new(
-                    Message: "emissive is non-finite.",
+                    Message: "emissive must be finite and non-negative, a luminance in nits.",
+                    Path: $"palette[{i}].emissive"
+                ));
+            } else if ((entry.Emissive is { } faint) && (faint > 0f) && (faint < SdfMaterial.MinimumVisibleEmissive)) {
+                // A fraction of a nit is invisible under any exposure a world renders at; a value in (0, 1) is a
+                // relative weight from before emissives were nits.
+                errors.Add(item: new(
+                    Message: $"emissive {faint} is below {SdfMaterial.MinimumVisibleEmissive} nit, too faint to show under any exposure; an emissive is a luminance in nits (an indicator about 300, a lit diffuser about 2,500).",
                     Path: $"palette[{i}].emissive"
                 ));
             }

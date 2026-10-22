@@ -193,8 +193,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
 
+            float3 indirect = float3(0.0, 0.0, 0.0);
+
             if (meshIndirect) {
-                color += sdfMeshIndirect(probes, normal) * shadeMaterial.albedo
+                indirect = sdfMeshIndirect(probes, normal);
+                color += indirect * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
                     * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                         * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
@@ -231,6 +234,22 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
             color = selfEmission + (color - selfEmission) * attenuation;
+
+            // The local adaptation (SdfExposure.Local): the surface's exposure moves that share of the way from the
+            // view's toward the one its own illumination would meter, the light arriving at it (the lights' diffuse
+            // terms and the volume's, what a white surface here would show) against the view's meter reading taken as
+            // a scene of SDF_LOCAL_REFLECTANCE albedo, within SDF_LOCAL_ADAPTATION_RANGE stops: a dim ceiling lifts
+            // and a sunlit floor compresses, while a dark paint under the same light stays dark. It precedes the
+            // display-referred terms below, which keep their colour at every exposure.
+            if ((passGroup.localAdaptation > 0.0) && (passGroup.meterLuminance > 0.0)) {
+                float incoming = dot((radiance + indirect), float3(0.2126, 0.7152, 0.0722));
+
+                if (incoming > 0.0) {
+                    float reference = (passGroup.meterLuminance / SDF_LOCAL_REFLECTANCE);
+
+                    color *= exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
+                }
+            }
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline), display-referred: they apply to
             // the color the view's exposure shows, so an ink line reads as its color at every exposure.

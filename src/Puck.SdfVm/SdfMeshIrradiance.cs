@@ -124,6 +124,15 @@ public sealed class SdfMeshIrradiance {
     private long m_traced;
     private long m_rays;
 
+    /// <summary>Gets the brightest luminance, in nits, of the sky the probes' lighting sees over its environment map;
+    /// zero while no lighting is captured or the sky is no source of it.</summary>
+    public float SkyPeakLuminance {
+        get {
+            lock (m_gate) {
+                return (m_lighting?.SkyPeak ?? 0f);
+            }
+        }
+    }
     /// <summary>Gets whether probes are being traced or wait to reach the volume table.</summary>
     public bool Settling {
         get {
@@ -860,7 +869,7 @@ public sealed class SdfMeshIrradiance {
 
         public static Layout Of(SdfIndirectTier tier, int? bounces) {
             var high = (tier == SdfIndirectTier.High);
-            var cap = (high ? 2 : 1);
+            var cap = (high ? 3 : 2);
 
             return new Layout(
                 Dims: (high ? HighDims : MediumDims),
@@ -881,6 +890,7 @@ public sealed class SdfMeshIrradiance {
         public required Vector3[] SkyCoefficients { get; init; }
         public required SdfIndirectGains Gains { get; init; }
         public required float Reach { get; init; }
+        public float SkyPeak { get; init; }
         public bool Direct { get; init; }
         public bool Emission { get; init; }
         public bool Feedback { get; init; }
@@ -908,6 +918,7 @@ public sealed class SdfMeshIrradiance {
 
             var coefficients = new Vector3[SdfSkyEnvironment.CoefficientCount];
             var sources = frame.IndirectSources;
+            var skyPeak = 0f;
 
             if ((sources & SdfIndirectSources.Sky) != 0) {
                 var map = new Vector3[SdfSkyEnvironment.Texels];
@@ -916,9 +927,13 @@ public sealed class SdfMeshIrradiance {
                 frame.Sky.Pack(frame.Lights, frame.FarDistance, new SdfSkyDetails(), out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
                 SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
+                foreach (var texel in map) {
+                    skyPeak = MathF.Max(x: skyPeak, y: SdfPhotometry.LuminanceOf(color: texel));
+                }
             }
 
             return new Lighting {
+                SkyPeak = skyPeak,
                 Direct = ((sources & SdfIndirectSources.Direct) != 0),
                 Emission = ((sources & SdfIndirectSources.Emission) != 0),
                 Feedback = ((sources & SdfIndirectSources.Feedback) != 0),

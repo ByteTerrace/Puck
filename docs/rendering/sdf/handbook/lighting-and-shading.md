@@ -86,7 +86,7 @@ The tier sizes the irradiance volume (below); Off reads no volume, and views
 light with the authored fill instead.
 
 `render.indirect.bounces` requests zero through four bounces after the direct
-light, capped by the tier (one at Medium, two at High); absent uses that cap.
+light, capped by the tier (two at Medium, three at High); absent uses that cap.
 
 `SdfFrame.IndirectSources` carries one category mask. Its bits follow the five
 categories: direct 1, feedback 2, emission 4, sky 8 and screens 16; the default
@@ -135,8 +135,8 @@ worlds are mostly static and their evaluation belongs at edit time rather than
 in the frame.
 
 - **Probes.** A probe sits at the centre of a world cell: 1 m apart in a
-  48×16×48 volume at High (128 rays a probe, two bounces), 2 m apart in a
-  32×12×32 volume at Medium (96 rays, one bounce). The volume follows the first
+  48×16×48 volume at High (128 rays a probe, three bounces), 2 m apart in a
+  32×12×32 volume at Medium (96 rays, two bounces). The volume follows the first
   view's camera and is toroidal: a cell's probe lives in the slot its
   coordinates name modulo the volume's size, keyed by the cell, so a camera move
   rewrites only the slots of the cells it brings in, and views reject a slot

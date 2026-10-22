@@ -26,16 +26,25 @@ public enum SdfExposureMode {
 /// <param name="Adaptation">The time constant an automatic exposure eases toward its meter with, in seconds; zero
 /// follows the meter at once.</param>
 /// <param name="Local">The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the
-/// view's toward the exposure its own surroundings would meter, read from the irradiance volume about it, so a dim
-/// ceiling beside a sunlit window lifts and the sunlit ground through the window compresses, as the eye adapts across
-/// a scene; zero exposes the whole view alike, one meters every surface on its own.</param>
+/// view's toward the exposure its own illumination would meter (the light arriving at it, direct and from the
+/// irradiance volume, against the view's meter reading over <see cref="LocalReflectance"/>), so a dim ceiling beside a
+/// sunlit window lifts and the sunlit ground through the window compresses while a dark paint stays dark, as the eye
+/// adapts across a scene; the sky is scaled so its brightest reaches display white (<see cref="SkyPeakTarget"/>). Zero
+/// exposes the whole view alike, one meters every surface on its own.</param>
 public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, float Minimum, float Maximum, float Compensation, float Adaptation, float Local) {
     /// <summary>The <c>EV100</c> an unauthored world renders at: a clear sunlit day.</summary>
     public const float DefaultEv100 = 15f;
     /// <summary>An automatic exposure's default time constant, in seconds.</summary>
     public const float DefaultAdaptation = 0.75f;
     /// <summary>The most stops the local adaptation moves a surface's exposure from the view's, either way.</summary>
-    public const float LocalRange = 4f;
+    public const float LocalRange = 6f;
+    /// <summary>The reflectance the local adaptation takes the meter's reading, a scene luminance, to stand for: the
+    /// illuminance over π a surface of this albedo would show the reading at, which each surface's own illumination is
+    /// measured against.</summary>
+    public const float LocalReflectance = 0.4f;
+    /// <summary>The display value, before the tonemap, the local adaptation scales a view's sky share down to where its
+    /// brightest texel would exceed it, so a window from a dim room shows the sky's gradient rather than white.</summary>
+    public const float SkyPeakTarget = 1f;
 
     /// <summary>Gets the exposure an unauthored world renders with: manual, at <see cref="DefaultEv100"/>, with no
     /// local adaptation.</summary>

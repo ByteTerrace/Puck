@@ -225,6 +225,8 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
         declarations.Real(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
+        declarations.Real(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
+        declarations.Real(name: "SDF_SKY_PEAK_TARGET", value: SdfExposure.SkyPeakTarget);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
             value: SdfWorldPackage.MinimumNear
