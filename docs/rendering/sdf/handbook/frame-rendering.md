@@ -52,9 +52,11 @@ frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
 **shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`,
-`sdf-mesh-shadow.frag.hlsl`) draw every mesh draw from the light cameras
+`sdf-mesh-shadow.frag.hlsl`) draw the opaque mesh draws from the light cameras
 `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
-their depth alone. A frame with no mesh draw, or whose view has no cascade,
+their depth alone, each draw whose box lies in the cascade's light box and,
+swept along the light, may shadow a receiver the view shows
+(what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
 skips them; `shadow-second` runs only while a second stable shadow slot holds a
 directional light, and a view whose world holds one stable slot has no
 `shadow-second` at all.
@@ -65,6 +67,19 @@ the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Th
 stored as floats, so a region holds at most 2^24 draws and a mesh at most 2^24 triangles, each refused by name past
 that. A frame with no mesh draws skips the pass, its target's and depth's barriers included. The target and its depth
 attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
+
+**What a raster pass draws.** Each staged draw carries a world box, its mesh's
+position bounds through its matrix and carry (`SdfMeshBox`), and every raster
+pass skips the draws whose box it cannot show (`SdfMeshCull`): the mesh and
+glass passes those wholly outside the view's frustum or past the frame's far
+distance, the cascades those outside their light box or whose shadows reach no
+receiver the view shows. The tests keep a pixel margin past the temporal jitter,
+a thousandth of the near distance before the near plane and the shadow filter's
+reach, so the cull changes no pixel; a skinned draw, whose vertices the GPU
+places from its members' slots, has no box and is always drawn. Each nested
+view culls by its own camera, a portal window by the frustum fitted through its
+glass. `world.cull off` draws every draw, and `gpu.vertices` counts the vertices
+each pass's draws ask for.
 
 **pyramid** (`sdf-mesh-pyramid.comp.hlsl`) reduces the mesh target into the
 depth pyramid the surface pass's occlusion reads (`frame/sdf-mesh-pyramid.hlsli`):

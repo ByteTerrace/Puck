@@ -77,6 +77,9 @@ beside the package that owns it. The open parts are:
   counted-default checks are named under their steps. P18-11's part-two binder
   work uses the existing layer and prototype vocabulary; P18-7's separate
   celestial body vocabulary remains open.
+- **P20:** P20-1, the per-pass cull of mesh draws by box, has landed; areas,
+  occlusion, levels of detail and residency are open
+  ([P20](#p20--visibility-areas-and-residency)).
 
 Of P18's landed steps, the sky and the bounded media animate on the presented
 engine tick, the `timeline` section names presentation clocks, the sky block and
@@ -7176,6 +7179,205 @@ and the symmetry LOD's switch is crossed under the device law.
 
 **Depends on:** the march's fold-wall crossing (`sdfMarchAdvance`) and, for
 tight boxes, Math's interval rules.
+
+### P20 — Visibility, areas and residency
+
+**Problem.** A frame drew every mesh draw of its residency in every raster
+pass: each view's mesh pass, and the near, far and second shadow cascades. The
+debug world bakes into 1,265 groups and 39.0 M triangles (36.1 M of them in
+406 static draws), so every frame rasterized 116.5 M triangles before the
+first pixel was shaded, whatever the camera saw, and every nested view (a
+portal window, a session screen) drew the whole world again. The question is
+how to draw, light and keep resident only what can be seen, indoors and out,
+with the Metroid Prime technique (areas joined by portals, the frustum narrowed
+to each opening and recursed, adjacent areas resident while their door is
+closed) where it fits.
+
+**What exists** (searched with `puck search -M 0`, `puck references`, git
+history and `experimental/`):
+
+- *Draws.* One draw a baked group: a static copy's union is one group, a
+  dynamic slot's shapes another, glass a group of its own
+  (`SdfMeshBakeGroup.Plan`). `SdfWorldPassRecorder.RecordMeshDraws` recorded
+  one draw call each, with no frustum, distance or occlusion test.
+- *Depth pyramid.* `sdf-mesh-pyramid.comp` reduces the current frame's mesh
+  target for the ambient occlusion's far taps: one representative pixel's ray
+  parameter a texel, built after the mesh pass. It is not a conservative
+  max-depth hierarchy and nothing tests draws against it.
+- *Portals and nested views.* `WorldPortalVisibility.Sees` schedules a nested
+  session only while its consumer's camera sees the glass (a frustum test with
+  a 10% margin), `Coverage` sizes it to the glass's share of the image, and a
+  window's camera is an off-axis frustum fitted through the glass
+  (`SdfAsymmetricFrustum`), its near plane on the glass, recursed to
+  `views.nestingDepth` (3). That is the portal recursion of the Metroid
+  technique, between worlds; before P20-1 each level's mesh pass still drew its
+  whole world.
+- *Residency.* One `SdfWorldResidency` a world: the boot world's, and one per
+  routed endpoint (`routed$<digest>`), which stays resident while any window or
+  seat shows it, so a crossing never stalls: the debug frame's garden is the
+  closed-door-adjacent area at world granularity. Within a world, every baked
+  mesh is resident: the mesh region holds the debug world's 1,265 draws in
+  2 GiB (`world.budget`, the most a `GpuRegion` holds; twice the need), the
+  arena lands owed meshes at most 2 MB of words a frame, and the mesh store
+  keeps meshes across boots. Field scopes bound a field's Lipschitz reach in
+  the bake; they decide nothing about drawing or residency.
+- *Levels of detail and impostors.* Deleted with the prototype bakes (the
+  atlases, impostor cards and the mesh LOD selector). Each group contours at
+  one spacing with local refinement, so a flat wall carries a quad per lattice
+  cell on every face.
+- *Shadows.* Three orthographic cascades per view (`SdfMeshShadowCascades`):
+  the bounding spheres of the view's first 16 m, of its first 120 m or far
+  distance, and of 40 m for the second shadow slot, each reaching 200 m toward
+  the light for casters.
+- *Indirect light.* A toroidal volume of 12,288 probes about the first view's
+  camera, traced on the CPU against the static draws (406 draws, 36 M
+  triangles) and cached per cell. It traces geometry, so walls and slabs stop
+  its rays; it knows nothing of areas.
+- *Lights.* At most eight a world (`SdfLights.MaxLights`, refused by the
+  validator), every one shading every pixel. A point light's falloff,
+  `weight / (1 + (d / r)^2)`, has no range, and point lights cast no shadow
+  ([open item](open-items.md)), so the lobby's lamp lights level 1 through
+  its slab.
+- *The debug world's structure.* `hall.puck` builds the gallery from box
+  unions: a 60 × 28 m footprint, four storeys at y = 4.5k + 0.05 under a roof,
+  slabs holed for the stairwell (x 10–14, z 35–40) and the lift shaft
+  (x 14–18, z 36–40), the lobby on level 0 and open-plan exhibition halls
+  (x 20–70) on every level, window bands on three faces, and permanent
+  openings: no door closes. Rooms are not authored as rooms; levels, the stair
+  and lift shafts and the lobby are the only enclosed volumes, and nothing in
+  the document names them.
+
+**Measured** on the debug world, Direct3D 12 Release, the RTX 4070, from
+`world.counters gpu` with `world.cadence off`, the operator camera posed and
+the body four metres behind it; `world.cull off` draws every draw, as before
+P20-1. Triangles are `gpu.vertices` over three; every view the frame rendered
+is summed, nested windows included.
+
+| View | Camera | Draws, before → after | Triangles, before → after | Mesh pass | Near cascade | Far cascade |
+|---|---|---:|---:|---:|---:|---:|
+| Lobby | (15, 1.7, 18), yaw -150 | 3,791 → 949 | 116.5 M → 77.8 M | 38.8 → 17.3 M | 38.8 → 26.7 M | 38.8 → 33.8 M |
+| Level 1 aisle | (22, 6.2, 22.6), yaw -90 | 3,791 → 788 | 116.5 M → 62.2 M | 38.8 → 18.2 M | 38.8 → 20.7 M | 38.8 → 23.3 M |
+| Stairwell, looking up | (12.2, 2, 33.5), yaw 180, pitch 25 | 3,791 → 499 | 116.5 M → 41.6 M | 38.8 → 3.3 M | 38.8 → 9.5 M | 38.8 → 28.7 M |
+| Level 1 landing at the lift | (16, 6.2, 34.5), yaw 180, pitch -10 | 3,791 → 246 | 116.5 M → 23.3 M | 38.8 → 3.0 M | 38.8 → 9.2 M | 38.8 → 11.1 M |
+| Outdoors at the spawn, toward the garden frame (five views) | (0, 1.7, 6), yaw 0 | 7,592 → 323 | 234.1 M → 12.8 M | 155.6 → 8.2 M | 38.8 → 2.2 M | 38.8 → 2.4 M |
+| Outdoors, facing the hall | (-2, 1.7, -2), yaw -135, pitch 5 | 3,852 → 1,217 | 121.5 M → 83.6 M | 43.7 → 35.4 M | 38.8 → 11.2 M | 38.8 → 36.8 M |
+| Outside the entrance, facing in | (16, 1.7, 6), yaw 180 | 3,791 → 1,237 | 116.5 M → 80.3 M | 38.8 → 21.5 M | 38.8 → 23.2 M | 38.8 → 35.4 M |
+| Inside, looking back out the entrance (two views) | (16, 1.7, 15.5), yaw 0 | 3,797 → 80 | 117.1 M → 14.5 M | 39.4 → 3.7 M | 38.8 → 5.2 M | 38.8 → 5.6 M |
+
+Before P20-1, then, between 31% (a view that holds the whole hall) and 95% (a
+view of the garden frame, whose nested windows each drew the whole debug world
+again) of a frame's triangles could not reach a pixel. The mesh passes'
+fragments do not move with the cull (the lobby's 1,716,991 either way; every
+view's change lies within two captures of the same state), since a draw the
+cull skips lies wholly outside the clip volume, and the near cascade's
+fragments fall by up to 0.9 M (the landing), casters whose shadows reach no
+visible receiver. What the cull leaves is the next target:
+
+- *Hidden behind walls and slabs.* The lobby's mesh pass still draws 17.3 M
+  triangles over 169 draws for a 1280 × 900 image: the exhibits of the halls
+  beyond the lobby's walls and of the levels above it lie inside the frustum.
+  Its fragments, 1.72 M for 1.15 M pixels, show the early depth test already
+  rejects most of the overdraw; the cost is vertex work.
+- *Shadow casters behind the roof.* The near cascade writes 9 to 18 M
+  fragments into its 4.2 M texels (two to four layers: four slabs and the roof
+  stack under the sun), and the far cascade still draws 11 to 37 M triangles,
+  most of them static and unchanged from frame to frame.
+- *Tessellation.* The triangle counts are the bake's: a flat face carries a
+  quad per lattice cell, so the hall's shell alone is millions of triangles a
+  handful of rectangles would draw.
+
+**P20-1, landed: the per-pass cull by box.** Each staged draw carries a world
+box: its mesh's position bounds (computed once per mesh) through its matrix and
+carry, a parallelepiped, so the test is exact under any affine matrix
+(`SdfMeshBox`). A view's mesh and glass passes keep a draw whose box may lie in
+the view's frustum before the frame's far distance (the surface pass keeps no
+hit past it), widened by 1% or four of the view's pixels, whichever is more (a
+nested window's temporal jitter is a larger share of its frustum), and keeping
+what stands within a thousandth of the near distance before the near plane (a
+portal frame's face stands on the glass a window's camera starts at). A shadow
+cascade keeps a draw whose box lies in its light's box and which, swept along
+the light through the cascade's depth, meets the view's frustum as far as the
+cascade's sphere reaches, grown by the 18 texels a receiver's shadow filter
+reads beside it (`SdfMeshCull`). A draw whose vertices ride member slots (a
+skinned body) has no host box and is always drawn. Every nested view culls by
+its own camera, so a window's off-axis frustum through its glass is the portal
+narrowing of the Metroid technique, recursed to the nesting depth. The test is
+`CameraSnapshot.MaySee`, which `WorldPortalVisibility` uses too. `world.cull
+off` draws everything for comparison, and `gpu.vertices` counts what each pass
+asks for. Captures of every view above, cull off against on, differ by no more
+than two captures of the same state (stairwell and landing: no pixel; the
+garden window seen through the entrance: at most 2 of 255 where two captures
+differ by 4).
+
+**Design for what follows.** Presentation only: nothing here reaches
+simulation state, and a world that declares nothing keeps P20-1's cull.
+
+1. **Occlusion from depth, not from authored areas.** The debug world authors
+   no rooms or doors, and its levels are open plan, so cells and portals would
+   have to be derived from the walls' box unions (a flood fill of the field's
+   empty space, split at openings narrower than a threshold, is a research
+   problem) or written by hand (a new `areas` section: the owner's call, below).
+   A two-phase occlusion test against a hierarchical depth buffer needs neither
+   and serves indoors and out alike: draw what was visible last frame, build a
+   conservative max-depth pyramid from it, test every remaining box against the
+   pyramid, and draw the newly visible in the same frame, so nothing pops. A
+   doorway leaks exactly what it shows. It needs indirect draws:
+   `IGpuRecorder` has `DispatchIndirect` only, so this adds a counted indirect
+   draw (`ExecuteIndirect` with a count buffer on Direct3D 12,
+   `vkCmdDrawIndirectCount` on Vulkan) and a cull compute pass per view that
+   writes the draw arguments, and the existing pyramid gains a max-depth level
+   chain beside its representative one. The lobby's 17.3 M and the aisle's
+   18.2 M mesh-pass triangles are its target.
+2. **Cascades: static casters cached, dynamic drawn.** The far cascade's static
+   casters change only when the light turns or the cascade's snapped fit moves;
+   drawing them into a retained depth once and only the dynamic draws (857
+   groups, 2.9 M triangles) each frame removes up to 34 M triangles a frame
+   with no change to the image. The near cascade follows the camera more often
+   and gains less. A receiver-side test (a caster stacked under the roof cannot
+   shadow what the roof already shadows) is the occlusion pass above run from
+   the light.
+3. **Levels of detail from the bake.** A second contour of each static group at
+   a coarser spacing, chosen per draw by its projected size, and planar-face
+   merging of the contour (a wall's coplanar quads into the polygon they tile)
+   cut the triangle count at its source. The bake's contour, store and
+   identity belong to the bake lane; the selector is a draw-time choice
+   beside P20-1's box.
+4. **Residency.** Today every mesh of a world is resident, the debug world's
+   at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
+   distance rings with hysteresis (resident within R + h of any view's camera,
+   evicted past R + 2h, landing ahead of the camera at the arena's 2 MB a
+   frame), which needs no authoring; or the Metroid shape, areas adjacent
+   through a closed door made resident before it opens, which needs areas and
+   doors that close. Worlds are already the area granularity across portals: a
+   routed residency stays live while its window shows. Which may pop (a
+   distant group reloading from the store) is the owner's call, below.
+5. **Lights per area.** The eight-light cap is world-wide. Choosing each view's
+   eight from a larger set by their influence over the view's frustum (and,
+   with item 1, over what is unoccluded) lifts it, but a point light's falloff
+   has no range: a cutoff radius changes the lighting where it applies, which
+   is a look decision. Indirect light already stops at geometry; area scoping
+   would add nothing to it until areas exist.
+6. **Glass and nested views** compose by construction: the glass pass culls
+   with its view's box test, and every nested view culls by its own camera.
+
+**Owner decisions** (each with what it buys on the debug world):
+
+- *Authored areas or derived occlusion.* Recommended: derived (item 1), no
+  authoring. Authored areas (an `areas` section of boxes and openings,
+  placements assigned by containment) would let the CPU skip the hidden halls
+  before any GPU work and drive residency (item 4), at the cost of every world
+  writing and keeping them.
+- *What may pop.* Distance residency (item 4) and levels of detail (item 3)
+  each trade memory or triangles against a visible change at a boundary
+  (a group loading, a coarser contour). P20-1 changes no pixel.
+- *Point-light range.* A cutoff lets lights be scoped per view (item 5) and
+  lifts the eight-light cap; it darkens what lies past the cutoff.
+
+**Timing to read on a quiet machine** (no other World, no build): each view of
+the table above with `world.cadence off` and `world.gpu-timing on`, read under
+`world.cull off` and then `on` (the `sdf.world$mesh`, `shadow-near` and
+`shadow-far` passes and the nested views'), with `host.frames` for the frame's
+worst iteration.
 
 ## Sequencing
 

@@ -62,6 +62,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   nothing; the window and the pattern's tile are a pair. `world.debug-view ao`
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
+- **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
+  applied in `SdfWorldPassRecorder.RecordMeshDraws`): a view's frustum, a
+  cascade's light box and the receivers it shadows. A box is the mesh's
+  position bounds through the draw's matrix and carry, so a draw whose vertex
+  stage moves vertices any other way (members' slots, a displacement) must have
+  no box (`SdfMeshBox.TryOf` returns false) or it vanishes while visible. A
+  missing object that `world.cull off` brings back is the cull's;
+  `gpu.vertices` in `world.counters gpu` counts what each pass draws.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's

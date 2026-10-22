@@ -208,6 +208,50 @@ public readonly record struct CameraSnapshot {
 
         return true;
     }
+    /// <summary>Returns whether any of a box may lie in the camera's frustum: its near plane, its four sides, each side
+    /// widened by a fraction of the half extents, and a far plane. A box is unseen only when it lies wholly past one of
+    /// those planes, so the test is conservative: a box it keeps may still be unseen behind a corner of the frustum, and a
+    /// box it refuses has no point the camera's image shows nearer than the far plane.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="halfX">The box's first half axis: the center plus or minus it reaches two faces.</param>
+    /// <param name="halfY">The box's second half axis.</param>
+    /// <param name="halfZ">The box's third half axis. The axes need not be perpendicular, so an axis-aligned box carried
+    /// through any affine matrix is tested exactly.</param>
+    /// <param name="margin">The fraction the frustum's sides are widened by: zero is the exact frustum.</param>
+    /// <param name="far">The forward distance of the far plane, in world units; infinity, the default, has none.</param>
+    /// <param name="sweep">The displacement the box is swept along, in world units: the test is of every point the box
+    /// passes moving by up to this, as a shadow caster's box swept along its light reaches the receivers it can shadow.
+    /// Zero, the default, tests the box where it stands.</param>
+    /// <param name="reach">The distance, in world units, every plane is moved out by: a receiver this near the frustum
+    /// still counts. Zero by default.</param>
+    /// <returns><see langword="false"/> when the whole box, swept, lies at or before the near plane, at or past the far
+    /// plane, or past one widened side, each moved out by <paramref name="reach"/>; otherwise <see langword="true"/>.</returns>
+    public bool MaySee(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity, Vector3 sweep = default, float reach = 0f) {
+        var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: reach, Sweep: sweep);
+        var vertical = (TanHalfFieldOfView * (1f + margin));
+        var horizontal = (AspectRatio * vertical);
+
+        // A plane through the eye or at the near distance, its normal pointing out of the frustum: the box lies past it
+        // when its nearest point does, the center's distance less the box's reach along the normal, less the sweep's
+        // where it moves the box toward the plane.
+        return !(
+            box.Beyond(normal: -Forward, offset: Near) ||
+            box.Beyond(normal: Forward, offset: -far) ||
+            box.Beyond(normal: (Right - ((FrustumOffset.X + horizontal) * Forward)), offset: 0f) ||
+            box.Beyond(normal: (((FrustumOffset.X - horizontal) * Forward) - Right), offset: 0f) ||
+            box.Beyond(normal: (Up - ((FrustumOffset.Y + vertical) * Forward)), offset: 0f) ||
+            box.Beyond(normal: (((FrustumOffset.Y - vertical) * Forward) - Up), offset: 0f)
+        );
+    }
+
+    // A box relative to the eye, swept and grown by a reach, tested against one plane at a time.
+    private readonly record struct SweptBox(Vector3 Center, Vector3 HalfX, Vector3 HalfY, Vector3 HalfZ, Vector3 Sweep, float Reach) {
+        public bool Beyond(Vector3 normal, float offset) {
+            var nearest = (((((Vector3.Dot(vector1: normal, vector2: Center) + offset) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfX))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfY))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfZ))) + MathF.Min(x: 0f, y: Vector3.Dot(vector1: normal, vector2: Sweep)));
+
+            return ((nearest - (Reach * normal.Length())) >= 0f);
+        }
+    }
 
     /// <summary>Gets the narrowest field of view a camera is built with, in radians. Half of it is a normal float, so
     /// its tangent, the snapshot's <see cref="TanHalfFieldOfView"/>, is a positive normal float that no device flushes
