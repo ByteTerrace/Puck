@@ -2751,9 +2751,12 @@ maps a whole-number register value to a kit or look row
 (`{ value: 0, row: "pilot" }`). A body whose register holds a value a case
 names wears that look, or runs that kit, outranking the sequence and, for a
 local seat, the seat kit; a value no case names (a fraction included) keeps
-what the sequence gives it. The validator refuses, by name, a `bodyState`
-`state.body` does not declare, a Timer register, an empty or repeated case
-value, and a case row naming no kit or look.
+what the sequence gives it. A register is declared document-wide, so every
+body holds it at its `initial`, props and pieces included: a case naming the
+`initial` value selects every body, so a selector names only the values that
+deviate (the debug world's `suit` is born 1 and selects only 0, `pilot`). The
+validator refuses, by name, a `bodyState` `state.body` does not declare, a Timer
+register, an empty or repeated case value, and a case row naming no kit or look.
 
 The register is the body's own state, so the choice is the body's and goes
 where the body goes. A kit action's `setState` and a world rule's

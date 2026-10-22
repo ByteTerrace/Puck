@@ -33,8 +33,9 @@ state {
 }
 
 kits {
-  // The sequence and rows are the inert default the basis leaves implied: a body whose register holds no case's value
-  // keeps the kit it had.
+  // The sequence and rows are the inert default the basis leaves implied. Every body holds the register, born 1, so the
+  // cases name only the suit-off value 0: a case naming 1 would select every body, a chess piece included. A body whose
+  // register holds no case's value keeps what it was given, the seat kit for a suited Moth.
   assignment {
     rows []
     sequence {
@@ -45,7 +46,6 @@ kits {
     select {
       bodyState: "suit"
       cases [
-        { value: 1, row: "walker" }
         { value: 0, row: "pilot" }
       ]
     }
@@ -153,7 +153,6 @@ looks {
     select {
       bodyState: "suit"
       cases [
-        { value: 1, row: "moth" }
         { value: 0, row: "moth-pilot" }
       ]
     }
