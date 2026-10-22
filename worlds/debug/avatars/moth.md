@@ -225,8 +225,8 @@ the `flight` swings (`airPose`) undo that tuck at zero vertical speed and leave
 the legs hanging straight with a slight bend. Moving in flight pitches the whole
 body 0.6 rad forward about her middle (the pelvis's `cruise` swing), so the legs
 trail; the head looks back up 0.4 rad, and turning banks the torso. The `cruise`
-swings use a constant wave: the speed phase reads zero in the air, so the gate
-alone eases the pitch in and out. The blink frame hides the open-eye pieces and seats
+swings use a constant wave: the pitch is a pose, the same at any speed, that the
+gate eases in and out. The blink frame hides the open-eye pieces and seats
 closed lids in their place, using the existing scheduled `blink` state.
 
 The `flight` and `wings` drivers read `airPose` and `airWings`. Existing server

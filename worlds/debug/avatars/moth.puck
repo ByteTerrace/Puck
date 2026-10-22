@@ -2682,7 +2682,7 @@ prototypes {
             phase: 0
           }
           // Moving in flight pitches the whole body 0.6 rad about her middle, so the legs trail behind; the cruise gate
-          // eases it in and out. A constant wave, since the rendered speed phase reads zero in the air.
+          // eases it in and out. A constant wave: the pitch is a pose, the same at any speed.
           {
             driver: "cruise"
             axis [1, 0, 0]

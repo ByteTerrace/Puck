@@ -73,7 +73,7 @@ before it, the rule a shape's `parent` follows.
 | Signal | Behavior |
 |---|---|
 | `planarTravel`, `travel`, `time` | integrate |
-| `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed (vertical travel reads zero, and so never trips `moving`), `turnRate` is positive turning left |
+| `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed in m/s read per frame (vertical travel reads zero, and so never trips `moving`; a read is capped at 60 m/s, never by the frame's length), `turnRate` is positive turning left |
 | `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
 | `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
 | `state.<row>[.<key>]` | set directly: the cell's numeric value at the frame's tick, times the cadence, is the phase (a cycle-trait clock, a counter, an `hp` cell) |
