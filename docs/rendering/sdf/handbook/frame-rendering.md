@@ -1139,7 +1139,8 @@ garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
 `meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to
-8 GiB, about six of the debug world's sets, by the caches' one retention, `CacheRetention`), keyed by the group's
+8 GiB, six of the debug world's sets, a set at a time: each bake identity's entries are one directory, removed whole,
+least recently used first, by the caches' one retention, `CacheRetention`), keyed by the group's
 geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'
 bytecode and the code the bake runs, the IL of every method its own code reaches
 across the `Puck` assemblies with the layouts of the types they name

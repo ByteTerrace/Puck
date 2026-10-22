@@ -152,7 +152,7 @@ subdirectory there. Every cache among them is bounded:
 | `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
 | `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
 | `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) | 4096 files, 1 GiB |
-| `meshes` | The baked meshes every World and worktree shares, keyed by geometry and bake identity (`SdfMeshStore`) | 8 GiB, 64 recorded identities |
+| `meshes` | The baked meshes every World and worktree shares, keyed by geometry and bake identity, one directory a bake identity's set (`SdfMeshStore`) | 8 GiB of whole sets, 64 recorded identities |
 | `corpora` | The conformance corpora the emulator batteries fetch | none: a fixed fetched set |
 
 Every bound follows one policy, `CacheRetention` in `Puck.Abstractions`: least
@@ -160,7 +160,10 @@ recently used out. An entry's last use is its stamp, the last write time of the
 file or directory that stands for it; an owner stamps an entry when it reads
 it, and writing one stamps it. When an owner writes, it removes the least
 recently used entries beyond its bound, keeps the entry it is using whatever its
-stamp, and leaves an entry another process holds open. A process lists a
+stamp, and leaves an entry another process holds open. A cache whose entries
+come in sets one reader uses together (the `meshes` store, a set a bake
+identity) removes a set whole, its last use its newest entry's, and never the
+set it is writing (`CacheRetention.EnforceSetsOnWrite`). A process lists a
 directory for this at most once a minute, so a build that publishes many
 entries pays for one listing. Every cache is content-addressed, so an evicted
 entry costs its next reader a derivation, never a different answer.
@@ -302,8 +305,10 @@ What the C# loop costs:
   a cold node compiles it once rather than once per operation.
 - **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
   in the `meshes` device cache), keyed by geometry and by the bake's own code
-  (the methods it reaches, `SdfMeshBakeClosure`) and kernels, so a reboot after
-  an edit outside what the bake runs loads every mesh
+  (the methods it reaches, `SdfMeshBakeClosure`) and kernels, which read their
+  own interface and the field's generated vocabulary alone, so a reboot after
+  an edit outside what the bake runs (a light, an exposure constant, a world
+  pass-block value) loads every mesh
   (`[sdf.mesh-bake] done … dispatches=0 … loaded=N`) and a changed creation
   bakes its own groups alone.
 

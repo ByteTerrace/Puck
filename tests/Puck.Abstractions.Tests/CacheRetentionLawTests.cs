@@ -90,6 +90,66 @@ public sealed class CacheRetentionLawTests {
         Assert.Equal(actual: result.Removed, expected: (OperatingSystem.IsWindows() ? 1 : 2));
         Assert.Equal(actual: (result.Removed + result.Kept), expected: 3);
     }
+    // A cache of sets keeps and removes each subdirectory whole, its last use its newest entry's, and a loose entry as a
+    // set of its own; the set in use stays and, alone past the bound, trims its own oldest entries; a set a reader holds
+    // an entry of keeps what it cannot delete; a set with no entry is aged by its directory; a writer enforces once an
+    // interval; and a missing directory holds nothing.
+    [Fact]
+    public void ACacheOfSetsRemovesASetWholeLeastRecentlyUsedFirst() {
+        using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-sets-law-");
+        var written = DateTime.UtcNow;
+        var bound = new CacheBound(MaxBytes: 3, MaxEntries: 10);
+
+        string Write(string name, int minutesAgo) {
+            var path = cache.WriteText(name: name, text: "x");
+
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: written.AddMinutes(value: -minutesAgo), path: path);
+            return path;
+        }
+        // The in-use set's entries are the oldest, but it stays; "fresh" was just used, so it stays whole; "stale", the
+        // loose entry and the empty set, aged by its directory, are older and go whole.
+        var used = Write(minutesAgo: 90, name: "used/a.bin");
+        var fresh = (Write(minutesAgo: 80, name: "fresh/a.bin"), Write(minutesAgo: 1, name: "fresh/b.bin"));
+        var stale = (Write(minutesAgo: 20, name: "stale/a.bin"), Write(minutesAgo: 10, name: "stale/b.bin"));
+        var loose = Write(minutesAgo: 30, name: "loose.bin");
+        var note = Write(minutesAgo: 5, name: "stale/note.txt");
+        var empty = Directory.CreateDirectory(path: Path.Combine(path1: cache.RootPath, path2: "empty")).FullName;
+
+        Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: written.AddDays(value: -1), path: empty);
+
+        var result = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+
+        Assert.True(condition: File.Exists(path: used));
+        Assert.True(condition: File.Exists(path: fresh.Item1) && File.Exists(path: fresh.Item2));
+        Assert.False(condition: File.Exists(path: stale.Item1) || File.Exists(path: stale.Item2) || File.Exists(path: note) || File.Exists(path: loose));
+        Assert.False(condition: Directory.Exists(path: Path.GetDirectoryName(path: stale.Item1)));
+        Assert.False(condition: Directory.Exists(path: empty));
+        Assert.Equal(expected: new CacheRetentionResult(Kept: 3, KeptBytes: 3, Removed: 3, RemovedBytes: 3), actual: result);
+
+        // Alone past the bound, the set in use trims its own oldest entries and keeps the one in use.
+        var second = Write(minutesAgo: 70, name: "used/b.bin");
+        var third = Write(minutesAgo: 60, name: "used/c.bin");
+        var trimmed = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+
+        Assert.True(condition: File.Exists(path: used) && File.Exists(path: third));
+        Assert.False(condition: File.Exists(path: second) || File.Exists(path: fresh.Item1) || File.Exists(path: fresh.Item2));
+        Assert.Equal(expected: 3, actual: trimmed.Removed);
+
+        // A set a reader holds an entry of keeps what it cannot delete, and its directory with it, on Windows.
+        var held = Write(minutesAgo: 50, name: "held/a.bin");
+
+        using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: held, share: FileShare.Read)) {
+            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+        }
+        Assert.Equal(actual: File.Exists(path: held), expected: OperatingSystem.IsWindows());
+
+        // A writer enforces once an interval, and a missing directory holds nothing.
+        var other = cache.PathOf(name: "other");
+
+        Assert.True(condition: CacheRetention.EnforceSetsOnWrite(bound: bound, directory: other, isEntry: static _ => true));
+        Assert.False(condition: CacheRetention.EnforceSetsOnWrite(bound: bound, directory: other, isEntry: static _ => true));
+        Assert.Equal(expected: default, actual: CacheRetention.EnforceSets(bound: bound, directory: other, isEntry: static _ => true));
+    }
     [Fact]
     public void AWriterListsADirectoryOnceAnInterval() {
         using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-law-");

@@ -342,17 +342,26 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 - **A miss names its cause.** Each identity's parts and code members are
   recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
   and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity
-  … unchanged: geometry new to the store, or evicted from it (N entries, B of C
-  bytes)`, or `identity … new since <earlier>: the code, K members (Puck.Maths
+  … unchanged: geometry new to its set of S entries (N entries in K sets, B of C
+  bytes)` or `… unchanged: its set was evicted, or it never stored one (…)`, or
+  `identity … new since <earlier>: the code, K members (Puck.Maths
   1: Puck.Maths.VectorFunctions.IsFinite) changed`. `puck mesh identity --build <dir>
   --against <dir>` prints the same comparison for two builds with no boot, and
   its value is the key a cache of the store is saved under.
-- **The store holds several worlds' sets.** The debug world's meshes fill
-  about 1.26 GB in 1,153 entries under one identity and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes`
-  (8 GiB, about six sets) least recently used out, shared by every World and worktree on
-  the machine. Under a cap smaller than one set, each boot evicts the
-  groups it baked first and re-bakes them on the next. A boot that bakes
-  nothing shows `done … loaded=N` with `dispatches=0`.
+- **The store keeps whole sets.** Each identity's entries are one set, in a
+  directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
+  world's meshes fill about 1.26 GB in about 1,150 entries under one identity
+  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, six
+  such sets), shared by every World and worktree on the machine, a set at a
+  time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
+  recently read or written entry's, and a write removes whole sets, least
+  recently used first, never its own. A set a World is baking or loading is
+  never cut short by another lane's writes, so concurrent lanes on different
+  identities keep each other's complete sets until six newer ones displace
+  them, and a set larger than the cap alone keeps its most recently used
+  entries. An entry left directly in the directory is a set of its own and ages
+  out first. A boot that bakes nothing shows `done … loaded=N` with
+  `dispatches=0`.
 
 ## Shadows and indirect light
 
