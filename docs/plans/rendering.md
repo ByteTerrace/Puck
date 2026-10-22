@@ -283,7 +283,7 @@ indices) into one color image and optionally one `D32Float` depth version,
 tested by `depthCompare` and written where a fragment passes. The planner
 validates extent, sample count, format, vertex layout, and index type, count
 and range, and refuses blending, multisampling and alpha test by name. Both
-backends draw that geometry opaque, single-sampled, unculled and flat as the
+backends draw that geometry opaque, single-sampled, unculled (a pipeline description may cull back faces) and flat as the
 fragment stage shades it, with clip-space +y at the top of the attachment:
 Vulkan's neutral pipelines draw through a negative-height viewport and no
 longer blend, which also turned the fullscreen adapter's UV the right way up on
@@ -2012,8 +2012,9 @@ and the canaries hold every scene the check names.
    its triangles from the mesh region through the `sdf-mesh` interface: one set
    per ring slot binding the viewport table and the region, the view and the
    draw pushed as one index. It projects with `ViewProjection`'s reversed-Z
-   matrices read from the view's viewport row, culls nothing, and turns each
-   face normal toward the camera, so a mirrored copy needs no winding flip. The
+   matrices read from the view's viewport row, culls back faces (an authored mesh
+   carries both windings, so a mirrored copy needs no winding flip), and turns
+   each face normal toward the camera. The
    target is an `RGBA32F` image at the engine extent that rests
    shader-readable; the depth image is created from the pass's depth attachment
    (`IGpuImageFactory.CreateDepth`), so Direct3D 12's optimized clear is the

@@ -204,6 +204,21 @@ to the far side before it has reached the glass. A floor door also needs the
 ground under it to give way, or a falling body stops on it in the same step it
 passes through.
 
+## The engine has no reference body size
+
+A world's length unit is the metre, and content is authored at the size the
+real thing has: a handheld console is its real millimetres, a door its real
+height. An avatar is content too, authored at whatever size its author chose.
+The Moth stands 2.06 m because she wears a suit. The engine holds no scale
+derived from an avatar's proportions and no notion of a "normal" body:
+movement, reach, camera framing and engagement read each body's own authored
+or current size. A world that wants an object to read well in a body's hands
+authors that body at a matching size, for example a Moth out of her suit,
+rather than rescaling the object.
+
+Why: the owner's ruling. The debug world's sizing follows the owner's choices
+for the Moth, which are an author's choices and not the engine's.
+
 ## A derived product is a cache, never the truth
 
 A baked mesh, an irradiance volume, a compiled shader or any other product
