@@ -582,11 +582,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var deltaTicks = clock.Sample();
                     // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
                     var stepTicks = ResolveStepTicks(simulation: m_simulation);
+                    // Lockstep presentation (PresentPacingControl.TickLocked): a frame steps at most once, by clamping
+                    // the interval to one step, and presents exactly the time it stepped.
+                    var tickLocked = m_presentPacing.TickLocked;
 
                     if (pump is { } activePump) {
                         fixedSteps += ((ulong)activePump.Advance(
                             deltaTicks: deltaTicks,
-                            maxFrameTicks: maxFrameTicks,
+                            maxFrameTicks: (tickLocked ? stepTicks : maxFrameTicks),
                             stepTicks: stepTicks
                         ));
                     }
@@ -626,11 +629,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             (height > 0)
                         ) {
                             var frameContext = new FrameContext(
-                                AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
+                                AccumulatorTicks: (tickLocked ? 0UL : (pump?.AccumulatorTicks ?? 0UL)),
                                 DeltaTicks: (fixedSteps * stepTicks),
                                 DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                                FrameDeltaTicks: deltaTicks,
+                                FrameDeltaTicks: ((tickLocked && (pump is not null)) ? (fixedSteps * stepTicks) : deltaTicks),
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,

@@ -328,6 +328,17 @@ the World's first stdin read is treated as silent. A line that arrives after
 stepping has begun lands in whatever tick drains it, so put a `world.wait` in
 front of anything whose tick matters.
 
+`world.wait until <tick>` holds the session until the addressed world has
+completed an absolute authority tick (the tick `world.state.hash` and capture
+stills report, not the host-work clock `world.wait <ticks>` counts), answers
+at once when it already has, and releases with a refusal when the world
+pauses first. `world.at <tick>|+<n> <line>` and its one-line script form
+(`WorldTickScript`, `WorldTickScriptCommandModule`, published from
+`WorldHostStep` beside the capture scheduler) pin lines to ticks independently
+of any session's queue; every line of a tick runs in the drain after it, as
+the console, in arming order, with no read-after-write barrier between them.
+`WorldTickScriptLawTests` pins both against the real pump and server.
+
 `quit` (`TerminalCommandModule`; `SiloStdinRouter` routes it as
 a process verb) is Immediate, so the barrier and `world.wait` hold it behind
 everything its session queued earlier. Once it runs, `mayStep` refuses further
@@ -396,6 +407,13 @@ The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so both rendered
 hosts hold their clock for it exactly as for a scheduled capture: no tick past
 the one it was armed after runs until a frame serves it or a hold budget
 refuses it, and a `world.wait <ticks>` after it has the capture behind it.
+`ArmUnscheduled` stamps a settled request with that tick and its state hashes
+(`FrameCaptureRequest.StateTick`/`StateStamp`) and, once it lands, prints
+`[still] <path> tick=<T> hash=<capture hash> pose=<pose hash> shown=<tick the
+frame shows>` on stderr. `world.screenshot <path.png> slots` also writes each
+slot of the active layout as `<stem>-<camera>.png` (`WorldSlotStills`). To land
+a still on a chosen tick, pin it with `world.at` ([schedules and
+tests](schedules-and-tests.md#tick-exact-debug-capture)).
 
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:

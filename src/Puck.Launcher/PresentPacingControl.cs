@@ -12,6 +12,7 @@ namespace Puck.Launcher;
 /// </summary>
 public sealed class PresentPacingControl {
     private double m_targetHertz;
+    private bool m_tickLocked;
     private uint m_version;
 
     /// <summary>Initializes the control with the boot target rate.</summary>
@@ -37,6 +38,19 @@ public sealed class PresentPacingControl {
     /// <summary>A monotonically increasing counter bumped whenever <see cref="SetTargetHertz"/> changes the target, so the
     /// pump re-resolves its render period only on an actual change.</summary>
     public uint Version => Volatile.Read(location: ref m_version);
+
+    /// <summary>Gets whether the window pump runs presentation in lockstep with the simulation: at most one fixed step
+    /// a presented frame, and each frame's presentation interval exactly the simulation time it advanced (a step, or
+    /// nothing) with no interpolation between ticks, as the offscreen host runs. Presentation animation (gait, effectors,
+    /// exposure adaptation) then integrates the same intervals at the same ticks on every run, so a capture of a tick
+    /// shows the same image whatever the display's rate or the machine's load. A frame that cannot keep up with the
+    /// simulation rate slows the simulation rather than skipping ticks; the simulation's own state never depends on
+    /// it.</summary>
+    public bool TickLocked => Volatile.Read(location: ref m_tickLocked);
+
+    /// <summary>Turns the lockstep presentation of <see cref="TickLocked"/> on or off.</summary>
+    /// <param name="locked">Whether presentation runs in lockstep with the simulation.</param>
+    public void SetTickLocked(bool locked) => Volatile.Write(location: ref m_tickLocked, value: locked);
 
     /// <summary>Retargets the present rate. A no-op (no version bump) when the value is unchanged.</summary>
     /// <param name="targetHertz">The new target in Hz, or 0 for automatic display pacing.</param>

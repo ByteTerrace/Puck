@@ -1413,6 +1413,8 @@ public static class WorldBootComposition {
         // The host-section READ-BACK — world.host, the DOCUMENT/RESOLVED/LIVE three-way read; the section is
         // written through world.row.set host <json>. Presentation-only: window/backend/present/pacing knobs.
         services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+        // world.lockstep: the window pump presents in lockstep with the simulation, as the offscreen host always does.
+        services.AddSingleton<ICommandModule, WorldLockstepCommandModule>();
         // The audio READ-BACK + lever surface — world.speakers/audio.state/speaker.state/world.volume/
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
