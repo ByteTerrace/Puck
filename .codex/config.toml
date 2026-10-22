@@ -5,8 +5,8 @@ startup_timeout_sec = 600
 tool_timeout_sec = 120
 enabled = true
 
-# A Codex lane runs in a git worktree under .claude/worktrees/<lane>/: its commits write the checkout's .git (a
-# worktree's metadata lives there) and its GPU legs take the shared leases under .claude/leases/. Both resolve from
-# the lane's worktree root, so the same entries hold on every machine.
+# A Codex lane's GPU legs take the shared leases under .claude/leases/, outside its worktree. Codex takes writable
+# roots as absolute paths only, so each machine's checkout adds its own entry; a path no machine has is inert. Codex
+# keeps .git read-only whatever this says, so the lead commits a Codex lane's work.
 [sandbox_workspace_write]
-writable_roots = ["../../../.git", "../../leases"]
+writable_roots = ["D:/Source/ByteTerrace/Puck/.claude/leases"]

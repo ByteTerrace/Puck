@@ -114,9 +114,11 @@ keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 The `.claude/leases/` directory is git-ignored, so the lead creates it once per
 checkout (`mkdir -p`). A Codex lane's sandbox writes only its worktree plus the
-writable roots `.codex/config.toml` declares (the checkout's `.git` and
-`.claude/leases/`), so a Codex lane runs in a worktree under
-`.claude/worktrees/<lane>/` branched from a tip carrying that config.
+writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
+path per machine), and never `.git`: a Codex lane runs in a worktree under
+`.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
+its changes uncommitted, and the lead commits them
+([`review-passes`](../review-passes/SKILL.md#before-launching)).
 A lease older than an hour whose World is gone is stale and may be removed. The
 same rule gives `Puck.World.Tests` one run at a time (`.claude/leases/heavy`),
 since a run takes about 7 GB of the lead machine's 32 GB. Investigating
