@@ -237,6 +237,12 @@ public sealed class WorldFaceCatalog {
             yawDegrees: yawDegrees
         )
         ) {
+            // The shape's position is an engine-frame offset under the PLACEMENT's rotation alone, as the drawn shape is
+            // placed (and as the general path below places it): the half turn turns the shape's own axes, never where
+            // it stands. So the offset reads the placement's basis from before the turn.
+            var placementRight = cardinalRight;
+            var placementNormal = cardinalNormal;
+
             if (shapeIsHalfTurn) {
                 cardinalNormal = -cardinalNormal;
                 cardinalRight = -cardinalRight;
@@ -258,7 +264,7 @@ public sealed class WorldFaceCatalog {
             var halfCardinal = (FixedVector3.FromVector3(value: shape.Scale) * scale);
 
             return new WorldFaceFrame(
-                Origin: (((origin + (cardinalRight * local.X)) + (FixedVector3.UnitY * local.Y)) + (cardinalNormal * local.Z)),
+                Origin: (((origin + (placementRight * local.X)) + (FixedVector3.UnitY * local.Y)) + (placementNormal * local.Z)),
                 Right: cardinalRight,
                 Up: FixedVector3.UnitY,
                 Normal: cardinalNormal,
