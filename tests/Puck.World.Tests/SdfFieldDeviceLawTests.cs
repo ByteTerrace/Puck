@@ -43,7 +43,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     private const uint WordsBinding = 0U;
     private const uint CasesBinding = 60U;
     private const uint ResultsBinding = 61U;
-    // The world interface's bindings of the instance masks (in the pass group) and the dynamic transforms (in the world
+    // The bake interface's bindings of the instance masks (in the pass group) and the dynamic transforms (in the world
     // group), which the per-instance probe reads.
     private const uint MasksBinding = 1U;
     private const uint TransformsBinding = 1U;
@@ -123,7 +123,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
     // results back, one per case in leg order. The per-instance probe also reads the legs' instance masks and the dynamic
-    // transforms, bound where the world interface binds them.
+    // transforms, bound where the bake interface binds them.
     private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector3[]? points = null,
         Vector4[]? parameters = null, string name = KernelName, uint[]? masks = null, Vector4[]? transforms = null) {
         points ??= Points;

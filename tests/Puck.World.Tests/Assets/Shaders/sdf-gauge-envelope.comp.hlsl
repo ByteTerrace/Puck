@@ -1,3 +1,4 @@
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
 
 [[vk::binding(60, 3)]] StructuredBuffer<float4> fieldCases : register(t60, space3);

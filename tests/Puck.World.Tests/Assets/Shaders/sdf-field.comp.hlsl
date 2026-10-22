@@ -5,6 +5,7 @@
 // resources sit in the Pass group at bindings the world interface leaves free; the pushed index is Direct3D 12's root
 // constant at b0, space 4.
 
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
 
 // Each case: the point, and the index of the results texel it writes (as bits).
