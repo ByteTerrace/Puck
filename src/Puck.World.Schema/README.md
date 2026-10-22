@@ -2753,10 +2753,12 @@ names wears that look, or runs that kit, outranking the sequence and, for a
 local seat, the seat kit; a value no case names (a fraction included) keeps
 what the sequence gives it. A register is declared document-wide, so every
 body holds it at its `initial`, props and pieces included: a case naming the
-`initial` value selects every body, so a selector names only the values that
-deviate (the debug world's `suit` is born 1 and selects only 0, `pilot`). The
+`initial` value would select every body, so a selector names only the values that
+deviate (the debug world's `suit` is born 1 and selects only 0, `pilot`); a body
+at the initial value keeps its sequence or seat kit and look. The
 validator refuses, by name, a `bodyState` `state.body` does not declare, a Timer
-register, an empty or repeated case value, and a case row naming no kit or look.
+register, an empty or repeated case value, a case value equal to the register's
+`initial`, and a case row naming no kit or look.
 
 The register is the body's own state, so the choice is the body's and goes
 where the body goes. A kit action's `setState` and a world rule's

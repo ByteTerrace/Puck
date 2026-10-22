@@ -2219,6 +2219,10 @@ public static partial class WorldDefinitionValidator {
     // A selector reads a body's own register the way WorldPopulation.SyncBodySelections does: a state.body counter, whose
     // value each case compares as a whole number, and every case's row declared in the table the assignment distributes.
     private static void ValidateRowSelector(WorldDefinition definition, WorldRowSelector select, string path, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+        // A register is document-wide, so every body (props and pieces included) holds its initial value until something
+        // writes it: a case naming that value would select every body and re-kit the whole world.
+        float? initial = null;
+
         if (string.IsNullOrEmpty(value: select.BodyState)) {
             errors.Add(item: $"{path}.bodyState is required.");
         } else if (definition.BodyState.FirstOrDefault(predicate: slot => string.Equals(
@@ -2229,6 +2233,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', which state.body does not declare.");
         } else if (slot.Kind != ActionStateKind.Counter) {
             errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', a {slot.Kind}; a selector reads a Counter.");
+        } else {
+            initial = slot.Initial;
         }
 
         if (select.Cases is not { Count: > 0 } cases) {
@@ -2248,6 +2254,10 @@ public static partial class WorldDefinitionValidator {
 
             if (!values.Add(item: selectCase.Value)) {
                 errors.Add(item: $"{path}.cases[{index}] repeats value {selectCase.Value}.");
+            }
+
+            if ((initial is { } born) && (born == selectCase.Value)) {
+                errors.Add(item: $"{path}.cases[{index}] value {selectCase.Value} is register '{select.BodyState}' initial value, which every body holds until it is written; the case would select every body. Leave the initial value to the sequence's own row and name only the values that deviate.");
             }
 
             RequireDeclared(

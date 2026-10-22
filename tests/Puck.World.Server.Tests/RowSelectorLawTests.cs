@@ -19,6 +19,8 @@ public sealed class RowSelectorLawTests {
     private const string PilotLook = "pilot";
     private const string Suit = "suit";
     private const string Fuel = "fuel";
+    // The suit's initial value, which no case names: every body holds it until something writes it.
+    private const float BornSuit = 5f;
 
     private static WorldRowSelector Selector(string first, string second) => new(
         BodyState: Suit,
@@ -90,7 +92,7 @@ public sealed class RowSelectorLawTests {
                     new ActionStateSlot(
                         Name: Suit,
                         Kind: suitKind,
-                        Initial: 1f
+                        Initial: BornSuit
                     ),
                     new ActionStateSlot(
                         Name: Fuel,
@@ -126,15 +128,30 @@ public sealed class RowSelectorLawTests {
     }
 
     [Fact]
-    public void TheBornRegisterSelectsTheBodysKitAndLook() {
-        using var fixture = Fixtures.FreshServer(definition: Document());
+    public void ABodyAtTheBornRegisterKeepsItsOwnKitAndLook() {
+        var selected = Document();
+        using var unselected = Fixtures.FreshServer(definition: (selected with {
+            LooksRaw = (selected.LooksRaw! with { Assignment = selected.LookAssignment with { Select = null } }),
+            KitsRaw = (selected.KitsRaw! with { Assignment = selected.Assignment with { Select = null } }),
+        }));
+        using var fixture = Fixtures.FreshServer(definition: selected);
+        unselected.JoinSeat();
         var body = fixture.JoinSeat();
 
         fixture.Step();
+        unselected.Step();
 
         Assert.Equal(
-            actual: LookName(server: fixture.Server),
-            expected: SuitedLook
+            actual: Register(server: fixture.Server, name: Suit),
+            expected: FixedQ4816.FromInteger(value: 5L)
+        );
+        Assert.Equal(
+            actual: KitName(server: fixture.Server),
+            expected: KitName(server: unselected.Server)
+        );
+        Assert.Equal(
+            actual: fixture.Server.Population.LookIndex(index: 0),
+            expected: unselected.Server.Population.LookIndex(index: 0)
         );
         Assert.Equal(
             actual: fixture.Server.Population.KitMotion(index: 0).Speed.Value,
@@ -417,7 +434,7 @@ public sealed class RowSelectorLawTests {
         );
         Assert.Equal(
             actual: Register(server: faulted.Server, name: Suit),
-            expected: FixedQ4816.One
+            expected: FixedQ4816.FromInteger(value: 5L)
         );
     }
     [Fact]
@@ -484,6 +501,22 @@ public sealed class RowSelectorLawTests {
                 )],
                 KitsRaw = (document.KitsRaw! with { Rows = [kit, .. document.Kits.Skip(count: 1)] }),
             }))
+        );
+    }
+    [Fact]
+    public void TheValidatorRefusesACaseNamingTheRegistersInitialValue() {
+        var atInitial = new WorldRowSelector(
+            BodyState: Suit,
+            Cases: [new WorldRowSelectorCase(Value: 5L, Row: PilotLook)]
+        );
+
+        Assert.Contains(
+            expectedSubstring: "looks.assignment.select.cases[0] value 5 is register 'suit' initial value",
+            actualString: Refusal(definition: Document(lookSelect: atInitial))
+        );
+        Assert.Contains(
+            expectedSubstring: "kits.assignment.select.cases[0] value 5 is register 'suit' initial value",
+            actualString: Refusal(definition: Document(kitSelect: (atInitial with { Cases = [new WorldRowSelectorCase(Value: 5L, Row: SlowKit)] })))
         );
     }
     [Fact]
