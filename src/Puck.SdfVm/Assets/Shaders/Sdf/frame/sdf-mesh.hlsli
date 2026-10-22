@@ -260,13 +260,4 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     return sdfMeshFaceCamera(normal, face, rayDirection);
 }
 
-// What the mesh pass's vertex stage hands its fragment stage: the clip position, the world position the fragment
-// measures the ray parameter to, and the triangle, which the surface pass resolves the surface of.
-struct MeshVertex {
-    float4 position : SV_Position;
-    float clip : SV_ClipDistance0;
-    float3 world : WORLD;
-    nointerpolation uint triangleIndex : MESHTRIANGLE;
-};
-
 #endif

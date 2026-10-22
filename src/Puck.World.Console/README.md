@@ -113,7 +113,8 @@ reference Client is denied.
 The read-back modules for the rest of the server-side surface live here too:
 `world.counters` (`WorldCountersCommandModule`, which prints a section per
 registered `IWorkCounterSource`, plus the render nodes' GPU work and an
-allocation reading; `WorldCountersServiceRegistration` registers it and the
+allocation reading, with `node`, `pass`, `counter` and `summary` narrowing the
+GPU section; `WorldCountersServiceRegistration` registers it and the
 server's own counters), `world.lighting` (`WorldLightingCommandModule`, the
 `render` section's lights, sky, grounding and tonemap), `world.timeline`
 (`WorldTimelineCommandModule`, the named clocks), `world.extensions`

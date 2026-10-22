@@ -661,6 +661,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
+
+    public bool CanDrawIndirectCount => false;
+
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
+        throw new NotSupportedException();
     public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => RecordGraphics(command: "draw", buffer: 0, offsetBytes: 0, sizeBytes: 0, count: parameters.VertexCount);
     public void DrawIndexed(nint commandBufferHandle, uint indexCount) => RecordGraphics(buffer: 0, command: "draw-indexed", count: indexCount, offsetBytes: 0, sizeBytes: 0);
     public void EndCommandBuffer(nint commandBufferHandle) { }
@@ -698,8 +703,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Submissions++;
         Complete(through: Submitted(commandBufferHandles: commandBufferHandles));
     }
+
     // The fake submits at once, so a batch only counts the frames that flushed one.
     public int BatchesFlushed { get; private set; }
+
     public void BeginBatch() { }
     public void FlushBatch() => BatchesFlushed++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);

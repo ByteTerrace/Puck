@@ -1,0 +1,210 @@
+// The Moth's suit on and off. `suit` holds 1 for each body wearing the mech suit and 0 for one out of it, and the
+// look and kit assignments select by it (`select`), so what she wears and how she moves follow the cell: a rule, a
+// console write (`world.state.cell.set suit 0 0`) or a replay moves both at the same tick, and a saved world keeps
+// them. The suit channel (T or the right trigger; `body.press suit` from the console) flips it while she stands; a
+// press in the air does nothing unless it is still held when she lands.
+//
+// Out of the suit she runs the `pilot` kit, a walker with one jump and no flight mode, so flight is refused, and wears
+// the `moth-pilot` look. Until the off-suit model lands that look is the 2 m green reference cube (`cube-2m` in
+// debug.puck) worn as a stand-in, so the switch is plain to see; the off-suit creation replaces its source.
+
+schema: "puck.world.definition.v1"
+
+channels [
+  {
+    composition: true
+    name: "suit"
+    shape: Binary
+  }
+]
+
+state {
+  world {
+    table suit {
+      "0" = 1
+    }
+  }
+}
+
+kits {
+  // The sequence and rows are the inert default the basis leaves implied: a body without a suit cell keeps the kit it
+  // had.
+  assignment {
+    rows []
+    sequence {
+      name: "index"
+      offset: 0
+      step: 0
+    }
+    select {
+      state: suit
+      cases [
+        { value: 1, row: "walker" }
+        { value: 0, row: "pilot" }
+      ]
+    }
+  }
+  rows [
+    // The woman inside the suit: 1.68 m tall and as quick on foot, with one jump and no flight pack. Her capsule's
+    // 0.3 m spheres span 0 to 1.68 m.
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: capsule(endpoint: [0, 1.08, 0], radius: 0.3)
+      mass: 0
+      motion {
+        facingSnap: false
+        groundStick: 2
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 1.2
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+          {
+            name: "fall"
+            bond: Free
+            hold: Gravity
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+        ]
+        moveFrame: World
+        shaping [
+          {
+            along {
+              engage: 40
+              release: 50
+            }
+            turnScale: 1
+          }
+        ]
+        speed {
+          value: 5
+        }
+        stepHeight: 0.3
+        turn {
+          falloff: 1
+          maxPitch: 1.2
+          pitchRate: 0
+          rate: 2.5
+        }
+      }
+      // One jump from the ground, spent by leaving it either way, so she never jumps in the air.
+      actions {
+        jump {
+          onPress {
+            gate: compareState(state: jumps, comparison: Equal, value: 2)
+            latchSeconds: 0
+            effects [
+              setVerticalVelocity(velocity: 5.1)
+              addState(state: jumps, value: -1)
+            ]
+          }
+          onRelease {
+            gate: now(fact: Rising)
+            latchSeconds: 0
+            effects [
+              scaleVerticalVelocity(factor: 0.45)
+            ]
+          }
+          onFact [
+            {
+              fact: "Airborne"
+              mode: "Edge"
+              gate: compareState(state: jumps, comparison: Equal, value: 2)
+              effects [
+                addState(state: jumps, value: -1)
+              ]
+            }
+          ]
+        }
+      }
+      name: "pilot"
+    }
+  ]
+}
+
+looks {
+  assignment {
+    select {
+      state: suit
+      cases [
+        { value: 1, row: "moth" }
+        { value: 0, row: "moth-pilot" }
+      ]
+    }
+  }
+  rows [
+    {
+      motion {
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+      }
+      name: "moth-pilot"
+      scale: 1
+      source: creation(prototypeId: `cube-2m`)
+    }
+  ]
+}
+
+// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands.
+rule "suit-toggle" {
+  when channel(1, suit) >= 1 and fact(body, 0, Airborne) == 0
+  mode: Edge
+  suit[0] = 1 - suit[0]
+}
+
+// The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.
+rule "airborne-on" {
+  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and suit[$each] == 1
+  mode: Edge
+  forEach: airPose
+  airPose[$each] = 1
+  airWings[$each] = 1
+}
+
+bindingOverlays [
+  {
+    id: "suit-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              {
+                channel: "suit"
+                id: "suit"
+                label: "Suit"
+                scale: 1
+                sources ["keyboard.t", "gamepad.rightTrigger"]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

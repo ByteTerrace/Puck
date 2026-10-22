@@ -587,8 +587,10 @@ public sealed partial class WorldDocument {
                 candidate = (current with { DefaultSeatKitRaw = m.Name });
 
                 return true;
+            // world.assign authors the sequence and its rows; an authored per-body selector stays unless the
+            // mutation carries its own.
             case WorldMutation.SetKitAssignment m:
-                candidate = (current with { AssignmentRaw = m.Assignment });
+                candidate = (current with { AssignmentRaw = (m.Assignment with { Select = (m.Assignment.Select ?? current.Assignment.Select) }) });
 
                 return true;
             case WorldMutation.UpsertScreen m:
@@ -1081,7 +1083,7 @@ public sealed partial class WorldDocument {
 
                 return true;
             case WorldMutation.SetLookAssignment m:
-                candidate = (current with { LookAssignmentRaw = m.Assignment });
+                candidate = (current with { LookAssignmentRaw = (m.Assignment with { Select = (m.Assignment.Select ?? current.LookAssignment.Select) }) });
 
                 return true;
             case WorldMutation.UpsertDynamics m:

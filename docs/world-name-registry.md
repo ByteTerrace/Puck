@@ -1187,6 +1187,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].collider[fromCreation].prototypeId` | Prototype | Names | Read | `WorldCollider.FromCreation.PrototypeId` |
+| `kits.assignment.select.state` | State | Names | Read | `WorldRowSelector.State` |
 | `bindingOverlays[].document.wheels[].labelRow` | State | Binding | Binding | `BindingWheelDefinition.LabelRow` |
 | `bindingOverlays[].document.wheels[].iconRow` | State | Binding | Binding | `BindingWheelDefinition.IconRow` |
 | `bindingOverlays[].bindingBar.iconRow` | State | Binding | Binding | `WorldBindingBarAuthoring.IconRow` |
@@ -1268,6 +1269,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `looks.assignment.select.state` | State | Names | Read | `WorldRowSelector.State` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -2859,6 +2861,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].tether.modeState` | `WorldTether.ModeState` | a per-body slot name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
+| `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `addons[].name` | `WorldAddonRow.Name` | an addon name |
 | `bindingOverlays[].id` | `WorldBindingOverlay.Id` | a binding overlay id |
 | `bindingOverlays[].document.modifiers[].id` | `BindingModifierDefinition.Id` | a binding modifier id |
@@ -2909,6 +2912,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.quality[].name` | `WorldViewQuality.Name` | a render view instance name or the default selector * |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
+| `looks.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `hud.panels[].elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |

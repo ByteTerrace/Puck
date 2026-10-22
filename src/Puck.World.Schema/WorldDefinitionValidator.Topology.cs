@@ -74,6 +74,20 @@ public static partial class WorldDefinitionValidator {
                 .OfType<WorldKit>();
         }
 
+        // A peer whose own cell selects a kit runs that kit's producer too.
+        if (definition.Assignment.Select is { Cases: { } cases }) {
+            assignedKits = assignedKits
+                .Concat(second: cases
+                    .OfType<WorldRowSelectorCase>()
+                    .Select(selector: selectCase => WorldDefinitionRows.FindKit(
+                    kits: definition.Kits,
+                    name: selectCase.Row
+                ))
+                    .OfType<WorldKit>())
+                .Distinct(comparer: ReferenceEqualityComparer.Instance)
+                .Cast<WorldKit>();
+        }
+
         foreach (var kit in assignedKits) {
             if (
                 (kit.Producers is null) ||

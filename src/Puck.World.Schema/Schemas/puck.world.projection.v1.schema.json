@@ -21848,6 +21848,53 @@
           "additionalProperties": false,
           "title": "WorldSequence"
         },
+        "select": {
+          "description": "The per-body selector, or null for the sequence alone.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "state": {
+              "description": "The keyed state.world row of kind Int or Bool whose cells are keyed by body index.",
+              "type": "string"
+            },
+            "cases": {
+              "description": "The value-to-row mapping, each value at most once.",
+              "type": "array",
+              "items": {
+                "description": "One case of a WorldRowSelector: the row a body\u0027s cell value selects.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "value": {
+                    "description": "The cell value: an Int cell\u0027s integer, or 0 and 1 for a Bool cell.",
+                    "type": "integer"
+                  },
+                  "row": {
+                    "description": "The kit or look row name the value selects.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "row"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRowSelectorCase"
+              }
+            }
+          },
+          "required": [
+            "state",
+            "cases"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRowSelector"
+        },
         "rows": {
           "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": "array",
@@ -26996,6 +27043,10 @@
       "properties": {
         "sequence": {
           "$ref": "#/properties/assignment/properties/sequence"
+        },
+        "select": {
+          "$ref": "#/properties/assignment/properties/select",
+          "default": null
         },
         "rows": {
           "$ref": "#/properties/assignment/properties/rows"
