@@ -1806,6 +1806,14 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     deferred: deferredSink
                 );
+                if (screen.Carry is { } carry) {
+                    ValidateCarry(
+                        carry: carry,
+                        definition: definition,
+                        errors: errors,
+                        path: $"{path}.carry"
+                    );
+                }
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective
                 // per-axis extent must stay positive (a margin that inverts the box is rejected by name).

@@ -66,15 +66,25 @@ arms forward and in, bends her elbows and tips her head down, and the look's
 toward her eyes: its lower half between her palms, her fingers behind it and
 her thumbs on its face. At rest the handheld sits hidden inside her chest.
 
-The handheld is the gallery's Humble Gaming Brick ([devices](../devices.puck)),
-75 × 133 × 27.5 mm: a faithful simplified copy, since a look wears one creation
-and cannot carry the device's own. Its shell and battery bay are the device's
-atomic-orange acrylic glass, so its pale green board, processor, cartridge and
-two blue cells read through the orange; the dark lens with a dim picture, the
-d-pad on the face's left as she looks at it, the smoked A and B, select, start
-and the red power light sit on its face. A frame poses each shape it names and
-not the shapes riding it, so the hold frame poses every part of the brick with
-the shell.
+The handheld is Wonderland's Humble Gaming Brick ([devices](../devices.md)),
+75 × 133 × 27.5 mm: a faithful simplified copy, since a look wears one creation.
+Its shell and battery bay are the device's atomic-orange acrylic glass, so its
+pale green board, processor, cartridge and two blue cells read through the
+orange; the dark lens, the picture's box (`brickPicture`, the device's 44 by
+39.6 mm glass), the d-pad on the face's left as she looks at it, the smoked A and
+B, select, start and the red power light sit on its face. A frame poses each
+shape it names and not the shapes riding it, so the hold frame poses every part
+of the brick with the shell.
+
+She picks the real brick up to play it. Out of the suit and at her full size,
+engaging it (E or the pad's X beside it) sets her `pilotHold` cell through
+`devices.puck`'s `brick-pick-up` rule, which reads the engagement as
+`engaged(each, 0)`. The brick's placement then shows nothing on its rest, and
+screen 0's `carry` puts the device's live picture on `brickPicture` in her
+hands, where the engaged camera frames it. Leaving puts it back on its rest and
+lowers her arms. In the suit, or at a quarter her size, she plays it where it
+stands. Setting the cell by hand holds the brick the same way, its live picture
+included:
 
 ```text
 world.state.cell.set pilotHold 0 1
@@ -82,8 +92,6 @@ view.override camera orbit 48 1.45 -48 3.2 160 -6 30
 ```
 
 The look's first holding frame wins, so she does not blink while she holds it.
-Nothing sets the cell when she engages a handheld device: a rule cannot read a
-screen engagement yet ([open item](../../../docs/plans/open-items.md)).
 
 ## How she moves
 
@@ -110,7 +118,7 @@ front harness straps are thin boxes; the shoulder and back straps, the knee-pad
 straps, the strap buckles, the shoulder patches and the handheld's picture are
 paint. A paint sits in its parent shape's own frame. The palette's
 charcoals are authored darker than the sheet reads, since the studio's light
-lifts them as it lifts the suit's lavender. She stamps 127 of her own 367
+lifts them as it lifts the suit's lavender. She stamps 128 of her own 367
 shapes:
 
 ```powershell

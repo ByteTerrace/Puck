@@ -214,6 +214,17 @@ eases back to the Moth, and the screen's bezel, CRT look and the room fade back
 in around it. The device's pad does not play the context button, so it never
 reaches the machine.
 
+Out of her suit and at her full size, the Moth picks the Humble Gaming Brick up
+to play it ([moth-pilot.md](avatars/moth-pilot.md#hold-the-handheld)). While she
+is engaged on screen 0, the `brick-pick-up` rule (it reads the engagement as
+`engaged(each, 0)`) sets her `pilotHold` cell: her arms bring the brick up to
+her eyes, the brick's placement shows nothing on its machined rest (its
+`respond`, a placement of its own beside the rest's), and screen 0's `carry`
+moves the live picture onto the brick in her hands, where the camera frames it.
+Leaving puts the brick back on its rest and lowers her arms. In the suit, or at
+a quarter her size, where the brick is a third her height, she plays it where
+it stands.
+
 An engaged device wears the `devicePad` kit: forward and strafe drive the d-pad,
 jump is A, flight is B, the Moth's `start` channel is start and her `select`
 channel is select. The controls are the seat's own whichever way the camera

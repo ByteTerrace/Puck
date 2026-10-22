@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics.Motion;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -333,6 +334,20 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
             1 => position.Y,
             _ => position.Z,
         });
+    }
+    /// <inheritdoc/>
+    public RuleFact Read(EngagedOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return RuleFact.Finite(
+            kind: CellKind.Int,
+            value: (Host.Engagement.Applies(
+                bodyIndex: ResolveBodyRef(bodyRef: operand.Body),
+                target: GrantSubject.Screen(index: operand.Screen)
+            )
+                ? 1L
+                : 0L)
+        );
     }
     /// <inheritdoc/>
     public RuleFact Read(BodyStateOperand operand) {

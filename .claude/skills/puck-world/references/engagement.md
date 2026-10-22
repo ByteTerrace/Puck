@@ -408,6 +408,24 @@ cursor or the bar can step aside while engaged.
   `Win32DesktopPassthroughTests` and `WorldSeatContextSyncTabletopLawTests`
   hold it.
 
+**A carried screen.** A screen row's `carry` (`WorldScreenCarry`: `look`,
+`pose`, `shape`) hands its picture to a body: while a body wearing that
+creation look holds the look's `pose` frame, the screen's own slab is not drawn
+(`WorldStaticSceneEmit` declares the surface alone, `SdfProgramBuilder.ScreenSurface`),
+the look's named ungrouped box is emitted in the screen's material
+(`WorldStampPool.CarriedScreenMaterials`), the screen's surface rides the box's
+front face (author `-Z`) every frame through the residency's screen-surface
+transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, from
+`WorldStampPool.TryCarriedScreen`), and the framed view frames the picture
+there (`EngagedScreenRow`). Picking it up or putting it down rebuilds the
+program (`WorldSceneEmitter`'s carried-screen revision component). Rules read an
+engagement through `engaged(each, <screen>)` (`$engaged:<bodyRef>:<screen>`,
+`WorldEngagement.Applies`). The debug world's Humble Gaming Brick is the worked
+example: `brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size
+Moth's `pilotHold` from it, the brick's placement responds to the same cell with
+an empty creation, and screen 0 carries onto her look's `brickPicture`. The
+server's screen row, engage radius and pointer mapping keep the authored frame.
+
 Known limits: the matte cuts in when the ease settles and out when it starts
 back, while the treatment fades over the ease; the uncovered display takes the
 first framed seat's fill. `WorldScreenFramingLawTests` holds the picture, the

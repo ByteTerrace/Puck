@@ -2292,7 +2292,10 @@ occupancy derive so a knocked-over piece reads as displaced),
 metres, fixed point, 0 for no live body; any other axis refuses as
 `BodyPositionMalformed`; the debug world's `fall-respawn` rule sweeps
 `forEach: $bodies` and gates a `pose` on it to recover any body that falls off
-the ground), and
+the ground), `$engaged:<bodyRef>:<screen>` (1 while the body's participant
+holds a control application onto that declared screen, captured or mirrored,
+0 otherwise or for no live body; an undeclared screen refuses as
+`EngagedMalformed`), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and

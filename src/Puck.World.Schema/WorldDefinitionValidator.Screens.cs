@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -671,6 +672,44 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.scrollSpeed",
             value: padPointer.ScrollSpeed
         );
+    }
+    // A carried screen's picture rides a creation look's ungrouped box while the look's pose holds, so the look, the pose
+    // and the box must all resolve: the presentation reads the box's face as the picture.
+    private static void ValidateCarry(WorldDefinition definition, WorldScreenCarry carry, string path, List<string> errors) {
+        WorldLook? look = null;
+
+        foreach (var row in definition.Looks) {
+            if (string.Equals(a: row.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal)) {
+                look = row;
+
+                break;
+            }
+        }
+
+        if (
+            (look?.Source is not WorldLookSource.Creation source) ||
+            (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: source.PrototypeId.Value) is not { } creation)
+        ) {
+            errors.Add(item: $"{path}.look '{carry.Look}' names no creation look row.");
+
+            return;
+        }
+        if ((look.Motion.Poses is not { } poses) || !poses.ContainsKey(key: carry.Pose)) {
+            errors.Add(item: $"{path}.pose '{carry.Pose}' is not a pose of look '{carry.Look}' (its motion.poses names the frames a body holds).");
+        }
+
+        foreach (var shape in (creation.Document.Shapes ?? [])) {
+            if (!string.Equals(a: shape.Name?.Value, b: carry.Shape, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+            if ((shape.Type != SdfSolidPrimitive.Box) || ((shape.Group ?? 0) != 0)) {
+                errors.Add(item: $"{path}.shape '{carry.Shape}' must be an ungrouped box: its front face shows the picture.");
+            }
+
+            return;
+        }
+
+        errors.Add(item: $"{path}.shape '{carry.Shape}' names no shape of look '{carry.Look}''s creation '{source.PrototypeId.Value}'.");
     }
     // How an engaged seat's framed view of the screen is matted: only an engageable screen is ever seen that way, and
     // its fill is a colour.

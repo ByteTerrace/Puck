@@ -129,6 +129,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public RuleFact Read(UprightOperand operand) => throw Unserved();
         public RuleFact Read(BodyFactOperand operand) => throw Unserved();
         public RuleFact Read(BodyPositionOperand operand) => throw Unserved();
+        public RuleFact Read(EngagedOperand operand) => throw Unserved();
         public RuleFact Read(BodyStateOperand operand) => throw Unserved();
         public RuleFact Read(LinkStalenessOperand operand) => throw Unserved();
         public RuleFact Read(ChannelOperand operand) => throw Unserved();

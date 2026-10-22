@@ -14,6 +14,12 @@ import "avatars/moth-pilot"
 import "pad-kit"
 import "suit-toggle"
 
+// The cell her look's hold pose reads, which a world's rules set to have her hold the handheld (devices.puck's brick).
+exports {
+  reads [pilotHold]
+  actions [pilotHold]
+}
+
 channels [
   {
     composition: true

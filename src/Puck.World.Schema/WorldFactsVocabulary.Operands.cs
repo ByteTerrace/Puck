@@ -29,6 +29,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
             $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:x|y|z",
+            $"{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
@@ -696,6 +697,64 @@ public static partial class WorldFactsVocabulary {
                 );
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.EngagedPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var width = WorldFactsCompileContext.BodyRefTokenWidth(
+                    start: 0,
+                    tokens: tokens
+                );
+
+                if (
+                    (tokens.Length != (width + 1)) ||
+                    !int.TryParse(
+                    s: tokens[width],
+                    style: NumberStyles.None,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var screen
+                ) ||
+                    !DeclaresScreen(
+                    definition: world.Definition,
+                    index: screen
+                )
+                ) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>' ({WorldFactsCompileContext.BodyRefVocabulary}, then the index of a declared screen)",
+                        refusal: WorldRuleRefusal.EngagedMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(
+                    channel: name,
+                    ruleName: ruleName,
+                    start: 0,
+                    tokens: tokens
+                );
+                var operand = new EngagedOperand(
+                    body: body,
+                    screen: screen
+                );
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: -1,
+                    valueKind: CellKind.Int,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.BodyStatePrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
@@ -1179,6 +1238,15 @@ public static partial class WorldFactsVocabulary {
             }
 
             return (fact is not null);
+        }
+        private static bool DeclaresScreen(WorldDefinition definition, int index) {
+            foreach (var screen in definition.Screens) {
+                if (screen.Index == index) {
+                    return true;
+                }
+            }
+
+            return false;
         }
         private static BoardSeatFacet? BoardSeatFacetOf(string name) {
             if (name.StartsWith(

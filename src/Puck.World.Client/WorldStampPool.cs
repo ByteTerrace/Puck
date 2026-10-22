@@ -1046,7 +1046,9 @@ public sealed partial class WorldStampPool {
     /// remote projection) — a registration's text runs are then omitted, exactly as the static stamper omits
     /// them.</param>
     /// <param name="picks">The presentation identity table populated alongside live emission, or null.</param>
-    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null) {
+    /// <param name="screens">The world's screen rows, whose carried screens a body's look shows on its box
+    /// (<see cref="TryCarriedScreen"/>), or <see langword="null"/> for none.</param>
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
         for (var index = 0; (index < m_pool.Length); index++) {
@@ -1075,6 +1077,7 @@ public sealed partial class WorldStampPool {
                 picks: picks,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
+                screenMaterials: ((live is null) ? null : CarriedScreenMaterials(live: live, screens: screens)),
                 textCatalog: textCatalog
             );
             if (live is not null) {

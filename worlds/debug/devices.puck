@@ -106,6 +106,20 @@ let brickBoard = 8
 let brickChip = 9
 let brickPart = 10
 let brickCell = 11
+let brickPalette = [
+  { color: "#FF4F10", roughness: 0.06, glass { depth: 0.009, ior: 1.49 } }
+  { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
+  { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
+  { color: "#2A2624", roughness: 0.4, specular: 0.04 }
+  { color: "#5E5E64", roughness: 0.75 }
+  { color: "#BFC2C7", metal: 1, roughness: 0.28, specular: 0.5 }
+  { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
+  { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
+  { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
+  { color: "#151617", roughness: 0.6, specular: 0.04 }
+  { color: "#D8C49A", roughness: 0.5, specular: 0.04 }
+  { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
+]
 
 let advancedPalette = [
   { color: "#454A7A", metal: 0.9, roughness: 0.34, specular: 0.5, sheen: 0.3 }
@@ -203,20 +217,7 @@ prototypes {
     document {
       name: "HUMBLE GAMING BRICK"
       schema: "puck.creation.v1"
-      palette [
-        { color: "#FF4F10", roughness: 0.06, glass { depth: 0.009, ior: 1.49 } }
-        { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
-        { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
-        { color: "#2A2624", roughness: 0.4, specular: 0.04 }
-        { color: "#5E5E64", roughness: 0.75 }
-        { color: "#BFC2C7", metal: 1, roughness: 0.28, specular: 0.5 }
-        { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
-        { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
-        { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
-        { color: "#151617", roughness: 0.6, specular: 0.04 }
-        { color: "#D8C49A", roughness: 0.5, specular: 0.04 }
-        { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
-      ]
+      palette: brickPalette
       shape Prism "shell" {
         material: brickShell
         position [0, 0.071422, -0.015938]
@@ -429,6 +430,24 @@ prototypes {
         rotation [-0.173648, 0, 0, 0.984808]
         scale [0.007, 0.0012, 0.0032]
       }
+    }
+  }
+
+  // The brick in the Moth's hands: its placement shows this while she holds it, so its rest stands empty.
+  prototype "device-humble-gaming-brick-held" {
+    document {
+      name: "HUMBLE GAMING BRICK"
+      schema: "puck.creation.v1"
+      palette: brickPalette
+    }
+  }
+
+  // The brick's machined rest, in the brick's frame: a base plate, a lip at its front and a wedge it leans back on.
+  prototype "device-humble-gaming-brick-stand" {
+    document {
+      name: "HUMBLE GAMING BRICK STAND"
+      schema: "puck.creation.v1"
+      palette: brickPalette
       shape Box "stand-base" {
         material: brickStand
         position [0, 0.0025, -0.009051]
@@ -1067,11 +1086,24 @@ prototypes {
 
 placements {
   // The Humble Brick stands on its own machined stand on the floor, with no plinth, so at a quarter her size the Moth
-  // walks right up to its leaning face.
+  // walks right up to its leaning face. While she holds it (`brick-pick-up`) its placement shows nothing and its rest
+  // stands empty.
+  placement "device-humble-gaming-brick-stand" {
+    prototype: "device-humble-gaming-brick-stand"
+    position: brickAt
+    yawDegrees: deviceYaw
+  }
+
   placement "device-humble-gaming-brick" {
     prototype: "device-humble-gaming-brick"
     position: brickAt
     yawDegrees: deviceYaw
+    respond [
+      {
+        "when": state(state: pilotHold, key: `0`, comparison: Equal, value: 1)
+        prototypeId: "device-humble-gaming-brick-held"
+      }
+    ]
   }
 
   placement "device-advanced-gaming-brick-plinth" {
@@ -1240,6 +1272,13 @@ screens [
     source: machine(instance: `humble-gaming-brick`, output: "video")
     luminance: 70nit
     route: deviceRoute
+    // While she holds the brick (`brick-pick-up`), the picture rides the brick in her hands: her look's hold pose
+    // seats the brick there, and its picture box shows this screen's game.
+    carry {
+      look: "moth-pilot"
+      pose: "hold"
+      shape: "brickPicture"
+    }
   }
   {
     index: 1
@@ -1276,3 +1315,21 @@ screens [
     }
   }
 ]
+
+// Out of her suit and at her full size, the Moth picks the Humble Gaming Brick up to play it: while her seat is engaged
+// on it (screen 0), her pilotHold cell holds 1, so her look raises its hold pose (avatars/moth-pilot.puck), the brick
+// leaves its rest (its placement's `respond`) and its screen rides her hands (its row's `carry`). Leaving it puts it
+// back. In the suit, or at a quarter her size, where the brick is a third her height, she plays it on its rest.
+rule "brick-pick-up" {
+  when engaged(each, 0) == 1 and bodyState(each, suit) == 0 and bodyState(each, size) == 1
+  mode: Edge
+  forEach: pilotHold
+  pilotHold[$each] = 1
+}
+
+rule "brick-put-down" {
+  when engaged(each, 0) == 0 or bodyState(each, suit) == 1 or bodyState(each, size) < 1
+  mode: Edge
+  forEach: pilotHold
+  pilotHold[$each] = 0
+}
