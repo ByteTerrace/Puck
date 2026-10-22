@@ -14,7 +14,7 @@ Advanced Brick's plinth stands twice your height.
 |---|---|
 | (10.3, 0.05, 30.5) | `wonderland-door`, the big painting on the lobby west wall's face, its canvas 2.25 by 2.875 m from just below the floor, facing +X into the lobby, its plaque on the wall to its right |
 | (9.4, 0.05, 30.5) | `wonderland-mouse-hole`, the mouse hole on the room east wall's face, its canvas 0.5625 by 0.71875 m, facing -X into the room |
-| x 0.7 .. 9.7, z 23.7 .. 34.3 | `wonderland-room`: walls 4.5 m tall, open to the sky, a doorway in the south wall at x 3.5 .. 5.5, a 12 cm skirting inside |
+| x 0.7 .. 9.7, z 23.7 .. 34.3 | `wonderland-room`: walls 4.5 m tall under a roof, a doorway in the south wall at x 3.5 .. 5.5, a 12 cm skirting inside, and one dim 2,700 K lamp (`wonderland-lamp`, hall.puck) so the device screens glow |
 | x 1.15 .. 1.65, z 28.6 .. 29.9 | `wonderland-stairs`: ten game cases climbing to the deck cabinet's top, 6.5 cm a step |
 | From the cabinet to (4.8, 31) | `wonderland-cable`: the pad's extension cable across the floor, not solid |
 

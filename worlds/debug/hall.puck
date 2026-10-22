@@ -554,7 +554,7 @@ placements {
 
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
-// car's body under its ceiling and a wash over the painting wing. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
+// car's body under its ceiling, a wash over the painting wing and Wonderland's lamp next door. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
 // A point or spot light reaches only as far as its light still shows at the darkest exposure the world takes, and each
 // view shades only the fixtures that reach what it sees. A fixture that stands still is traced into the irradiance
 // volume, which bounces its light and occludes it where the probes about a surface cannot see it; the lift car's lamp
@@ -568,6 +568,8 @@ render {
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
         point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], temperature: 3500K, power: 400lm)
         point(name: "hall-wing", position: [60.4, 3.4, 26], color: "#FFE9CC", power: 2000lm)
+        // Wonderland's one lamp (wonderland.puck), dim enough that its device screens glow under the roof.
+        point(name: "wonderland-lamp", position: [5.2, 4.3, 29], temperature: 2700K, power: 300lm)
       ],
       map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}"))
     )
