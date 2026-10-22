@@ -1974,7 +1974,7 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
-`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
+`interact` channel, E or a pad's RB; [`devices.md`](../../worlds/debug/devices.md)).
 While a seat is captured on a screen, its own camera eases in on the screen's
 picture, square-on, derived from the row's own frame, with nothing between the
 camera and the glass drawn, until each source row is a whole number of window
