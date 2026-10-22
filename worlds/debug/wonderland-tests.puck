@@ -1,7 +1,7 @@
 // Wonderland's portal pair of two sizes (wonderland.puck), each scenario booted in the whole debug world:
-// `puck test worlds/debug/wonderland-tests.puck`, and `--reproduce` to show two runs agree. `bodyScale` holds each
-// body's size. A headless seat's camera faces -Z, so a strafe walks along X: -1 toward the lobby's west wall and the big
-// painting on the wall at x = 10.3, +1 toward the room's east wall and the mouse hole on it at x = 9.4. At full size
+// `puck test worlds/debug/wonderland-tests.puck`, and `--reproduce` to show two runs agree. The `size` register
+// (size.puck) holds each body's size. A headless seat's camera faces -Z, so a strafe walks along X: -1 toward the lobby's west
+// wall and the big painting on the wall at x = 10.3, +1 toward the room's east wall and the mouse hole on it at x = 9.4. At full size
 // the wall round the mouse hole stops her before her feet reach its glass.
 
 schema: "puck.world.definition.v1"
@@ -18,7 +18,7 @@ test "the big painting sets her down a quarter her size" {
     ticks 60
   }
   expect {
-    bodyScale[0] == 0.25
+    bodyState(body, 0, size) == 0.25
   }
 }
 
@@ -34,7 +34,7 @@ test "the mouse hole sets her down at full size again" {
     ticks 60
   }
   expect {
-    bodyScale[0] == 1
+    bodyState(body, 0, size) == 1
   }
 }
 
@@ -46,6 +46,24 @@ test "at full size she cannot fit the mouse hole" {
     ticks 60
   }
   expect {
-    bodyScale[0] == 1
+    bodyState(body, 0, size) == 1
+  }
+}
+
+// The register's envelope is a quarter to one: a body already a quarter her size walking into the big painting again
+// would come out a sixteenth, which the pair refuses by name (bodies.scale 'size' 0.25..1), so she stays as she was.
+test "a quarter her size she cannot shrink further" {
+  when {
+    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    ticks 15
+    seat1: body.fly 0 -1 0 0 0 0 1.5 0
+    ticks 60
+    seat1: body.pose 11.5 0.05 30.5 90 0 0 0
+    ticks 15
+    seat1: body.fly 0 -1 0 0 0 0 1.5 0
+    ticks 60
+  }
+  expect {
+    bodyState(body, 0, size) == 0.25
   }
 }

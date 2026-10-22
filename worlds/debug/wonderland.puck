@@ -15,8 +15,9 @@
 //   (9.4, 0.05, 30.5)    the mouse hole, on the room east wall's inner face, facing -X into the room
 //   (4.5, 0.05, 23.7)    the room's own doorway, in its south wall: walked through at full size, she looms in it
 //
-// A body's size is its cell of `bodyScale` (bodies.scaleRow, debug.puck): a crossing multiplies it by the pair's scale
-// and refuses one that would leave the row's 0.25 .. 1. Every value in this file is a world coordinate, except inside
+// A body's size is its `size` register (bodies.scale, size.puck): a crossing multiplies it by the pair's scale and
+// refuses one that would leave the register's 0.25 .. 1. The register crosses with her to the garden and the night
+// field, which declare it too. Every value in this file is a world coordinate, except inside
 // the two paintings, which are authored in their own frame (x across the canvas, y up, z out of the wall).
 
 let wonderWall = "#6FA6A8"

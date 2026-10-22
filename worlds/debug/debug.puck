@@ -29,6 +29,7 @@ import "paintings"
 import "wonderland"
 import "places"
 import "suit"
+import "size"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA
@@ -118,10 +119,9 @@ commands: galleryCommands
 
 // The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck), the chess
 // board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
-// settles it. Each body's size is its cell of `bodyScale` (the state below).
+// settles it. Each body's size is its `size` register (size.puck).
 bodies {
   capacity: 42
-  scaleRow: bodyScale
 }
 
 placements {
@@ -190,17 +190,6 @@ placements {
 state {
   world {
     galleryState()
-    // Each body's size, the multiplier bodies.scaleRow names: one for the local seats at boot, written by a crossing of
-    // a pair of two sizes (wonderland.puck), within the envelope a quarter to one. A body with no cell is its authored
-    // size.
-    row {
-      name: "bodyScale"
-      kind: "Fixed"
-      capacity: 8
-      min: "0.25"
-      max: "1"
-      cells: map(range(0, 3), i => { key: $"{i}", value: "1" })
-    }
   }
 }
 
