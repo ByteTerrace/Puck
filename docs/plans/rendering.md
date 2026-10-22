@@ -7412,7 +7412,7 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    doors that close. Worlds are already the area granularity across portals: a
    routed residency stays live while its window shows. Which may pop (a
    distant group reloading from the store) is the owner's call, below.
-5. **Lights per view, landed.** A point or spot light now ends at a range
+5. **Lights per view, landed.** A point or spot light ends at a range
    derived from its intensity and the world's darkest exposure, under a
    windowed inverse square that is exactly zero there, and each view shades only
    the lights whose sphere of range its frustum may see (`SdfLightSelection`,
