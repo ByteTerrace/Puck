@@ -2741,7 +2741,9 @@ authored commands) with their bindability and audience to
 document's [authored commands](commands.md#document-authored-commands) are
 checked against it where no World runs (`puck compile --validate`, the silo's
 admission), and a live registry reads it so a line naming a verb only a
-rendered World registers passes a headless boot. Regenerate after adding,
+rendered World registers passes a headless boot. Each verb carries its value kind and
+whether it takes arguments, so a binding row's or sector's command is checked against
+it too (named, bindable, `text` accepted, value kind). Regenerate after adding,
 renaming or changing the bindability or audience of a console verb.
 `--headless-only` boots headless alone, for a host without a free GPU, and
 keeps every catalogued verb the headless World does not register; only a full

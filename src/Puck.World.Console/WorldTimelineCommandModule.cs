@@ -113,8 +113,8 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
         yield return CommandDefinition.WithWireArgs(
             name: "world.timeline",
             routing: CommandRouting.Immediate,
-            bindability: CommandBindability.Unbindable,
-            description: "world.timeline [hold|run <clock> | at <clock> <engine-tick> | rate <clock> <rate>] — reports authored clocks and their presentation readings. Hold and at freeze only the named presentation clock; run continues from it; rate is finite and nonnegative. Previews never change simulation state or save to source.",
+            bindability: CommandBindability.Bindable,
+            description: "world.timeline [hold|run <clock> | at <clock> <engine-tick> | rate <clock> <rate>] — reports authored clocks and their presentation readings. Hold and at freeze only the named presentation clock; run continues from it; rate is finite and nonnegative. Previews never change simulation state or save to source, which is why a binding may name it.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.timeline")) { return error; }
                 var mirror = presentation?.Invoke(server);

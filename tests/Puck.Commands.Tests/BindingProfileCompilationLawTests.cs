@@ -199,6 +199,74 @@ public sealed class BindingProfileCompilationLawTests {
         );
     }
     [Fact]
+    public void AViewFlagsDeclaredModifiersAndNamesThePagesAHeldControlOpens() {
+        var profile = Compile(
+            modifiers: [
+                new BindingModifierDefinition(
+                    Id: "lt",
+                    Sources: ["pad.lt", "key.z"]
+                ),
+                new BindingModifierDefinition(
+                    Id: "rt",
+                    Sources: ["pad.rt"]
+                ),
+            ],
+            rows: [
+                Resting(),
+                new BindingChordDefinition(
+                    Group: "g",
+                    Chord: ["lt"],
+                    Page: new BindingPageDefinition(
+                        Id: "view",
+                        Label: "View",
+                        Entries: []
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "g",
+                    Chord: ["lt", "rt"],
+                    Page: new BindingPageDefinition(
+                        Id: "go",
+                        Label: "Go",
+                        Entries: []
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "g",
+                    Chord: ["pad.lb"],
+                    Page: new BindingPageDefinition(
+                        Icon: "wheel",
+                        Id: "wheel",
+                        Label: "Wheel",
+                        Entries: []
+                    )
+                ),
+            ]
+        );
+
+        Assert.True(condition: profile.TryGetPageView(pageId: "base", view: out var resting));
+        Assert.Equal(
+            expected: [true, true, false],
+            actual: resting.Modifiers.Select(selector: static modifier => modifier.Declared)
+        );
+        Assert.Equal(
+            expected: ("view", "View"),
+            actual: (resting.Openers!["pad.lt"].PageId, resting.Openers["key.z"].Label)
+        );
+        Assert.Equal(
+            expected: ("wheel", "Wheel", "wheel"),
+            actual: (resting.Openers["pad.lb"].PageId, resting.Openers["pad.lb"].Label, resting.Openers["pad.lb"].Icon)
+        );
+        Assert.False(condition: resting.Openers.ContainsKey(key: "pad.rt"));
+
+        Assert.True(condition: profile.TryGetPageView(pageId: "view", view: out var view));
+        Assert.Equal(
+            expected: "go",
+            actual: view.Openers!["pad.rt"].PageId
+        );
+        Assert.False(condition: view.Openers.ContainsKey(key: "pad.lb"));
+    }
+    [Fact]
     public void AHeldPageMarksItsHeldMembersRequiredInTheView() {
         // A page selected by an UNORDERED hold rendered no held-modifier chip: the view's required set was built
         // from the chord alone, so the bar showed a page nobody could see the way into.

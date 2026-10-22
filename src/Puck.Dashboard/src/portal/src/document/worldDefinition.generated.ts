@@ -3460,6 +3460,10 @@ export type WorldBindingBarAuthoring = {
    */
   modifiers?: boolean;
   /**
+   * Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section — the page-holding triggers an author named — and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.
+   */
+  declaredModifiersOnly?: boolean;
+  /**
    * Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page's name.
    */
   pageLabel?: boolean;

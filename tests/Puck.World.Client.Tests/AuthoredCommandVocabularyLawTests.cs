@@ -67,6 +67,40 @@ public sealed class AuthoredCommandVocabularyLawTests {
         Assert.Contains(collection: errors, filter: error => error.Contains(value: "answers the operator alone", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
+    public void ABindingToAVerbOnlyAnotherShapeRegistersValidatesInAShapeThatLacksItAndATypoIsRefusedOffline() {
+        List<string> Check(string command, string text, CommandRegistry? registry) {
+            var errors = new List<string>();
+            var document = Binding(command: command);
+            var entry = document.Chords[0].Page!.Entries[0] with { Text = text };
+
+            WorldAffordances.ValidateAgainst(
+                channels: WorldChannelTable.Compile(channels: []),
+                commands: null,
+                document: document with {
+                    Chords = [document.Chords[0] with { Page = document.Chords[0].Page! with { Entries = [entry] } }],
+                },
+                errors: errors,
+                registry: registry,
+                seatModes: []
+            );
+
+            return errors;
+        }
+
+        var lacking = new CommandRegistry(modules: [new Probe()]);
+
+        lacking.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
+
+        // world.debug-view is registered by a rendered World alone: the registry here lacks it, the catalog holds it.
+        Assert.False(condition: lacking.TryGetMetadata(name: "world.debug-view", metadata: out _));
+        Assert.Empty(collection: Check(command: "world.debug-view", text: "next", registry: lacking));
+        Assert.Empty(collection: Check(command: "world.debug-view", text: "next", registry: null));
+        Assert.Contains(collection: Check(command: "world.debug-viw", text: "next", registry: lacking), filter: static error => error.Contains(value: "names no registered command", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: Check(command: "world.debug-viw", text: "next", registry: null), filter: static error => error.Contains(value: "names no registered command", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: Check(command: "quit", text: "now", registry: null), filter: static error => error.Contains(value: "is not bindable", comparisonType: StringComparison.Ordinal));
+        Assert.Equal(actual: WorldConsoleVerbCatalog.Lookup(name: "world.screenshot")?.Bindability, expected: CommandBindability.Bindable);
+    }
+    [Fact]
     public void TheCatalogRefusesOfflineAClashAReachAndAVerbNoShapeRegisters() {
         var errors = new List<string>();
 

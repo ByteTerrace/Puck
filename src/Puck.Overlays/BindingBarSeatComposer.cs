@@ -96,9 +96,21 @@ public static class BindingBarSeatComposer {
             var livePress = ((isPressed is not null) && isPressed(source));
             var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
             var pressed = (livePress || latched);
-            var icon = ((binding is null)
-                ? OverlayResolvedGlyph.None
-                : resolveIcon(binding.Key)
+            // A control the page leaves unbound but whose hold opens a deeper page (a shoulder that opens the play wheel)
+            // reads as that page's opener: bright, and wearing the icon the bar's icon row names for the page's id.
+            var opener = ((binding is null) && (view.Openers is { } openers) && openers.TryGetValue(
+                key: source,
+                value: out var opens
+            )
+                ? opens
+                : null
+            );
+            var icon = ((binding is not null)
+                ? resolveIcon(binding.Key)
+                : ((opener is not null)
+                    ? resolveIcon(opener.PageId)
+                    : OverlayResolvedGlyph.None
+                )
             );
 
             destination[index] = new OverlayBindingSlot(
@@ -106,7 +118,7 @@ public static class BindingBarSeatComposer {
                 BadgeGlyph0: glyph.Glyph0,
                 BadgeGlyph1: glyph.Glyph1,
                 BankOrder: bankOrder,
-                Bound: (binding is not null),
+                Bound: ((binding is not null) || (opener is not null)),
                 Latched: (latched && (isPressed is null)),
                 Toggled: latched,
                 IconGlyph0: icon.Glyph0,
@@ -114,7 +126,7 @@ public static class BindingBarSeatComposer {
                 PitchX: plate.Position.X,
                 PitchY: plate.Position.Y,
                 Pressed: pressed,
-                Visible: ((binding is not null) || !hideUnbound),
+                Visible: ((binding is not null) || (opener is not null) || !hideUnbound),
                 Frame: frame,
                 BadgeX: plate.Badge.X,
                 BadgeY: plate.Badge.Y
@@ -131,28 +143,34 @@ public static class BindingBarSeatComposer {
     /// <param name="resolveBadge">Resolves a modifier's input source id to its badge content — the caller's own icon
     /// table, the SAME door a slot's badge resolves through.</param>
     /// <param name="destination">The destination modifiers; at least <c>view.Modifiers.Count</c> entries.</param>
+    /// <param name="declaredOnly">Whether to keep to the modifiers the profile declares
+    /// (<see cref="BindingModifierView.Declared"/>), leaving out the ones the compiler minted for a raw source a row
+    /// names.</param>
     /// <returns>The number of modifiers written.</returns>
-    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination) {
+    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination, bool declaredOnly = false) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: resolveBadge);
 
-        var count = Math.Min(
-            val1: view.Modifiers.Count,
-            val2: destination.Length
-        );
+        var count = 0;
 
-        for (var index = 0; (index < count); index++) {
+        for (var index = 0; ((index < view.Modifiers.Count) && (count < destination.Length)); index++) {
             var modifier = view.Modifiers[index];
+
+            if (declaredOnly && !modifier.Declared) {
+                continue;
+            }
+
             var badge = Badge(
                 glyph: resolveBadge(modifier.Sources[0]),
                 text: text
             );
 
-            destination[index] = new OverlayBindingModifier(
+            destination[count] = new OverlayBindingModifier(
                 BadgeGlyph0: badge.Glyph0,
                 BadgeGlyph1: badge.Glyph1,
                 Held: modifier.Required
             );
+            count++;
         }
 
         return count;
@@ -173,10 +191,13 @@ public static class BindingBarSeatComposer {
     /// <param name="destination">The destination hints; rows past its length stay off the bar.</param>
     /// <param name="members">The backing the hints' member badges are written into,
     /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</param>
+    /// <param name="declaredOnly">Whether the modifier row places only the modifiers the profile declares
+    /// (<see cref="BindingModifierView.Declared"/>), so a chord whose member is a minted modifier needs that member in
+    /// <paramref name="slotSet"/> instead.</param>
     /// <returns>The number of hints written.</returns>
     /// <exception cref="ArgumentException"><paramref name="members"/> is shorter than
     /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</exception>
-    public static int ComposeHints(BindingPageView view, IReadOnlyList<string> slotSet, bool modifiers, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Func<BindingChordCommandView, OverlayResolvedGlyph> resolveAction, Span<OverlayBindingHint> destination, Memory<OverlayResolvedGlyph> members) {
+    public static int ComposeHints(BindingPageView view, IReadOnlyList<string> slotSet, bool modifiers, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Func<BindingChordCommandView, OverlayResolvedGlyph> resolveAction, Span<OverlayBindingHint> destination, Memory<OverlayResolvedGlyph> members, bool declaredOnly = false) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: slotSet);
         ArgumentNullException.ThrowIfNull(argument: resolveBadge);
@@ -218,7 +239,10 @@ public static class BindingBarSeatComposer {
                 badges.Span[index] = badge;
                 placed = (
                     (badge != OverlayResolvedGlyph.None) &&
-                    (modifiers || Places(
+                    ((modifiers && (!declaredOnly || IsDeclaredModifier(
+                        source: sources[index],
+                        view: view
+                    ))) || Places(
                         slotSet: slotSet,
                         source: sources[index]
                     ))
@@ -250,6 +274,21 @@ public static class BindingBarSeatComposer {
         }
 
         return count;
+    }
+    private static bool IsDeclaredModifier(BindingPageView view, string source) {
+        for (var index = 0; (index < view.Modifiers.Count); index++) {
+            var modifier = view.Modifiers[index];
+
+            if (modifier.Declared && (modifier.Sources.Count > 0) && string.Equals(
+                a: modifier.Sources[0],
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
     private static bool Places(IReadOnlyList<string> slotSet, string source) {
         for (var index = 0; (index < slotSet.Count); index++) {

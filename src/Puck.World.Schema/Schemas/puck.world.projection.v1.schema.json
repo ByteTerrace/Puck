@@ -22623,6 +22623,11 @@
                 "type": "boolean",
                 "default": true
               },
+              "declaredModifiersOnly": {
+                "description": "Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section \u2014 the page-holding triggers an author named \u2014 and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.",
+                "type": "boolean",
+                "default": false
+              },
               "pageLabel": {
                 "description": "Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page\u0027s name.",
                 "type": "boolean",

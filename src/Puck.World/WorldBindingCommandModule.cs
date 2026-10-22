@@ -490,6 +490,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
                 .Append(value: "\",\"bindable\":").Append(value: ((definition.Bindability == CommandBindability.Bindable)
                 ? "true"
                 : "false"))
+                .Append(value: ",\"wireArgs\":").Append(value: (definition.AcceptsWireArgs ? "true" : "false"))
                 .Append(value: ",\"audience\":\"").Append(value: definition.Audience.ToString().ToLowerInvariant())
                 .Append(value: (m_registry().NamesAuthoredCommand(name: definition.Name)
                     ? "\",\"authored\":true}"
