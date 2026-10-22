@@ -107,10 +107,12 @@ public interface IGpuRecorder {
     /// <param name="argumentBufferHandle">The argument buffer, created with <see cref="GpuBufferUsage.Indirect"/>.</param>
     /// <param name="argumentBufferOffset">The byte offset of the three group counts.</param>
     void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset);
+
     /// <summary>Gets whether the device records <see cref="DrawIndirectCount"/>: always on Direct3D 12, and on Vulkan
     /// when the device enables <c>multiDrawIndirect</c>, <c>drawIndirectFirstInstance</c> and
     /// <c>VK_KHR_draw_indirect_count</c>. A caller that finds it <see langword="false"/> draws from the host.</summary>
-    bool CanDrawIndirectCount => false;
+    bool CanDrawIndirectCount { get; }
+
     /// <summary>Records a counted indirect draw: up to <paramref name="maxDrawCount"/> non-indexed draws whose arguments
     /// the GPU reads from consecutive <see cref="GpuDrawIndirectCommand"/> records of an argument buffer, as many as the
     /// <see langword="uint"/> at <paramref name="countBufferOffset"/> of a count buffer holds. Each record's identity
@@ -128,8 +130,7 @@ public interface IGpuRecorder {
     /// <param name="countBufferOffset">The byte offset of the count, a multiple of four.</param>
     /// <param name="maxDrawCount">The most records drawn, whatever the count holds.</param>
     /// <exception cref="NotSupportedException">The device does not record it (<see cref="CanDrawIndirectCount"/>).</exception>
-    void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
-        throw new NotSupportedException(message: "This recorder records no counted indirect draw.");
+    void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount);
     /// <summary>Records a zero clear of a color image in <see cref="GpuImageLayout.General"/>.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="imageHandle">The image, created with <see cref="GpuImageUsage.Storage"/>.</param>

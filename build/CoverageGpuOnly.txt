@@ -20,3 +20,10 @@ src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.
 # A removed Direct3D 12 device's DRED record, read only from a device that was removed; DirectXRemovalReportLawTests
 # covers its formatting.
 src/Puck.DirectX/DirectXRemovalReport.Device.
+# Direct3D 12's counted indirect draw: the recorder's ExecuteIndirect on a live command list and the pipeline layout's
+# command signature, created on a live device. VulkanIndirectCountLawTests holds the same call's recording on Vulkan.
+src/Puck.DirectX/DirectXGpuRecorder.Device.
+src/Puck.DirectX/DirectXPipelineLayout.Device.
+# The Vulkan logical device's native creation: vkCreateDevice with the chosen queues, extensions and feature chain, and the
+# command table resolved on the device it returns. VulkanDeviceChainCleanupLawTests drives the chain over a recording driver.
+src/Puck.Vulkan/Apis/VulkanNativeLogicalDeviceApi.cs

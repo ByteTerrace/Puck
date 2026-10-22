@@ -329,6 +329,246 @@ public sealed class WorldCountersCommandModuleLawTests {
             );
         }
     }
+
+    // One completed submission under three passes: mesh drew twice (30 and 12 vertices), views dispatched twice, sky
+    // skipped.
+    private static GpuWorkLedger MeshLedger() {
+        var device = new Puck.Testing.FakeGpuDevice(holdFences: true);
+        var ledger = new GpuWorkLedger(
+            framesInFlight: 1,
+            name: "gpu.test"
+        );
+        var services = GpuWorkCounting.Wrap(
+            ledger: ledger,
+            services: device.Services
+        );
+
+        ledger.Configure(
+            passClasses: [WorkClass.Deterministic, WorkClass.Deterministic, WorkClass.Deterministic],
+            passLabels: ["sdf.world$mesh", "sdf.world$views", "sdf.world$sky"],
+            revision: 1L
+        );
+        ledger.EnterPass(pass: 0);
+        services.Recorder.DrawIndexed(commandBufferHandle: 2, indexCount: 30U);
+        services.Recorder.DrawIndexed(commandBufferHandle: 2, indexCount: 12U);
+        ledger.LeavePass();
+        ledger.EnterPass(pass: 1);
+        services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1U, groupCountY: 1U, groupCountZ: 1U);
+        services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1U, groupCountY: 1U, groupCountZ: 1U);
+        ledger.LeavePass();
+        ledger.SkipPass(pass: 2);
+        services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
+
+        return ledger;
+    }
+    private static FakeRegistry MeshRegistry(int sessions = 2) {
+        var ledger = MeshLedger();
+        var nodes = new List<GpuWorkNode> { new(Lifetime: ledger, Name: "sdf:world", Work: ledger) };
+
+        for (var index = 0; (index < sessions); index++) {
+            nodes.Add(item: new GpuWorkNode(Lifetime: null, Name: $"session${index}", Work: ledger));
+        }
+
+        nodes.Add(item: new GpuWorkNode(Lifetime: null, Name: "session$0$24", Work: ledger));
+
+        return new FakeRegistry(null, [.. nodes]);
+    }
+
+    [Fact]
+    public void ASummaryIsOneLinePerNode() {
+        var output = Run(
+            gpu: MeshRegistry(sessions: 1),
+            line: "world.counters gpu summary"
+        );
+
+        Assert.False(condition: output.IsError);
+        Assert.Equal(
+            expected: "[world.counters: gpu device unavailable\nnode sdf:world draws=2 vertices=42 texels=0 dispatches=2\nnode session$0 draws=2 vertices=42 texels=0 dispatches=2\nnode session$0$24 draws=2 vertices=42 texels=0 dispatches=2\n]",
+            actual: output.Output
+        );
+        Assert.Equal(
+            expected: "[world.counters: gpu device unavailable\nnode sdf:world draws=2 vertices=42 texels=0 dispatches=0\n]",
+            actual: Run(
+                gpu: MeshRegistry(sessions: 1),
+                line: "world.counters node sdf:world pass sdf.world$mesh summary"
+            ).Output
+        );
+        Assert.Contains(
+            expectedSubstring: "{\"name\":\"sdf:world\",\"summary\":{\"draws\":2,\"vertices\":42,\"texels\":0,\"dispatches\":2}}",
+            actualString: Run(
+                gpu: MeshRegistry(sessions: 1),
+                line: "world.counters summary --json"
+            ).Output
+        );
+    }
+    [Fact]
+    public void ANodeFilterKeepsTheNodeAndTheNodesUnderIt() {
+        var registry = MeshRegistry(sessions: 2);
+
+        Assert.Equal(
+            expected: "[world.counters: gpu device unavailable\nnode session$0 draws=2 vertices=42 texels=0 dispatches=2\nnode session$0$24 draws=2 vertices=42 texels=0 dispatches=2\n]",
+            actual: Run(
+                gpu: registry,
+                line: "world.counters node session$0 summary"
+            ).Output
+        );
+
+        var exact = Run(
+            gpu: registry,
+            line: "world.counters gpu node sdf:world"
+        ).Output;
+
+        Assert.Contains(actualString: exact, expectedSubstring: "node sdf:world work submission=1");
+        Assert.DoesNotContain(actualString: exact, expectedSubstring: "node session");
+
+        var missing = Run(
+            gpu: registry,
+            line: "world.counters gpu node sdf.world$mesh"
+        );
+
+        Assert.True(condition: missing.IsError);
+        Assert.Contains(expectedSubstring: "'sdf.world$mesh' names a pass; use: world.counters gpu pass sdf.world$mesh", actualString: missing.Output);
+    }
+    [Fact]
+    public void APassFilterKeepsThePassWhereverItIsAndDropsTheRest() {
+        var output = Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu pass sdf.world$views"
+        ).Output;
+
+        Assert.StartsWith(
+            actualString: output,
+            expectedStartString: "[world.counters: gpu device unavailable\nnode sdf:world work submission=1 revision=1\nwork sdf.world$views executed: dispatches=2 "
+        );
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "sdf.world$mesh");
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "work outside");
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "work lifetime");
+        // The registry holds two nodes, and the pass appears once in each.
+        Assert.Equal(
+            expected: 3,
+            actual: output.Split(separator: "work sdf.world$views").Length
+        );
+        // A prefix of whole segments reaches every pass under it.
+        Assert.Contains(
+            expectedSubstring: "work sdf.world$sky skipped",
+            actualString: Run(
+                gpu: MeshRegistry(sessions: 0),
+                line: "world.counters gpu pass sdf.world"
+            ).Output
+        );
+
+        var refused = Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu pass shadow"
+        );
+
+        Assert.True(condition: refused.IsError);
+        Assert.Equal(
+            expected: "[world.counters: no gpu pass is named 'shadow' or sits under it in any node]",
+            actual: refused.Output
+        );
+    }
+    [Fact]
+    public void ACounterFilterKeepsTheCountsUnderThePrefix() {
+        var output = Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu node sdf:world counter vertices"
+        ).Output;
+
+        Assert.Contains(actualString: output, expectedSubstring: "work sdf.world$mesh executed: vertices=42\n");
+        Assert.Contains(actualString: output, expectedSubstring: "work outside: vertices=0\n");
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "dispatches");
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "owned-bytes");
+        Assert.Contains(
+            expectedSubstring: "work sdf.world$mesh executed: draws=2 draws.indirect=0\n",
+            actualString: Run(
+                gpu: MeshRegistry(sessions: 0),
+                line: "world.counters gpu counter draws"
+            ).Output
+        );
+        Assert.Contains(
+            expectedSubstring: "work lifetime: created.pipelines=0 created.shader-modules=0 created.images=0 created.buffers=0 created.descriptor-pools=0 created.descriptor-sets=0 created.timestamp-pools=0\n",
+            actualString: Run(
+                gpu: MeshRegistry(sessions: 0),
+                line: "world.counters gpu counter created"
+            ).Output
+        );
+
+        var refused = Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu counter nonsense"
+        );
+
+        Assert.True(condition: refused.IsError);
+        Assert.StartsWith(expectedStartString: "[world.counters: no gpu count starts with 'nonsense' — counts are dispatches, ", actualString: refused.Output);
+        Assert.True(condition: Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu summary counter draws"
+        ).IsError);
+    }
+    [Fact]
+    public void JsonNarrowsToTheSelectedNodesPassesAndCounts() {
+        var output = Run(
+            gpu: MeshRegistry(sessions: 1),
+            line: "world.counters node sdf:world pass sdf.world$mesh counter vertices --json"
+        ).Output;
+
+        Assert.StartsWith(
+            actualString: output,
+            expectedStartString: """[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"sdf:world","sample":{"submission":1,"revision":1,"passes":[{"label":"sdf.world$mesh","class":"deterministic","state":"executed","details":[],"counts":{"gpu.vertices":42}}],"outside":{}},"lifetime":null,"owned-bytes":null}]},"kinds":{"gpu.vertices":{"unit":"count","class":"per-backend-deterministic"}}}]"""
+        );
+    }
+    [Fact]
+    public void ATextGpuSectionPastTheBudgetPrintsItsSummary() {
+        var full = Run(
+            gpu: MeshRegistry(sessions: 4),
+            line: "world.counters gpu"
+        ).Output;
+
+        Assert.DoesNotContain(actualString: full, expectedSubstring: "summary:");
+
+        var registry = MeshRegistry(sessions: 400);
+        var capped = Run(
+            gpu: registry,
+            line: "world.counters gpu"
+        ).Output;
+
+        Assert.Contains(actualString: capped, expectedSubstring: "summary: the lines for these nodes run ");
+        Assert.Contains(actualString: capped, expectedSubstring: "node session$399 draws=2 vertices=42 texels=0 dispatches=2\n");
+        Assert.DoesNotContain(actualString: capped, expectedSubstring: "work sdf.world$mesh");
+        Assert.True(condition: (capped.Length < WorldCountersCommandModule.GpuTextBudget));
+        // Narrowed under the budget, the lines come back.
+        Assert.Contains(
+            expectedSubstring: "work sdf.world$mesh executed:",
+            actualString: Run(
+                gpu: registry,
+                line: "world.counters gpu node session$399"
+            ).Output
+        );
+        // The JSON is never replaced.
+        Assert.Contains(
+            expectedSubstring: "\"label\":\"sdf.world$mesh\"",
+            actualString: Run(
+                gpu: registry,
+                line: "world.counters gpu --json"
+            ).Output
+        );
+    }
+    [Fact]
+    public void TheOptionsBelongToTheGpuSection() {
+        Assert.True(condition: Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters state summary"
+        ).IsError);
+        Assert.True(condition: Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu node"
+        ).IsError);
+        Assert.True(condition: Run(
+            gpu: MeshRegistry(sessions: 0),
+            line: "world.counters gpu node a node b"
+        ).IsError);
+    }
     [Fact]
     public void ASecondFilterIsRefused() =>
         Assert.True(condition: Run(line: "world.counters state world").IsError);

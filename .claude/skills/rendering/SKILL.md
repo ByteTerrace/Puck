@@ -292,6 +292,17 @@ world.counters gpu     # per-pass counted work: dispatches, shape evaluations, t
 world.budget           # program words, instances, scopes, segments
 ```
 
+`world.counters gpu` runs to hundreds of kilobytes in a world with many graph
+instances, past the 1 MiB an MCP result carries, so ask for what you need:
+`world.counters gpu summary` (one `draws vertices texels dispatches` line per
+node), `node sdf:world` (a node and the nodes under it), `pass sdf.world$mesh`
+(a pass label, or its prefix by whole segments, in every node that has it; it
+drops the lifetime, owned-bytes and outside lines) and `counter vertices` (a
+count-name prefix). They combine, and `--json` takes them too. A text reading
+past `WorldCountersCommandModule.GpuTextBudget` characters prints the summary
+under a note. A pass label is not a node name: `node sdf.world$mesh` is refused
+with a hint to use `pass`.
+
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.indirect`, `world.render-scale`) and isolate the raster with
 `world.debug-view depth`. Compare the whole frame, not one pass. `puck counters`

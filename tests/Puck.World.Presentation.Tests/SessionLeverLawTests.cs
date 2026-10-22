@@ -2,6 +2,7 @@ using Puck.Commands;
 using Xunit;
 
 using Puck.Launcher;
+using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -271,6 +272,29 @@ public sealed class SessionLeverLawTests {
         Assert.Equal(
             actual: decoded,
             expected: lever
+        );
+    }
+    [Fact]
+    public void TheCullLeverSelectsTheMeshCullLevelByItsNumber() {
+        var settings = new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render);
+        var sink = WorldSessionLevers.Compose(
+            audio: new RecordingAudioLever(),
+            bindingBar: new WorldBindingBarVisibility(),
+            pacing: new PresentPacingControl(initialTargetHertz: null),
+            settings: settings
+        );
+
+        Assert.Equal(
+            expected: SdfMeshCullLevel.Occlusion,
+            actual: settings.Cull
+        );
+        sink.Apply(lever: Lever(
+            a: ((double)SdfMeshCullLevel.Off),
+            name: WorldSessionLevers.Cull
+        ));
+        Assert.Equal(
+            expected: SdfMeshCullLevel.Off,
+            actual: settings.Cull
         );
     }
     [Fact]

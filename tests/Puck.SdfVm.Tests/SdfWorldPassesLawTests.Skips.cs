@@ -192,6 +192,64 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(actual: StagesOf(frame: (frame with { Lights = new SdfLights() })), expected: (true, false, false));
     }
 
+    // The counted indirect draws the mesh pass recorded over three frames of the given frame.
+    private static int IndirectDrawsOf(SdfFrame frame) {
+        var gpu = new FakeGpuDevice(countCalls: true);
+        var pipelines = SdfTestPipelines.Cache();
+        using var view = new SdfTestView(
+            device: gpu,
+            extent: Extent,
+            hostsOnDirectX: false,
+            pipelines: pipelines,
+            residency: new SdfWorldResidency(
+                brickPoolVoxelCapacity: 0,
+                frameSource: new FixedFrameSource(frame: frame),
+                height: Extent,
+                kernels: SdfTestPipelines.Kernels(),
+                name: SdfTestView.Instance,
+                pipelines: pipelines,
+                width: Extent
+            )
+        );
+        var context = new FrameContext(
+            AccumulatorTicks: 0UL,
+            DeltaTicks: 0UL,
+            ElapsedTicks: 0UL,
+            FrameDeltaTicks: 0UL,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> {
+                [typeof(IGpuDeviceContext)] = gpu,
+            }),
+            StepTicks: 0UL,
+            TargetHeight: Extent,
+            TargetWidth: Extent
+        );
+
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason,
+            wait: view.Residency.WaitPipelineBuilds
+        );
+
+        for (var frameIndex = 0; (frameIndex < 3); frameIndex++) {
+            _ = view.Produce(context: in context);
+        }
+
+        return gpu.Calls.GetValueOrDefault(key: "IGpuRecorder.DrawIndirectCount");
+    }
+
+    // The occlusion test draws what the box cull keeps in two phases; a draw wholly behind the camera leaves it nothing
+    // to test, so neither phase records a draw.
+    [Fact]
+    public void ADrawTheViewCannotSeeIsNoCandidateAndRecordsNoCountedDraw() {
+        var drawn = DrawnFrame();
+        var behind = drawn with {
+            MeshDraws = [drawn.MeshDraws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0f, z: -100f)) }],
+        };
+
+        Assert.True(condition: (IndirectDrawsOf(frame: drawn) > 0));
+        Assert.Equal(expected: 0, actual: IndirectDrawsOf(frame: behind));
+    }
+
     // The fixture's frame with one triangle drawn.
     private static SdfFrame DrawnFrame() => Frame() with {
         MeshDraws = [new SdfMeshDraw(Identity: "triangle", Material: 0, ObjectToWorld: System.Numerics.Matrix4x4.Identity,
