@@ -10,7 +10,9 @@
 // the View page, the right trigger (X) the Debug page, the left then the right trigger the Go page and the right then the
 // left trigger the Tour page, pressed in that order: the press order picks the page, so the two double squeezes are two
 // pages. Every page binds the bar's twelve controls; the Go and Tour pages bind the debug world's places and gallery
-// (pad.puck) and read empty elsewhere. The suit toggle sits on the Debug page (suit.puck).
+// (pad.puck) and read empty elsewhere. The suit toggle sits on the Debug page (suit.puck). The Debug page also holds the
+// capture to the state root's screenshots folder, the history switch and the inspector; the render levers (quality, update
+// rates) sit on the Tour page. LB and RB on Move open the play wheel and the gallery's wheel, and wear their icons.
 //
 // Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
 // under the pointer; releasing at the hub cancels. The wheel has three rings, Act, View and Places (Places in the debug
@@ -26,21 +28,6 @@ exports {
 }
 
 let mono = "jetbrains-mono-regular"
-
-// world.debug-view draws only where something presents, so a headless boot refuses a binding that names it; this command
-// carries its lines, and a headless boot refuses only the line when it runs.
-commands [
-  {
-    name: "pad.debug-view"
-    help: "Steps every camera to the next debug view (off, depth, normals, ... then off again), or selects one by name: the Debug page's Y."
-    parameters [
-      { name: "view", kind: Choice, values ["next", "off"], default: "next" }
-    ]
-    lines [
-      "world.debug-view {view}"
-    ]
-  }
-]
 
 let standardAnchor = { edge: "Bottom", inset: 3.6 }
 
@@ -137,8 +124,6 @@ icons {
     { name: "pad.rb", label: "RB" }
     { name: "pad.r1", label: "R1" }
     { name: "pad.r", label: "R" }
-    { name: "pad.ls", label: "LS" }
-    { name: "pad.rs", label: "RS" }
     { name: "pad.l3", label: "L3" }
     { name: "pad.r3", label: "R3" }
     { name: "pad.back", label: "BK" }
@@ -189,6 +174,8 @@ icons {
     { name: "act.flag", label: "!" }
     { name: "act.view", label: "DV" }
     { name: "act.slice", label: "SL" }
+    { name: "act.wheel", label: "WH" }
+    { name: "act.galleryWheel", label: "GW" }
     // The View page and ring: the chase view and the inspection layouts, the camera, the close-ups.
     { name: "view.play", label: "PL" }
     { name: "view.quarter", label: "3Q" }
@@ -208,6 +195,10 @@ icons {
     { name: "dbg.clear", label: "CL" }
     { name: "dbg.stop", label: "ST" }
     { name: "dbg.suit", label: "SU" }
+    { name: "dbg.capture", label: "CP" }
+    { name: "dbg.history", label: "HI" }
+    { name: "dbg.quality", label: "QU" }
+    { name: "dbg.rates", label: "RA" }
     // The Go page and the Places ring: the debug world's places.
     { name: "go.stage", label: "SG" }
     { name: "go.hero", label: "HR" }
@@ -222,7 +213,6 @@ icons {
     { name: "go.level2", label: "L2" }
     { name: "go.level3", label: "L3" }
     // The Tour page: the gallery's lights and motion, and the paintings.
-    { name: "tour.entrance", label: "GO" }
     { name: "tour.lightsOff", label: "L-" }
     { name: "tour.lightsOn", label: "L+" }
     { name: "tour.motionOff", label: "M0" }
@@ -349,6 +339,11 @@ state {
       galleryView = "act.view"
       gallerySlice = "act.slice"
 
+      // A wheel's opener, keyed by the page it opens: a plate whose hold opens that page wears the icon (LB opens the play
+      // wheel; RB opens the gallery's wheel, hall.puck, in the debug world).
+      "wheel-pad" = "act.wheel"
+      "gallery-wheel-pad" = "act.galleryWheel"
+
       // The View page.
       viewPlay = "view.play"
       viewQuarter = "view.quarter"
@@ -365,9 +360,9 @@ state {
 
       // The Debug page.
       dbgWhere = "act.where"
-      dbgChannels = "act.channels"
       dbgConsole = "act.console"
-      dbgBuild = "act.build"
+      dbgCapture = "dbg.capture"
+      dbgHistory = "dbg.history"
       dbgInspect = "dbg.inspect"
       dbgInspectOff = "dbg.inspectOff"
       dbgDebugView = "act.view"
@@ -395,9 +390,9 @@ state {
       tourNext = "act.next"
       tourPrev = "act.prev"
       tourFlag = "act.flag"
-      tourView = "act.view"
+      tourQuality = "dbg.quality"
+      tourRates = "dbg.rates"
       tourSlice = "act.slice"
-      tourEntrance = "tour.entrance"
       tourLightsOff = "tour.lightsOff"
       tourLightsOn = "tour.lightsOn"
       tourMotionOff = "tour.motionOff"
@@ -498,9 +493,10 @@ bindingOverlays [
         { id: "tour", pageId: "pad-rt-lt", alpha: 1 }
       ]
       iconRow: "state.barIcons"
-      // The modifier row on the anchor line lights the triggers (and the wheel's openers) held, and the page's name sits
-      // under it.
+      // The modifier row on the anchor line lights the page-holding triggers (the two the pad-pages row declares) held, and
+      // the page's name sits under it; the wheel's openers and the mouse chord stay off it.
       modifiers: true
+      declaredModifiersOnly: true
       pageLabel: true
       modelCell: "state.barModel.model"
       layout: "standard"
@@ -708,12 +704,12 @@ bindingOverlays [
             label: "Debug"
             entries [
               { command: "body.where", id: "dbgWhere", label: "Where", sources: padUp }
-              { command: "body.channels", id: "dbgChannels", label: "Channels", sources: padRight }
+              { command: "world.history", id: "dbgHistory", label: "History on", text: "on", sources: padRight }
               { command: "console", id: "dbgConsole", label: "Console", sources: padDown }
-              { command: "player.build", id: "dbgBuild", label: "Build", sources: padLeft }
+              { command: "world.screenshot", id: "dbgCapture", label: "Capture", sources: padLeft }
               { command: "world.inspect", id: "dbgInspect", label: "Inspector on", text: "on", sources: padLeftShoulder }
               { command: "world.inspect", id: "dbgInspectOff", label: "Inspector off", text: "off", sources: padLeftStick }
-              { command: "pad.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
+              { command: "world.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
               { command: "world.compare", id: "dbgHold", label: "Hold frame", text: "hold", value: neverRead, sources: padWest }
               { command: "world.compare", id: "dbgSplit", label: "Compare", text: "split", value: neverRead, sources: padEast }
               { command: "world.compare", id: "dbgClear", label: "Clear hold", text: "off", value: neverRead, sources: padRightShoulder }

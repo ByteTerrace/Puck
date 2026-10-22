@@ -40,7 +40,7 @@ public static class WorldConsoleVerbCatalog {
 
         var rows = verbs
             .OrderBy(keySelector: static verb => verb.Name, comparer: StringComparer.Ordinal)
-            .Select(selector: static verb => $"    {{ \"name\": \"{verb.Name}\", \"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{((verb.Audience == CommandAudience.Operator) ? "operator" : "anyone")}\" }}");
+            .Select(selector: static verb => $"    {{ \"name\": \"{verb.Name}\", \"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{((verb.Audience == CommandAudience.Operator) ? "operator" : "anyone")}\", \"valueKind\": \"{verb.ValueKind.ToString().ToLowerInvariant()}\", \"wireArgs\": {(verb.AcceptsWireArgs ? "true" : "false")} }}");
 
         return $"{{\n  \"schema\": \"{SchemaId}\",\n  \"verbs\": [\n{string.Join(separator: ",\n", values: rows)}\n  ]\n}}\n";
     }
@@ -60,11 +60,12 @@ public static class WorldConsoleVerbCatalog {
         return verbs.EnumerateArray().ToFrozenDictionary(
             comparer: StringComparer.OrdinalIgnoreCase,
             elementSelector: static verb => new CommandMetadata(
+                AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
                 Audience: ((verb.GetProperty(propertyName: "audience").GetString() == "operator") ? CommandAudience.Operator : CommandAudience.Anyone),
                 Bindability: (verb.GetProperty(propertyName: "bindable").GetBoolean() ? CommandBindability.Bindable : CommandBindability.Unbindable),
                 Name: verb.GetProperty(propertyName: "name").GetString()!,
                 Routing: CommandRouting.Immediate,
-                ValueKind: CommandValueKind.Digital
+                ValueKind: Enum.Parse<CommandValueKind>(ignoreCase: true, value: verb.GetProperty(propertyName: "valueKind").GetString()!)
             ),
             keySelector: static verb => verb.GetProperty(propertyName: "name").GetString()!
         );

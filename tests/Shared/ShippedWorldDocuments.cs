@@ -83,6 +83,19 @@ internal static class ShippedWorldDocuments {
             root = (Path.GetDirectoryName(path: root) ?? throw new InvalidDataException(message: $"{document} composes from files on no common root."));
         }
 
+        // A module library an import names is no layer (it emits no document), but the composer reads it beside its
+        // importer, so each directory a composed file sits in brings its libraries along.
+        files = [.. files.Concat(second: files.Select(selector: static file => Path.GetDirectoryName(path: file)!).Distinct(comparer: StringComparer.Ordinal).SelectMany(selector: static directory => (Puck.World.Transpiler.Composition.PuckDocumentComposer.TryCarriers(
+            carriers: out _,
+            directory: directory,
+            libraries: out var libraries,
+            option: SearchOption.TopDirectoryOnly,
+            reason: out _
+        )
+            ? libraries.Select(selector: static library => Path.GetFullPath(path: library))
+            : []
+        ))).Distinct(comparer: StringComparer.Ordinal)];
+
         foreach (var file in files.Where(predicate: file => !string.Equals(
             a: file,
             b: document,

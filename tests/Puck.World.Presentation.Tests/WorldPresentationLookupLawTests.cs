@@ -159,6 +159,7 @@ public sealed class WorldPresentationLookupLawTests {
                 Number(key: BindingWheelDefinition.HubLabelKey, row: "labels"),
                 Number(key: "north", row: "labels"),
                 Number(key: "north", row: "icons"),
+                Number(key: "hold", row: "icons"),
                 Number(key: "jump", row: "icons"),
                 Number(key: "sprint", row: "icons"),
                 Number(row: "layout"),

@@ -78,9 +78,9 @@ bindingOverlays [
               { command: "gallery.next", id: "tourNext", label: "Next exhibit", sources: padUp }
               { command: "gallery.flag", id: "tourFlag", label: "Flag exhibit", sources: padRight }
               { command: "gallery.prev", id: "tourPrev", label: "Previous exhibit", sources: padDown }
-              { command: "gallery.view", id: "tourView", label: "Debug view", sources: padLeft }
+              { command: "world.quality", id: "tourQuality", label: "Quality", text: "next", sources: padLeft }
               { command: "gallery.slice", id: "tourSlice", label: "Slice exhibit", sources: padLeftShoulder }
-              { command: "gallery.go", id: "tourEntrance", label: "Entrance", sources: padLeftStick }
+              { command: "world.rates", id: "tourRates", label: "Update rates", text: "toggle", sources: padLeftStick }
               { command: "gallery.lights.all", id: "tourLightsOff", label: "Lights off", text: "Off", sources: padNorth }
               { command: "gallery.lights.all", id: "tourLightsOn", label: "Lights on", text: "On", sources: padWest }
               { command: "gallery.motion", id: "tourMotionOff", label: "Motion off", text: "0", sources: padSouth }
