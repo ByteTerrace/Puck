@@ -481,13 +481,17 @@ public sealed partial class WorldPopulation {
         return (ResolveKitOrNull(name: name)
             ?? throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition."));
     }
-    // The kit row a population index actually runs: a local seat (0..LocalSeatCount) always reads the resolved seat
-    // kit (m_seatKit), never its entry's own KitIndex — the seat kit can differ from a seat entry's assigned row on a
-    // multi-kit world. Every seat-vs-peer kit read (recompile, producer-support checks, kit-replace safety, and the
-    // runtime coherence door) shares this ONE resolver so they can never disagree.
-    private byte ResolveKitIndex(int index) => ((index < LocalSeatCount)
-        ? m_seatKit
-        : m_entries[index].KitIndex
+    // The kit row a population index actually runs: the row its own selector cell picks (kits.assignment.select), else
+    // for a local seat (0..LocalSeatCount) the resolved seat kit (m_seatKit), never its entry's own KitIndex — the seat
+    // kit can differ from a seat entry's assigned row on a multi-kit world — else the entry's KitIndex. Every
+    // seat-vs-peer kit read (recompile, producer-support checks, kit-replace safety, and the runtime coherence door)
+    // shares this ONE resolver so they can never disagree.
+    private byte ResolveKitIndex(int index) => ((m_entries[index].SelectedKit >= 0)
+        ? (byte)m_entries[index].SelectedKit
+        : ((index < LocalSeatCount)
+            ? m_seatKit
+            : m_entries[index].KitIndex
+        )
     );
     private byte? ResolveKitOrNull(string name) => ResolveRowIndex(
         name: name,
@@ -745,6 +749,8 @@ public sealed partial class WorldPopulation {
         // Re-resolve the look table too — a live look row/assignment mutation flows through Rebuild (AffectsRenderEnvelope
         // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
+        // The selections index the fresh kit and look tables, so they resolve before anything reads a body's kit.
+        _ = ResolveSelections(definition: definition);
 
         // Re-derive the kit/producer-dependent per-entry statics from the fresh tables, but keep the running producer phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.
@@ -771,25 +777,9 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var kitIndex = ResolveKitIndex(index: index);
-            var kit = m_kits[kitIndex];
-
-            body.RecompileKit(
-                tuning: kit.Tuning,
-                actions: kit.Actions,
-                actionThresholds: kit.ActionThresholds,
-                actionShapes: kit.ActionShapes,
-                roleMask: kit.RoleMask,
-                roleOrdinals: kit.RoleOrdinals,
-                actionState: kit.ActionState,
-                program: kit.BodyMotionProgram,
-                programs: m_bodyMotionPrograms,
-                collider: kit.Collider,
-                rigid: kit.Rigid,
-                carry: kit.Carry,
-                tether: kit.Tether,
-                maxSmoothError: m_fixedMotion.MaxSmoothError,
-                holds: kit.Holds
+            RecompileBodyKit(
+                body: body,
+                kitIndex: ResolveKitIndex(index: index)
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.

@@ -747,7 +747,7 @@ active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action-state machinery—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
 1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
-body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
+body's cell; `WorldPopulation.SyncBodyCells` resyncs every active body's
 `Scale` wholesale from that row at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
@@ -755,7 +755,13 @@ every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
 a detached-seat/peer transfer restore), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
 previous occupant's value nor sits at the unscaled default the row itself
-disagrees with. A crossing of a portal pair of two sizes writes the row:
+disagrees with. The same resync resolves each body's kit and look from the kit
+and look assignments' `select` rows (`WorldPopulation.Selection.cs`): the
+selection outranks the entry's `KitIndex`/`LookIndex` and the seat kit in
+`ResolveKitIndex`, a body whose kit moves recompiles in place, and a moved kit
+or look bumps `Revision` so the client re-latches the stamp
+([schema](../Puck.World.Schema/README.md#kit-and-look-selected-by-a-bodys-cell)).
+A crossing of a portal pair of two sizes writes the row:
 `WorldServer.TryApplyInPlaceCrossing` multiplies the body's cell by the pair's
 scale (`WorldFrameIsometry.Scale`, the counterpart face's width over the
 source's) and publishes it before the next step, refusing a world with no row

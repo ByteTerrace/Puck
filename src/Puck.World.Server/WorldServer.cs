@@ -675,7 +675,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_tick.PaintLatticeDraws(definition: definition);
         // AFTER ReconcileInhabitants above: every boot-declared body (seats and inhabited placements alike) now has
         // a WorldBody to resync bodies.scaleRow's cells onto.
-        m_population.SyncBodyScale(definition: definition);
+        m_population.SyncBodyCells(definition: definition);
     }
 
 }

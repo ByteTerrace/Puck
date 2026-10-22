@@ -163,19 +163,20 @@ public static partial class WorldDefinitionValidator {
     }
     // The kit assignment policy (SIM-AFFECTING): hash needs nothing more; table needs a non-empty cycle whose every
     // entry resolves to a declared kit name.
-    private static void ValidateAssignment(WorldRowAssignment assignment, HashSet<string> kitNames, List<string> errors) {
+    private static void ValidateAssignment(WorldDefinition definition, WorldRowAssignment assignment, HashSet<string> kitNames, List<string> errors) {
         if (assignment is null) {
-            errors.Add(item: "assignment is required.");
+            errors.Add(item: "kits.assignment is required.");
 
             return;
         }
 
         ValidateRowAssignment(
             assignment: assignment,
+            definition: definition,
             errors: errors,
             rowNames: kitNames,
             rowNoun: "kit",
-            section: "assignment"
+            section: "kits.assignment"
         );
     }
     // The editor/authoring policy row: every field finite/positive with a sane ceiling. The BOOT-CONSUMED
@@ -1149,9 +1150,10 @@ public static partial class WorldDefinitionValidator {
     }
     // The look assignment policy (PRESENTATION-ONLY): a table needs a non-empty cycle whose every entry resolves to a
     // declared look name. Reuses the shared row-assignment gate verbatim.
-    private static void ValidateLookAssignment(WorldRowAssignment assignment, HashSet<string> lookNames, List<string> errors) {
+    private static void ValidateLookAssignment(WorldDefinition definition, WorldRowAssignment assignment, HashSet<string> lookNames, List<string> errors) {
         ValidateRowAssignment(
             assignment: assignment,
+            definition: definition,
             errors: errors,
             rowNames: lookNames,
             rowNoun: "look",
@@ -2214,7 +2216,88 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The shared sequence/row-view gate for kit and look assignment.
-    private static void ValidateRowAssignment(WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+    // A selector reads a body's own cell the way WorldPopulation.SyncBodyCells does: a keyed Int or Bool row whose keys
+    // are body indices inside the population, each read at its stored value (so no value-over-time trait), and every
+    // case's row declared in the table the assignment distributes.
+    private static void ValidateRowSelector(WorldDefinition definition, WorldRowSelector select, string path, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+        if (string.IsNullOrEmpty(value: select.State)) {
+            errors.Add(item: $"{path}.state is required.");
+        } else if (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: select.State
+        ) is not { } row) {
+            errors.Add(item: $"{path}.state names state row '{select.State}', which the document does not declare.");
+        } else if (
+            ((row.Kind != CellKind.Int) && (row.Kind != CellKind.Bool)) ||
+            !row.IsKeyed ||
+            (row.Field is not null)
+        ) {
+            errors.Add(item: $"{path}.state names state row '{select.State}', which must be a keyed Int or Bool row whose cells are keyed by body index.");
+        } else {
+            foreach (var cell in (row.Cells ?? [])) {
+                if (
+                    (cell.Advance is not null) ||
+                    (cell.Cycle is not null) ||
+                    (cell.Dynamics is not null)
+                ) {
+                    errors.Add(item: $"{path}.state names state row '{select.State}', whose cell '{cell.Key}' declares an advance/cycle/dynamics trait; a selector reads each cell's stored value.");
+                }
+                if (
+                    !int.TryParse(
+                    s: cell.Key,
+                    style: NumberStyles.Integer,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var bodyIndex
+                ) ||
+                    (bodyIndex < 0) ||
+                    (bodyIndex >= definition.Population.Capacity)
+                ) {
+                    errors.Add(item: $"{path}.state names state row '{select.State}', whose cell key '{cell.Key}' is not a 0-based body index inside 0..{(definition.Population.Capacity - 1)}.");
+                }
+            }
+        }
+
+        if (select.Cases is not { Count: > 0 } cases) {
+            errors.Add(item: $"{path}.cases must name at least one value.");
+
+            return;
+        }
+
+        var values = new HashSet<long>();
+
+        for (var index = 0; (index < cases.Count); index++) {
+            if (cases[index] is not { } selectCase) {
+                errors.Add(item: $"{path}.cases[{index}] is required.");
+
+                continue;
+            }
+
+            if (!values.Add(item: selectCase.Value)) {
+                errors.Add(item: $"{path}.cases[{index}] repeats value {selectCase.Value}.");
+            }
+
+            RequireDeclared(
+                value: selectCase.Row,
+                declaredSet: rowNames,
+                path: $"{path}.cases[{index}].row",
+                field: "",
+                rowNoun: rowNoun,
+                errors: errors
+            );
+        }
+    }
+    private static void ValidateRowAssignment(WorldDefinition definition, WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+        if (assignment.Select is { } select) {
+            ValidateRowSelector(
+                definition: definition,
+                errors: errors,
+                path: $"{section}.select",
+                rowNames: rowNames,
+                rowNoun: rowNoun,
+                select: select
+            );
+        }
+
         ValidateSequence(
             sequence: assignment.Sequence,
             path: $"{section}.sequence",
