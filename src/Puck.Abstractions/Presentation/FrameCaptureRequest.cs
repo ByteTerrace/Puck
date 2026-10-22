@@ -92,7 +92,23 @@ public sealed class FrameCaptureRequest {
     /// <summary>Gets the requested PNG path.</summary>
     public string Path { get; }
     /// <summary>Gets the number of frozen samples requested, or zero for an ordinary capture.</summary>
-    public int Converge { get; }
+    public int Converge { get; private set; }
+
+    /// <summary>Has a settled request converge over a fresh sequence of samples (<see cref="Converge"/>) rather than
+    /// observe the next normal one, before it is armed: the arming host's choice when a still must not depend on the
+    /// temporal history that frames before it built.</summary>
+    /// <param name="samples">The samples to converge over, one or more.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="samples"/> is less than one.</exception>
+    /// <exception cref="InvalidOperationException">The request is presented, or already claimed.</exception>
+    public void ConvergeOver(int samples) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(other: 1, value: samples);
+
+        if ((Mode != FrameCaptureMode.Settled) || Claimed) {
+            throw new InvalidOperationException(message: "Only a settled request not yet served takes a convergence.");
+        }
+
+        Converge = samples;
+    }
     /// <summary>Gets whether the request is past serving: a writer or a refusal has claimed it, or a presented request has
     /// taken its last frame, though its encodes may still be writing until <see cref="Completion"/> completes.</summary>
     public bool Claimed => (Volatile.Read(location: ref m_claimed) != 0);

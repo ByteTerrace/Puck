@@ -229,6 +229,12 @@ public sealed record SdfFrame(
     /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
     /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>Whether the frame belongs to lockstep presentation (<c>world.lockstep</c>), whose frames must render the
+    /// same image for the same tick on every run: the residency finishes tracing the irradiance volume's window before it
+    /// renders the frame, rather than taking whatever probes an asynchronous trace has landed by then, and adapts each
+    /// view's exposure by the frame's own presentation time (<see cref="Time"/>) since the last frame it staged rather
+    /// than by the host frame's interval. Default <see langword="false"/>.</summary>
+    public bool TickLocked { get; init; }
 
     /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;

@@ -26,7 +26,16 @@ call instead.
    (as a frame held for a capture always does), and advances presentation
    animation by the ticks completed since the last captured frame
    (`WorldFramePresenter.HistoryFree`), so a frame the render graph skips drops
-   no time. A frame held for a settled capture also culls by box rather than by
+   no time. Its frames (`SdfFrame.TickLocked`) also make the residency finish
+   tracing the irradiance volume's window before rendering, rather than taking
+   whatever probes the asynchronous trace has landed (the window follows the
+   first view's camera, so it moves as a camera riding a body does), and adapt
+   exposure over the frame's own presentation time. An ordinary settled still
+   under lockstep converges over one fresh jitter period
+   (`FrameCaptureRequest.ConvergeOver`, armed by `WorldCaptureScheduler`), so a
+   temporally resolved view, the motion layout's cameras included, shows those
+   samples alone rather than the history the display's frames built before
+   the hold. A frame held for a settled capture also culls by box rather than by
    the occlusion test and rates no work, so the still owes nothing to earlier
    frames. Wait for `world.wait bakes <seconds>` before anything you read
    pixels from.
@@ -66,13 +75,13 @@ What repeats, and what to compare:
 
 | Compare | Tick lists | `hash` (capture scope) | `pose` hash (every body) | Slot PNGs |
 |---|---|---|---|---|
-| Same script in fresh lockstep Worlds, same absolute `start`, the first or a later script of the run | identical | identical | identical | byte-identical: eight fresh Worlds, sixteen stills each across two scripts, the turn and the stop included, with one exception, where one still took the other of two images that differ by 1 level on the same 5 pixels |
+| Same script in fresh lockstep Worlds, same absolute `start`, the first or a later script of the run | identical | identical | identical | byte-identical in most stills; the rest within 1 level on at most 20 of 1.15 M pixels (four fresh Worlds, sixteen stills each across two scripts, the turn and the stop included). The same 1-level flips appear between repeated stills of one paused tick in one World, so they come from a render, not from history |
 | Same script twice in one World (another `start`) | identical offsets | differs: it folds the tick and the world's clocks | identical | differs where state the world advances on its own is at another tick, as the differing capture hash says (likely rule deadlines such as the Moth's blink, animated screens and sky content; not isolated): up to ~170 levels on silhouettes, ~16 across animated regions |
 | Without `world.lockstep on` | as above | as above | as above | not comparable: gait phase, exposure adaptation and frame-history work follow wall-clock frames, so up to every pixel differs |
 
 So a repeat is proven by the tick list and the hashes per still, and two
 fresh-World stills of one tick compare equal byte for byte, or within 1 level
-on a handful of pixels (the residue above, open in the plans); anything more is
+on a few dozen pixels (the residue above, open in the plans); anything more is
 a determinism defect in presentation, so read its differences (changed-pixel
 count, largest difference, where they sit) and report it. To
 repeat in one World, the world's own state must also be at the same tick; it

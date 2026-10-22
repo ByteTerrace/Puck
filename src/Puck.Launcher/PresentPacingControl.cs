@@ -42,7 +42,8 @@ public sealed class PresentPacingControl {
     /// <summary>Gets whether the window pump runs presentation in lockstep with the simulation: at most one fixed step
     /// a presented frame, and each frame's presentation interval exactly the simulation time it advanced (a step, or
     /// nothing) with no interpolation between ticks, as the offscreen host runs. The World's frame source also presents
-    /// the completed tick and advances its animation by the ticks completed while it holds
+    /// the completed tick, advances its animation by the ticks completed and marks its frames
+    /// (<c>SdfFrame.TickLocked</c>) so the renderer traces indirect light and adapts exposure by them too, while it holds
     /// (<c>WorldFramePresenter.HistoryFree</c>), so a capture of a tick shows the same image whatever the display's rate
     /// or the machine's load. A frame that cannot keep up with
     /// the simulation rate slows the simulation rather than skipping ticks; the simulation's own state never depends on

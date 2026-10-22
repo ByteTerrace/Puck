@@ -97,6 +97,43 @@ public sealed class SdfMeshIrradianceLawTests {
         return sum;
     }
 
+    /// <summary>A lockstep frame waits for the window's trace: the first one staged once the scene is built writes the
+    /// whole traced window at once, the same probes the asynchronous trace lands over many frames, and leaves nothing
+    /// owed.</summary>
+    [Fact]
+    public void ALockstepFrameRendersTheWindowTracedToTheEnd() {
+        var (_, landed) = Trace(frame: Frame(), volume: new SdfMeshIrradiance());
+        var locked = new SdfMeshIrradiance();
+        var frame = (Frame() with { TickLocked = true });
+        var writes = 0;
+        var words = Array.Empty<uint>();
+        var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
+
+        do {
+            _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
+                writes++;
+                words = memory.ToArray();
+            });
+            Thread.Sleep(millisecondsTimeout: 20);
+        } while ((writes == 0) && (DateTime.UtcNow < deadline));
+
+        Assert.Equal(expected: 1, actual: writes);
+        Assert.Equal(expected: landed, actual: words);
+
+        _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => writes++);
+        Assert.Equal(expected: 1, actual: writes);
+    }
+    /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
+    /// backward and nothing for the first; any other frame over the host frame's interval.</summary>
+    [Fact]
+    public void ALockstepFrameAdaptsExposureOverItsOwnTime() {
+        var frame = (Frame() with { TickLocked = true, Time = 2.5f });
+
+        Assert.Equal(expected: 0.5d, actual: SdfViewExposures.SecondsOf(frame: frame, frameSeconds: 0.016d, previousTime: 2f), precision: 6);
+        Assert.Equal(expected: 0d, actual: SdfViewExposures.SecondsOf(frame: frame, frameSeconds: 0.016d, previousTime: float.NaN));
+        Assert.Equal(expected: 0d, actual: SdfViewExposures.SecondsOf(frame: frame, frameSeconds: 0.016d, previousTime: 3f));
+        Assert.Equal(expected: 0.016d, actual: SdfViewExposures.SecondsOf(frame: (frame with { TickLocked = false }), frameSeconds: 0.016d, previousTime: 2f));
+    }
     [Fact]
     public void AStaticPointLightIsSeenAndBouncedInItsOwnRoomAlone_AndADepthCubeStopsAtTheSlab() {
         var volume = new SdfMeshIrradiance();

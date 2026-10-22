@@ -179,6 +179,7 @@ public sealed class SdfMeshIrradiance {
         if ((tier == SdfIndirectTier.Off) || (frame.Views.Count == 0)) { return default; }
 
         var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces);
+        bool drain;
 
         lock (m_gate) {
             m_wrote = false;
@@ -208,7 +209,24 @@ public sealed class SdfMeshIrradiance {
                 FillFromCache();
             }
             m_layout = layout;
+            drain = (frame.TickLocked && m_owed && (m_scene is not null) && (m_lighting is not null));
+        }
 
+        // A lockstep frame renders the window traced to the end, so its indirect light and its views' exposure meters
+        // never depend on how far an asynchronous trace had got by the time the frame was asked for. The trace takes the
+        // gate itself, so it runs outside it, after the worker in flight, which may hold it, has finished.
+        if (drain) {
+            try {
+                m_worker?.Wait();
+            } catch (AggregateException) {
+                // A faulted worker is reported below, as it is for any frame.
+            }
+            if (m_worker is not { IsFaulted: true }) {
+                Trace();
+            }
+        }
+
+        lock (m_gate) {
             // A landed probe changes its own filtered cubes and its neighbours', which averaged it in.
             m_restore.Clear();
             while (m_landed.TryDequeue(result: out var landed)) {

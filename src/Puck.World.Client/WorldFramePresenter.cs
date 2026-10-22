@@ -2014,6 +2014,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // still of a tick is the same image whatever frames preceded it.
             MeshCull = CullOf(cull: m_settings.Cull, settles: SettlesCapture),
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
+            TickLocked = TickLocked,
             RateCounts = m_settings.RateCounts,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,

@@ -500,7 +500,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The bake takes its batch before the upload, which carries the batch's surface points.
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
-        Exposures.Stage(frame: m_frame!, irradiance: MeshIrradiance, seconds: context.FrameDeltaSeconds);
+        Exposures.Stage(frame: m_frame!, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame!));
         tables.ViewExposures = Exposures;
 
         tables.UpdateTablesSignature();
@@ -698,6 +698,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the residency holds its frame for a capture (<see cref="BeginConvergence"/>): until the
     /// capture completes, every frame renders the frame the capture's first frame took.</summary>
     public bool HoldsFrame => (m_convergence is { Completion.IsCompleted: false });
+
+    // The presentation time of the frame the exposure last adapted to, for a lockstep frame's own interval.
+    private float m_exposureTime = float.NaN;
+
+    // The seconds the views' exposure adapts over this staging (SdfViewExposures.SecondsOf).
+    private double ExposureSeconds(in FrameContext context, SdfFrame frame) {
+        var previous = m_exposureTime;
+
+        m_exposureTime = frame.Time;
+
+        return SdfViewExposures.SecondsOf(frame: frame, frameSeconds: context.FrameDeltaSeconds, previousTime: previous);
+    }
 
     /// <summary>Freezes the presentation source for a capture.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>

@@ -27,6 +27,22 @@ public sealed class SdfViewExposures {
     /// last staged; zero while the volume holds no sky.</summary>
     public float SkyPeakLuminance { get; private set; }
 
+    /// <summary>Returns the seconds a staging adapts exposure over: a lockstep frame's (<see cref="SdfFrame.TickLocked"/>)
+    /// own presentation time since the frame staged before it, which the ticks decide, so a frame the render graph did
+    /// not stage drops no adaptation; the host frame's interval otherwise.</summary>
+    /// <param name="frame">The frame being staged.</param>
+    /// <param name="previousTime">The presentation time of the frame staged before it, or <see cref="float.NaN"/> for
+    /// none.</param>
+    /// <param name="frameSeconds">The host frame's interval, in seconds.</param>
+    /// <returns>The seconds to adapt over; never negative.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public static double SecondsOf(SdfFrame frame, float previousTime, double frameSeconds) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        return (frame.TickLocked
+            ? (float.IsFinite(f: previousTime) ? Math.Max(val1: 0d, val2: (frame.Time - previousTime)) : 0d)
+            : frameSeconds);
+    }
     /// <summary>Stages a frame's exposures: each view's <c>EV100</c> eased toward its target over the frame's
     /// presentation time, and the open sky its air sees.</summary>
     /// <param name="frame">The frame.</param>
