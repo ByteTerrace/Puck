@@ -19,40 +19,26 @@ public sealed class BodyBroadphaseRadiusLawTests {
 
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 
-    // The base fixture with the shipped seat collider (a capsule up to (0,1,0), radius 0.35) and a bodies.scaleRow
-    // whose cell starts at one.
+    // The base fixture with the shipped seat collider (a capsule up to (0,1,0), radius 0.35) and a bodies.scale register
+    // that starts at one.
     private static WorldDefinition Document() {
         var source = Fixtures.BuildDocument();
 
-        return source with {
-            KitRowsRaw = [.. source.Kits.Select(selector: static kit => kit with {
-                Collider = new WorldCollider.Capsule(
-                    Endpoint: new Vector3(
-                        x: 0f,
-                        y: 1f,
-                        z: 0f
+        return Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            source: source with {
+                KitRowsRaw = [.. source.Kits.Select(selector: static kit => kit with {
+                    Collider = new WorldCollider.Capsule(
+                        Endpoint: new Vector3(
+                            x: 0f,
+                            y: 1f,
+                            z: 0f
+                        ),
+                        Radius: 0.35f
                     ),
-                    Radius: 0.35f
-                ),
-            })],
-            PopulationRaw = (source.Population with { ScaleRow = "scale" }),
-            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
-                World = [
-                .. (source.StateRaw?.World ?? []),
-                new WorldStateRow(
-                    CellName.Parse(candidate: "scale"),
-                    CellKind.Fixed,
-                    Capacity: 4,
-                    Cells: [new StateCell(
-                            CellName.Parse(candidate: "0"),
-                            CellValue.Fixed(rawBits: FixedQ4816.One.Value)
-                        )],
-                    Max: FixedQ4816.One.Value,
-                    Min: FixedQ4816.FromDouble(value: 0.05).Value
-                ),
-            ],
-            }),
-        };
+                })],
+            }
+        );
     }
     // Every live body's cached radius equals the radius recomputed from its current volumes, bit for bit.
     private static void AssertEveryRadiusIsCurrent(WorldServer server) {
@@ -72,12 +58,10 @@ public sealed class BodyBroadphaseRadiusLawTests {
 
         Assert.True(condition: (bodies > 0));
     }
-    private static WorldMutation WriteScale(FixedQ4816 value) => new WorldMutation.UpsertStateCell(
-        Key: "0",
-        Kind: WorldDocumentWriteKind.Set,
-        Principal: Principal.Console,
-        Row: "scale",
-        Value: value.Value
+    private static void WriteScale(WorldServer server, FixedQ4816 value) => Fixtures.WriteBodyScale(
+        body: 0,
+        server: server,
+        value: value
     );
 
     [InlineData(false)]
@@ -149,7 +133,10 @@ public sealed class BodyBroadphaseRadiusLawTests {
         var before = body.BroadphaseRadius;
 
         Assert.True(condition: (before > FixedQ4816.Zero));
-        fixture.Server.EnqueueMutation(mutation: WriteScale(value: Half));
+        WriteScale(
+            server: fixture.Server,
+            value: Half
+        );
         fixture.Step();
 
         Assert.Equal(
@@ -190,7 +177,10 @@ public sealed class BodyBroadphaseRadiusLawTests {
 
         fixture.JoinSeat();
         fixture.Step();
-        fixture.Server.EnqueueMutation(mutation: WriteScale(value: Half));
+        WriteScale(
+            server: fixture.Server,
+            value: Half
+        );
         fixture.Step();
 
         var captured = fixture.Server.Body(index: 0)!.BroadphaseRadius;
@@ -247,7 +237,10 @@ public sealed class BodyBroadphaseRadiusLawTests {
             expected: settled
         );
         // The control: the counter moves when an input does, so the steady count above can fail.
-        fixture.Server.EnqueueMutation(mutation: WriteScale(value: Half));
+        WriteScale(
+            server: fixture.Server,
+            value: Half
+        );
         fixture.Step();
 
         Assert.Equal(

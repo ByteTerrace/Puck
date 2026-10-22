@@ -175,10 +175,14 @@ Engine facts those worlds exercised, which hold for any world:
   [rig](../../sdf-authoring/references/rig.md) and
   [surface](../../sdf-authoring/references/surface.md). All of it is
   presentation-only except the shapes' contact geometry.
-- **Body scale.** `Server.WorldBody.Scale` (a body's cell of the keyed
-  `bodies.scaleRow`) scales collider volumes, move speed and turn rate, hold
-  probes, standoff and reach, a hold's own gravity and vertical envelope, and a
-  pull's rate; the client multiplies the same cell into the rendered rig and
+- **Body scale.** `Server.WorldBody.Scale` (the body's own `state.body` Counter
+  register that `bodies.scale` names, with a `range` envelope; the debug world's
+  is `size`, `worlds/debug/size.puck`, imported by every world a body can walk
+  into so the size crosses with the body) scales collider volumes, move speed
+  and turn rate, hold probes, standoff and reach, a hold's own gravity and
+  vertical envelope, and a pull's rate; a scaled portal pair's in-place crossing
+  writes the register (`WorldServer.TryApplyInPlaceCrossing`), and the client
+  multiplies the same register into the rendered rig and
   the seat chase camera's orbit distance and look-at height
   (`Client.WorldFramePresenter.ResolveCamera`). A rigid body's mass, inertia,
   bounding radius, centre of mass and rest threshold scale with it

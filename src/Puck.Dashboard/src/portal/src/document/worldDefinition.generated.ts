@@ -556,7 +556,7 @@ export type ActionSpec = {
 };
 
 /**
- * The authored values a player-writable durable slot admits in this world.
+ * The authored values a slot admits in this world: a player-writable durable slot's input, a rule's or a kit's write, and a value carried in from another world all settle through it.
  */
 export type ActionStateEnvelope = ActionStateEnvelopeRange | ActionStateEnvelopeSet | null;
 
@@ -3678,7 +3678,7 @@ export type WorldBodiesDefaults = {
   reconnectGraceSeconds?: number;
   capacityRow?: string | null;
   disclosure?: WorldObserverDisclosure | null;
-  scaleRow?: string | null;
+  scale?: string | null;
   sleepAfterSeconds?: number;
 };
 
@@ -5242,7 +5242,7 @@ export type WorldEffectSetIdentityFact = {
 export type WorldEffectSetVerticalVelocity = {
   $type?: "setVerticalVelocity";
   /**
-   * The vertical velocity, in world units per second at the body's authored size; a body whose live scale (bodies.scaleRow) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.
+   * The vertical velocity, in world units per second at the body's authored size; a body whose live scale (bodies.scale) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.
    */
   velocity: number;
   /**

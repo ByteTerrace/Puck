@@ -752,16 +752,21 @@ peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action-state machinery—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
-1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
-body's cell; `WorldPopulation.SyncBodyCells` resyncs every active body's
-`Scale` wholesale from that row at the same `Install`/admission choke points
+1 unless `bodies.scale` names a `state.body` Counter register carrying this
+body's size; `WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs
+every active body's `Scale` from that register once a tick after the world
+rules, and at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
-`WorldPopulation.Restore` rebuilds every body at the constructed default, and
-a detached-seat/peer transfer restore), so a reused population slot—or a
+`WorldPopulation.Restore` rebuilds every body at the constructed default, a
+detached-seat/peer transfer restore, and an escrow landing that has loaded a
+traveller's carried registers), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
-previous occupant's value nor sits at the unscaled default the row itself
-disagrees with. The same resync resolves each body's kit and look from the kit
+previous occupant's value nor sits at the unscaled default the register itself
+disagrees with. An in-place crossing through a pair of two sizes writes the
+register (`WorldServer.TryApplyInPlaceCrossing`), refusing by name a size outside
+the register's envelope, and a crossing to another world carries it by name in
+the commit's action continuity. The same resync resolves each body's kit and look from the kit
 and look assignments' `select` registers (`WorldPopulation.SyncBodySelections`,
 which also runs once a tick right after the world rules and when an escrow
 landing has loaded a traveller's carried registers): the selection outranks the

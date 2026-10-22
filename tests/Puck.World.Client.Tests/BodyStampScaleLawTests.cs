@@ -6,39 +6,44 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>THE LAW: a body stamp bakes its body's live scale (<c>bodies.scaleRow</c>) at each rebuild, and a
-/// state-only write of that cell moves the scene's revision, so the next frame rebuilds and packs the stamp at the new
-/// scale; a frame with nothing delivered moves nothing. Held on a session view, which reads its destination through
-/// the same <see cref="WorldBodyStampCensus"/> the local scene does.</summary>
+/// <summary>THE LAW: a body stamp bakes its body's live scale (the <c>bodies.scale</c> register) at each rebuild, and a
+/// snapshot carrying a new value of that register moves the scene's revision, so the next frame rebuilds and packs the
+/// stamp at the new scale; a frame with nothing delivered moves nothing. Held on a session view, which reads its
+/// destination through the same <see cref="WorldBodyStampCensus"/> the local scene does.</summary>
 [Collection(SceneProbeCollection.Name)]
 public sealed class BodyStampScaleLawTests {
     // The body wears a creation look whose one shape sits one unit above the root, so its packed height is its scale.
-    private static WorldDefinition Document(double scale) {
+    private static WorldDefinition Document() {
         var creation = CreationFixtures.Prototype(document: CreationFixtures.Document(
             name: "orb",
             palette: CreationFixtures.GreyAndBlue,
             shapes: [(CreationFixtures.UnitSphereShape with { Position = new Vector3(x: 0f, y: 1f, z: 0f) })]
         ));
-        var definition = CreationDomainParentLawTests.Definition(creation: creation);
-        var row = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: FixedQ4816.FromDouble(value: 0.05).Value,
-            Max: FixedQ4816.One.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                Key: CellName.Parse(candidate: "0"),
-                Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: scale).Value)
-            )]
-        );
 
-        return (definition with {
-            PopulationRaw = (definition.Population with { ScaleRow = "scale" }),
-            StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (definition.StateRaw?.World ?? []), row],
-            }),
-        });
+        return Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            source: CreationDomainParentLawTests.Definition(creation: creation)
+        );
     }
+    private static WorldSnapshot Snapshot(double scale, ulong tick) => new(
+        Entries: new EntitySnapshot[] {
+            new(
+                Index: 0,
+                Position: Vector3.Zero,
+                Orientation: Quaternion.Identity,
+                BodyColor: Vector3.One,
+                Active: true,
+                Kit: 0,
+                Look: 0,
+                CatalogRig: 0,
+                Continuity: default,
+                State: new long[] { FixedQ4816.FromDouble(value: scale).Value }
+            ),
+        },
+        Revision: 1,
+        StepTicks: 1680UL,
+        Tick: tick
+    );
     // The packed height of the stamp's shape: the pool's first registration sits past the avatar catalog's slots, and
     // its first shape one slot past its root.
     private static float ShapeHeight(SdfFrame frame) => frame.DynamicTransforms[(WorldRigCatalog.DynamicTransformCapacity + 1)].Position.Y;
@@ -51,27 +56,13 @@ public sealed class BodyStampScaleLawTests {
     }
 
     [Fact]
-    public void AScaleRowWriteMovesTheRevisionAndTheNextPackUsesTheNewScale() {
-        var session = new WorldSessionMirror(placeholder: Document(scale: 1d));
+    public void AScaleRegisterWriteMovesTheRevisionAndTheNextPackUsesTheNewScale() {
+        var session = new WorldSessionMirror(placeholder: Document());
 
-        session.DeliverDefinition(definition: Document(scale: 1d), version: default);
-        session.DeliverSnapshot(snapshot: new WorldSnapshot(
-            Entries: new EntitySnapshot[] {
-                new(
-                    Index: 0,
-                    Position: Vector3.Zero,
-                    Orientation: Quaternion.Identity,
-                    BodyColor: Vector3.One,
-                    Active: true,
-                    Kit: 0,
-                    Look: 0,
-                    CatalogRig: 0,
-                    Continuity: default
-                ),
-            },
-            Revision: 1,
-            StepTicks: 1680UL,
-            Tick: 1UL
+        session.DeliverDefinition(definition: Document(), version: default);
+        session.DeliverSnapshot(snapshot: Snapshot(
+            scale: 1d,
+            tick: 1UL
         ));
 
         var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
@@ -104,12 +95,12 @@ public sealed class BodyStampScaleLawTests {
             expected: settled
         );
 
-        // A state-only write of the body's scale cell moves the census component, and the next frame packs at it.
-        session.DeliverState(
-            definition: Document(scale: 0.5d),
-            stamp: new WorldStateStamp(EngineTick: 3360UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL),
-            version: default
-        );
+        // A snapshot carrying a new value of the body's scale register moves the census component, and the next frame
+        // packs at it.
+        session.DeliverSnapshot(snapshot: Snapshot(
+            scale: 0.5d,
+            tick: 2UL
+        ));
 
         var moved = Revision(emitter: emitter);
 

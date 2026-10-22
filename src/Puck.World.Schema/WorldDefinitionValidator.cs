@@ -948,55 +948,12 @@ public static partial class WorldDefinitionValidator {
 
         ValidatePopulationCapacityRow(definition.Population, definition.State, errors);
 
-        if (definition.Population.ScaleRow is { } scaleRow) {
-            if (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: scaleRow
-            ) is not { } scaleStateRow) {
-                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which the document does not declare.");
-            } else if (
-                (scaleStateRow.Kind != CellKind.Fixed) ||
-                !scaleStateRow.IsKeyed ||
-                (scaleStateRow.Field is not null) ||
-                (scaleStateRow.Min is null) ||
-                (scaleStateRow.Max is null)
-            ) {
-                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=Fixed row declaring both min and max — the world's own body-scale envelope.");
-            } else {
-                var scaleMin = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Min.Value));
-                var scaleMax = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Max.Value));
-
-                if (scaleMin <= 0f) {
-                    errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose min {scaleMin} is not positive — a body's Scale is a multiplier, never zero or inverted.");
-                }
-                if (scaleMax > definition.Authoring.MaxPlacementScale) {
-                    errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose max {scaleMax} exceeds authoring.maxPlacementScale {definition.Authoring.MaxPlacementScale} — the render capacity probe's worst case would not cover the largest live body.");
-                }
-                foreach (var cell in (scaleStateRow.Cells ?? [])) {
-                    if (
-                        (cell.Advance is not null) ||
-                        (cell.Cycle is not null) ||
-                        (cell.Dynamics is not null)
-                    ) {
-                        errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell '{cell.Key}' declares an advance/cycle/dynamics trait — WorldPopulation.SyncBodyScale resyncs it at tick 0 only, so a value-over-time cell would read its base value forever instead of progressing.");
-                    }
-                    // The SAME parse WorldPopulation.SyncBodyScale runs at every resync: a key that fails it is
-                    // silently skipped there rather than read, so an author typo (a non-integer key, or an index
-                    // outside the authored population) would otherwise author a cell nothing ever reads.
-                    if (
-                        !int.TryParse(
-                        s: cell.Key,
-                        style: NumberStyles.Integer,
-                        provider: CultureInfo.InvariantCulture,
-                        result: out var scaleBodyIndex
-                    ) ||
-                        (scaleBodyIndex < 0) ||
-                        (scaleBodyIndex >= definition.Population.Capacity)
-                    ) {
-                        errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell key '{cell.Key}' is not a 0-based body index inside 0..{(definition.Population.Capacity - 1)}.");
-                    }
-                }
-            }
+        if (definition.Population.Scale is { } scaleName) {
+            ValidateBodyScale(
+                definition: definition,
+                errors: errors,
+                name: scaleName
+            );
         }
 
         var peerCapacity = Math.Max(

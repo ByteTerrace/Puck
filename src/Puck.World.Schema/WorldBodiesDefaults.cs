@@ -72,15 +72,14 @@ public readonly record struct WorldBodiesDefaults(
     // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
     // which is what every world authoring none delivers.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null,
-    // OPTIONAL — names a scalar kind=Fixed, KEYED state.world row (capacity declared, cells keyed by 0-based body
-    // index, Min AND Max both authored — the declared scale envelope) that carries each body's own live scale
-    // multiplier. Absent (the default) is today's behavior: every body's Scale reads FixedQ4816.One forever, at no
-    // per-Install cost. Resynced wholesale at the same choke points state.GatesDrive is (WorldServer.Install's own
-    // Install/InstallRuntimeStateValue), never per-tick — a live world.state.cell.set against this row settles
-    // before the next tick reads it. A body absent from the row's cells reads Scale = 1, exactly like a body a live
-    // RemoveStateCell just cleared, and a reused population slot always resyncs from the row rather than inheriting
-    // a previous occupant's value.
-    [property: JsonPropertyName("scaleRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ScaleRow = null,
+    // OPTIONAL — names a state.body Counter register carrying each body's own live scale multiplier, with a Range
+    // envelope the validator requires (the world's own scale envelope: positive, no greater than
+    // authoring.maxPlacementScale). Absent (the default) leaves every body's Scale at FixedQ4816.One forever, at no
+    // per-tick cost. The register is the body's own state, so a body's size goes where the body goes: a crossing to
+    // another world carries it with the body (the destination reads it through the register it declares under the
+    // same name), a checkpoint restores it, and a replay moves it at the same tick. WorldPopulation.SyncBodyScale
+    // resolves it once a tick after the world rules, at the install choke points, and when a crossing lands.
+    [property: JsonPropertyName("scale"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scale = null,
     // Seconds, a whole number of engine ticks (FixedTickConversion.TryDurationEngineTicksExact): a body's own idle
     // floor before its motion program and contact solve stop running. 0 (the default) means never sleep.
     decimal SleepAfterSeconds = 0m

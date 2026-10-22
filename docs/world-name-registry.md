@@ -287,7 +287,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].anchors[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `cameras[].anchors[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `bodies.capacityRow` | State | Names | Read | `WorldBodiesDefaults.CapacityRow` |
-| `bodies.scaleRow` | State | Names | Read | `WorldBodiesDefaults.ScaleRow` |
 | `targetRegisters[].rangeState` | State | Names | Read | `WorldTargetRegister.RangeState` |
 | `targetRegisters[].halfAngleState` | State | Names | Read | `WorldTargetRegister.HalfAngleState` |
 | `kits.rows[].motion.shaping[].when[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |

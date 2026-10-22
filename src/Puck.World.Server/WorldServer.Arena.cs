@@ -39,7 +39,6 @@ public sealed partial class WorldServer {
 
     // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
     // brings them up to date.
-    private bool m_bodyCellsOwed;
     private bool m_consumersOwed;
     private bool m_driveGateOwed;
     private bool m_fieldsOwed;
@@ -300,7 +299,6 @@ public sealed partial class WorldServer {
         }
         if (!any) {
             return new WorldArenaPublication(
-                BodyCells: false,
                 Definition: before,
                 DriveGate: false,
                 Moved: false,
@@ -309,9 +307,7 @@ public sealed partial class WorldServer {
         }
 
         var installed = before.AuthoredState;
-        var scaleRow = before.Population.ScaleRow;
         var descriptors = m_arena.Catalog.Descriptors;
-        var bodyCells = false;
         var driveGate = false;
         var refresh = false;
         var rows = new WorldStateRow[installed.Count];
@@ -350,11 +346,6 @@ public sealed partial class WorldServer {
 
             // Which of the consumers that keep their own copy of a state value read a row this publication moves.
             driveGate |= published.GatesDrive;
-            bodyCells |= string.Equals(
-                a: name,
-                b: scaleRow,
-                comparisonType: StringComparison.Ordinal
-            );
             // A document value bound to a state row, a placement's spatial extent or a creation's scale, is
             // resolved against the row's value, so a moved row re-resolves the values reading it.
             refresh |= DocumentValueRows().Contains(item: name);
@@ -376,7 +367,6 @@ public sealed partial class WorldServer {
         }
 
         return new WorldArenaPublication(
-            BodyCells: bodyCells,
             Definition: definition,
             DriveGate: driveGate,
             Moved: true,
@@ -431,7 +421,6 @@ public sealed partial class WorldServer {
         // The installed document now carries values no sink has seen: a rule's own write reaches a client through the
         // same state delivery a console write does.
         m_document.MarkStateDeliveryPending();
-        m_bodyCellsOwed |= publication.BodyCells;
         m_driveGateOwed |= publication.DriveGate;
         // The field section compiles from the state section and is republished only when what it reads changed, so
         // its reference is what says whether the lattice's input moved.
@@ -453,16 +442,13 @@ public sealed partial class WorldServer {
             return;
         }
 
-        var bodyCells = m_bodyCellsOwed;
         var driveGate = m_driveGateOwed;
         var fields = m_fieldsOwed;
 
-        m_bodyCellsOwed = false;
         m_consumersOwed = false;
         m_driveGateOwed = false;
         m_fieldsOwed = false;
         m_document.ReconcileStateConsumers(
-            bodyCells: bodyCells,
             definition: m_document.Definition,
             driveGate: driveGate,
             fields: fields

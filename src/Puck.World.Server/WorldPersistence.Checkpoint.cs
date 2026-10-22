@@ -871,10 +871,9 @@ public sealed partial class WorldPersistence {
             defaults: Host.Document.Definition.PlayerDefaults,
             tick: Host.Tick.CompletedTick
         );
-        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — bodies.scaleRow is document
-        // state, not part of WorldPopulationCheckpoint, so it needs the same catch-up every other admission door
-        // gives a freshly minted body. m_definition is already the checkpoint's own restored document (set above),
-        // so this reads the SAME cells the live server had when it captured.
+        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — a body's size is its register,
+        // which the arena restored, so it needs the same catch-up every other admission door gives a freshly minted
+        // body.
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before

@@ -1119,12 +1119,6 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
-            typeof(WorldBodiesDefaults),
-            nameof(WorldBodiesDefaults.ScaleRow),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
             typeof(WorldTargetRegister),
             nameof(WorldTargetRegister.RangeState),
             WorldNameKind.State,

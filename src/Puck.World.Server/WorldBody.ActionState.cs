@@ -316,6 +316,16 @@ public sealed partial class WorldBody {
         slot: slot,
         writer: "rule"
     );
+    /// <summary>Writes one register a crossing through a scaled portal pair addresses: the body's size, which the caller
+    /// has already checked against the register's envelope.</summary>
+    /// <param name="slot">The register's slot in the world's register file.</param>
+    /// <param name="requested">The new value, in raw counter bits.</param>
+    internal void ApplyCrossingState(int slot, long requested) => ApplyRawState(
+        reason: "scaled portal crossing",
+        requested: requested,
+        slot: slot,
+        writer: "crossing"
+    );
     private void ApplyRawState(int slot, long requested, string writer, string reason) {
         var definition = m_actionStateDefinitions[slot];
         var effective = (definition.Envelope?.Clamp(

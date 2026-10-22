@@ -23,7 +23,7 @@ public static partial class WorldNameRegistry {
         "Source", "Attribute", "Occupancy", "Board", "Tokens", "Turn", "Verdict", "Legal", "Reach", "Held", "Counts",
         "Best", "Move", "Plan", "Medium", "Family", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
         "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
-        "PhaseOf", "ScaleRow", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
+        "PhaseOf", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
         "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
         "Parent", "Placement", "Prototype",
     };

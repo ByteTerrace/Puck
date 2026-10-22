@@ -135,8 +135,8 @@ public sealed class WorldTransferTurnRecoveryLawTests {
         AbortAndCheck(destination: rowB, owner: host, source: rowA);
         AbortAndCheck(destination: restoredB, owner: restoredHost, source: restoredA);
     }
-    // A mapped pair of two sizes between two worlds: the body's size lives in its own world's bodies.scaleRow, which
-    // the destination does not hold, so the crossing is refused by name and the body stays where it stood.
+    // A mapped pair of two sizes between two worlds: a transfer carries the body's size register unchanged and
+    // cannot apply the pair's scale to it, so the crossing is refused by name and the body stays where it stood.
     [Fact]
     public void AMappedPairOfTwoSizesBetweenWorldsIsRefusedAndTheBodyStays() {
         using var stateRoot = new TemporaryDirectory(prefix: "puck-scaled-refusal-");

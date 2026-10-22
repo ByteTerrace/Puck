@@ -4,7 +4,8 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
-/// <summary>The authored values a player-writable durable slot admits in this world.</summary>
+/// <summary>The authored values a slot admits in this world: a player-writable durable slot's input, a rule's or a
+/// kit's write, and a value carried in from another world all settle through it.</summary>
 [JsonDerivedType(typeof(ActionStateEnvelope.Range), typeDiscriminator: "range")]
 [JsonDerivedType(typeof(ActionStateEnvelope.Set), typeDiscriminator: "set")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]

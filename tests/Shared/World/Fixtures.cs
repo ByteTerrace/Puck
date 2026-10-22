@@ -571,6 +571,32 @@ internal static partial class Fixtures {
             time: in time
         );
     }
+    /// <summary>The name of the <c>state.body</c> register <see cref="WithBodyScale"/> declares.</summary>
+    public const string BodyScaleRegister = "scale";
+    /// <summary>Returns <paramref name="source"/> declaring the Counter register <see cref="BodyScaleRegister"/> in
+    /// <c>state.body</c>, with a range envelope, and <c>bodies.scale</c> naming it, so every body's live scale reads the
+    /// register.</summary>
+    /// <param name="source">The document.</param>
+    /// <param name="initial">The register's initial value, the scale every body is born at.</param>
+    /// <param name="minimum">The envelope's least admitted scale.</param>
+    /// <param name="maximum">The envelope's greatest admitted scale.</param>
+    public static WorldDefinition WithBodyScale(WorldDefinition source, FixedQ4816 initial, double minimum = 0.05d, double maximum = 1d) => (source with {
+        PopulationRaw = (source.Population with { Scale = BodyScaleRegister }),
+        StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
+            Body = [
+                .. (source.StateRaw?.Body ?? []),
+                new ActionStateSlot(
+                    Envelope: new ActionStateEnvelope.Range(
+                        Maximum: ((float)maximum),
+                        Minimum: ((float)minimum)
+                    ),
+                    Initial: ((float)((double)initial)),
+                    Kind: ActionStateKind.Counter,
+                    Name: BodyScaleRegister
+                ),
+            ],
+        }),
+    });
     /// <summary>Returns the base fixture document at the default <see cref="SimulationRateHz"/>.</summary>
     public static WorldDefinition BuildDocument() => BuildDocumentAtRate(rateHz: DefaultRateHz);
     /// <summary>Returns the base fixture document at an explicitly authored simulation rate.</summary>

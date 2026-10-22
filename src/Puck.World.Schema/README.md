@@ -2616,47 +2616,39 @@ large crowds that batch motion use the default `overlap` contact mode.
 
 ### Body scale
 
-`bodies.scaleRow` names a keyed `state.world` row (`kind: fixed`, a declared
-`capacity`, and both `min`/`max` authored, `min` strictly positive and `max`
-no greater than `authoring.maxPlacementScale`—the row's own envelope is the
-world's own declared scale envelope, and the render capacity probe's worst
-case must cover the largest live body—refused by name otherwise) whose
-cells, keyed by 0-based body index, carry each body's live scale multiplier:
-absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
-forever, at no per-tick cost. Every cell key must parse as an integer inside
-`0..bodies.capacity-1`—the SAME parse `WorldPopulation.SyncBodyCells` runs at
-every resync, which silently skips a key that fails it; refusing the mismatch
-at validation instead of leaving an authored cell nothing ever reads. A cell
-may not declare an `advance`/`cycle`/`dynamics` value-over-time trait—every
-resync reads at tick 0, so such a cell would read its base value forever
-instead of progressing. A `Region`
-INTERACTION scoped to the one affected body (`left` a one-cell carrier
-property naming it, `right` the placement) is the trigger shape for "this
-specific body standing in this region": the `$region:<placementId>` reserved
-channel is an AGGREGATE occupant count over the whole population and cannot
-express "this body, not any other"—an ordinary world rule gated on it
-shrinks whichever body happens to wander in, and restoring on "the aggregate
-reads zero" stays blocked while an unrelated body lingers in the same region.
-The interaction's own `Edge` mode (not `Level`) is what keeps the trigger a
-single write per crossing rather than a per-tick one: `Level` re-fires the
-effect every tick the co-occurrence holds, which for a `setState` effect is a
-document mutation, a stderr journal line, and a client definition delivery
-EVERY tick a body simply stands in the region. A shrink/restore pair is
-therefore two `Edge` interactions over two regions—one that lowers `Scale`
-on entering the shrinking region, a second, physically separate region that
-restores it on entering THAT one—never a single region's `Level` write
-paired with a self-resetting flag row, which is the same per-tick-write
-anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against. The garden's
-`drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry) are
-one authored instance of this primitive, not engine surface of their own.
-`WorldPopulation.SyncBodyCells` resyncs every active body's `Scale` wholesale
-from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
-resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
-`WorldPopulation.Restore` rebuilds every body at the constructed default) and
-a detached-seat/peer transfer restore, so a live write settles before the next
-tick and a reused population slot—or a body a checkpoint restore or transfer
-just minted fresh—never inherits a previous occupant's value nor sits at the
-unscaled default the row itself disagrees with. `Scale` multiplies the body's
+`bodies.scale` names a `state.body` Counter register (declared with a `range`
+envelope whose `minimum` is strictly positive and whose `maximum` is no greater
+than `authoring.maxPlacementScale`—the register's own envelope is the world's
+declared scale envelope, and the render capacity probe's worst case must cover
+the largest live body—refused by name otherwise) carrying each body's live
+scale multiplier: absent (the default) leaves every body's
+`Server.WorldBody.Scale` at `1` forever, at no per-tick cost. The register's
+`initial` is the size a body is born at, and the envelope is the only place the
+range is authored (`worlds/debug/size.puck` declares `size`, a quarter to one).
+
+The register is the body's own state, so a body's size goes where the body
+goes. A rule's `setBodyState` writes it; a crossing through a portal pair of
+two sizes (`WorldFrameIsometry.TryScale`, in place in one world) multiplies it
+by the pair's exact scale and refuses, by name, a size outside the envelope
+before anything moves; a mapped crossing to another world carries it with the
+body, so a destination declaring the same register under the same name lands
+the traveller at the size it left in, clamped to the destination's own
+envelope; a checkpoint restores it with the arena and a replay moves it at the
+same tick. A pair of two sizes between two worlds is refused by name, since a
+transfer carries the register unchanged and cannot apply the pair's scale to
+it. A `Region` interaction (or a rule gated on the body's own position) that
+writes the register must be edge-triggered, one write per entry rather than
+one per tick.
+
+`WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs every active
+body's `Scale` from the register once a tick after the world rules (the last
+writer of a register in a tick), at the same `Install`/admission choke points
+`WorldGrants.SyncState` resyncs its own drive gates at, after
+`RestoreCheckpoint` (which rebuilds every body at the constructed default), when
+a crossing lands a body, and right after an in-place crossing wrote it, so a
+reused population slot—or a body a checkpoint restore or transfer just minted
+fresh—never inherits a previous occupant's value nor sits at the unscaled
+default the register itself disagrees with. `Scale` multiplies the body's
 collider volumes (about its own root—contact resolution and hold probes/
 standoff/reach alike), its resolved move speed and turn rate, a hold's own
 gravity fall/rise magnitudes and its own vertical-channel envelope (including
@@ -2664,7 +2656,8 @@ a medium's idle/settle target), a wall
 hold's travel speed, and a pull's own rate (`WorldBody.Hold.cs`)—so a shrunk body settles onto and
 depenetrates from the ground at a proportionally gentler rate too, rather than
 free-falling one tick of full-scale gravity into a collider whose own skin
-margin it can no longer absorb—and, client-side, reading the same row live,
+margin it can no longer absorb—and, client-side, reading the same register
+through the snapshot's body state (the `$bodyState:<register>` presentation row),
 its composed render scale (`Client.WorldSceneEmitter.ResolveStampCreation`)
 and the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`, scaled about the body's own root
@@ -2769,7 +2762,7 @@ settles through the register's envelope inside the firing's journal scope, and
 a kit refuses it by name, since a kit writes its own registers with
 `setState`); a replay and `puck test --reproduce` move the choice at the same
 tick. `WorldPopulation.SyncBodySelections` resolves it at the same choke points
-as `bodies.scaleRow`, once a tick after the world rules, and when a crossing
+as `bodies.scale`, once a tick after the world rules, and when a crossing
 lands; a body whose kit moves recompiles it in place (pose, velocity and every
 register kept), and a moved kit or look bumps the population revision, so the
 client rebuilds and re-latches the body's stamp. A checkpoint carries the
@@ -2782,7 +2775,10 @@ replaces the sequence and rows and keeps the authored `select`;
 `world.population` echoes each assignment's selector and `world.looks` the
 bodies each look holds. The debug world's suit toggle
 (`worlds/debug/suit.puck`) selects both by a `suit` register, which the garden
-and the night field declare too.
+and the night field declare too. The toggle is one rule per local seat
+(`worlds/debug/suit-toggle.puck`): a rule reads a seat as a literal checked
+against `bodies.localSeats`, so `suit.puck` instantiates seat 1 and a world
+seating more bodies instantiates one `suitToggle(seat, index)` for each more.
 
 ### Body sleep
 
