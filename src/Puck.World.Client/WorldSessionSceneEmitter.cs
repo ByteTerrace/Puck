@@ -833,7 +833,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 builder: builder,
                 creations: definition.Creations,
                 definition: definition,
-                placements: definition.Placements
+                placements: WorldPlacementStamper.Queryable(definition: definition, placements: definition.Placements)
             );
             m_dressedFieldProgram = program;
 

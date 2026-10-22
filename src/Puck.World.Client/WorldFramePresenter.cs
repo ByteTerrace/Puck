@@ -475,7 +475,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                placements: WorldPlacementStamper.Queryable(
+                    definition: definition,
+                    placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                    excluded: static (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded placement '{placement.Id}': {reason}]")
+                ),
                 colors: m_queryColors,
                 palettes: m_queryPalettes
             );
@@ -492,11 +496,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screens: definition.Screens
             );
 
-            m_adjacencies.EmitCurrent(builder: builder);
+            m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
             m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build()));
-        } catch (ArgumentException) {
-            // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored
-            // eye; query-compatible worlds still receive the presentation-only clearance correction.
+        } catch (ArgumentException exception) {
+            // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves
+            // no field; name it so missing surface targets cannot be mistaken for a probe or rig problem.
+            Console.Error.WriteLine(value: $"[world.presentation-field: unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
     }
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
@@ -545,6 +550,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         m_builtDefinitionRevision = definitionRevision;
     }
+
     // The presentation row of the scale register, rebuilt only when the document names another, so a frame allocates
     // none.
     private string? m_scaleRegister;
@@ -897,6 +903,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             PresentationSeconds: m_elapsedSeconds,
             AuthoritativeTick: m_simulation.Tick
         );
+
         var (eye, target, fieldOfView) = rig.Resolve(
             anchor: in anchor,
             clock: in clock
@@ -1498,7 +1505,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// frame presents the completed simulation tick itself, including body poses, rather than interpolating from its
     /// predecessor; a presented capture reads frames as the display shows them and does not pin them.</summary>
     public Func<bool>? CapturePending { get; set; }
-
     /// <summary>Gets or sets whether presentation runs in lockstep with the ticks (<c>world.lockstep</c>): every frame
     /// presents the completed tick itself, as a frame held for a settled capture does, and advances presentation
     /// animation by the ticks completed since the last frame captured rather than by the host frame's interval.
@@ -1513,6 +1519,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
     // Whether presentation runs in lockstep with the ticks.
     private bool TickLocked => (HistoryFree?.Invoke() ?? false);
+
     /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
     /// draws the previous frame's visible set, while the frame is held for a settled capture.</summary>
     /// <param name="cull">The session's cull level.</param>
@@ -1529,7 +1536,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public static SdfUpdateRates RatesOf(SdfUpdateRates rates, bool settles) => (settles
         ? SdfUpdateRates.None
         : rates);
-
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
@@ -1708,7 +1714,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             WorldCamera? holdCamera = null;
 
             var carried = ((m_continuum.PresentedElsewhere(slot: slot) is null)
-                ? EngagedScreenRow(slot: slot, held: out holdCamera)
+                ? EngagedScreenRow(held: out holdCamera, slot: slot)
                 : null);
 
             m_anchor.PublishHoldView(
