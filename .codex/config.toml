@@ -4,3 +4,9 @@ args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/puck
 startup_timeout_sec = 600
 tool_timeout_sec = 120
 enabled = true
+
+# A Codex lane runs in a git worktree under .claude/worktrees/<lane>/: its commits write the checkout's .git (a
+# worktree's metadata lives there) and its GPU legs take the shared leases under .claude/leases/. Both resolve from
+# the lane's worktree root, so the same entries hold on every machine.
+[sandbox_workspace_write]
+writable_roots = ["../../../.git", "../../leases"]

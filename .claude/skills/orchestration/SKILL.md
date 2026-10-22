@@ -102,9 +102,9 @@ branch is the next piece of work, not a reason to stop landing.
 A brief that grants GPU legs carries a time box and what to do when a leg
 fails: rerun it once alone, then fix it or hand it back as open. Several lanes
 granted the GPU share it through one lease on the lead machine: before booting
-a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/gpu-lease`
+a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/leases/gpu`
 (atomic: it fails while another lane holds the lease), writes its lane name and
-the time into `gpu-lease/holder`, and removes the directory as soon as its
+the time into `leases/gpu/holder`, and removes the directory as soon as its
 World stops. Chain the boot on the `mkdir` (`mkdir … && …`), never run it as a
 separate step: a lane that carried on after a failed `mkdir` overwrote another
 lane's holder and then removed its lease. A lane that finds the lease taken does CPU work and tries again
@@ -112,8 +112,13 @@ later, and never holds it longer than its batch of checks, at most 20 minutes.
 Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+The `.claude/leases/` directory is git-ignored, so the lead creates it once per
+checkout (`mkdir -p`). A Codex lane's sandbox writes only its worktree plus the
+writable roots `.codex/config.toml` declares (the checkout's `.git` and
+`.claude/leases/`), so a Codex lane runs in a worktree under
+`.claude/worktrees/<lane>/` branched from a tip carrying that config.
 A lease older than an hour whose World is gone is stale and may be removed. The
-same rule gives `Puck.World.Tests` one run at a time (`.claude/heavy-lease`),
+same rule gives `Puck.World.Tests` one run at a time (`.claude/leases/heavy`),
 since a run takes about 7 GB of the lead machine's 32 GB. Investigating
 a failure is a lane of its own, never the integrator's.
 
