@@ -1,8 +1,8 @@
 // The Moth's suit on and off. `suit` holds 1 for each body wearing the mech suit and 0 for one out of it, and the
 // look and kit assignments select by it (`select`), so what she wears and how she moves follow the cell: a rule, a
 // console write (`world.state.cell.set suit 0 0`) or a replay moves both at the same tick, and a saved world keeps
-// them. The suit channel (T or the right trigger; `body.press suit` from the console) flips it while she stands; a
-// press in the air does nothing unless it is still held when she lands.
+// them. The suit channel (T, or South while the right trigger is held; `body.press suit` from the console and the play
+// wheel's Suit sector) flips it while she stands; a press in the air does nothing unless it is still held when she lands.
 //
 // Out of the suit she runs the `pilot` kit, a walker with one jump and no flight mode, so flight is refused, and wears
 // the `moth-pilot` look: the 1.68 m woman inside the suit (avatars/moth-pilot.puck), the same head on a body of her
@@ -10,6 +10,7 @@
 
 schema: "puck.world.definition.v1"
 import "avatars/moth-pilot"
+import "pad-kit"
 
 channels [
   {
@@ -192,7 +193,7 @@ bindingOverlays [
     id: "suit-keys"
     document {
       version: "puck.input.bindings.v1"
-      modifiers []
+      modifiers: padModifiers
       chords [
         {
           chord []
@@ -205,7 +206,27 @@ bindingOverlays [
                 id: "suit"
                 label: "Suit"
                 scale: 1
-                sources ["keyboard.t", "gamepad.rightTrigger"]
+                sources ["keyboard.t"]
+              }
+            ]
+          }
+        }
+        // The pad's toggle is a bar plate on the Debug page (controls.puck), the right trigger's: hold it (or X) and press
+        // South (or K).
+        {
+          chord ["rt"]
+          group: "play"
+          page {
+            id: "pad-rt"
+            inherits: "base"
+            label: "Debug"
+            entries [
+              {
+                channel: "suit"
+                id: "dbgSuit"
+                label: "Suit"
+                scale: 1
+                sources ["gamepad.buttonSouth", "keyboard.k"]
               }
             ]
           }

@@ -55,7 +55,7 @@ rule): the bar is the debug world's only on-screen UI.
 | Space | South | Jump, twice before landing; in flight mode, rise |
 | Ctrl | East | In flight mode, descend and land |
 | E | West | Context button: engage the device in reach, and leave it again ([devices](../devices.md#engaging-a-device)) |
-| T | Right trigger | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)) |
+| T | Right trigger held, then South | In the debug world, take the suit off or put it back on while standing; out of it she is the 1.68 m pilot ([moth-pilot.md](moth-pilot.md)), who walks and jumps once, with no flight mode ([`suit.puck`](../suit.puck)). Keyboard equivalent on the Debug page: X held, then K |
 | 1 | | Native three-quarter inspection |
 | 2 | | Native front inspection |
 | 3 | | Native rear inspection |
@@ -66,25 +66,53 @@ rule): the bar is the debug world's only on-screen UI.
 | F2 | Back | Switch between playing and building (`player.build`) |
 | Backspace | L3 | Respawn at the stage spawn, standing still, from anywhere (a fall or the portal loop included) |
 | Tab (hold) | LB (hold) | Open the play wheel |
+| Z (hold) | Left trigger (hold) | The View page of the bar: the twelve controls become camera layouts and the annotation toggles |
+| X (hold) | Right trigger (hold) | The Debug page: inspection verbs, frame comparison, stop and the suit |
+| Z then X (hold) | Left then right trigger | The Go page: the debug world's places (`debug.go`) |
+| X then Z (hold) | Right then left trigger | The Tour page: the gallery tour, its lights and motion, two paintings |
 | Backtick | | Show or hide the console |
 
 Out of flight mode, letting go of Space while still rising cuts the jump short.
 In flight mode, releasing Space holds altitude. Inspection cameras stay at the
 studio origin; use **5** when moving away from it.
 
-The debug world and the garden draw these controls on screen from
-[`controls.puck`](../controls.puck): the standard controller bar along the bottom
-edge (the d-pad diamond with LB and the left stick's press, the face diamond
-with RB and the right stick's press, each plate showing its action) and the
-play wheel. The bar shows a chord only over controls it places, as their caps
-and the action's icon, so the both-mouse-buttons walk stays off this
-controller bar. Hold Tab and point with the mouse, or hold LB and aim the right
-stick, then release over a sector: Console, Build, Where (`body.where`),
-Channels (`body.channels`), Annotate, Respawn (back to the stage), Desktop
-(the desktop pane, `view.override layout desktop`) and Play (the play view
-alone, `view.override layout play`). Releasing at the hub cancels. The bar
-fades after six seconds without input, and the bar and the cursor step aside
-while the seat is engaged on a device.
+The debug world, the garden and the night field draw these controls on screen
+from [`controls.puck`](../controls.puck): the standard controller bar along the
+bottom edge (the d-pad diamond with LB and the left stick's press, the face
+diamond with RB and the right stick's press, each plate showing its action) and
+the play wheel. The bar has five pages of twelve plates, named under it, and a
+row on its anchor line that lights each trigger, bumper and key that opens a
+page or a wheel while it is held: nothing held is Move (the table above), and
+the Moth's own controls are everything above. Each trigger page keeps the
+sticks and the movement keys, and rebinds the twelve controls; its keyboard
+equivalents are the arrow keys for the d-pad, I, J, K, L for North, West, South
+and East, U and O for LB and RB and N and M for the stick presses
+([`pad-kit.puck`](../pad-kit.puck)).
+
+| Page | Held | Plates (d-pad up, right, down, left; LB; L3; North, West, South, East; RB; R3) |
+|---|---|---|
+| Move | nothing | forward, strafe right, back, strafe left; wheel (LB); respawn; flight, interact, jump, descend; gallery wheel (RB); recenter |
+| View | LT or Z | chase, three-quarter, front, rear; wide; chase camera; annotate, jetpack alone, face, boots; head; shoulder |
+| Debug | RT or X | where, channels, console, build; inspector on; inspector off; debug view, hold frame, suit, compare; clear hold; stop |
+| Go | LT then RT, Z then X | stage, gallery, portals, Wonderland; hero studio; devices; chess, computer, gallery levels 0 and 1; levels 2 and 3 on RB and R3 |
+| Tour | RT then LT, X then Z | next exhibit, flag, previous exhibit, debug view; slice; entrance; lights off, lights on, motion off, motion on; garden painting; night painting |
+
+Go and Tour name the debug world's places and gallery
+([`pad.puck`](../pad.puck)) and read empty in the garden and the night field.
+
+The play wheel has three rings, Act, View and Places (Places in the debug world
+alone). Hold Tab and point with the mouse, or hold LB and aim the right stick,
+then release over a sector. Up or Down on the arrow keys, the d-pad or the mouse
+wheel steps the ring while it is open. Act: Console, Build, Where
+(`body.where`), Channels (`body.channels`), Respawn (back to the stage), Suit
+(`body.press suit`), Stop (`body.stop`) and Annotate. View: Play (the play view
+alone, `view.override layout play`), three-quarter, front, rear, wide, face,
+Desktop (the desktop pane, `view.override layout desktop`) and the chase
+camera. Places: the stage, the hero studio, the gallery, the portals, the chess
+table, the computer, the devices deck and Wonderland (`debug.go`). Releasing at
+the hub cancels. The bar fades after six seconds without input, and the bar and
+the cursor step aside while the seat is engaged on a device; the bar also steps
+aside while a wheel is open.
 
 ## Edit the native character live
 

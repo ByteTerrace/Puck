@@ -129,6 +129,32 @@ same line, and a binding row or wheel sector names it like any verb
 is refused with the list of places. How a command like it is authored is in
 the [commands reference](../../docs/reference/commands.md#document-authored-commands).
 
+## Controls on screen
+
+The controller bar along the bottom edge has five pages of twelve plates,
+reached by holding the triggers (or Z and X on the keyboard); the page's name
+sits under the bar and the row above it lights what is held. The Go and Tour
+pages hold this world's places and gallery, so a pad reaches them without the
+console ([`pad.puck`](pad.puck); the bar, the other three pages and the play
+wheel are [`controls.puck`](controls.puck), and the key layout is
+[`pad-kit.puck`](pad-kit.puck)):
+
+| Hold | Page | What the twelve plates do |
+|---|---|---|
+| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)) |
+| LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face, head, boots, shoulder), the chase camera, annotation, the jetpack alone |
+| RT or X | Debug | Where, channels, console, build, the inspector, the debug view, frame hold and compare, stop, and the suit toggle |
+| LT then RT | Go | `debug.go` to the stage, gallery, portals, Wonderland, hero studio, devices, chess, computer and the four gallery levels |
+| RT then LT | Tour | The gallery tour (next, previous, flag, debug view, slice, entrance), its lights and motion, and the garden and night paintings |
+
+The press order picks the page, so the two double squeezes are two pages. Keys
+under a held Z or X are the arrow keys for the d-pad, I, J, K, L for North,
+West, South and East, U and O for LB and RB, and N and M for the stick presses.
+The play wheel (hold Tab or LB) has three rings, Act, View and Places; Up and
+Down on the arrow keys or the d-pad, or the mouse wheel, step the ring.
+`gallery.lights.all On|Off` and `gallery.motion 1|0` are the two console
+commands the Tour page adds.
+
 ## The layout
 
 | Where | What | Portal |

@@ -1171,7 +1171,9 @@ Facts a script needs:
   entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
   imports, the `theme.puck` theme and the `controls.puck` cursor, key hints,
-  icons, binding bar and play wheel it and the garden import, and
+  icons, five-page binding bar and three-ring play wheel it and the garden import
+  (with `pad.puck`, the debug world's own Go and Tour pages and Places ring, and
+  the `pad-kit.puck` library), and
   `garden.puck` and `night.puck`, the destinations its painting wing's portals
   open onto, and `paintings.puck`, the wing in the gallery hall
   ([the portal demo](../../worlds/debug/debug.md));

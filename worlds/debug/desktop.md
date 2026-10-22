@@ -52,8 +52,8 @@ view.override layout desktop
 view.override layout play
 ```
 
-The play wheel's Desktop and Play sectors (hold Tab or LB) run the same two
-lines. `view.override layout auto` also returns to the play view. `world.view.panes`
+The play wheel's Desktop and Play sectors (hold Tab or LB, then step to the View
+ring) run the same two lines. `view.override layout auto` also returns to the play view. `world.view.panes`
 lists the shown panes; with the desktop layout active it lists `claude` over
 the bottom two fifths, with its mapping.
 

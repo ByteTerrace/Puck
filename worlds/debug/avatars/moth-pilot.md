@@ -23,8 +23,10 @@ right cheek and falls over her right collarbone to an ochre tie.
 [`suit.puck`](../suit.puck) imports this file, and the debug world, the garden
 and the night field import `suit.puck`. A body whose `suit` cell is 0 runs the
 `pilot` kit (a walker with one jump and no flight mode, its capsule 0.25 m in
-radius and 1.68 m tall) and wears the `moth-pilot` look. In the debug world, T
-or the right trigger flips the cell while she stands; from the console:
+radius and 1.68 m tall) and wears the `moth-pilot` look. In the debug world, T,
+or South while the right trigger is held (K while X is held; the bar's Debug
+page, `SU`), flips the cell while she stands, as does the play wheel's Suit
+sector; from the console:
 
 ```text
 body.press suit 1 0.2 0
