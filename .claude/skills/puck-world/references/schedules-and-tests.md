@@ -19,11 +19,17 @@ fixed number of ticks apart; pin everything that must land on a tick in one
 call instead.
 
 1. Boot your own World (`--devices none --control --state-dir <lane dir>`), or
-   use the live one when the brief allows mutations. Wait for `world.wait
-   bakes <seconds>`, then `world.lockstep on` (windowed only; the offscreen host
-   always presents this way) so presentation animation (gait, foot plants,
-   exposure adaptation) advances exactly one step a tick and never by wall
-   time.
+   use the live one when the brief allows mutations, and turn `world.lockstep
+   on` as early as you can (a piped script's first line runs before tick 1).
+   Lockstep (windowed only; the offscreen host always steps this way) steps at
+   most once a frame, presents the completed tick rather than an interpolation
+   (as a frame held for a capture always does), and advances presentation
+   animation by the ticks completed since the last captured frame
+   (`WorldFramePresenter.HistoryFree`), so a frame the render graph skips drops
+   no time. A frame held for a settled capture also culls by box rather than by
+   the occlusion test and rates no work, so the still owes nothing to earlier
+   frames. Wait for `world.wait bakes <seconds>` before anything you read
+   pixels from.
 2. Arm the whole script in one line with `world.at` (`WorldTickScript`):
 
    ```text
@@ -58,17 +64,18 @@ call instead.
 
 What repeats, and what to compare:
 
-| Compare | Tick lists | `hash` (capture scope) | `pose` hash | Slot PNGs |
+| Compare | Tick lists | `hash` (capture scope) | `pose` hash (every body) | Slot PNGs |
 |---|---|---|---|---|
-| Same script, two fresh Worlds, same absolute `start` | identical | identical | identical | byte-identical or within a few levels at most stills; at a still taken mid-turn, silhouette edges differ (up to ~100 levels on ~15% of pixels, mean under 0.5) |
-| Same script twice in one World (`+<n>` start) | identical offsets | differs: it folds the tick and the world's clocks | identical | silhouette edges as above, plus scene content that animates with the absolute tick (mean under 2 levels) |
-| Either, without `world.lockstep on` | as above | as above | as above | not comparable: gait phase and exposure adaptation integrate wall-clock frame time, so up to every pixel differs |
+| Same script in fresh lockstep Worlds, same absolute `start`, the first or a later script of the run | identical | identical | identical | byte-identical: six fresh Worlds, sixteen stills each across two scripts, the turn and the stop included |
+| Same script twice in one World (another `start`) | identical offsets | differs: it folds the tick and the world's clocks | identical | differs where state the world advances on its own is at another tick, as the differing capture hash says (likely rule deadlines such as the Moth's blink, animated screens and sky content; not isolated): up to ~170 levels on silhouettes, ~16 across animated regions |
+| Without `world.lockstep on` | as above | as above | as above | not comparable: gait phase, exposure adaptation and frame-history work follow wall-clock frames, so up to every pixel differs |
 
-So the proof of a repeat is the tick list and the `pose` hash per still (and
-the capture `hash` across fresh Worlds pinned to the same absolute ticks);
-compare slot PNGs by changed-pixel count and mean difference, and read the
-flagged ones, never by bytes. Two settled captures held at one tick show the
-same pose; a residual edge difference is presentation, not state.
+So a repeat is proven by the tick list and the hashes per still, and two
+fresh-World stills of one tick compare equal byte for byte; a still that does
+not is a determinism defect in presentation, so read its differences
+(changed-pixel count, largest difference, where they sit) and report it. To
+repeat in one World, the world's own state must also be at the same tick; it
+rarely is, so compare repeats across fresh Worlds.
 
 ## Captures
 

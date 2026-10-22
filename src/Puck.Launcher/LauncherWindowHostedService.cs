@@ -595,7 +595,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     if (pump is { } activePump) {
                         fixedSteps += ((ulong)activePump.Advance(
                             deltaTicks: deltaTicks,
-                            maxFrameTicks: (tickLocked ? stepTicks : maxFrameTicks),
+                            maxFrameTicks: PresentPacingControl.FrameClampOf(maxFrameTicks: maxFrameTicks, stepTicks: stepTicks, tickLocked: tickLocked),
                             stepTicks: stepTicks
                         ));
                     }
@@ -654,11 +654,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             (height > 0)
                         ) {
                             var frameContext = new FrameContext(
-                                AccumulatorTicks: (tickLocked ? 0UL : (pump?.AccumulatorTicks ?? 0UL)),
+                                AccumulatorTicks: PresentPacingControl.AccumulatorOf(accumulatorTicks: (pump?.AccumulatorTicks ?? 0UL), tickLocked: tickLocked),
                                 DeltaTicks: (fixedSteps * stepTicks),
                                 DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                                FrameDeltaTicks: ((tickLocked && (pump is not null)) ? (fixedSteps * stepTicks) : deltaTicks),
+                                FrameDeltaTicks: PresentPacingControl.FrameDeltaOf(simulates: (pump is not null), steppedTicks: (fixedSteps * stepTicks), tickLocked: tickLocked, wallTicks: deltaTicks),
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,

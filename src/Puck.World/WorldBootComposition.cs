@@ -939,6 +939,7 @@ public static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        services.AddSingleton<ICommandModule, WorldReseedCommandModule>();
 
         // The on-screen annotations (view.annotate): presentation-only state, core like view.override because the
         // debug world binds the verb. A windowed boot draws it on the overlay and feeds it from the pointer.

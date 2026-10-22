@@ -1499,7 +1499,36 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// predecessor; a presented capture reads frames as the display shows them and does not pin them.</summary>
     public Func<bool>? CapturePending { get; set; }
 
-    private bool PinsPresentation => (PinsStateFraction || (CapturePending?.Invoke() ?? false));
+    /// <summary>Gets or sets whether presentation runs in lockstep with the ticks (<c>world.lockstep</c>): every frame
+    /// presents the completed tick itself, as a frame held for a settled capture does, and advances presentation
+    /// animation by the ticks completed since the last frame captured rather than by the host frame's interval.
+    /// <see langword="null"/> is never.</summary>
+    public Func<bool>? HistoryFree { get; set; }
+
+    // A lockstep frame presents the completed tick itself, as an offscreen one does: interpolating from the tick before
+    // would show that tick again on a frame that steps nothing, and the presentation animation would read the step back
+    // and forth there on some runs and not others.
+    private bool PinsPresentation => (PinsStateFraction || SettlesCapture || TickLocked);
+    // Whether this frame is held for a settled capture.
+    private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
+    // Whether presentation runs in lockstep with the ticks.
+    private bool TickLocked => (HistoryFree?.Invoke() ?? false);
+    /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
+    /// draws the previous frame's visible set, while the frame is held for a settled capture.</summary>
+    /// <param name="cull">The session's cull level.</param>
+    /// <param name="settles">Whether the frame is held for a settled capture.</param>
+    /// <returns>The frame's cull level.</returns>
+    public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
+        ? SdfMeshCullLevel.Frustum
+        : cull);
+    /// <summary>Returns the rated work a frame rates: none while the frame is held for a settled capture, since a rated
+    /// update held from an earlier frame would show an earlier tick in the still, and the session's levers otherwise.</summary>
+    /// <param name="rates">The session's rate levers.</param>
+    /// <param name="settles">Whether the frame is held for a settled capture.</param>
+    /// <returns>The frame's rate levers.</returns>
+    public static SdfUpdateRates RatesOf(SdfUpdateRates rates, bool settles) => (settles
+        ? SdfUpdateRates.None
+        : rates);
 
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
@@ -1981,8 +2010,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
-            MeshCull = m_settings.Cull,
-            UpdateRates = m_settings.UpdateRates,
+            // A frame held for a settled capture renders free of earlier frames' visible set and rated updates, so a
+            // still of a tick is the same image whatever frames preceded it.
+            MeshCull = CullOf(cull: m_settings.Cull, settles: SettlesCapture),
+            UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
             RateCounts = m_settings.RateCounts,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,

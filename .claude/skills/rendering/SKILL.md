@@ -146,7 +146,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   with (`SdfWorldTables.HoldsFrame`, the `held` argument of
   `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
   so a temporal view converges over the held renders. Settling motion history
-  on a held upload makes every capture of the motion view read still.
+  on a held upload makes every capture of the motion view read still. A frame
+  held for a settled capture also culls by box rather than by the occlusion
+  test and rates no work (`WorldFramePresenter.CullOf`/`RatesOf`), so the still
+  owes nothing to earlier frames' visible set or rated updates; under
+  `world.lockstep` every frame also presents the completed tick and advances
+  presentation by the ticks completed, which is what makes stills of one tick
+  repeat across Worlds.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:
