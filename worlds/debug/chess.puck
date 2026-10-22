@@ -16,9 +16,11 @@ bodies {
 grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" })
 
 // The table's placement, its creation's floor 0.5 m under its origin on the lobby's floor (y 0.05), and the ticks the
-// physics must rest before an arrangement is judged (one second at the debug world's 30 Hz).
+// physics must stay at rest before an arrangement is judged (0.3 s at the debug world's 30 Hz). The rigid solver's own
+// resting latch has already held each piece still before `physics(quiescent)` reads 1, so the hold only has to outlast
+// a piece that is touched, knocked or dropped beside another settling.
 let chessTable = [12.2, -0.45, 20]
-let chessSettleTicks = 30
+let chessSettleTicks = 9
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
 let pieceLooks = concat(
@@ -764,7 +766,7 @@ for i in range(0, 32) {
   rule $"chess-ai-place-{i}" {
     gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] >= 0), right: 1)
     mode: Level
-    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.3, 0])
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.08, 0])
   }
   rule $"chess-ai-capture-{i}" {
     gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] < 0), right: 1)

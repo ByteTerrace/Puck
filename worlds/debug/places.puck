@@ -8,8 +8,7 @@
 // own authority, as though the caller had typed it.
 
 spawnPoints [
-  // Two and a half metres in front of the device row's middle plinth in the gallery lobby (devices.puck), facing its
-  // screens.
+  // Two metres in front of the device row's middle plinth in the gallery lobby (devices.puck), facing its screens.
   { id: "devices", position [15, 0.05, 25.5], yawDegrees: 180 }
   // At White's edge of the chess table in the gallery lobby (chess.puck), 1.6 m from the board's centre and facing it,
   // inside the board's engage radius: the context button sits her down.
