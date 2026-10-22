@@ -57,7 +57,14 @@ temporal jitter, a thousandth of the near distance in front of the near plane,
 the shadow filter's reach around receivers, and no box at all for a skinned
 draw whose vertices the GPU places. Occlusion, levels of detail and residency
 build on the same per-draw box; authored areas are not assumed, because the
-debug world's levels are open plan and name no rooms.
+debug world's levels are open plan and name no rooms. Hidden geometry is found
+by a depth-based occlusion test that needs no authoring, not by authored rooms.
+
+Anything that trades a visible change for cost, such as a level of detail, an
+unloaded residency ring or a culled small object, switches only beyond the
+distance at which the switch is barely perceptible (the owner's ruling). The
+switch distance is derived from the change's size on screen at the view's
+resolution, not fixed in metres.
 
 ## The pipeline foundation
 
