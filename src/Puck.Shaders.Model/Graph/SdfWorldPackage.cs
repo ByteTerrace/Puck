@@ -220,17 +220,18 @@ public static partial class SdfWorldPackage {
     /// <summary>The depth the mesh pass clears its depth attachment to: zero, the reversed-Z far plane at infinity.</summary>
     public const float MeshClearDepth = 0f;
 
-    /// <summary>Gets the mesh pass's depth attachment: cleared to <see cref="MeshClearDepth"/> and discarded, the one
-    /// statement of its clear that the pass's render pass and the depth image the node creates for it share.</summary>
+    /// <summary>Gets the mesh pass's depth attachment: cleared to <see cref="MeshClearDepth"/> and stored, since the
+    /// pass's second occlusion phase draws over its first's depth; the one statement of its clear that the pass's render
+    /// pass and the depth image the node creates for it share.</summary>
     public static GpuDepthAttachment MeshDepthAttachment { get; } = new(
         ClearDepth: MeshClearDepth,
         Format: MeshDepthFormat,
         Load: GpuAttachmentLoad.Clear,
-        Store: GpuAttachmentStore.Discard
+        Store: GpuAttachmentStore.Store
     );
     /// <summary>Gets a shadow cascade's depth attachment: cleared to <see cref="MeshClearDepth"/>, which reads as the
     /// cascade's far plane where nothing was drawn, and stored, since the surface pass samples it.</summary>
-    public static GpuDepthAttachment MeshShadowDepthAttachment { get; } = MeshDepthAttachment with { Store = GpuAttachmentStore.Store };
+    public static GpuDepthAttachment MeshShadowDepthAttachment { get; } = MeshDepthAttachment;
 
     /// <summary>The name the fragment's output port version takes: the view's color, which the composite writes from the
     /// sky's runs and the lit image.</summary>

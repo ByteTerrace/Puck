@@ -34,9 +34,12 @@ public sealed class WorkClassLawTests {
     [Fact]
     public void GpuSubmissionCountsAreDeterministicAndKernelCountsAndCreatedObjectsPerBackend() {
         // The kernels count their own march steps and texels on the GPU: the marches run in floats and an indirect pass
-        // runs only the tiles culling leaves it, so those follow the device; every call the node makes does not.
-        Assert.All(collection: GpuWork.SubmissionKinds.ToArray().Except(second: GpuWork.KernelKinds.ToArray()), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.Deterministic));
-        Assert.All(collection: GpuWork.KernelKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
+        // runs only the tiles culling leaves it, so those follow the device, as do the draws and vertices a pass's
+        // kernels issue as counted indirect draws; every other call the node makes does not.
+        WorkKind[] drawn = [GpuWork.Draws, GpuWork.Vertices];
+
+        Assert.All(collection: GpuWork.SubmissionKinds.ToArray().Except(second: [.. GpuWork.KernelKinds.ToArray(), .. drawn]), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.Deterministic));
+        Assert.All(collection: [.. GpuWork.KernelKinds.ToArray(), .. drawn], action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
         Assert.All(collection: GpuWork.LifetimeKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
         Assert.Equal(actual: PresentationWork.Skipped.Class, expected: WorkClass.Pacing);
     }

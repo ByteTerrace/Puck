@@ -145,6 +145,17 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle holding the group counts (must carry <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>).</param>
     /// <param name="offset">The byte offset into <paramref name="bufferHandle"/> of the <c>VkDispatchIndirectCommand</c>.</param>
     void DispatchIndirect(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offset);
+    /// <summary>Records a counted indirect draw (<c>vkCmdDrawIndirectCountKHR</c>): up to <paramref name="maxDrawCount"/>
+    /// <c>VkDrawIndirectCommand</c>s, <paramref name="stride"/> bytes apart, as many as the count buffer holds.</summary>
+    /// <param name="device">The command table of the logical device, which resolved <see cref="VulkanDeviceCommands.CmdDrawIndirectCountKhr"/>.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle holding the commands (must carry <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>).</param>
+    /// <param name="offset">The byte offset into <paramref name="bufferHandle"/> of the first command.</param>
+    /// <param name="countBufferHandle">The native <c>VkBuffer</c> handle holding the count (must carry <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>).</param>
+    /// <param name="countBufferOffset">The byte offset into <paramref name="countBufferHandle"/> of the count.</param>
+    /// <param name="maxDrawCount">The most commands drawn.</param>
+    /// <param name="stride">The bytes between consecutive commands.</param>
+    void DrawIndirectCount(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount, uint stride);
     // Low-level synchronization and transfer primitives: no barriers are implied, so the
     // caller sequences layouts and access/stage masks. All operate on 2D, single-layer,
     // color images.

@@ -58,7 +58,17 @@ the shadow filter's reach around receivers, and no box at all for a skinned
 draw whose vertices the GPU places. Occlusion, levels of detail and residency
 build on the same per-draw box; authored areas are not assumed, because the
 debug world's levels are open plan and name no rooms. Hidden geometry is found
-by a depth-based occlusion test that needs no authoring, not by authored rooms.
+by a depth-based occlusion test that needs no authoring, not by authored rooms:
+each view's mesh pass draws what its previous frame found visible, builds a
+pyramid of the farthest depth it drew, tests every box the box cull keeps
+against it on the GPU and draws the newly visible in a second phase of the same
+frame, so the test is conservative and a disocclusion is never a frame late.
+Both phases keep the box cull's draw order, so depth ties resolve alike. Glass
+never occludes, the shadow cascades keep the box cull, and each nested view tests
+against its own depth. On the debug world it removed a further 34% to 61% of
+the mesh pass's triangles where walls and slabs hide exhibits
+([P20](../plans/rendering.md#p20--visibility-areas-and-residency)).
+`world.cull frustum` keeps the box cull alone for comparison.
 
 Anything that trades a visible change for cost, such as a level of detail, an
 unloaded residency ring or a culled small object, switches only beyond the

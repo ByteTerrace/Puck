@@ -147,6 +147,9 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.DrawIndexed"] = (rig => rig.Services.Recorder.DrawIndexed(commandBufferHandle: 2, indexCount: 6), [(GpuWork.Draws, 1L), (GpuWork.Vertices, 6L)]),
             ["IGpuRecorder.Dispatch"] = (rig => rig.Services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 8, groupCountY: 8, groupCountZ: 1), [(GpuWork.Dispatches, 1L)]),
             ["IGpuRecorder.DispatchIndirect"] = (rig => rig.Services.Recorder.DispatchIndirect(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2), [(GpuWork.IndirectDispatches, 1L)]),
+            ["IGpuRecorder.CanDrawIndirectCount"] = (rig => _ = rig.Services.Recorder.CanDrawIndirectCount, none),
+            // The commands' draws and vertices are the GPU's to count; the host counts the call.
+            ["IGpuRecorder.DrawIndirectCount"] = (rig => rig.Services.Recorder.DrawIndirectCount(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2, countBufferHandle: 4, countBufferOffset: 0UL, maxDrawCount: 8, pipelineLayoutHandle: 5), [(GpuWork.IndirectDraws, 1L)]),
             ["IGpuRecorder.ClearStorageImage"] = (rig => rig.Services.Recorder.ClearStorageImage(commandBufferHandle: 2, format: GpuPixelFormat.R8G8B8A8Unorm, imageHandle: 3), [(GpuWork.Clears, 1L)]),
             ["IGpuRecorder.ClearStorageBuffer"] = (rig => rig.Services.Recorder.ClearStorageBuffer(bufferHandle: 3, commandBufferHandle: 2, sizeBytes: 16UL), [(GpuWork.Clears, 1L)]),
             ["IGpuRecorder.CopyImage"] = (rig => rig.Services.Recorder.CopyImage(commandBufferHandle: 2, destinationImageHandle: 4, height: 4, sourceImageHandle: 3, width: 4), [(GpuWork.Copies, 1L)]),

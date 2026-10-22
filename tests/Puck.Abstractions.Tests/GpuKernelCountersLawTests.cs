@@ -222,7 +222,7 @@ public sealed class GpuKernelCountersLawTests {
         );
 
         Assert.Equal(actual: GpuKernelCounters.RowBytes, expected: ((GpuWork.KernelKinds.Length * GpuKernelCounters.CountWords) * sizeof(uint)));
-        Assert.Equal(actual: counters.SizeBytes, expected: (10UL * ((ulong)GpuKernelCounters.RowBytes)));
+        Assert.Equal(actual: counters.SizeBytes, expected: GpuKernelCounters.SlotBytesOf(rows: 10));
         Assert.Equal(actual: counters.TotalBytes, expected: (6UL * counters.SizeBytes));
         Assert.Equal(actual: (gpu.BufferBytes - bytesBefore), expected: counters.TotalBytes);
         Assert.NotSame(expected: counters.RowOf(row: 0, slot: 0).Buffer, actual: counters.RowOf(row: 0, slot: 1).Buffer);

@@ -48,7 +48,8 @@ public static partial class GpuWork {
     internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
     internal const int VerticesColumn = (ShapeGradientsColumn + 1);
-    internal const int SubmissionColumnCount = (VerticesColumn + 1);
+    internal const int IndirectDrawsColumn = (VerticesColumn + 1);
+    internal const int SubmissionColumnCount = (IndirectDrawsColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -62,11 +63,18 @@ public static partial class GpuWork {
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting compute dispatches whose group counts the GPU reads from a buffer.</summary>
     public static WorkKind IndirectDispatches { get; } = new(name: "gpu.dispatches.indirect", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting draws, indexed or not.</summary>
-    public static WorkKind Draws { get; } = new(name: "gpu.draws", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting draws, indexed or not: each draw the host records, and each command a pass's
+    /// kernels write for a counted indirect draw, which the GPU counts (<see cref="GpuKernelCounters.DrawnWords"/>). A
+    /// pass whose kernels choose its draws, such as an occlusion test, counts per backend.</summary>
+    public static WorkKind Draws { get; } = new(name: "gpu.draws", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the counted indirect draws the host records
+    /// (<see cref="IGpuRecorder.DrawIndirectCount"/>): calls, each drawing the commands the GPU wrote, which
+    /// <see cref="Draws"/> counts.</summary>
+    public static WorkKind IndirectDraws { get; } = new(name: "gpu.draws.indirect", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the vertices draws ask for: each draw's vertex count times its instance count,
-    /// or an indexed draw's index count, so a triangle-list draw's triangles are a third of it.</summary>
-    public static WorkKind Vertices { get; } = new(name: "gpu.vertices", unit: "count", workClass: WorkClass.Deterministic);
+    /// or an indexed draw's index count, so a triangle-list draw's triangles are a third of it. A counted indirect
+    /// draw's commands count on the GPU, as <see cref="Draws"/> does.</summary>
+    public static WorkKind Vertices { get; } = new(name: "gpu.vertices", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting render pass instances begun.</summary>
     public static WorkKind RenderPasses { get; } = new(name: "gpu.render-passes", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting command buffers begun for recording.</summary>
@@ -204,6 +212,7 @@ public static partial class GpuWork {
             kinds[ShapesEvaluatedColumn] = ShapesEvaluated;
             kinds[ShapeGradientsColumn] = ShapeGradients;
             kinds[VerticesColumn] = Vertices;
+            kinds[IndirectDrawsColumn] = IndirectDraws;
 
             return kinds;
         }

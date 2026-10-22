@@ -260,6 +260,14 @@ internal sealed class FakeGpuDevice :
         OnDispatch?.Invoke(groupCountX, groupCountY, groupCountZ);
     }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
+    bool IGpuRecorder.CanDrawIndirectCount {
+        get {
+            Hit(key: "IGpuRecorder.CanDrawIndirectCount");
+
+            return true;
+        }
+    }
+    void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => Hit(key: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         BufferClears?.Add(item: (bufferHandle, sizeBytes));

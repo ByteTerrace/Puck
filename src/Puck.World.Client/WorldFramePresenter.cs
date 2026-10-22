@@ -1868,7 +1868,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
-            DrawUnseen = !m_settings.Cull,
+            MeshCull = m_settings.Cull,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,

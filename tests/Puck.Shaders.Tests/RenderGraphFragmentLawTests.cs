@@ -413,8 +413,8 @@ public sealed class RenderGraphFragmentLawTests {
 
         node.ProduceUntilInstalled();
 
-        // Three frame slots of a counter and a readback, two rows of 16 bytes each.
-        var rowBytes = ((ulong)(2 * GpuKernelCounters.RowBytes));
+        // Three frame slots of a counter and a readback, two rows and their drawn counts each.
+        var rowBytes = GpuKernelCounters.SlotBytesOf(rows: 2);
 
         Assert.Equal(
             actual: gpu.CreatedObjects.Count(predicate: created => ((created.Kind == "buffer") && (created.Bytes == rowBytes))),

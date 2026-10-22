@@ -124,12 +124,13 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being prepared, before any pass records.</param>
     /// <returns>The named detail labels in kernel index order.</returns>
     IReadOnlyList<string> WorkDetails(in FrameContext context) => [];
-    /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
-    /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned barriers the instance recorded before it left
-    /// each bound version in the layout its port's access needs (<see cref="RenderGraphPortAccess"/>): a sampled input
-    /// shader-readable and a color-attachment output in <see cref="GpuImageLayout.RenderTarget"/>, which a render pass
-    /// the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
+    /// <summary>Records the pass's work for one frame. It must not submit, wait or create a pipeline, and records no
+    /// barrier on a bound version but to move it and return it within the recording (a mesh pass reading its own
+    /// target between two draws of it): the instance submits the command buffer with the rest of its frame, the
+    /// pipelines were built off the frame thread (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned
+    /// barriers the instance recorded before it left each bound version in the layout its port's access needs
+    /// (<see cref="RenderGraphPortAccess"/>): a sampled input shader-readable and a color-attachment output in
+    /// <see cref="GpuImageLayout.RenderTarget"/>, which a render pass the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
     /// copies an input into an output to stand for it.</summary>
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
