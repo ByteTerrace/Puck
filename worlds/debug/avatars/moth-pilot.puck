@@ -698,7 +698,7 @@ prototypes {
           color: "#FFF8EF"
           roughness: 0.2
           specular: 0.04
-          emissive: 0.8
+          emissive: 1200
         }
         {
           color: "#1A1B1F"
@@ -777,7 +777,7 @@ prototypes {
         { color: "#151617", roughness: 0.6, specular: 0.04 }
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
         { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
-        { color: "#FF3A2A", emissive: 4, roughness: 0.3 }
+        { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
       ]
 
       // The whole body rides the pelvis, which turns her hips into a diagonal, trails a turn, leans into her planar
