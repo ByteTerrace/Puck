@@ -61,10 +61,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
 
-    /// <summary>Whether the view publishes the luminance it shades, in nits, unexposed: a window's view of the world
-    /// beyond its glass, or a sky layer's view of another world, whose consumer shows that luminance in its own scene and
-    /// exposes it with its own view. The default, <see langword="false"/>, exposes the view by the frame's
-    /// <see cref="SdfFrame.Exposure"/>, so its output is display-referred before the tonemap.</summary>
+    /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its
+    /// glass, or a sky layer's view of another world, whose consumer shows it in its own scene. Such a view applies the
+    /// window share of its exposure (<see cref="SdfPhotometry.WindowAdaptation"/>) and the consumer the rest of its own,
+    /// so the window shows the world beyond at an exposure between the two. The default, <see langword="false"/>,
+    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, so its output is display-referred before
+    /// the tonemap.</summary>
     public bool Unexposed { get; init; }
 }
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>

@@ -32,6 +32,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: SdfPhotometry.PositionalWeight(candela: 50f), actual: lamp.Weight);
         Assert.Equal(expected: 1f, actual: SdfPhotometry.LuminanceOf(color: lamp.Color), tolerance: 1e-6f);
         Assert.Equal(expected: gain, actual: resolved.Exposure.BrightestGain);
+        // An unanchored point light is static: the irradiance volume traces and occludes it.
+        Assert.True(condition: bulb.IsTraced);
+        Assert.True(condition: lamp.IsTraced);
+        Assert.False(condition: sun.IsTraced);
     }
     [Fact]
     public void ASpotResolvesToAPointWithItsConeAboutItsAim_ItsAimTurningWithItsAnchor() {
@@ -59,6 +63,9 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(expected: (down, downOffset), actual: (plain.SpotAxis, plain.SpotOffset));
         Assert.Equal(expected: SdfPhotometry.PositionalWeight(candela: 200f), actual: plain.Weight);
+        // An anchored light moves with its anchor, so the volume neither traces nor occludes it; the static one it does.
+        Assert.False(condition: aimed.IsTraced);
+        Assert.True(condition: plain.IsTraced);
     }
     [Fact]
     public void TheLightingReadBackEchoesASpotAndTheExposure() {

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/89c922abc546a587200ed4a82e25e30c572c0d2c9bd91338c1f51ad68c293449). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/51783052753017ae9b791a0204d725a3d31864b50f9ba15ed06bf145759f86af). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -140,7 +140,7 @@ struct SdfResolvePass {
     [[vk::offset(60)]] uint disableAmbientOcclusion;
     [[vk::offset(64)]] uint disableScreenLights;
     [[vk::offset(68)]] uint disableSoftShadows;
-    [[vk::offset(72)]] uint exposeOutput;
+    [[vk::offset(72)]] float exposeShare;
     [[vk::offset(76)]] float exposure;
     [[vk::offset(80)]] float farDistance;
     [[vk::offset(84)]] uint _pad84;
@@ -176,8 +176,8 @@ struct SdfResolvePass {
     [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
     [[vk::offset(304)]] uint4 lightMask;
-    [[vk::offset(320)]] uint meshBakeCount;
-    [[vk::offset(324)]] uint _pad324;
+    [[vk::offset(320)]] float localAdaptation;
+    [[vk::offset(324)]] uint meshBakeCount;
     [[vk::offset(328)]] uint _pad328;
     [[vk::offset(332)]] uint _pad332;
     [[vk::offset(336)]] float4 meshBakeLattices[64];
@@ -194,8 +194,8 @@ struct SdfResolvePass {
     [[vk::offset(1612)]] uint _pad1612;
     [[vk::offset(1616)]] float4 meshShadowParameters;
     [[vk::offset(1632)]] uint meshShadowTexels;
-    [[vk::offset(1636)]] float nearDistance;
-    [[vk::offset(1640)]] uint _pad1640;
+    [[vk::offset(1636)]] float meterLuminance;
+    [[vk::offset(1640)]] float nearDistance;
     [[vk::offset(1644)]] uint _pad1644;
     [[vk::offset(1648)]] float4 previousView[6];
     [[vk::offset(1744)]] uint screenCount;
@@ -218,8 +218,8 @@ struct SdfResolvePass {
     [[vk::offset(1856)]] uint workCounterRow;
     [[vk::offset(1860)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa091B74EF : register(b0, space3);
-#define passGroup passGroupIsa091B74EF
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa2F18CD5C : register(b0, space3);
+#define passGroup passGroupIsa2F18CD5C
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

@@ -554,6 +554,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            // The destination's own authored tier: its views read its own irradiance volume, which also meters its
+            // exposure and occludes its fixtures, as a seat presented there would.
+            IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,

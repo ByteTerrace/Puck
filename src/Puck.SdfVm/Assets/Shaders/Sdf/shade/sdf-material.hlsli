@@ -171,6 +171,19 @@ float3 sdfMaterialSpecular(SdfMaterialData material, float3 normal, float3 viewD
 
     return result;
 }
+// The GGX lobe's directional albedo under a uniform environment, the split-sum environment BRDF's scale and bias at a
+// roughness and view angle (Karis's analytic fit of the UE4 lookup): the environment radiance about the mirror direction
+// times this is the lobe's reflection of it. A rough dielectric stays near its f0 at every angle, so a matte surface
+// at grazing reflects little; a smooth one rises toward one there.
+float3 sdfMaterialEnvironmentBrdf(float3 f0, float roughness, float nDotV) {
+    float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
+    float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
+    float4 r = ((roughness * c0) + c1);
+    float a004 = ((min((r.x * r.x), exp2(-9.28 * nDotV)) * r.x) + r.y);
+    float2 scaleBias = ((float2(-1.04, 1.04) * a004) + r.zw);
+
+    return ((f0 * scaleBias.x) + scaleBias.y);
+}
 // The ONE lit-surface shade funnel: a metal-scaled lambert term, an emissive lift, and a fresnel sheen edge-lift.
 // `diffuse` is the caller's accumulated irradiance over pi, in nits a white surface would show (ambient, the lights'
 // diffuse terms — a float3 so colored lights tint the surface); each light's GGX and clearcoat lobe is its own response

@@ -32,6 +32,14 @@ public static class SdfPhotometry {
     public const float MinimumTemperature = 1000f;
     /// <summary>The highest colour temperature <see cref="Blackbody"/> spans, in kelvin.</summary>
     public const float MaximumTemperature = 40000f;
+    /// <summary>The share of its own exposure a window onto another world carries, in [0, 1]: the view beyond the glass
+    /// publishes its luminance raised by its exposure to this power, and the view looking through the glass applies the
+    /// rest of its own, so the window shows <c>L · E_viewer · (E_window / E_viewer)^share</c>. At zero the window is
+    /// the luminance beyond it under the viewer's exposure alone, so a sunlit garden seen from a dim room blows to
+    /// white as it does in a photograph; at one it is the garden as its own camera shows it, however dim the room. The
+    /// eye adapts to a window it looks through, so the share stands near the garden's own look. Every level of windows
+    /// within windows carries the same share, so the sum across them is the same whatever the nesting.</summary>
+    public const float WindowAdaptation = 0.75f;
     /// <summary>The lowest <c>EV100</c> an exposure admits: starlight.</summary>
     public const float MinimumEv100 = -6f;
     /// <summary>The highest <c>EV100</c> an exposure admits: beyond the brightest sunlit snow.</summary>

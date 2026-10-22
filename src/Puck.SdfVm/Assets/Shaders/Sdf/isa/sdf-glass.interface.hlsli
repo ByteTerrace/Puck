@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/465b3dc508389aa5ab388a0c143916b40a1fb6521256b91634aa949e92eaf982). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/8a380c399b74480ad22e1fb667dd014d544f21a66f54b90e4f4e0f6e3308001a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -140,7 +140,7 @@ struct SdfGlassPass {
     [[vk::offset(60)]] uint disableAmbientOcclusion;
     [[vk::offset(64)]] uint disableScreenLights;
     [[vk::offset(68)]] uint disableSoftShadows;
-    [[vk::offset(72)]] uint exposeOutput;
+    [[vk::offset(72)]] float exposeShare;
     [[vk::offset(76)]] float exposure;
     [[vk::offset(80)]] float farDistance;
     [[vk::offset(84)]] uint _pad84;
@@ -176,8 +176,8 @@ struct SdfGlassPass {
     [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
     [[vk::offset(304)]] uint4 lightMask;
-    [[vk::offset(320)]] uint meshBakeCount;
-    [[vk::offset(324)]] uint _pad324;
+    [[vk::offset(320)]] float localAdaptation;
+    [[vk::offset(324)]] uint meshBakeCount;
     [[vk::offset(328)]] uint _pad328;
     [[vk::offset(332)]] uint _pad332;
     [[vk::offset(336)]] float4 meshBakeLattices[64];
@@ -194,8 +194,8 @@ struct SdfGlassPass {
     [[vk::offset(1612)]] uint _pad1612;
     [[vk::offset(1616)]] float4 meshShadowParameters;
     [[vk::offset(1632)]] uint meshShadowTexels;
-    [[vk::offset(1636)]] float nearDistance;
-    [[vk::offset(1640)]] uint _pad1640;
+    [[vk::offset(1636)]] float meterLuminance;
+    [[vk::offset(1640)]] float nearDistance;
     [[vk::offset(1644)]] uint _pad1644;
     [[vk::offset(1648)]] float4 previousView[6];
     [[vk::offset(1744)]] uint screenCount;
@@ -218,8 +218,8 @@ struct SdfGlassPass {
     [[vk::offset(1856)]] uint workCounterRow;
     [[vk::offset(1860)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa091B74EF : register(b0, space3);
-#define passGroup passGroupIsa091B74EF
+[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa2F18CD5C : register(b0, space3);
+#define passGroup passGroupIsa2F18CD5C
 [[vk::binding(1, 3)]] Texture2D<float4> lit : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> glassVisibility : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

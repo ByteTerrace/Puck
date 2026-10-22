@@ -7,6 +7,7 @@
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
 #ifdef SDF_VIEWS_PASS
+#include "sdf-mesh-irradiance.hlsli"
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
@@ -30,7 +31,9 @@ struct SdfLightSource {
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1) and each stable slot's shadow visibility.
+// material's already relaxed toward 1), each stable slot's shadow visibility, and the irradiance volume's probes about
+// it, which occlude a traced point or spot light (probed is false while the volume is off, and every such light goes
+// unoccluded).
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -38,6 +41,8 @@ struct SdfShadeSurface {
     SdfMaterialData material;
     float ambientOcclusion;
     float4 shadowVisibility;
+    bool probed;
+    SdfMeshProbes probes;
 };
 
 // A light's shadow visibility. A handoff fades a stable slot from its outgoing light to its incoming one: the outgoing
@@ -155,7 +160,8 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
 // What `light` adds at `surface`:
 // - a directional its wrapped Lambert term and its own GGX lobe under its shadow visibility;
 // - a point or spot its wrapped Lambert term and its own GGX lobe under the windowed inverse square and the spot's cone
-//   (sdfPointReach) and ambient occlusion;
+//   (sdfPointReach), ambient occlusion and, for a static light the irradiance volume traced (its Shadows flag,
+//   SdfLight.IsTraced), the share of the probes about the surface that see it (sdfMeshLightVisibility);
 // - a rim its view-dependent silhouette brighten;
 // - an occluder a Gaussian dimming of reflected light, facing the surface;
 // - a screen its glow toward what sits in front of its face: a Lambertian face of luminance L and area A casts
@@ -182,6 +188,9 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         float3 pointDirection;
         float reach = (light.weight * sdfPointReach(light.record, light.position, surface.position, pointDirection));
 
+        if ((reach > 0.0) && surface.probed && (light.record.Shadows != 0u) && (light.index >= 0)) {
+            reach *= sdfMeshLightVisibility(surface.probes, (uint)light.index);
+        }
         if (reach > 0.0) {
             float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 

@@ -252,7 +252,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return SdfPhotometry.UnitLuminance(color: Rgb(color: color, fallback: Vector3.One, mirror: mirror));
     }
     // A spot light's record: a point light's at its position, its intensity from its power over the outer cone when it
-    // authors power, and its cone's lanes about its aim.
+    // authors power, and its cone's lanes about its aim. An unanchored point or spot is static, so the irradiance volume
+    // traces and occludes it (SdfLight.IsTraced); an anchored one moves with its anchor and is neither.
     private SdfLight SpotOf(WorldStateMirror mirror, WorldRenderLight.Spot spot, SdfLight pinned, in WorldValueSite lightSite) {
         var angle = Angle(angle: spot.Angle, fallback: WorldRenderLight.Spot.DefaultAngle, field: WorldValueFields.SpotAngle, mirror: mirror, site: in lightSite);
         var inner = Angle(angle: spot.InnerAngle, fallback: (angle * WorldRenderLight.Spot.DefaultInnerShare), field: WorldValueFields.SpotInnerAngle, mirror: mirror, site: in lightSite);
@@ -264,6 +265,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return (pinned with {
             Color = Chroma(color: spot.Color, field: WorldValueFields.SpotTemperature, mirror: mirror, site: in lightSite, temperature: spot.Temperature),
             Direction = Position(fallback: pinned.Direction, mirror: mirror, position: spot.Position),
+            Shadows = ((spot.Anchor is null) ? 1u : 0u),
             SpotAxis = axis,
             SpotOffset = offset,
             Weight = SdfPhotometry.PositionalWeight(candela: candela),
@@ -558,6 +560,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                             ),
                         },
                         WorldRenderLight.Point point => Ranged(exposure: exposure, light: pinned with {
+                            Shadows = ((point.Anchor is null) ? 1u : 0u),
                             Color = Chroma(
                                 color: point.Color,
                                 field: WorldValueFields.PointTemperature,

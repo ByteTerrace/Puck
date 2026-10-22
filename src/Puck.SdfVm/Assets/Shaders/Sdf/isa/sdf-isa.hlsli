@@ -190,6 +190,8 @@
 #define SDF_SCREEN_EMISSION_EDGE       4u
 #define SDF_LIGHT_MINIMUM_DISTANCE     0.05
 #define SDF_LUMINANCE_CEILING          65000.0
+#define SDF_WINDOW_ADAPTATION          0.75
+#define SDF_LOCAL_ADAPTATION_RANGE     4.0
 #define SDF_MINIMUM_NEAR               0.02
 #define SDF_NOISE_PERIOD_CELLS         4096u
 #define SDF_VOLUME_VECTORS_PER_ENTRY   12u
@@ -273,7 +275,11 @@
 #define SDF_MESH_VIEW_SHIFT             24u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS 13u
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS 20u
+#define SDF_MESH_IRRADIANCE_LIGHTS_WORD 13u
+#define SDF_MESH_IRRADIANCE_LIGHT_WORDS 4u
+#define SDF_MESH_IRRADIANCE_DEPTH_WORD  17u
+#define SDF_MESH_IRRADIANCE_DEPTH_FADE  0.25
 #define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.35
 #define SDF_MESH_IRRADIANCE_BEHIND      0.1
@@ -305,7 +311,7 @@
 #define SDF_AIR_STEEP_LIMIT                  (-20.0)
 
 // The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
-#define SDF_DEBUG_VIEW_COUNT       10
+#define SDF_DEBUG_VIEW_COUNT       11
 #define SDF_DEBUG_VIEW_OFF         0
 #define SDF_DEBUG_VIEW_DEPTH       1
 #define SDF_DEBUG_VIEW_NORMALS     2
@@ -316,5 +322,6 @@
 #define SDF_DEBUG_VIEW_SKY_COST    7
 #define SDF_DEBUG_VIEW_AO          8
 #define SDF_DEBUG_VIEW_SHADOW      9
+#define SDF_DEBUG_VIEW_INDIRECT    10
 
 #endif // SDF_ISA_HLSLI

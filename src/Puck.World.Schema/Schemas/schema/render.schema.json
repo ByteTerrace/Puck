@@ -559,6 +559,14 @@
             "null"
           ],
           "default": null
+        },
+        "local": {
+          "description": "The share of the local adaptation, in [0, 1]: how far each surface\u0027s exposure moves from the view\u0027s toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,

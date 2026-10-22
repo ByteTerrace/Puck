@@ -223,6 +223,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
         declarations.Real(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
         declarations.Real(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
+        declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
+        declarations.Real(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
             value: SdfWorldPackage.MinimumNear
@@ -289,6 +291,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_VIEW_SHIFT", value: SdfKernelInterfaces.MeshViewShift);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHTS_WORD", value: SdfMeshIrradianceProbe.LightsWord);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHT_WORDS", value: SdfMeshIrradianceProbe.LightWords);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_DEPTH_WORD", value: SdfMeshIrradianceProbe.DepthWord);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_FADE", value: SdfMeshIrradianceProbe.DepthFade);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_BEHIND", value: SdfMeshIrradianceProbe.Behind);

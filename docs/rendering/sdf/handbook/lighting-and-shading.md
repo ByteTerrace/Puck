@@ -147,20 +147,45 @@ in the frame.
   camera first, every probe's first sweep before any second. A probe stores two
   ambient cubes, one value per axis direction: the share of cosine-weighted sky
   its rays reach, and the cosine-weighted mean radiance the static geometry
-  sends it. A hit's radiance is each directional
-  light under a traced shadow ray, scaled by its `bounce`, its emission, and,
-  from the second sweep, the light it reflects from the probes about it, its
-  sky included, which is the Feedback source. The sources mask and
-  gains of `render.indirect.sources` apply as described above. A probe
+  sends it, and which static point and spot lights its centre sees, one bit a
+  record of the lights table. A hit's radiance is each directional light under
+  a traced shadow ray and each static point or spot light under its windowed
+  falloff, cone and a traced shadow ray, each scaled by its `bounce`, its
+  emission, and, from the second sweep, the light it reflects from the probes
+  about it, its sky included, which is the Feedback source. The sources mask
+  and gains of `render.indirect.sources` apply as described above. A probe
   whose rays mostly meet back faces lies inside geometry and is never read.
-- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) read the eight probes about the shaded point,
-  pushed 0.35 of a cell along its normal, weighted trilinearly and by how far
-  each lies in front of the surface. The sky term is the live sky's irradiance
-  over π under the volume's sky visibility, so
-  the sky can change without a retrace; the reflected term adds as stored. The
-  sum replaces the harmonic sky ambient and the authored fill, under the
-  `apply` intensity, tint and contact.
-  Across the volume's last cell the light fades to the open sky.
+  The volume a view reads holds each probe's cubes averaged with the
+  neighbouring probes its centre sees (one half across a face, a quarter
+  across an edge, an eighth across a corner, `SdfMeshIrradiance.FilterWeights`),
+  so a sunlit patch a few rays catch does not show as a band; a neighbour
+  behind a wall or inside geometry takes no part, and the light visibility bits
+  are each probe's own. A probe also stores a depth cube, the mean distance its
+  rays within 35 degrees of each axis travel before they meet geometry.
+- **A probe lights only what lies within its depth.** A read weights each of
+  the eight probes about a point by whether the point, pushed off its surface,
+  lies nearer along the axis it mostly lies in than the probe's depth there,
+  fading over a quarter of a cell past it (`SdfMeshIrradianceProbe.DepthFade`,
+  `sdfMeshProbeDepthVisibility`): a probe in the storey above a wall's top, or
+  the room beyond a partition, stops at the slab or wall and lights nothing
+  past it, which the preference for the probes in front of a surface cannot
+  tell for a wall. The test is one axis wide, so architecture off the axes
+  resolves at the lattice's coarseness.
+- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
+  probes about the shaded point once (`sdfMeshProbesAt`), pushed 0.35 of a cell
+  along its normal, weighted trilinearly and by how far each lies in front of
+  the surface. The sky term is the live sky's irradiance over π under the
+  volume's sky visibility, so the sky can change without a retrace; the
+  reflected term adds as stored. The sum replaces the harmonic sky ambient and
+  the authored fill, under the `apply` intensity, tint and contact. A static
+  point or spot light's visibility at the surface is the share of those probes
+  whose centre sees it (`sdfMeshLightVisibility`), which scales its direct
+  term, so a fixture lights nothing through the slab under it; an anchored
+  light is never traced and goes unoccluded. Across the volume's last cell the
+  light fades to the open sky and every light to visible. `world.debug-view
+  indirect` shows the volume's light alone. A window's view and a sky layer's
+  view of another world read that world's own volume, at the tier its
+  `render.indirect` authors, so its meter, fixtures and bounce are its own.
 - **What an edit costs.** Probes are cached by cell, so a static world traces
   each cell once per lighting, and a camera returning to a place reads its
   cached probes at once. The scene is two-level: each distinct geometry (a
@@ -181,20 +206,27 @@ in the frame.
   sweep of a High window, and the update for one draw's new geometry, a move
   and a return. On the debug world's 250 stored static groups (16.9 million
   triangles) a full build takes about 1.2 s on the Ryzen 7 7800X3D and a
-  one-draw change about 0.05 s.
+  one-draw change about 0.05 s. A change of a static point or spot light (a
+  switch's power) retraces the probes, since their bounce and visibility bits
+  carry it; an anchored light's move retraces nothing.
 - **Limits.** Moving bodies receive the volume's light and cast none into it.
-  Point lights and screens contribute no bounced light. The sky's bounced share
-  is captured when a generation of probes traces, so drifting clouds change
-  only the direct sky term. Leaks are held back by the back-face weight, the
-  inside-geometry test and the read's preference for the probes in front of a
-  surface (a probe more than a tenth of a cell behind its plane, past the wall
-  or slab it belongs to, answers only where none lies in front); there is no
-  per-probe visibility, so a probe across an opening still sees both rooms.
-- **Reflections.** A surface reflects the lighting-visible sky in its mirror
-  direction only as far as the probes about it see the sky open that way, and
-  the light the surfaces about them send back where they do not
-  (`sdfMeshReflection`), so a room reflects its walls rather than the sky
-  outside it.
+  Anchored lights and screens contribute no bounced light. The sky's bounced
+  share is captured when a generation of probes traces, so drifting clouds
+  change only the direct sky term. Leaks are held back by the back-face weight,
+  the inside-geometry test and the read's preference for the probes in front
+  of a surface (a probe more than a tenth of a cell behind its plane, past the
+  wall or slab it belongs to, answers only where none lies in front); there is
+  no per-probe visibility of the surfaces it lights, so a probe across an
+  opening still sees both rooms. A fixture's occlusion has the probe spacing's
+  resolution: a wall, a slab or a doorway resolves, a plinth's shadow does not.
+- **Reflections.** A surface with a specular response reflects the
+  lighting-visible sky about its mirror direction, blurred toward the sky's
+  irradiance as the roughness widens the lobe, under the lobe's directional
+  albedo (`sdfMaterialEnvironmentBrdf`, which keeps a rough dielectric near its
+  `specular` at every angle); with the volume on, only as far as the probes
+  about it see the sky open that way, and the light the surfaces about them
+  send back where they do not (`sdfMeshReflection`), so a room reflects its
+  walls rather than the sky outside it.
 - **Exposure.** The volume is also the automatic exposure's meter: the
   luminance the probes about a view's camera see along their six axes, weighted
   toward where the camera looks ([photometric units](#photometric-units-and-exposure)).
@@ -242,7 +274,9 @@ branches on a light's kind, so a new kind is one branch of that function.
 A point or spot light falls off as the windowed inverse square
 `saturate(1 − (d/r)⁴)² / max(d, 5 cm)²` (`sdfPointReach`), exactly zero at its
 range `r`, and a spot's cone multiplies it by
-`saturate(dot(−l, SpotAxis) + SpotOffset)²`. The range is where the light shows
+`saturate(dot(−l, SpotAxis) + SpotOffset)²`; a static one (its record's
+`Shadows`, `SdfLight.IsTraced`) is scaled by the irradiance volume's visibility
+of it at the surface. The range is where the light shows
 1/256 of display white on a white surface at the world's darkest exposure
 (`SdfPhotometry.RangeOf`). Each view's pass block carries a mask of the table's
 lights it shades (`SdfLightSelection`): a light whose sphere of range the view's
@@ -259,13 +293,23 @@ irradiance volume traces and stores nits. Each view's composite multiplies its
 output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
 (`SdfPhotometry.ExposureOf`), before the root's tonemap. `render.exposure` holds
 `EV100` fixed or adapts it: the meter reads the irradiance volume about the
-camera plus the point lights' light there, aims for `log2(L · 100 / 12.5)` less
-the compensation within the bounds, and eases there over the adaptation time of
-presentation time, snapping at a camera cut (`SdfViewExposures`).
+camera, which carries every traced light's bounce, aims for
+`log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
+over the adaptation time of presentation time, snapping at a camera cut
+(`SdfViewExposures`). An automatic exposure's `local` share then adapts each
+surface on its own in the composite (`sdfLocalAdaptationGain`): the probes
+about the surface, read toward it, meter its surroundings, and the surface's
+exposure moves that share of the way from the view's toward that reading,
+within `SdfExposure.LocalRange` stops; the sky share and a pixel the volume
+holds no probe about keep the view's exposure. The pass block carries the
+view's meter reading (`meterLuminance`) and the share (`localAdaptation`).
 `world.exposure` echoes the authored exposure and each view's `EV100`, multiplier
 and meter reading. A view onto another world through a window, or a sky layer's
-view, publishes its luminance unexposed (`SdfViewSnapshot.Unexposed`) for the
-view looking through it to expose. The ink line, the editor grid and an unbound
+view, publishes its luminance raised by its own exposure to the window share
+(`SdfViewSnapshot.Unexposed`, the pass block's `exposeShare`,
+`SdfPhotometry.WindowAdaptation`), and the view looking through it applies the
+rest of its own to the opening, so the window shows the world beyond at an
+exposure between the two. The ink line, the editor grid and an unbound
 screen's glass are display-referred: they apply to the exposed colour. The lit
 images store half floats, so a view holds its luminance below
 `SdfPhotometry.LuminanceCeiling`.

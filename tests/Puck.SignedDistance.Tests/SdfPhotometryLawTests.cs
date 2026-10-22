@@ -84,7 +84,7 @@ public sealed class SdfPhotometryLawTests {
     }
     [Fact]
     public void AnAutomaticExposureAimsWithinItsBoundsAndEasesTowardThere() {
-        var exposure = new SdfExposure(Adaptation: 1f, Compensation: 1f, Ev100: 10f, Maximum: 15f, Minimum: 5f, Mode: SdfExposureMode.Auto);
+        var exposure = new SdfExposure(Adaptation: 1f, Compensation: 1f, Ev100: 10f, Local: 0f, Maximum: 15f, Minimum: 5f, Mode: SdfExposureMode.Auto);
 
         Assert.Equal(expected: 15f, actual: exposure.Target(luminance: 1e9f));
         Assert.Equal(expected: 5f, actual: exposure.Target(luminance: 1e-6f));

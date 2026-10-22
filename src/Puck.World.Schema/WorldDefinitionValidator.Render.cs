@@ -368,11 +368,14 @@ public static partial class WorldDefinitionValidator {
         if (exposure.Adaptation is { } adaptation) {
             RequireRange(value: adaptation, min: 0f, max: WorldRenderExposure.MaxAdaptation, name: "render.exposure.adaptation", errors: errors);
         }
+        if (exposure.Local is { } local) {
+            RequireRange(value: local, min: 0f, max: 1f, name: "render.exposure.local", errors: errors);
+        }
         if ((exposure.Minimum is { } minimum) && (exposure.Maximum is { } maximum) && (minimum > maximum)) {
             errors.Add(item: $"render.exposure.minimum {minimum} is above its maximum {maximum}; the darkest exposure an automatic exposure takes is the lower bound.");
         }
-        if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null))) {
-            errors.Add(item: "render.exposure authors automatic bounds, compensation or adaptation with mode Manual, which holds ev100; set mode: Auto or remove them.");
+        if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null) || (exposure.Local is not null))) {
+            errors.Add(item: "render.exposure authors automatic bounds, compensation, adaptation or local adaptation with mode Manual, which holds ev100; set mode: Auto or remove them.");
         }
     }
     // Judges a section after its keys are expanded, as ValidateRenderLighting does.

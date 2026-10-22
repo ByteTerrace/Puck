@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -7,16 +6,13 @@ namespace Puck.SdfVm;
 /// One residency's view exposures: the multiplier each view of a frame maps the luminance it shades by
 /// (<see cref="SdfPhotometry.ExposureOf"/>), which its pass block carries and its composite applies, and the share of the
 /// sky the air about its camera sees open, which scales the sky's in-scatter into its atmosphere. A manual exposure is
-/// its <c>EV100</c>; an automatic one meters about the view's camera (<see cref="SdfMeshIrradiance.TryMeter"/>, with the
-/// point lights' light at the camera added) and eases toward that reading over presentation time, each view on its own,
-/// snapping to it at a camera cut. A view that publishes its luminance unexposed (<see cref="SdfViewSnapshot.Unexposed"/>)
-/// still takes its exposure, which divides its display-referred terms, while its composite leaves its output in nits.
-/// Presentation only: no value here reaches simulation state.
+/// its <c>EV100</c>; an automatic one meters about the view's camera (<see cref="SdfMeshIrradiance.TryMeter"/>) and
+/// eases toward that reading over presentation time, each view on its own, snapping to it at a camera cut. A view that
+/// publishes its luminance partially exposed (<see cref="SdfViewSnapshot.Unexposed"/>) still takes its exposure, which
+/// divides its display-referred terms, while its composite applies the window share of it
+/// (<see cref="SdfPhotometry.WindowAdaptation"/>). Presentation only: no value here reaches simulation state.
 /// </summary>
 public sealed class SdfViewExposures {
-    // The reflectance the meter takes a point light's illuminance at the camera to light the scene about it with.
-    private const float PointReflectance = 0.4f;
-
     private float[] m_ev100 = [];
     private long[] m_cuts = [];
     private float[] m_multipliers = [];
@@ -65,7 +61,7 @@ public sealed class SdfViewExposures {
             var ev100 = exposure.Ev100;
 
             m_cuts[index] = view.CutRevision;
-            m_reads[index] = Meter(airLight: out m_airLight[index], irradiance: irradiance, lights: frame.Lights, luminance: out m_metered[index], view: in view);
+            m_reads[index] = Meter(airLight: out m_airLight[index], irradiance: irradiance, luminance: out m_metered[index], view: in view);
             if (exposure.Mode == SdfExposureMode.Auto) {
                 ev100 = (m_reads[index]
                     ? exposure.Target(luminance: m_metered[index])
@@ -89,6 +85,11 @@ public sealed class SdfViewExposures {
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns>The share, in [0, 1]; one for a view it did not stage.</returns>
     public float AirLightOf(int view) => (((view >= 0) && (view < m_count)) ? m_airLight[view] : 1f);
+    /// <summary>Returns the luminance a view's meter read about its camera, in nits, which the local adaptation measures
+    /// each surface's surroundings against.</summary>
+    /// <param name="view">The view's index in the frame's views.</param>
+    /// <returns>The reading, or zero for a view it did not stage or whose meter had no reading.</returns>
+    public float MeteredOf(int view) => (((view >= 0) && (view < m_count) && m_reads[view]) ? m_metered[view] : 0f);
     /// <summary>Describes each staged view's exposure: its <c>EV100</c>, multiplier, the meter's reading and the open
     /// sky its air sees.</summary>
     /// <returns>One line a view.</returns>
@@ -102,27 +103,15 @@ public sealed class SdfViewExposures {
         return lines;
     }
 
-    // The meter's reading about a view's camera: the irradiance volume's luminance there and the light the point lights
-    // cast on the scene about it, and the open sky the volume sees there (one without a reading).
-    private static bool Meter(SdfMeshIrradiance irradiance, SdfLights lights, in SdfViewSnapshot view, out float luminance, out float airLight) {
+    // The meter's reading about a view's camera: the irradiance volume's luminance there, which carries every traced
+    // light's bounce, and the open sky the volume sees there (one without a reading).
+    private static bool Meter(SdfMeshIrradiance irradiance, in SdfViewSnapshot view, out float luminance, out float airLight) {
         var camera = view.Camera;
 
         if (!irradiance.TryMeter(forward: camera.Forward, luminance: out luminance, position: camera.Position, skyVisibility: out airLight)) {
             airLight = 1f;
 
             return false;
-        }
-
-        for (var index = 0; (index < lights.Count); index++) {
-            var light = lights[index];
-
-            if ((light.Kind != SdfLightKind.Point) || !(light.Weight > 0f)) {
-                continue;
-            }
-
-            var distance = Vector3.Distance(value1: light.Direction, value2: camera.Position);
-
-            luminance += ((PointReflectance * light.Weight) * SdfPhotometry.Falloff(distance: distance, range: light.Param));
         }
 
         return true;

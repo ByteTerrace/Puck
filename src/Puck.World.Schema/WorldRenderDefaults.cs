@@ -216,13 +216,19 @@ public sealed record WorldRenderDefaults(
 /// Absent is zero.</param>
 /// <param name="Adaptation">The time constant an automatic exposure eases toward its meter with, in seconds, in
 /// <c>[0, 60]</c>; zero follows the meter at once. Absent is <c>SdfExposure.DefaultAdaptation</c>.</param>
+/// <param name="Local">The share of the local adaptation, in <c>[0, 1]</c>: how far each surface's exposure moves from
+/// the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a
+/// dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts
+/// across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the
+/// irradiance volume on.</param>
 public sealed record WorldRenderExposure(
     SdfExposureMode Mode = SdfExposureMode.Manual,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Ev100 = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Minimum = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Maximum = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Compensation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null
 ) {
     /// <summary>The lowest an exposure's compensation admits, in stops.</summary>
     public const float MinCompensation = -10f;
@@ -248,6 +254,7 @@ public sealed record WorldRenderExposure(
             Adaptation: (exposure.Adaptation ?? SdfExposure.DefaultAdaptation),
             Compensation: (exposure.Compensation ?? 0f),
             Ev100: (exposure.Ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
+            Local: (automatic ? (exposure.Local ?? 0f) : 0f),
             Maximum: maximum,
             Minimum: minimum,
             Mode: exposure.Mode
@@ -394,7 +401,10 @@ public abstract record WorldRenderLight {
     /// <summary>A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse
     /// square of the distance under a window that ends it smoothly and exactly at its range, the distance past which
     /// its light would show below <c>SdfPhotometry.RangeThreshold</c> of display white at the world's brightest
-    /// exposure. No shadow march — a point light never occludes and is never occluded.</summary>
+    /// exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static
+    /// meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only
+    /// where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An
+    /// anchored light moves with its anchor, lights through every wall and bounces nothing.</summary>
     /// <param name="Position">The world-space position for a static (unanchored) light. Absent is the world origin.
     /// An offset in the anchor frame when an anchor is authored.</param>
     /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
@@ -420,8 +430,8 @@ public abstract record WorldRenderLight {
         public override string? LightName => Name;
     }
     /// <summary>A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full
-    /// strength inside the inner angle and smoothly to none at the outer, with the point light's windowed falloff and
-    /// range.</summary>
+    /// strength inside the inner angle and smoothly to none at the outer, with the point light's windowed falloff,
+    /// range, and tracing and occlusion by the irradiance volume while unanchored.</summary>
     /// <param name="Position">The world-space position, or the offset in the anchor's frame.</param>
     /// <param name="Direction">The direction the light shines along, any nonzero length; in the anchor's frame when an
     /// anchor is authored. Absent is straight down.</param>

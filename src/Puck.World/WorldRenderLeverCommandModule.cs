@@ -374,10 +374,10 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.exposure",
-            description: "Reads the camera exposure: world.exposure. Echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation) and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual).",
+            description: "Reads the camera exposure: world.exposure. Echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation) and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual).",
             handler: (_, args) => {
                 var exposure = WorldRenderExposure.Resolve(exposure: server.Definition.Render.Exposure);
-                var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s");
+                var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##}");
 
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.exposure: takes no argument]");

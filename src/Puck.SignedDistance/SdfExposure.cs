@@ -25,17 +25,25 @@ public enum SdfExposureMode {
 /// <param name="Compensation">The stops an automatic exposure brightens the metered image by.</param>
 /// <param name="Adaptation">The time constant an automatic exposure eases toward its meter with, in seconds; zero
 /// follows the meter at once.</param>
-public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, float Minimum, float Maximum, float Compensation, float Adaptation) {
+/// <param name="Local">The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the
+/// view's toward the exposure its own surroundings would meter, read from the irradiance volume about it, so a dim
+/// ceiling beside a sunlit window lifts and the sunlit ground through the window compresses, as the eye adapts across
+/// a scene; zero exposes the whole view alike, one meters every surface on its own.</param>
+public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, float Minimum, float Maximum, float Compensation, float Adaptation, float Local) {
     /// <summary>The <c>EV100</c> an unauthored world renders at: a clear sunlit day.</summary>
     public const float DefaultEv100 = 15f;
     /// <summary>An automatic exposure's default time constant, in seconds.</summary>
     public const float DefaultAdaptation = 0.75f;
+    /// <summary>The most stops the local adaptation moves a surface's exposure from the view's, either way.</summary>
+    public const float LocalRange = 4f;
 
-    /// <summary>Gets the exposure an unauthored world renders with: manual, at <see cref="DefaultEv100"/>.</summary>
+    /// <summary>Gets the exposure an unauthored world renders with: manual, at <see cref="DefaultEv100"/>, with no
+    /// local adaptation.</summary>
     public static SdfExposure Default { get; } = new(
         Adaptation: DefaultAdaptation,
         Compensation: 0f,
         Ev100: DefaultEv100,
+        Local: 0f,
         Maximum: DefaultEv100,
         Minimum: DefaultEv100,
         Mode: SdfExposureMode.Manual

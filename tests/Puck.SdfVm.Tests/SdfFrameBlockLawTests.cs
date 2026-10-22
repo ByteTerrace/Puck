@@ -30,7 +30,9 @@ public sealed class SdfFrameBlockLawTests {
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
-        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow];
+        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow,
+        // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
+        SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.

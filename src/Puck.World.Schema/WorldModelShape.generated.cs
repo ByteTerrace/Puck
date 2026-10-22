@@ -4659,6 +4659,7 @@ public static partial class WorldModelShape {
                 M("maximum", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Maximum", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Maximum),
                 M("compensation", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Compensation", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Compensation),
                 M("adaptation", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Adaptation", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Adaptation),
+                M("local", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Local", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Local),
             ],
             []),
         T(typeof(global::Puck.World.WorldRenderFog), true, JsonTypeInfoKind.Object, null,

@@ -512,6 +512,7 @@ public static class WorldLightingText {
             .Field(key: "maximum", value: exposure.Maximum.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Field(key: "compensation", value: exposure.Compensation.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Field(key: "adaptation", value: exposure.Adaptation.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
+            .Field(key: "local", value: exposure.Local.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Segment()
             .Head(head: "keys")
             .Field(

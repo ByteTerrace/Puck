@@ -19,8 +19,10 @@ public enum SdfLightKind : uint {
     /// <see cref="SdfPhotometry.RangeOf"/>), and a spot's cone (<see cref="SdfLight.SpotAxis"/>,
     /// <see cref="SdfLight.SpotOffset"/>). <see cref="SdfLight.Direction"/> carries the light's world-space position
     /// rather than a direction; <see cref="SdfLight.DynamicSlot"/> optionally rides a dynamic transform so the position
-    /// follows an anchored shape. Lambert diffuse plus the material's GGX response, both scaled by ambient occlusion. No
-    /// shadow march: a point light never occludes and is never occluded.</summary>
+    /// follows an anchored shape. Lambert diffuse plus the material's GGX response, both scaled by ambient occlusion. A
+    /// static light (<see cref="SdfLight.Shadows"/> set, <see cref="SdfLight.IsTraced"/>) is traced into the irradiance
+    /// volume, which bounces its light and occludes it by the probes' visibility of it; a moving one lights through every
+    /// wall and bounces nothing.</summary>
     Point = 2,
     /// <summary>A bounded attenuation field with position, radius, and weight in [0, 1].</summary>
     Occluder = 3,
@@ -48,7 +50,9 @@ public record struct SdfLight {
     /// <summary>The kind's second scalar: penumbra half-slope, rim exponent, a point's range or an occluder's
     /// radius.</summary>
     [FieldOffset(32)] public float Param;
-    /// <summary>One when the directional participates in a stable shadow slot or active handoff, zero otherwise.</summary>
+    /// <summary>One when the directional participates in a stable shadow slot or active handoff, or when the point or
+    /// spot light is static, so the irradiance volume traces it and occludes it (<see cref="IsTraced"/>); zero
+    /// otherwise.</summary>
     [FieldOffset(36)] public uint Shadows;
     /// <summary>A point's or an occluder's dynamic-transform slot its position is read from every frame, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/> for the static authored position in <see cref="Direction"/>;
@@ -71,7 +75,8 @@ public record struct SdfLight {
     /// <param name="Color">The linear RGB color.</param>
     /// <param name="Weight">The strength.</param>
     /// <param name="Param">The kind's second scalar.</param>
-    /// <param name="Shadows">A directional only: whether this light may cast a shadow; the frame's slots select its march.</param>
+    /// <param name="Shadows">A directional: whether this light may cast a shadow; the frame's slots select its march. A
+    /// point or spot: whether it is static, so the irradiance volume traces and occludes it.</param>
     /// <param name="DynamicSlot">A point or an occluder only: the dynamic-transform slot its position rides, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/>. Packed as zero for every other kind.</param>
     /// <param name="Bounce">The indirect diffuse gain, one by default.</param>
@@ -90,6 +95,10 @@ public record struct SdfLight {
 
     /// <summary>Gets whether the light may cast a shadow: a directional with <see cref="Shadows"/> set.</summary>
     public readonly bool CastsShadow => ((Shadows != 0u) && (Kind == SdfLightKind.Directional));
+    /// <summary>Gets whether the irradiance volume traces the light: a static point or spot light, with
+    /// <see cref="Shadows"/> set, whose light the volume bounces and whose visibility each probe records, so a view
+    /// occludes it by the probes about a surface.</summary>
+    public readonly bool IsTraced => ((Shadows != 0u) && (Kind == SdfLightKind.Point));
     /// <summary>Gets whether the light reaches only the sphere of its range about its position: a point or a spot. Every
     /// other kind may light any surface.</summary>
     public readonly bool IsRanged => (Kind == SdfLightKind.Point);
