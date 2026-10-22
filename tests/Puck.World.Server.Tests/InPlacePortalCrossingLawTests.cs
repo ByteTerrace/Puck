@@ -35,6 +35,13 @@ public sealed class InPlacePortalCrossingLawTests {
         Wall,
         /// <summary>A placement the world does not hold.</summary>
         Missing,
+        /// <summary>The ceiling door at half the floor door's size, in a world whose bodies.scaleRow holds each size
+        /// from a quarter to one, so each crossing halves the traveller until the third would leave the row.</summary>
+        HalfCeiling,
+        /// <summary>The half-size ceiling door in a world that authors no bodies.scaleRow.</summary>
+        HalfCeilingUnscaled,
+        /// <summary>A ceiling door as wide as the floor door and half as deep, which no one scale maps onto it.</summary>
+        StretchedCeiling,
     }
 
     private const float CeilingHeight = 6f;
@@ -47,7 +54,7 @@ public sealed class InPlacePortalCrossingLawTests {
 
     // A square door creation whose glass is shape 0, turned by `rotation` in engine terms: a quarter turn about +X lays
     // the glass (its +Z face) flat. Converted to the author frame the engine door converts back from.
-    private static WorldPrototype Door(string id, float angle) {
+    private static WorldPrototype Door(string id, float angle, float width = 1.25f, float height = 1.25f) {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: id,
@@ -62,8 +69,8 @@ public sealed class InPlacePortalCrossingLawTests {
                     axis: Vector3.UnitX
                 ),
                 Scale: new Vector3(
-                    x: 1.25f,
-                    y: 1.25f,
+                    x: width,
+                    y: height,
                     z: 0.06f
                 ),
                 Material: 0,
@@ -113,10 +120,46 @@ public sealed class InPlacePortalCrossingLawTests {
     );
     // The floor door at the origin of the shaft facing up, and the door its glass leads to: the ceiling door facing
     // down, turned a half about up so the pair keeps a traveller's heading or left unturned, or a wall door facing +Z.
-    private static WorldDefinition Shaft(string ownPath, Counterpart counterpart) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
+    private static WorldDefinition Shaft(string ownPath, Counterpart counterpart) {
+        var source = Fixtures.PeerPopulationDocument(networkPlayers: 2);
+        var shaft = Shaft(
+            counterpart: counterpart,
+            ownPath: ownPath,
+            source: source
+        );
+
+        if (counterpart != Counterpart.HalfCeiling) {
+            return shaft;
+        }
+
+        // Each body's size, a quarter to one; seat 0 starts at one.
+        var scaleRow = new WorldStateRow(
+            Name: CellName.Parse(candidate: "scale"),
+            Kind: CellKind.Fixed,
+            Min: FixedQ4816.FromDouble(value: 0.25).Value,
+            Max: FixedQ4816.One.Value,
+            Capacity: 8,
+            Cells: [new StateCell(
+                Key: CellName.Parse(candidate: "0"),
+                Value: CellValue.Fixed(rawBits: FixedQ4816.One.Value)
+            )]
+        );
+
+        return (shaft with {
+            PopulationRaw = (shaft.Population with { ScaleRow = "scale" }),
+            StateRaw = ((shaft.StateRaw ?? new WorldStateSection()) with {
+                World = [.. (shaft.StateRaw?.World ?? []), scaleRow],
+            }),
+        });
+    }
+    private static WorldDefinition Shaft(string ownPath, Counterpart counterpart, WorldDefinition source) => (source with {
         CreationsRaw = [
             Door(angle: (-MathF.PI / 2f), id: "floor-door"),
-            Door(angle: (MathF.PI / 2f), id: "ceiling-door"),
+            (counterpart switch {
+                Counterpart.HalfCeiling or Counterpart.HalfCeilingUnscaled => Door(angle: (MathF.PI / 2f), height: 0.625f, id: "ceiling-door", width: 0.625f),
+                Counterpart.StretchedCeiling => Door(angle: (MathF.PI / 2f), height: 0.625f, id: "ceiling-door"),
+                _ => Door(angle: (MathF.PI / 2f), id: "ceiling-door"),
+            }),
             Door(angle: 0f, id: "wall-door"),
         ],
         Destinations = [new WorldDestination(
@@ -384,8 +427,86 @@ public sealed class InPlacePortalCrossingLawTests {
             expected: CrossingsWanted
         );
     }
+    [Fact]
+    public void ADoorOntoOneHalfItsSizeHalvesTheTravellerEachCrossing_UntilItsSizeWouldLeaveTheRow_AndReplays() {
+        using var scenario = new Scenario(counterpart: Counterpart.HalfCeiling);
+        var name = $"in-place-scaled-{Guid.NewGuid():N}";
+        var half = FixedQ4816.FromDouble(value: 0.5);
+
+        Assert.True(
+            condition: scenario.Tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+        scenario.DropOverFloor();
+        scenario.Step();
+
+        var crossings = 0;
+        var size = FixedQ4816.One;
+
+        for (var tick = 0; ((tick < LoopBound) && (scenario.Count(text: "outside bodies.scaleRow") == 0)); tick++) {
+            var body = scenario.Server.Body(index: 0)!;
+            var entering = body.CaptureTransferState().VerticalVelocity;
+
+            scenario.Host.DrainPendingTransfers();
+
+            if (scenario.Count(text: "in place") > crossings) {
+                crossings++;
+                size *= half;
+
+                // Half the size, falling half as fast, its row cell written with it.
+                Assert.Equal(
+                    actual: body.Scale,
+                    expected: size
+                );
+                Assert.Equal(
+                    actual: body.CaptureTransferState().VerticalVelocity,
+                    expected: (entering * half)
+                );
+                Assert.True(condition: WorldStateReader.TryRead(
+                    definition: scenario.Server.Definition,
+                    engineTick: 0UL,
+                    key: "0",
+                    rawValue: out var raw,
+                    row: out _,
+                    rowName: "scale",
+                    text: out _,
+                    tick: 0UL
+                ));
+                Assert.Equal(
+                    actual: raw,
+                    expected: size.Value
+                );
+            }
+
+            scenario.Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        }
+
+        // A quarter is the row's floor: the third crossing would make an eighth, so it is refused and the body keeps its
+        // size.
+        Assert.Equal(
+            actual: crossings,
+            expected: 2
+        );
+        Assert.Equal(
+            actual: scenario.Server.Body(index: 0)!.Scale,
+            expected: FixedQ4816.FromDouble(value: 0.25)
+        );
+
+        var stop = scenario.Tape.StopRecording();
+
+        Assert.Null(@object: stop.VerifyFault);
+        Assert.True(
+            condition: stop.Verdict!.Passing,
+            userMessage: stop.Verdict.Describe()
+        );
+    }
     [InlineData(Counterpart.Wall, "do not map world up onto itself")]
     [InlineData(Counterpart.Missing, "names no placement 'missing'")]
+    [InlineData(Counterpart.HalfCeilingUnscaled, "authors no bodies.scaleRow")]
+    [InlineData(Counterpart.StretchedCeiling, "no one scale maps one onto the other")]
     [Theory]
     public void AFloorDoorWhoseCounterpartCannotTakeAFallRefusesByName_AndTheBodyFallsOnThroughTheFloor(Counterpart counterpart, string refusal) {
         using var scenario = new Scenario(counterpart: counterpart);

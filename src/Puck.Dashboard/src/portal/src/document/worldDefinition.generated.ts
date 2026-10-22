@@ -5082,7 +5082,7 @@ export type WorldEffectPlanarImpulse = {
    */
   bodyDirection: DocumentVector3;
   /**
-   * The overlay's speed, in world units per second.
+   * The overlay's speed, in world units per second at the body's authored size, times the body's live scale.
    */
   speed: number;
   /**
@@ -5213,7 +5213,7 @@ export type WorldEffectSetIdentityFact = {
 export type WorldEffectSetVerticalVelocity = {
   $type?: "setVerticalVelocity";
   /**
-   * The vertical velocity, in world units per second.
+   * The vertical velocity, in world units per second at the body's authored size; a body whose live scale (bodies.scaleRow) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.
    */
   velocity: number;
   /**
