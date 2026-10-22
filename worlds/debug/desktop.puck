@@ -1,34 +1,33 @@
-// The desktop pane: a live capture of the Claude desktop app's window, shown as a pane below the play view and on the
-// monitor of a desktop computer standing in the world. The debug world imports this file whole. desktop.md beside it
-// gives the console lines that show the pane, hand the window the keyboard and mouse, take them back, and reload this
-// file while it runs.
+// The desktop pane: a live capture of the whole primary display, shown as a pane below the play view and on the monitor
+// of a desktop computer standing in the world. The World's own window is on that display, so the picture shows the
+// World showing the picture, as a camera pointed at its own screen does. The debug world imports this file whole.
+// desktop.md beside it gives the console lines that show the pane, hand the desktop the mouse and keyboard, take them
+// back, and reload this file while it runs.
 //
-// The capture finds its window by title: the first visible top-level window whose title contains `claudeTitle`,
-// compared without regard to case. Nothing here sends the window input: only the local user's own console
-// (`source.passthrough open claude Claude`) or own press on the engaged monitor opens a passthrough source, and the
-// desktop page below only says which pad control means which pointer act; the engine acts on a local pad's own press
-// alone and refuses a document that tries more.
+// Nothing here sends the desktop input: only the local user's own console (`source.passthrough open desktop Desktop`)
+// or own press on the engaged monitor opens a passthrough source, and the desktop page below only says which pad
+// control means which pointer act; the engine acts on a local pad's own press alone and refuses a document that tries
+// more.
 
-let claudeTitle = "Claude"
-
-// The capture's output extent and cadence, the pane's and the monitor's alike: the window at its own size and shape
-// (2560 by 1392, maximized on a 2560 by 1440 display), so its text stays sharp. The pane shows it at the window's own
-// aspect ratio whatever this extent's; the monitor's glass is cut to this extent, so a window of another shape reads
-// stretched there until the profile follows it.
-let claudeCapture = {
-  windowTitle: claudeTitle
-  profile { width: 2560, height: 1392, refreshRateHz: 30 }
+// The capture's output extent and cadence, the pane's and the monitor's alike: the primary display at its own size and
+// shape (2560 by 1440), so its text stays sharp. The primary display rather than the one the World's window is on:
+// the monitor's glass is cut to this extent when the world compiles, and the primary does not change under a running
+// World, while the World's window can move to a display of another shape. A display of another shape reads stretched
+// on the glass until this profile follows it.
+let desktopCapture = {
+  monitorIndex: 0
+  profile { width: 2560, height: 1440, refreshRateHz: 30 }
 }
 
 // The pane's share of the display, from the bottom edge. Two fifths leave the play view the top three fifths.
 let paneHeight = 0.4
 
 views {
-  // Contained: the window keeps its own aspect ratio, centred in its slot with bars beside it, and a pointer on a bar
+  // Contained: the display keeps its own aspect ratio, centred in its slot with bars beside it, and a pointer on a bar
   // stays with the game.
-  graph "claude" {
+  graph "desktop" {
     package: "source.capture"
-    settings: claudeCapture
+    settings: desktopCapture
     fit: Contain
   }
 
@@ -37,7 +36,7 @@ views {
     seatCount: 0
     slots [
       { x: 0, y: 0, width: 1, height: (1 - paneHeight) }
-      { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "claude" }
+      { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "desktop" }
     ]
     transitionRenderScale: 1
     transitionSeconds: 0
@@ -59,13 +58,13 @@ views {
 //   chair      its column at (11.55, 23.7), the back toward the lobby
 
 // The monitor's glass is exactly the picture (docs/decisions/rendering.md, in-world devices): the capture's pixels at a
-// 27-inch 2560 by 1440 panel's pixel pitch, 0.2331 mm, so 2560 by 1392 is 596.7 by 324.5 mm. The glass is a 14 mm slab
+// 27-inch 2560 by 1440 panel's pixel pitch, 0.2331 mm, so 2560 by 1440 is 596.7 by 335.7 mm. The glass is a 14 mm slab
 // sunk 4 mm into the panel, its face 10 mm proud of the panel and 3 mm proud of the black bezel round it, which runs
 // 7 mm wide at the sides and top and 18 mm at the chin, outside the glass. A screen's `origin` is its glass's face (the
 // slab runs 2 halfDepth back from it).
 let monitorPitch = 0.0002331
-let pictureHalfWidth = ((claudeCapture.profile.width * monitorPitch) / 2)
-let pictureHalfHeight = ((claudeCapture.profile.height * monitorPitch) / 2)
+let pictureHalfWidth = ((desktopCapture.profile.width * monitorPitch) / 2)
+let pictureHalfHeight = ((desktopCapture.profile.height * monitorPitch) / 2)
 let glassFront = 10.75
 let glassHalfDepth = 0.007
 let pictureY = 1.13
@@ -280,7 +279,7 @@ placements {
   }
 }
 
-// The monitor's glass: the same window, its own capture at the pane's settings, facing +X.
+// The monitor's glass: the same display, its own capture at the pane's settings, facing +X.
 screens [
   {
     index: 16
@@ -291,19 +290,19 @@ screens [
     halfHeight: pictureHalfHeight
     halfDepth: glassHalfDepth
     round: 0
-    source: producer(id: "capture", settings: claudeCapture)
+    source: producer(id: "capture", settings: desktopCapture)
     // A desktop monitor's 250 nits.
     luminance: 250nit
     filter: Linear
     // Engaged on the Moth's context button like a device: the camera frames its picture as large as the World's window
-    // holds, on the fill, and a click on the picture hands the window the mouse and keyboard (desktop.md).
+    // holds, on the fill, and a click on the picture lands on the desktop where the picture shows it (desktop.md).
     route {
       engageable: true
       engageRadius: 3
       engageChannel: "interact"
       display { fill: "#000000" }
-      // A pad's sticks over the framed window (the desktop page below): at full tilt the pointer crosses half the
-      // picture's height a second, a squared response for fine placement, tripling over 0.6 s of held tilt; the right
+      // A pad's sticks over the framed desktop (the desktop page below): at full tilt the pointer crosses half the
+      // display's height a second, a squared response for fine placement, tripling over 0.6 s of held tilt; the right
       // stick scrolls up to 12 notches a second.
       padPointer {
         speed: 0.5
@@ -317,9 +316,9 @@ screens [
 ]
 
 // The desktop page: while a seat is engaged on the monitor (the engagement family's `passthrough` state, a captured
-// screen showing a window capture), a pad drives the window the way a controller's desktop mode does. Only the local
-// user's own pad acts through these verbs, and only on the window the seat frames; the first click on the picture opens
-// it, as a mouse click does. X (or E) leaves through the context button, as at every device.
+// screen showing a capture), a pad is the desktop's mouse, the way a controller's desktop mode is. Only the local user's
+// own pad acts through these verbs, and only while its seat frames the desktop. X (or E) leaves through the context
+// button, as at every device.
 bindingOverlays [
   {
     id: "desktop-pad"

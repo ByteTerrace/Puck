@@ -644,14 +644,14 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    // A pad drives the pointer only over a window a seat engaged on the screen frames, so the feel belongs to an
-    // engageable screen showing a window capture, and each speed is a finite rate in its own range.
+    // A pad drives the pointer only over a window or desktop a seat engaged on the screen frames, so the feel belongs
+    // to an engageable screen showing a capture, and each speed is a finite rate in its own range.
     private static void ValidatePadPointer(WorldScreenPadPointer padPointer, bool engageable, WorldScreenSource? source, string path, List<string> errors) {
         if (!engageable) {
             errors.Add(item: $"{path} is authored but engageable is false: only a seat engaged on the screen drives its pointer.");
         }
-        if (!WorldImageProducerSettings.IsWindowCapture(source: source)) {
-            errors.Add(item: $"{path} is authored but the screen shows no window capture: a pad drives the pointer only over a window the local user opens.");
+        if (!WorldImageProducerSettings.IsPassthroughCapture(source: source)) {
+            errors.Add(item: $"{path} is authored but the screen shows no capture: a pad drives the pointer only over a window or desktop the local user opens.");
         }
         if (!(float.IsFinite(f: padPointer.Speed) && (padPointer.Speed > 0f))) {
             errors.Add(item: $"{path}.speed must be a positive number of picture heights per second.");

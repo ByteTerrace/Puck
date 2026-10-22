@@ -199,4 +199,23 @@ internal static partial class User32 {
     public static partial nint GetWindowDpiAwarenessContext(nint windowHandle);
     [LibraryImport("user32.dll")]
     public static partial nint SetThreadDpiAwarenessContext(nint context);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial uint SendInput(uint count, [In] SystemInput[] inputs, int size);
+    [LibraryImport("user32.dll")]
+    public static partial nint WindowFromPoint(Point point);
+    [LibraryImport("user32.dll")]
+    public static partial nint GetAncestor(nint windowHandle, uint flags);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RegisterHotKey(nint windowHandle, int id, uint modifiers, uint virtualKey);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnregisterHotKey(nint windowHandle, int id);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetForegroundWindow(nint windowHandle);
+    // EnumThreadWindows takes a managed delegate callback, as EnumWindows does.
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumThreadWindows(uint threadId, EnumWindowsCallback callback, nint parameter);
 }

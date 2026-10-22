@@ -69,13 +69,13 @@ public sealed class WorldSeatContextSyncTabletopLawTests {
         Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
         Assert.Null(@object: anchor.EngagedTabletop(slot: WorldSeatBindings.SeatCount));
 
-        // Captured on screen 16: a window capture's screen reads passthrough; a monitor capture's, or a screen the
-        // document does not declare, reads engaged. Mirrored, it frames nothing and reads engaged.
+        // Captured on screen 16: a window capture's screen and a monitor capture's read passthrough; a screen the
+        // document does not declare reads engaged. Mirrored, it frames nothing and reads engaged.
         Engage(capture: true, screens: [Screen(index: 16, monitor: null)], target: GrantSubject.Screen(index: 16));
         Assert.Equal(expected: 16, actual: anchor.EngagedScreen(slot: 0));
         Assert.Equal(expected: WorldContextFamilies.EngagementPassthrough, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
         Engage(capture: true, screens: [Screen(index: 2, monitor: null), Screen(index: 16, monitor: 0)], target: GrantSubject.Screen(index: 16));
-        Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
+        Assert.Equal(expected: WorldContextFamilies.EngagementPassthrough, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
         Engage(capture: true, screens: [Screen(index: 2, monitor: null)], target: GrantSubject.Screen(index: 16));
         Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
         Engage(capture: false, screens: [Screen(index: 16, monitor: null)], target: GrantSubject.Screen(index: 16));

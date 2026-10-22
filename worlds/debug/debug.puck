@@ -6,7 +6,7 @@
 // this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
 // The standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
 // wheel) are imported documents, as are the gaming devices (devices.puck) in Wonderland, the room a portal pair of two
-// sizes shrinks the Moth into (wonderland.puck), the Claude desktop app's window as a pane and a screen
+// sizes shrinks the Moth into (wonderland.puck), the whole desktop as a pane and a screen
 // (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
 // `debug.go` console command that reaches them (places.puck), each with notes beside it, and the Moth's suit on/off
 // toggle (suit.puck).

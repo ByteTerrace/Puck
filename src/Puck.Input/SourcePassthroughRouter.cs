@@ -527,6 +527,11 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
                 point: point
             );
         }
+        // The desktop takes no keyboard from the host: keys go wherever Windows sends them, the game's while the host's
+        // window is in front.
+        if (window is ISourcePassthroughDesktop) {
+            Focus.ReturnToGame();
+        }
 
         m_buttons[button] = new ButtonPress(
             Delivered: delivered,
