@@ -245,7 +245,9 @@ public sealed class PrototypeMeshLawTests {
 
         Assert.False(condition: draw.IsDynamic);
 
-        Assert.Equal(expected: 2, actual: draw.Mesh.TriangleCount);
+        // The quad's two triangles, then each again wound the other way, so the culling mesh pass draws either side.
+        Assert.Equal(expected: 4, actual: draw.Mesh.TriangleCount);
+        Assert.Equal(expected: [0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2], actual: draw.Mesh.Indices.ToArray().Select(selector: static index => ((int)index)).ToArray());
         Assert.Equal(expected: new Vector3(x: -1f, y: 0f, z: 0f), actual: draw.Mesh.Positions.Span[1]);
 
         // Author (1, 0, 0) is engine (-1, 0, 0); scaled by 2 it is (-2, 0, 0); a +90° yaw about +Y takes -X to +Z,

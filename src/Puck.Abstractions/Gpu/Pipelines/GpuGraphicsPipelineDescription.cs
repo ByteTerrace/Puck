@@ -3,8 +3,11 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// Describes a graphics pipeline both backends build identically: a vertex input layout, the frequency groups it binds
 /// (<see cref="Layout"/>), and the depth test of a render pass with a depth attachment. Every such pipeline draws an
-/// opaque, single-sampled, unculled triangle list whose clip-space +y is the top of the attachment: a fragment replaces
-/// what its color attachment holds. A field only one backend would honor is a defect, not a capability.
+/// opaque, single-sampled triangle list whose clip-space +y is the top of the attachment: a fragment replaces what its
+/// color attachment holds, and no face is culled unless <see cref="Cull"/> names one. A triangle that appears
+/// counter-clockwise on the attachment is a front face on both backends (<c>SV_IsFrontFace</c>, <see cref="Cull"/>),
+/// which is how the bake winds a mesh's outward faces. A field only one backend would honor is a defect, not a
+/// capability.
 /// </summary>
 /// <param name="Name">A diagnostics-only label; not read by either backend factory.</param>
 /// <param name="VertexInput">The pipeline's vertex input layout.</param>
@@ -13,11 +16,13 @@ namespace Puck.Abstractions.Gpu;
 /// samplers in sampler tables.</param>
 /// <param name="DepthCompare">The depth test a passing fragment then writes its depth through, which the render pass's
 /// depth attachment requires; <see langword="null"/> for a render pass without one.</param>
+/// <param name="Cull">The faces the rasterizer discards; <see cref="GpuCullMode.None"/> by default.</param>
 public sealed record GpuGraphicsPipelineDescription(
     string Name,
     GpuVertexInputLayout VertexInput,
     GpuPipelineLayoutDescription Layout,
-    GpuDepthCompare? DepthCompare = null
+    GpuDepthCompare? DepthCompare = null,
+    GpuCullMode Cull = GpuCullMode.None
 ) {
     /// <summary>Returns the groups the pipeline binds, refusing a layout that is not a graphics pipeline's.</summary>
     /// <returns>The layout.</returns>
