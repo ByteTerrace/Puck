@@ -448,7 +448,10 @@ public sealed partial class WorldBody {
     /// the body motion program. The body keeps its pose, velocity, tape, source, and engagement; only the compiled feel
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
-    /// <c>body.motion</c> does (a no-op when unchanged).</summary>
+    /// <c>body.motion</c> does (a no-op when unchanged). A collider whose volumes differ from the body's last ones moves
+    /// the body to the nearest pose, up its axis or along world X or Z and never down, where they are not embedded in
+    /// static geometry, so a body leaving a volumeless kit inside a wall steps out of it rather than through the
+    /// floor.</summary>
     /// <param name="tuning">The kit's compiled locomotion tuning (<see cref="FixedWorldKit.Tuning"/>).</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
@@ -481,12 +484,22 @@ public sealed partial class WorldBody {
         );
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
+
+        var colliderChanged = !SameVolumes(
+            left: m_collider,
+            right: collider
+        );
+
         m_collider = collider;
         RescaleColliderVolumes();
 
         var hadRigidFacet = (m_rigid is not null);
 
         m_rigid = rigid;
+
+        if (colliderChanged) {
+            EscapeEmbedding();
+        }
         m_maxSmoothError = maxSmoothError;
 
         if (hadRigidFacet != (rigid is not null)) {

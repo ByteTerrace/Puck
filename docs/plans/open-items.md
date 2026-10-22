@@ -4,6 +4,38 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Input channels
+
+The [input channel decision](../decisions/input-channels.md) owns the model,
+migration inventory, genre checks, and each step's completion criteria. The
+runtime still has sixteen uniform channel slots; the design record is complete.
+
+- [ ] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
+  buttons, separate target-register reach, all consumers and codecs migrated,
+  shared debug declarations, and chess `confirm`/`cancel` without Select coupling.
+- [ ] C2 relative input: Q32.32 displacement in the numeric bank, authored
+  units/sensitivity/bounds, single consumption, and no tick-rate scaling.
+- [ ] C3 authoritative modes: finite state selectors, composed live sets,
+  per-combination allocation and permissions, directed family-transition keep
+  sets, named capacity/continuity refusals, and the debug form/flight/engagement
+  migration policy. Deliver with C4 before enabling slot reuse.
+- [ ] C4 switch barrier and continuity: input epochs, release by default,
+  authored same-meaning held/toggle carry, consumed transition activations,
+  cancellation and neutral rearming for released/rebound sources,
+  reload/disconnect/route handling, bounded source provenance and
+  taped/checkpointed contributions, toggle, rearm and hold
+  continuity. Show run/autorun surviving compatible forms, autofly starting
+  flight and clearing on flight exit, and neutral board/screen entry and exit.
+- [ ] C5 timed ingress and history: sub-tick events, lateness admission,
+  calibration, bounded rings and overflow outcomes, held-origin continuation
+  across epochs, replay and hash coverage.
+- [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
+  patterns, consumption, tick buffers, event-time beat judgement, and held-note
+  and charge continuity across a declared mode transition without a new press.
+- [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
+  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
+  ordinal surfaces removed, and executable checks of the genre table.
+
 ## Standalone
 
 - [ ] Keep the run channel held through the motion scenarios' steady-run captures. `body.press run 1 4` is capped by the default Drive grant to two seconds; `run-steady` and `pilot-run-steady` start capturing at tick 60, when that hold expires. Their samples therefore show the transition back to walking. Re-press within the hold budget or grant the scenario session the required duration before using those sheets to judge a 10 m/s run.

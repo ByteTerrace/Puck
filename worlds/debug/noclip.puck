@@ -1,0 +1,191 @@
+// Noclip, the debug world's own: a seat's noclip channel (P, or the left stick's press while the right trigger is held;
+// `body.press noclip` from the console) switches her collision off and on. `noclip` is a body register (state.body)
+// holding 1 while her collision is off, and the kit assignment selects by it as it selects by the suit (suit.puck):
+// with noclip on she runs the `noclip` kit, which has no collider and overlaps every other body, so she passes through
+// walls, floors, placements and bodies, and flies, in the suit or out of it. Switching noclip off hands her back the kit
+// her suit register selects, colliding again where she is; if that kit's collider finds her inside something, the
+// engine steps her out to the nearest free pose up or sideways, never down through the floor.
+//
+// The kit assignment reads one register, so its selector reads `form`, the suit register plus two while noclip is on
+// (0 the pilot, 1 the suit, 2 and 3 the same with noclip on), which a rule keeps in step with both. The debug world
+// imports this file in place of suit.puck, which it imports and whose selector it replaces. The garden and the night
+// field import suit.puck alone, so they declare neither register: noclip is the debug world's, and a crossing lands her
+// with her suit's kit there.
+
+import "pad-kit"
+import "suit"
+
+// What suit.puck exports, handed on to the debug world through this import: the cell her look's hold pose reads.
+exports {
+  reads [pilotHold]
+  actions [pilotHold]
+}
+
+channels [
+  {
+    composition: true
+    name: "noclip"
+    shape: Binary
+  }
+]
+
+state {
+  body [
+    {
+      name: "noclip"
+      kind: "Counter"
+      initial: 0
+    }
+    // The kit selector's register: suit + 2 * noclip. Born 1, a suited body with noclip off, which no case names, so a
+    // chess piece keeps the kit it was given.
+    {
+      name: "form"
+      kind: "Counter"
+      initial: 1
+    }
+  ]
+}
+
+kits {
+  assignment {
+    select {
+      bodyState: "form"
+      cases [
+        { value: 0, row: "pilot" }
+        { value: 2, row: "noclip" }
+        { value: 3, row: "noclip" }
+      ]
+    }
+  }
+  rows [
+    // Free flight with nothing to collide as: no collider, so the contact field never solves her, and overlap with every
+    // other body. One free hold cancels gravity whole, so she hovers where she stops: the movement keys and stick move
+    // her at her flight pace, 5 m/s and 10 running, and rise and descend (Space, Left Ctrl or M; C) climb and sink at it.
+    {
+      bodyMotionProgram: "walk"
+      mass: 0
+      motion {
+        facingSnap: false
+        holds [
+          {
+            name: "noclip"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: 5
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            thrust: 1
+          }
+        ]
+        moveFrame: World
+        shaping [
+          {
+            along {
+              engage: 40
+              release: 50
+            }
+            turnScale: 1
+          }
+        ]
+        speed {
+          value: 5
+          held {
+            channel: "run"
+            multiplier: 2
+          }
+        }
+        stepHeight: 0
+        turn {
+          falloff: 1
+          maxPitch: 1.2
+          pitchRate: 0
+          rate: 2.5
+        }
+      }
+      name: "noclip"
+    }
+  ]
+}
+
+// Keeps every body's `form` the suit register plus two while noclip is on. Rules run before the tick's kit selection,
+// so a toggle moves her kit the tick it lands.
+rule "noclip-form" {
+  when bodyState(each, form) != bodyState(each, suit) + 2 * bodyState(each, noclip)
+  mode: Level
+  forEach: $bodies
+  setBodyState(key: $each, state: "form", expression: bodyState(each, suit) + 2 * bodyState(each, noclip))
+}
+
+// In the suit, noclip holds flight mode on, so she wears her flight pose while she flies through things and hovers
+// where she switches noclip off. Out of the suit she has no flight pack (suit-toggle.puck), so she falls when it ends.
+rule "noclip-flight" {
+  when bodyState(each, noclip) == 1 and bodyState(each, suit) == 1 and bodyState(each, flightFuel) == 0
+  mode: Level
+  forEach: $bodies
+  setBodyState(key: $each, state: "flightFuel", expression: 1000)
+}
+
+// One seat's noclip toggle: the noclip channel of the 1-based local `seat` flips the register of that seat's own body,
+// the 0-based `index`, wherever she is. A rule reads a seat as a literal, so a world that seats more bodies
+// instantiates one toggle for each more, as suit-tests.puck does the suit's.
+template noclipToggle(seat, index) {
+  rule $"noclip-toggle-{seat}" {
+    when channel(seat, noclip) >= 1
+    mode: Edge
+    setBodyState(key: $"{index}", state: "noclip", expression: 1 - bodyState(body, index, noclip))
+  }
+}
+
+noclipToggle(seat: 1, index: 0)
+
+bindingOverlays [
+  {
+    id: "noclip-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              {
+                channel: "noclip"
+                id: "noclip"
+                label: "Noclip"
+                scale: 1
+                sources ["keyboard.p"]
+              }
+            ]
+          }
+        }
+        // The pad's toggle is a bar plate on the Debug page (controls.puck), the right trigger's: hold it (or X) and press
+        // the left stick (or N).
+        {
+          chord ["rt"]
+          group: "play"
+          page {
+            id: "pad-rt"
+            inherits: "base"
+            label: "Debug"
+            entries [
+              {
+                channel: "noclip"
+                id: "dbgNoclip"
+                label: "Noclip"
+                scale: 1
+                sources: padLeftStick
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

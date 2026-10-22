@@ -807,7 +807,7 @@ rule "chess-play-buttons" {
   if board(engaged, board, 1) == 1 and channel(1, boardPick) >= 0.5 {
     play[pickNow] = 1
   }
-  if board(engaged, board, 1) == 1 and channel(1, boardCancel) >= 0.5 {
+  if board(engaged, board, 1) == 1 and channel(1, select) >= 0.5 {
     play[cancelNow] = 1
   }
   if board(engaged, board, 1) == 1 and channel(1, forward) >= 0.5 {
@@ -974,16 +974,12 @@ rule "chess-play-cursor-parked" {
   poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0, 0])
 }
 
-// The pick and cancel buttons a seated player presses; the seat's movement channels move the cursor.
+// The pick button a seated player presses; the seat's movement channels move the cursor, and its cancel is the Moth's
+// `select` channel, which nothing else reads at the table. A world holds sixteen channels.
 channels [
   {
     composition: true
     name: "boardPick"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "boardCancel"
     shape: Binary
   }
 ]
@@ -1012,7 +1008,7 @@ bindingOverlays [
               { channel: "strafe", id: "boardRight", scale: 1, sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"] }
               { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
               { channel: "boardPick", id: "boardPick", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
-              { channel: "boardCancel", id: "boardCancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
+              { channel: "select", id: "boardCancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
               { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
             ]
           }

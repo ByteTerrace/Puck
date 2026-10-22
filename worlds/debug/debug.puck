@@ -9,7 +9,7 @@
 // sizes shrinks the Moth into (wonderland.puck), the whole desktop as a pane and a screen
 // (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
 // `debug.go` console command that reaches them (places.puck), each with notes beside it, and the Moth's suit on/off
-// toggle (suit.puck).
+// toggle (suit.puck) under her noclip toggle (noclip.puck, which imports the suit and replaces its kit selector).
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -28,7 +28,7 @@ import "chess"
 import "paintings"
 import "wonderland"
 import "places"
-import "suit"
+import "noclip"
 import "size"
 
 // The test room's palette slots.
