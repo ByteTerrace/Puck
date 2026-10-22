@@ -159,8 +159,9 @@ While the current engine campaign is in progress, the debug world
 ([`debug.puck`](../../worlds/debug/debug.puck)) is the only
 live world, and the World boots it when no `--world` is given. Its own
 dependencies stay live with it: the Moth avatar it takes as its basis, the
-quality presets that avatar imports, the skies it imports, the garden its
-portal frame opens onto ([`garden.puck`](../../worlds/debug/garden.puck)), and the shipped
+quality presets that avatar imports, the skies it imports, the garden and the
+night field its painting wing opens onto ([`garden.puck`](../../worlds/debug/garden.puck),
+[`night.puck`](../../worlds/debug/night.puck)), and the shipped
 fonts, schemas and audio assets live code reads.
 
 Every other world is quarantined in [`experimental/`](../../experimental/README.md),

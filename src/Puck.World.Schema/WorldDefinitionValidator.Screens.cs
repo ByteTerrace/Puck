@@ -946,6 +946,14 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // A ripple refracts the opening's image, and only a window is an opening: a display's glass has its own treatment.
+        if (
+            session.Ripple &&
+            (session.Projection != WorldScreenProjection.Window)
+        ) {
+            errors.Add(item: $"{path}.session.ripple requires projection 'window': only an opening ripples.");
+        }
+
         if (
             (session.Fallback is { } fallback) &&
             !IsHexColor(value: fallback)

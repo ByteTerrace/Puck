@@ -17,7 +17,7 @@ subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against (the debug world's portal frame
+  portal facet's `destination` resolves against (the debug world's garden painting
   names the garden this way).
 - **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
   geometry. `uniform` is an authored acceleration vector. `attractors` names a
@@ -74,8 +74,16 @@ subject names them:
   same way: the mirrors' interpolation endpoints, `IWorldStampSource.Carries`
   for the stamp pool's followers, gait drivers and effectors and for the
   catalog avatars, while the chase boom is translation-invariant and turns
-  through `CrossView` for a turning pair. The debug world's loop shaft
-  (`worlds/debug/loop.puck`) is the live example.
+  through `CrossView` for a turning pair. The debug world's endless fall
+  (`worlds/debug/paintings.puck`: a painting in the floor under its twin in the
+  ceiling) and its pair of paintings facing each other are the live examples.
+  A window's session source may author `ripple: true` (refused off
+  `projection: window`): the opening shimmers and rings from every body that
+  touches or passes through it, presentation only (`WorldOpeningRipples`
+  contacts, `sdfOpeningRipple` in `shade/sdf-environment.hlsli`). A wall
+  painting is a thin rim shape with its centre carved out, face 0, because the
+  glass fills the face shape a centimetre short of its faces, and the wall
+  behind it holds nothing back while a body stands in the opening.
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
   field, `RateHz` (required in an authored section), the authoritative
   server's fixed step rate in Hz. Read through

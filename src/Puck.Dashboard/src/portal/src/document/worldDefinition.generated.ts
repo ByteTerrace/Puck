@@ -11016,6 +11016,10 @@ export type WorldScreenSourceSession = {
    * The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.
    */
   fallback?: string | null;
+  /**
+   * Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.
+   */
+  ripple?: boolean;
 };
 
 /**
