@@ -1,59 +1,101 @@
 # Moth concept pack
 
-Seven concept sheets expand the owner's selected Moth into a visual handoff for
-character modeling and procedural animation. They describe the intended
-quality; the current engine prototype is not the visual reference to reproduce.
-The pack was generated with the built-in image_gen tool, including targeted
-image corrections, and the complete [prompt set](prompts.md) remains available
-as source provenance. The compact-wing sheets follow the owner's
-preference for two subtle shells and supersede the earlier folding-fan proposal.
+These sheets are the visual standard for the Moth, the debug world's avatar,
+built as the native SDF creation in [moth.puck](../../../../worlds/debug/avatars/moth.puck).
+They show her in two forms: the suited Moth, a compact powered suit in a
+friendly arcade mech style, and the off-suit Moth, the woman inside it. The
+suit on/off toggle exists for one demonstration: holding a real-size handheld
+console in her own hands.
+
+The sheets were made by an art-direction pair. Codex (its built-in image
+generation tool) wrote the prompts, generated every sheet and judged which
+ones to keep. Claude held the owner's constraints and checked each keeper
+against them: hand and finger counts, the braid's root, the two-shell pack,
+the palette, SDF buildability and the handheld's real size. The reading order
+and the authority lines below are Codex's verdicts. Prompts and how each sheet
+was edited or composited are in [prompts.md](prompts.md).
 
 ## Read the images in this order
 
-| Sheet | Use it for |
+| Sheet | Authoritative for |
 |---|---|
-| [Owner source](00-owner-source.png) | Character 4, bottom left, is the selected Moth. Other crew members are context, not alternate Moth designs. |
-| [Character model sheet](01-character-model-sheet.png) | Overall silhouette, proportions, front/side/back relationships, palette and compact flight-pack appearance. |
-| [Face and armor](02-face-and-armor.png) | Facial identity and expression, curved hood opening, swept shoulder layers, tapered boots and dark joint gaps. |
-| Compact-wing owner reference | The owner's design reference (from [Owner source](00-owner-source.png)) for the two curved shells, compact size and band placement. |
-| [Thrusters, rear low](08-thrusters-rear-low.png) | The owner's primary thruster reference: the two shells from behind, about 45 degrees below. It shows the shell outline, band slope and seams, the vent, the steep trimmed bottom cut and the nozzle housings. Get this view right first. |
-| [Thrusters, rear three-quarter](09-thrusters-rear-three-quarter.png), [on the body](10-thrusters-on-body-three-quarter.png), [on the body from behind](11-thrusters-on-body-back.png), [rear and rear low](12-thrusters-rear-and-rear-low.png), [inner section](13-thrusters-inner-section.png) | The owner's other chosen thruster views, for extrapolating the shells to other angles. For the thrusters, these four images outrank every other sheet in this pack, which are unreliable for them. |
-| [Compact wing views](05-compact-wing-views.png) | Back, side and rear three-quarter views; matching rest and subtle hover opening. Current pack construction reference. |
-| [Isolated wing jetpack](07-isolated-wing-jetpack.png) | Equipment alone from rear, side, low, and three-quarter angles, plus body-facing and hover studies. Revised from the owner's close-ups to preserve defined plate edges, raised bands, and tapered lower lips. Hidden mounting surfaces are inferred. |
-| [Compact wing motion](06-compact-wing-motion.png) | Jump preparation, takeoff, hover, forward flight, air brake and touchdown with the same two-shell assembly. Current flight pose reference. |
-| [Earlier flight exploration](03-flight-system.png) | Historical folding-fan proposal, superseded by the compact wing views. Do not implement its extra segments. |
-| [Earlier movement and weight](04-movement-and-weight.png) | Additional ready, sprint, bank and recovery gestures. Its fan-wing hardware is superseded. |
+| [Owner source](00-owner-source.png) | Identity. Character 4, bottom left, is the Moth; the other crew members are context. It outranks every generated sheet. |
+| [Suited turnaround](01-suited-turnaround.png) | The suit's silhouette, proportions and palette in front, right side, back and three-quarter views: the dusty lavender, the hood, gauntlets and boots as the three main forms, and a quiet torso. The ivory chest sides are paint on one continuous breastplate; the shading that makes them read as raised pads is a known flaw of the image, not geometry to build. |
+| [Construction details](02-construction-details.png) | Hood opening and the braid's root, the open hand and the fist, the gauntlet, and the boot from side, front, rear and below. The gauntlet's inside and the sole are proposals; painted seams stay paint and never become grooves. |
+| [Isolated wing jetpack](07-isolated-wing-jetpack.png) | The exact exterior of the flight pack. Read it before building the back. Its body-facing view is inferred. |
+| [Thrusters, rear low](08-thrusters-rear-low.png), [rear three-quarter](09-thrusters-rear-three-quarter.png), [on the body](10-thrusters-on-body-three-quarter.png), [on the body from behind](11-thrusters-on-body-back.png), [rear and rear low](12-thrusters-rear-and-rear-low.png), [inner section](13-thrusters-inner-section.png) | The owner's chosen thruster views, closeups of the same pack as sheet 07. The rear-low view (08) is the one to get right first. |
+| [Poses and expressions](03-poses-and-expressions.png) | Four expressions (calm, delight, focus, determined) and six key poses: idle, run, jump preparation, hover, forward flight and touchdown. The hover and forward-flight figures were generated separately and composited into the sheet, so the panels' scale is illustrative. |
+| [Face identity](14-face-identity.png) | Her face and expressions only: the same woman in both forms. Its hood, shoulder and boot studies are an earlier suit and are superseded by sheets 01 and 02. |
+| [Off-suit turnaround](04-offsuit-turnaround.png) | The off-suit Moth, option B: an athletic adult about 1.68 m and about 6.4 heads tall, in a charcoal work undersuit with full sleeves, straight-cut work trousers, soft knee and elbow pads, a contact harness, small lavender shoulder patches, ochre fastenings and flat ankle boots. |
+| [Scale and fit](05-scale-and-fit.png) | The two off-suit options beside the 2.06 m suit at exact relative height (400 px per metre): A, compact, 1.65 m and about 4.3 heads; B, grounded, 1.68 m and about 6.4 heads. Each is drawn inside a translucent suit with the raised footbed, eye line, headroom, and hip and knee offsets measured from the images. It shows where the fit does not line up; it does not prove a wearable fit. |
+| [Handheld scale](06-handheld-scale.png) | The handheld, an original portrait console in see-through atomic orange, 75 × 133 × 27.5 mm, about 8% of her standing height and about three quarters of her hand's length. Its orthographic front, side and back are scaled to those dimensions; the held views are illustrative perspective. |
 
 ## Preserve the character
 
-The Moth's implementation is the native SDF creation in [moth.puck](../../../../worlds/debug/avatars/moth.puck); [the flight studio guide](../../../../worlds/debug/avatars/moth.md) covers launching, the inspection layouts and live editing. These concept sheets are the visual standard it is built toward.
+Keep warm brown skin, expressive brown eyes, black swept hair and one thick
+braid rooted beside her right cheek, through the hood's front opening when
+suited. The braid can trail during movement; its root never moves, and it never
+comes out of the back of the hood or the back of her head. The hood has an
+ivory face rim and a lavender shell with round ear discs. Its opening follows
+the forehead and cheeks in one continuous curve, never a box or a pentagonal
+"house" around the face.
 
-Keep warm brown skin, expressive brown eyes, black swept hair and one thick braid rooted beside her right cheek through the front helmet opening. The braid can trail during movement; its attachment does not change or move through the helmet back. The hood has an ivory face rim and lilac shell. Its opening follows the forehead and cheeks with a continuous shaped curve. Avoid a box or pentagonal house surrounding the face.
+The suit is built from broad plate faces, tapered volumes, controlled bevels
+and purposeful curves: swept overlapping shoulders with a round front pivot,
+large rounded gauntlets, flared shin shells and substantial flat-soled boots.
+Charcoal joints separate rigid pieces and leave room to bend. Lavender and
+ivory dominate; a small ochre collar and belt and restrained cyan lights are
+accents. Seams and colour bands are paint. Geometry carries only the
+silhouette, joint gaps, major overlaps and openings, so the whole suit is
+buildable from SDF primitives with no surface noise.
 
-Armor combines broad plate faces, tapered volumes, controlled bevels and purposeful curves. Swept overlapping shoulders, large gauntlets, flared shin armor and substantial flat-soled boots establish the silhouette. Charcoal joints separate rigid pieces and provide bending space. Ivory and lilac dominate; muted ochre and restrained cyan lights are accents. Preserve the friendly arcade character and compact chibi proportions instead of adding realistic anatomy, surface noise or excessive effects.
+The off-suit Moth is a grown, competent woman with an athlete's build and a
+working pilot's clothes. Nothing about her is sexualized: no cleavage, no bare
+midriff, no clothing that traces her body.
 
-## Interpret the proposed motion
+## Flight pack and motion
 
-Keep exactly two rigid, curved pods beside a narrow central spine. Each has two ivory bands and one recessed lower propulsion outlet. Upper mounts stay below the helmet and behind the shoulder armor; lower tips remain around the upper pelvis. The shells open only a few degrees outward and aft, with no added segments or changing shell dimensions. Preserve shoulder movement, hip flexion and an exhaust path behind the legs.
+Keep exactly two rigid curved pods beside a narrow charcoal spine. Each has two
+ivory bands, a small dark upper opening, a small grey inset, a long tapered
+lower lip and one recessed cyan nozzle under that lip. Upper mounts sit below
+the hood and behind the shoulder armor; the lower tips reach the upper pelvis.
+The pods open only a few degrees outward and aft in powered states, with no
+added segments, fins or outlets and no change in size. Exhaust is short and
+translucent and leaves only the two pod nozzles; boot heel ports are small cyan
+lights.
 
-Let the body compress before a jump and extend on takeoff, with the shells opening slightly as thrust begins. Hover uses an upright torso and balanced downward jets. Forward flight pitches the body forward; braking pitches it back, changing thrust direction while the pack remains attached. Touchdown transfers weight through both flat boot soles, bent knees and hips, with the shells still slightly open. Settle the body before closing them. These sheets use the two backpack outlets for powered poses; boot ports remain idle cyan lights. Exhaust is short and translucent, and it is off in jump preparation and touchdown.
+The thruster references each show the pods through their own camera, so no
+view's perspective belongs in the 3D form. The nozzle sits square to the
+opening it fills, its axis the opening's normal (in, down and a little back)
+and its face flush with the opening. Its lens faces a viewer only where that
+viewer looks along the normal; never aim the nozzle at a camera to reproduce a
+sheet.
 
-## Resolve differences deliberately
+## Decisions waiting on the owner
 
-Sheet 7 isolates the pack from sheet 5 and the owner's close-ups for geometry
-study. Its low view is an angled perspective, and its body-facing mounting details are a
-proposal because the character hides those surfaces in the source. Use sheet 5
-to resolve exterior proportions and sheet 6 for movement; sheet 7 does not
-establish exact dimensions or additional hardware.
+Codex's recommendations, recorded here until the owner rules:
 
-The thruster references (08–13) each show the pods through their own camera, so
-no view's perspective belongs in the 3D form. The nozzle sits square to the
-opening it fills, its axis the opening's normal (in, down and a little back) and
-its face flush with the opening. Its lens faces a viewer only where that viewer
-looks along the normal. The lens looks face-on in the rear and rear-low sheets
-because of how those sheets were drawn; never aim the nozzle at a camera to
-reproduce that.
+- **Off-suit proportion.** Codex recommends B, the grounded adult, because its
+  build reads as a grown woman with the same face; A stays on sheet 05 as the
+  alternative.
+- **Her head inside the hood.** Under B her real head is about 0.26 m, smaller
+  than the face every suited sheet draws. Codex recommends building her real
+  head inside the unchanged hood, with more helmet around her face, so one head
+  serves both forms; sheet 05's B front fit shows how that looks. The
+  alternative keeps the larger suited face as a stylized read that is not
+  literally her head. The suited sheets keep the larger face until the owner
+  rules.
+- **Earrings.** Small gold studs appear in the generated sheets but are not in
+  the preserved identity; Codex recommends leaving them off the model unless
+  the owner wants them.
+- **Palette.** Codex recommends keeping the dusty lavender of the owner
+  source and rejecting the saturated violet that image generation drifts
+  toward.
 
-The owner source and subsequent owner feedback take precedence. Sheet 1 anchors overall identity and costume; sheet 2 clarifies surface treatment and expression. Sheet 5 anchors the compact pack; sheet 6 supplies its movement intent. Sheets 3–4 remain historical explorations. Generated perspective views are not exact orthographic blueprints: use one shared rig to verify hinge travel, armor clearance and exhaust separation through the complete motions. Small perspective or seam differences do not authorize new parts or outlets. Incidental slogans on the sheets are not game copy, lore or implementation requirements.
-
-For implementation priorities, use the [hero brief](../armored-chibi-hero-brief.md). The [studio guide](../../../../worlds/debug/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.
+A suit-up transition sheet was attempted and rejected; none ships. The owner
+source and later owner feedback take precedence over every generated sheet,
+which are concept interpretations rather than orthographic blueprints. Small
+perspective or seam differences do not authorize new parts. For implementation
+priorities, see the [hero brief](../armored-chibi-hero-brief.md); the
+[studio guide](../../../../worlds/debug/avatars/moth.md) covers the current
+model, its controls and live editing.

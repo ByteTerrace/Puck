@@ -14,9 +14,9 @@ choices supersede the island-ranger palette and helmet defaults below. The
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
 The [Moth concept pack](moth-concept-pack/README.md) expands the selected
-source into character views, facial and armor details, proposed wing mechanics,
-and movement studies. Its guide distinguishes the owner-selected design from
-generated mechanical proposals.
+source into a suited turnaround, construction details, poses and expressions,
+the off-suit Moth, and the flight-pack references. Its guide distinguishes the
+owner-selected design from generated proposals.
 
 The selected movement personality is nimble, with visible weight and function in
 the wings. Prioritize a convincing idle → run → takeoff → bank → land sequence.
