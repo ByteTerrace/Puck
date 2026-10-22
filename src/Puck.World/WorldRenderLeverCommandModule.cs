@@ -542,7 +542,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.temporal",
-            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. Camera and session views never reconstruct.",
+            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. The world's own views are the seat views, the operator pose and every layout slot that names a camera; the camera views screens film and session views never reconstruct.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: TemporalEcho(settings: settings));

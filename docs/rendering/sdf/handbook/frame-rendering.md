@@ -648,9 +648,13 @@ gathered into its output. It runs `SdfWorldPackage.TemporalFragment`, the
 reduced fragment's passes at its render ceiling, native or reduced, so a native
 view gains a `resolve` pass too. In `Puck.World`, `world.temporal` turns it on
 for the world's own views; the quality presets carry it, off at `low` and on at
-`medium` and `high`. A camera view never reconstructs (its quality restriction,
+`medium` and `high`. The world's own views are every view the presentation lays
+out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
+layout slots that name a camera alike, so a named-camera slot reconstructs and
+its settled still converges over a jitter period. A camera view a screen films
+never reconstructs (its quality restriction,
 `WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
-view.
+view (`WorldSessionSceneEmitter.ReducedQuality`).
 
 Each view's history is its own fragment's: two versions at the output extent,
 one allocation a frame slot each, that the next frame reads through

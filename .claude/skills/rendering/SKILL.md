@@ -162,6 +162,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   frames the display rendered before the hold (five stills of one paused tick
   differed by up to 141 levels on 12-17% of pixels). Together these make stills
   of one tick repeat across Worlds to a 1-level per-render residue.
+- **A named-camera layout slot reconstructs; a screen's camera does not.**
+  `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
+  dresses: seat views, the operator pose and `views.layouts` slots that name a
+  camera. A camera view a screen films and a session view take a reduced
+  quality (`WorldScreenBinder.CameraViewQuality`,
+  `WorldSessionSceneEmitter.ReducedQuality`) whose `Temporal` is off, and
+  `SdfViewQuality.Restrict` ANDs it, so they never jitter.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:
