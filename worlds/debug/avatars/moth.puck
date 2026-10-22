@@ -122,10 +122,6 @@ let shinPanelOutline = [
 ]
 
 let braidParent = [
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
   "braid-root-1"
   "braid-root-1"
   "braid-root-1"
@@ -137,10 +133,6 @@ let braidParent = [
 ]
 
 let braid0Position = [
-  [-0.1542, 1.6678, 0.1348]
-  [-0.1834, 1.6361, 0.1428]
-  [-0.2114, 1.6047, 0.1236]
-  [-0.2394, 1.5732, 0.1044]
   [-0.2527, 1.53865, 0.120375]
   [-0.2549, 1.50015, 0.141125]
   [-0.2571, 1.46165, 0.133875]
@@ -160,17 +152,9 @@ let braid0Rotation = [
   [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
   [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
 ]
 
 let braid1Position = [
-  [-0.1208, 1.669, 0.1384]
-  [-0.1488, 1.6376, 0.1192]
-  [-0.178, 1.6059, 0.1272]
-  [-0.2072, 1.5742, 0.1352]
   [-0.2247, 1.53865, 0.120375]
   [-0.2269, 1.50015, 0.113125]
   [-0.2291, 1.46165, 0.133875]
@@ -182,10 +166,6 @@ let braid1Position = [
 ]
 
 let braid1Rotation = [
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
   [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
   [0, 0, -braidTwist, braidUntwist]
@@ -213,8 +193,9 @@ template cameraLayout(name) {
   }
 }
 
+// One column of the plait's lobes, from where the root becomes the braid below her jaw down to the tie.
 template braidChain(chainIdx, baseId, positions, rotations) {
-  for i in range(0, 12) {
+  for i in range(0, 8) {
     shape Superellipsoid $"braid-{chainIdx}-{i}" {
       id: baseId + i
       blend: "Union"
@@ -2988,27 +2969,18 @@ prototypes {
         ]
       }
 
+      // The hood's charcoal interior, the headroom round her face reading as its padded lining: the cut takes the
+      // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
       shape Superellipsoid "helmetInner" {
         id: 24
         position [0, 1.7559, 0.009]
-        scale [0.2442, 0.25828, 0.2205]
+        scale [0.21, 0.224, 0.186]
         material: charcoal
-        blend: "Subtraction"
+        blend: "SmoothSubtraction"
+        smooth: 0.01
         group: 4
         parent: "helmet"
         exponent: softness
-      }
-
-      // A dark lining shell inside the hood, so the headroom round her face reads as the hood's padded interior.
-      shape Superellipsoid "hoodLining" {
-        id: 4
-        position [0, 1.7559, 0.009]
-        scale [0.226, 0.24, 0.202]
-        material: charcoal
-        group: 4
-        parent: "helmet"
-        exponent: softness
-        onion: 0.016
       }
 
       shape Prism "helmetFaceOpening" {
@@ -3016,7 +2988,9 @@ prototypes {
         position [0, 1.7405, 0.2475]
         scale [0.2222, 0.24112, 0.23175]
         material: charcoal
-        blend: "Subtraction"
+        // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
+        blend: "SmoothSubtraction"
+        smooth: 0.012
         group: 4
         parent: "helmet"
         profile {
@@ -3116,19 +3090,19 @@ prototypes {
 
       mothHead(headScale, headAt, "helmet", rust, leather, ivory, umber, jet, pearl, ink)
 
-      // The braid roots beside her right cheek and leaves through the hood's front opening; the braid below keeps its
-      // full thickness whatever the head's scale.
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, which becomes the plait below
+      // her jaw and leaves through the hood's front opening; the braid keeps its full thickness whatever the head's scale.
       shape Sweep "braid-root-0" {
         id: 119
-        position [-0.1232, 1.6842, 0.1394]
+        position [-0.1232, 1.695, 0.137]
         material: ink
         parent: "helmet"
         curve {
           a [0, 0, 0]
-          b [-0.05, -0.068, 0]
-          c [-0.1144, -0.1263, -0.0224]
-          radiusStart: 0.014
-          radiusEnd: 0.017
+          b [-0.012, -0.095, 0.012]
+          c [-0.1144, -0.1371, -0.02]
+          radiusStart: 0.011
+          radiusEnd: 0.019
         }
       }
 
@@ -7180,16 +7154,18 @@ prototypes {
           ]
         }
       ]
+      // Each pod's exhaust leaves its nozzle 55 degrees back from straight down in the pod's frame and narrows to two and a
+      // half times its mouth, so in a straight-legged hover it passes behind the greaves rather than over them (sheet 10).
       volumes [
         {
           kind: "flow"
           parent: "pod-left"
           position [0.0072, -0.4054, -0.2791]
-          rotation [0.3007, 0, 0, 0.9537]
+          rotation [0.4617, 0, 0, 0.887]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
-          spread: 4
+          spread: 2.5
           fade: 1.5
           noiseScale: 0.08
           noiseDepth: 0.4
@@ -7224,11 +7200,11 @@ prototypes {
           kind: "flow"
           parent: "pod-right"
           position [-0.0072, -0.4054, -0.2791]
-          rotation [0.3007, 0, 0, 0.9537]
+          rotation [0.4617, 0, 0, 0.887]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
-          spread: 4
+          spread: 2.5
           fade: 1.5
           noiseScale: 0.08
           noiseDepth: 0.4

@@ -15,14 +15,16 @@ Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
 `mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed
 so her eyes sit 1.527 m up, the suited eye line less sheet 05's 0.208 m
 footbed. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
-placed at her head the same way. A thick three-strand braid roots beside her
-right cheek and falls over her right collarbone to an ochre tie.
+placed at her head the same way. A thick braid roots under the lock beside her
+right cheek as one smooth tapering root, then a plait of alternating lobes falls
+over her right collarbone to an ochre tie.
 
 ## Wear her
 
 [`suit.puck`](../suit.puck) imports this file, and the debug world, the garden
 and the night field import `suit.puck`. A body whose `suit` cell is 0 runs the
-`pilot` kit (a walker with one jump and no flight mode, its capsule 0.25 m in
+`pilot` kit (a walker with one grounded jump of 3.7 m/s, which lifts her feet
+0.56 m where the suit clears 1.1 m, and no flight mode, its capsule 0.25 m in
 radius and 1.68 m tall) and wears the `moth-pilot` look. In the debug world, T,
 or South while the right trigger is held (K while X is held; the bar's Debug
 page, `SU`), flips the cell while she stands, as does the play wheel's Suit
@@ -62,6 +64,16 @@ arms forward and in, bends her elbows and tips her head down, and the look's
 toward her eyes: its lower half between her palms, her fingers behind it and
 her thumbs on its face. At rest the handheld sits hidden inside her chest.
 
+The handheld is the gallery's Humble Gaming Brick ([devices](../devices.puck)),
+75 × 133 × 27.5 mm: a faithful simplified copy, since a look wears one creation
+and cannot carry the device's own. Its shell and battery bay are the device's
+atomic-orange acrylic glass, so its pale green board, processor, cartridge and
+two blue cells read through the orange; the dark lens with a dim picture, the
+d-pad on the face's left as she looks at it, the smoked A and B, select, start
+and the red power light sit on its face. A frame poses each shape it names and
+not the shapes riding it, so the hold frame poses every part of the brick with
+the shell.
+
 ```text
 world.state.cell.set pilotHold 0 1
 view.override camera orbit 48 1.45 -48 3.2 160 -6 30
@@ -93,10 +105,10 @@ The torso is one smoothly blended group (chest, waist, chest front and
 trapezius) riding the torso shape; two hip masses ride and blend into the
 pelvis so her hips flow into her trouser legs. Limbs are tapered sweeps. The
 front harness straps are thin boxes; the shoulder and back straps, the knee-pad
-straps, the strap buckles, the shoulder patches and the handheld's screen and
-controls are paint. A paint sits in its parent shape's own frame. The palette's
+straps, the strap buckles, the shoulder patches and the handheld's picture are
+paint. A paint sits in its parent shape's own frame. The palette's
 charcoals are authored darker than the sheet reads, since the studio's light
-lifts them as it lifts the suit's lavender. She stamps 136 of her own 367
+lifts them as it lifts the suit's lavender. She stamps 127 of her own 367
 shapes:
 
 ```powershell
