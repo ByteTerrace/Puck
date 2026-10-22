@@ -268,6 +268,11 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
 - **Capture both streams.** Read-back answers land on stdout; refusals,
   narration, boot lines, capture announcements and `[world.mutation: …]`
   echoes land on stderr.
+- **Narrow a large read.** An MCP result carries 1 MiB, and `world.counters gpu`
+  alone passes that in a world with many render-graph instances. Ask with
+  `summary`, `node <name>`, `pass <label>` or `counter <prefix>` (they combine;
+  [the rendering skill](../rendering/SKILL.md#performance-and-cost) names the
+  forms), and a source name (`world.counters state`) for the rest.
 - **The drain barrier.** A following immediate verb waits for pending
   simulation traffic, so write-then-read pairs need no polling.
   `world.wait <ticks>` holds the issuing session; a windowed script that reads
