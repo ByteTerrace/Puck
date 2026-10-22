@@ -93,12 +93,14 @@ test "writing a level's cell, as gallery.lights does, switches it" {
   }
 }
 
-// The blinds follow the lights: a level's are down while its lights are off and up while they are on. A body posed at
-// (30, 0.05, 14) in the lobby level's hall sees body 8, the first chess piece out on the lawn to the south-west, through
-// the south window at x = 26 to 29, so its line of sight reads whether that window's blind is down.
+// The blinds follow the lights: a level's are down while its lights are off and up while they are on. Each scenario
+// poses body 0 at (27.5, 0.05, 14) in the lobby level's hall and body 8, a chess piece, out on the ground at
+// (27.5, 0.05, 6), so the line of sight between them runs through the south window at x = 26 to 29 and reads whether
+// that window's blind is down.
 test "the lobby's blinds are down and stop the sight line through a window" {
   when {
-    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 6 0 0 0 8
     ticks 30
   }
   expect {
@@ -113,7 +115,8 @@ test "the lobby switch raises its blinds" {
     ticks 30
     seat1: body.press interact 1 0.2 0
     ticks 30
-    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 6 0 0 0 8
     ticks 30
   }
   expect {
@@ -124,7 +127,8 @@ test "the lobby switch raises its blinds" {
 
 test "another level's lights leave the lobby's blinds as they stand" {
   when {
-    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 6 0 0 0 8
     seat1: world.state.cell.set hallLights level0 1
     seat1: world.state.cell.set hallLights level1 0
     ticks 30
@@ -137,7 +141,8 @@ test "another level's lights leave the lobby's blinds as they stand" {
 
 test "switching the lobby off again lowers its blinds" {
   when {
-    seat1: body.pose 30 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 6 0 0 0 8
     seat1: world.state.cell.set hallLights level0 1
     ticks 30
     seat1: world.state.cell.set hallLights level0 0
