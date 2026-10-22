@@ -43,137 +43,24 @@ let mothBlinkPose = [
   [65, -0.11656, 1.76542, 0.09945]
 ]
 
-let mothFringeBlend = [
-  "Union"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-]
-
-let mothFringe0Position = [
-  [0.0462, 1.9407, 0.12825]
-  [0.0249877, 1.9377667, 0.154]
-  [0.0024173, 1.9309222, 0.17425]
-  [-0.0215111, 1.9201667, 0.189]
-  [-0.0467975, 1.9055, 0.19825]
-  [-0.073442, 1.8869222, 0.202]
-  [-0.1014444, 1.8644333, 0.20025]
-  [-0.1308049, 1.8380333, 0.193]
-  [-0.1615235, 1.8077222, 0.18025]
-  [-0.1936, 1.7735, 0.162]
-]
-
-let mothFringe0Scale = [
-  [0.052976, 0.058256, 0.0174774]
-  [0.060982, 0.066262, 0.0201187]
-  [0.0680224, 0.0733024, 0.0224414]
-  [0.0732479, 0.0785279, 0.0241654]
-  [0.0720319, 0.0773119, 0.0237642]
-  [0.0594857, 0.0647657, 0.019625]
-  [0.0409938, 0.0462738, 0.0135244]
-  [0.0229078, 0.0281878, 0.0075576]
-  [0.0104181, 0.0156981, 0.0034371]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let mothFringe1Position = [
-  [0.0396, 1.9407, 0.1287]
-  [0.0589383, 1.9329864, 0.1506333]
-  [0.077842, 1.9235346, 0.1676333]
-  [0.0963111, 1.9123444, 0.1797]
-  [0.1143457, 1.899416, 0.1868333]
-  [0.1319457, 1.8847494, 0.1890333]
-  [0.1491111, 1.8683444, 0.1863]
-  [0.165842, 1.8502012, 0.1786333]
-  [0.1821383, 1.8303198, 0.1660333]
-  [0.198, 1.8087, 0.1485]
-]
-
-let mothFringe1Scale = [
-  [0.037136, 0.042416, 0.0122516]
-  [0.0424332, 0.0477132, 0.0139992]
-  [0.0470915, 0.0523715, 0.0155361]
-  [0.050549, 0.055829, 0.0166767]
-  [0.0497444, 0.0550244, 0.0164113]
-  [0.0414432, 0.0467232, 0.0136726]
-  [0.0292079, 0.0344879, 0.0096361]
-  [0.0172413, 0.0225213, 0.0056881]
-  [0.0089774, 0.0142574, 0.0029618]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let mothFringe2Position = [
-  [-0.1452, 1.8285, 0.12825]
-  [-0.154516, 1.8086457, 0.1378056]
-  [-0.1619309, 1.7891716, 0.1454722]
-  [-0.1674444, 1.7700778, 0.15125]
-  [-0.1710568, 1.7513642, 0.1551389]
-  [-0.1727679, 1.7330309, 0.1571389]
-  [-0.1725778, 1.7150778, 0.15725]
-  [-0.1704864, 1.6975049, 0.1554722]
-  [-0.1664938, 1.6803123, 0.1518056]
-  [-0.1606, 1.6635, 0.14625]
-]
-
-let mothFringe2Scale = [
-  [0.032208, 0.037488, 0.0106258]
-  [0.0366625, 0.0419425, 0.0120954]
-  [0.0405797, 0.0458597, 0.0133877]
-  [0.0434871, 0.0487671, 0.0143469]
-  [0.0428105, 0.0480905, 0.0141237]
-  [0.0358299, 0.0411099, 0.0118207]
-  [0.0255412, 0.0308212, 0.0084264]
-  [0.0154783, 0.0207583, 0.0051065]
-  [0.0085292, 0.0138092, 0.0028139]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let mothFringe3Position = [
-  [0.1562, 1.8307, 0.1035]
-  [0.1622459, 1.8141321, 0.1112222]
-  [0.1666948, 1.7976728, 0.1173889]
-  [0.1695467, 1.7813222, 0.122]
-  [0.1708015, 1.7650802, 0.1250556]
-  [0.1704593, 1.7489469, 0.1265556]
-  [0.16852, 1.7329222, 0.1265]
-  [0.1649837, 1.7170062, 0.1248889]
-  [0.1598504, 1.7011988, 0.1217222]
-  [0.15312, 1.6855, 0.117]
-]
-
-let mothFringe3Scale = [
-  [0.029744, 0.035024, 0.0098129]
-  [0.0337771, 0.0390571, 0.0111435]
-  [0.0373238, 0.0426038, 0.0123136]
-  [0.0399562, 0.0452362, 0.013182]
-  [0.0393436, 0.0446236, 0.0129799]
-  [0.0330233, 0.0383033, 0.0108948]
-  [0.0237079, 0.0289879, 0.0078215]
-  [0.0145969, 0.0198769, 0.0048157]
-  [0.0083051, 0.0135851, 0.0027399]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-// One lock of the fringe: ten softened ellipsoids tapering along the sweep, smoothly unioned into one group.
-template mothFringeChain(chainIdx, baseId, groupIdx, positions, scales, s, at, parentName, hair) {
-  for i in range(0, 10) {
-    shape Superellipsoid $"fringe-{chainIdx}-{i}" {
-      id: baseId + i
-      blend: mothFringeBlend[i]
-      exponent: mothHeadSoftness
-      group: groupIdx
-      material: hair
-      parent: parentName
-      position: map(positions[i], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-      rotation [0, 0, 0, 1]
-      scale: map(scales[i], v => v * s)
-      smooth: 0.008 * s
+// One lock of hair: a tapering sweep from its root on the crown or temple, laid over the scalp and face and smoothly
+// joined to the scalp's group, so the hair reads as one swept mass. `a` is the root in the head's unscaled frame, `b` and
+// `c` the sweep's control and end points relative to it.
+template mothHairLock(name, id, a, b, c, radiusStart, radiusEnd, s, at, parentName, hair) {
+  shape Sweep $"{name}" {
+    id: id
+    position: map(a, (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    material: hair
+    blend: "SmoothUnion"
+    smooth: 0.028 * s
+    group: 9
+    parent: parentName
+    curve {
+      a [0, 0, 0]
+      b: map(b, v => v * s)
+      c: map(c, v => v * s)
+      radiusStart: radiusStart * s
+      radiusEnd: radiusEnd * s
     }
   }
 }
@@ -187,7 +74,7 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
     scale: map([0.049, 0.034, 0.06], v => v * s)
     material: skin
     blend: "SmoothSubtraction"
-    smooth: 0.001 * s
+    smooth: 0.012 * s
     group: 6
     parent: parentName
     profile {
@@ -316,7 +203,7 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
   shape Superellipsoid $"blinkCover-{name}" {
     id: baseId
     position: map([side * 0.07656, 1.74842, 0.09945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.05, 0.035, 0.021], v => v * s)
+    scale: map([0.056, 0.04, 0.021], v => v * s)
     material: skin
     parent: parentName
     exponent: mothHeadSoftness
@@ -337,8 +224,8 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
   }
 }
 
-// The whole head. Shape ids are the suited Moth's: face and features 32..50 and 56..66, scalp 76..78, fringe 79..118
-// and the blink lids 284..287; groups 6..13.
+// The whole head. Shape ids are the suited Moth's: face and features 32..50 and 56..66, scalp 76..78, the nose's wings
+// 79 and 80, the hair locks 81..84 and the blink lids 284..287; groups 6..9 and 14.
 template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair) {
   shape Superellipsoid "face" {
     id: 32
@@ -386,39 +273,63 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     parent: parentName
   }
 
+  // A soft bridge in the face's group, and a small rounded tip with its two wings in a group of its own: a part a few
+  // centimetres across bakes on a lattice of its own size, where the face's group bakes at the coarsest cell.
   shape Sweep "noseBridge" {
     id: 36
-    position: map([0, 1.7295, 0.2295], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: map([0, 1.7295, 0.2275], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     material: skin
     blend: "SmoothUnion"
-    smooth: 0.014 * s
+    smooth: 0.02 * s
     group: 6
     parent: parentName
     curve {
       a [0, 0, 0]
-      b: map([0, -0.0176, 0.00675], v => v * s)
-      c: map([0, -0.03212, 0.0108], v => v * s)
-      radiusStart: 0.004 * s
-      radiusEnd: 0.004 * s
+      b: map([0, -0.0176, 0.0065], v => v * s)
+      c: map([0, -0.0322, 0.0105], v => v * s)
+      radiusStart: 0.005 * s
+      radiusEnd: 0.007 * s
     }
   }
 
   shape Superellipsoid "nose" {
     id: 37
-    position: map([0, 1.6899, 0.2466], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.01452, 0.01012, 0.0126], v => v * s)
+    position: map([0, 1.6915, 0.2415], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.0135, 0.0105, 0.0105], v => v * s)
+    material: skin
+    group: 14
+    parent: parentName
+    exponent: 2
+  }
+
+  shape Superellipsoid "noseWing-left" {
+    id: 79
+    position: map([0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.0075, 0.007, 0.0075], v => v * s)
     material: skin
     blend: "SmoothUnion"
-    smooth: 0.014 * s
-    group: 6
+    smooth: 0.007 * s
+    group: 14
     parent: parentName
-    exponent: mothHeadSoftness
+    exponent: 2
+  }
+
+  shape Superellipsoid "noseWing-right" {
+    id: 80
+    position: map([-0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.0075, 0.007, 0.0075], v => v * s)
+    material: skin
+    blend: "SmoothUnion"
+    smooth: 0.007 * s
+    group: 14
+    parent: parentName
+    exponent: 2
   }
 
   shape Superellipsoid "nostril-1" {
     id: 38
-    position: map([-0.01188, 1.6833, 0.2547], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.003, 0.0014, 0.0015], v => v * s)
+    position: map([-0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
     parent: parentName
     exponent: mothHeadSoftness
@@ -426,8 +337,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "nostril1" {
     id: 39
-    position: map([0.01188, 1.6833, 0.2547], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.003, 0.0014, 0.0015], v => v * s)
+    position: map([0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
     parent: parentName
     exponent: mothHeadSoftness
@@ -446,30 +357,37 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     exponent: mothHeadSoftness
   }
 
+  // The hairline: the scalp cut away under her temples and in front of her crown, with rounded seams so its edge reads
+  // as hair lying on the head rather than a sawn shell.
   shape Box "scalpBottom" {
     id: 77
     position: map([0, 1.68, 0.25], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     scale: map([0.4, 0.141, 0.22], v => v * s)
     material: hair
-    blend: "Subtraction"
+    blend: "SmoothSubtraction"
+    smooth: 0.02 * s
     group: 9
     parent: parentName
   }
 
   shape Box "scalpFront" {
     id: 78
-    position: map([0, 1.88, 0.4], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: map([0, 1.88, 0.435], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     scale: map([0.4, 0.4, 0.24925], v => v * s)
     material: hair
-    blend: "Subtraction"
+    blend: "SmoothSubtraction"
+    smooth: 0.02 * s
     group: 9
     parent: parentName
   }
 
-  mothFringeChain(0, 79, 10, mothFringe0Position, mothFringe0Scale, s, at, parentName, hair)
-  mothFringeChain(1, 89, 11, mothFringe1Position, mothFringe1Scale, s, at, parentName, hair)
-  mothFringeChain(2, 99, 12, mothFringe2Position, mothFringe2Scale, s, at, parentName, hair)
-  mothFringeChain(3, 109, 13, mothFringe3Position, mothFringe3Scale, s, at, parentName, hair)
+  // The swept fringe: a thick lock from the parting on her left across her forehead to her right temple, a shorter one
+  // back to her left temple, and a lock down each side of her face in front of the ear, her left one to the jaw. Each
+  // fringe lock roots inside the scalp, so it leaves the crown already lying flat and nothing stands up from it.
+  mothHairLock("fringe-0", 81, [0.0028, 1.9201, 0.1111], [0.0162, -0.0204, 0.1322], [-0.1416, -0.0968, 0.064], 0.04, 0.016, s, at, parentName, hair)
+  mothHairLock("fringe-1", 82, [0.0056, 1.9201, 0.1103], [0.0461, -0.0232, 0.0743], [0.1623, -0.0612, 0.0393], 0.034, 0.014, s, at, parentName, hair)
+  mothHairLock("sideLock-left", 83, [0.1329, 1.8546, 0.1487], [0.0712, -0.0732, -0.0265], [0.0459, -0.148, -0.0349], 0.026, 0.011, s, at, parentName, hair)
+  mothHairLock("sideLock-right", 84, [-0.1205, 1.8474, 0.1486], [-0.0814, -0.0569, -0.0181], [-0.0604, -0.1146, -0.0282], 0.024, 0.012, s, at, parentName, hair)
 
   mothBlinkLid("left", 1, 284, s, at, parentName, skin, hair)
   mothBlinkLid("right", -1, 286, s, at, parentName, skin, hair)

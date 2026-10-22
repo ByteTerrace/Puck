@@ -187,11 +187,21 @@ curve, sweep radius and blend radius, and takes the creation's palette slots, so
 the off-suit pilot ([moth-pilot.md](moth-pilot.md)) wears it at the same scale. The mouth and lid paints and the
 blink frame (`blinkPose`) live in the creation and scale by the same
 `headScale`. Her face sits forward at the hood's rim, in the key light, with the
-skin's wrap and warm fill raised so it reads lit inside the hood. A charcoal
-onion shell (`hoodLining`) lines the hood, so the headroom round her face reads
-as padded interior, and the ochre collar stands forward round her neck. The
-braid's root sweep and its first beads start at her cheek, under the side lock,
-and bridge to the unscaled braid below.
+skin's wrap and warm fill raised so it reads lit inside the hood. The face is
+the character's charm, after sheet 03: a small soft nose (a gentle bridge in the
+face's group and a rounded tip with two wings in a group of their own, so it
+bakes on a lattice its own size rather than the face's 13 mm cells), almond eyes
+in softly rounded sockets, swept brows and a painted smile. Her black hair is a
+scalp cut to a soft hairline and four tapering locks smoothly joined to it: a
+thick fringe swept from the parting on her left across her forehead to her right
+temple, a shorter one back to her left temple, and a lock down each side of her
+face. The fringe locks root inside the scalp, so nothing stands up from her
+crown on either form. The hood's charcoal interior is its own cut (the cutter's
+material), rounded where it meets the face opening, which is itself a rounded
+cut, so the rim and the interior bake clean; the ochre collar stands forward
+round her neck. The braid roots under her right side lock as one smooth
+tapering sweep that becomes the plait below her jaw and leaves through the
+hood's front opening.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
 lavender hexagon, above the segmented charcoal waist and the ochre belt; the
@@ -261,7 +271,10 @@ The `flight` and `wings` drivers read `airPose` and `airWings`. Existing server
 rules and damped state responses provide takeoff and landing transitions. Each
 pod deploys approximately six degrees outward and four degrees aft. No extra
 fan blades deploy. Four bounded `flow` volumes supply animated translucent
-exhaust: two back pods use lane 1 and two heels use lane 3. The pods' lens emission
+exhaust: two back pods use lane 1 and two heels use lane 3. Each pod's plume
+leaves its nozzle 55 degrees back from straight down and narrows to two and a
+half times its mouth, so in a straight-legged hover it passes behind the
+greaves rather than over the upper shins, as sheet 10 draws it. The pods' lens emission
 uses flight-mode lane 2; the boot pilot lights are independent of that lane.
 Lane expressions use keyed state syntax, unlike the
 drivers' `state.airPose.$body` binding. Collision and movement controls remain
@@ -272,7 +285,7 @@ and pelvis displacement as the body settles after impact.
 
 ## Verify edits
 
-Check document admission and the stamp budget (355 of 367):
+Check document admission and the stamp budget (312 of 367):
 
 ```powershell
 dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world worlds/debug/avatars/moth.puck --prototype moth

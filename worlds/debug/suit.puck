@@ -108,14 +108,15 @@ kits {
           rate: 2.5
         }
       }
-      // One jump from the ground, spent by leaving it either way, so she never jumps in the air.
+      // One grounded jump from the ground, spent by leaving it either way, so she never jumps in the air: 3.7 m/s lifts
+      // her feet 0.56 m, a fit woman's standing jump, where the suit's 5.1 m/s clears 1.1 m.
       actions {
         jump {
           onPress {
             gate: compareState(state: jumps, comparison: Equal, value: 2)
             latchSeconds: 0
             effects [
-              setVerticalVelocity(velocity: 5.1)
+              setVerticalVelocity(velocity: 3.7)
               addState(state: jumps, value: -1)
             ]
           }
