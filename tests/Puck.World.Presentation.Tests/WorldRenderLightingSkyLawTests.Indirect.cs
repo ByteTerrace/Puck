@@ -11,9 +11,9 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     public void IndirectLightGainUsesTheExistingRecordWithoutChangingDirectLight() {
         var resolved = Resolve(defaults: BaseDefaults() with {
             Lighting = new WorldRenderLighting(Lights: [
-                new WorldRenderLight.Directional(Weight: .4f) { Bounce = 0f },
-                new WorldRenderLight.Point(Weight: .7f) { Bounce = 2f },
-                new WorldRenderLight.Directional(Weight: .6f),
+                new WorldRenderLight.Directional(Illuminance: .4f) { Bounce = 0f },
+                new WorldRenderLight.Point(Intensity: .7f) { Bounce = 2f },
+                new WorldRenderLight.Directional(Illuminance: .6f),
             ]),
         });
         var copy = new SdfLights();
@@ -24,13 +24,13 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         copy.Pack(records: packed);
         var words = MemoryMarshal.Cast<SdfLight, float>(span: packed);
 
-        Assert.Equal(expected: 48, actual: Marshal.SizeOf<SdfLight>());
+        Assert.Equal(expected: 64, actual: Marshal.SizeOf<SdfLight>());
         Assert.Equal(expected: 0f, actual: words[11]);
-        Assert.Equal(expected: 2f, actual: words[23]);
-        Assert.Equal(expected: 1f, actual: words[35]);
-        Assert.Equal(expected: .4f, actual: packed[0].Weight);
-        Assert.Equal(expected: .7f, actual: packed[1].Weight);
-        Assert.Equal(expected: .6f, actual: packed[2].Weight);
+        Assert.Equal(expected: 2f, actual: words[27]);
+        Assert.Equal(expected: 1f, actual: words[43]);
+        Assert.Equal(expected: SdfPhotometry.DirectionalWeight(lux: .4f), actual: packed[0].Weight);
+        Assert.Equal(expected: SdfPhotometry.PositionalWeight(candela: .7f), actual: packed[1].Weight);
+        Assert.Equal(expected: SdfPhotometry.DirectionalWeight(lux: .6f), actual: packed[2].Weight);
     }
     [Fact]
     public void SectionLightKeysResolveTheIndirectGainThroughTheSharedScalarPath() {
@@ -38,7 +38,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1d)]),
             RenderRaw = BaseDefaults() with {
                 Lighting = new WorldRenderLighting(
-                Lights: [new WorldRenderLight.Directional(Weight: .4f, Name: "sun") { Bounce = .25f }],
+                Lights: [new WorldRenderLight.Directional(Illuminance: .4f, Name: "sun") { Bounce = .25f }],
                 Clock: "day",
                 Keys: [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> {
                     ["sun"] = new WorldRenderLight.Directional { Bounce = 2f },
@@ -50,7 +50,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         var resolved = resolver.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition), revision: 0);
 
         Assert.Equal(expected: 2f, actual: resolved.Lights[0].Bounce);
-        Assert.Equal(expected: .4f, actual: resolved.Lights[0].Weight);
+        Assert.Equal(expected: SdfPhotometry.DirectionalWeight(lux: .4f), actual: resolved.Lights[0].Weight);
     }
     [InlineData(-.1f)]
     [InlineData(float.NaN)]

@@ -2002,6 +2002,8 @@ export type RulePoolIteration = {
 
 export type SafeName = string;
 
+export type SdfExposureMode = "Manual" | "Auto";
+
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
 export type SearchMethod = "Negamax" | "MonteCarlo";
@@ -7902,7 +7904,7 @@ export type WorldPrototype = {
        */
       color: string;
       /**
-       * The emissive strength (null = 0 — optional members are nullable and normalized at load).
+       * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
        */
       emissive?: number | null;
       /**
@@ -9488,6 +9490,10 @@ export type WorldRenderDefaults = {
    * The boot sky field grid fraction, one or one half, independent of view render scale.
    */
   skyFieldScale?: number;
+  /**
+   * The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day's.
+   */
+  exposure?: WorldRenderExposure | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -9499,6 +9505,37 @@ export type WorldRenderEnvironment = {
    * The reflection gain. Absent is one; zero disables reflection lookups.
    */
   reflection?: BindableScalar;
+};
+
+export type WorldRenderExposure = {
+  /**
+   * Manual or automatic. Absent is manual.
+   */
+  mode?: SdfExposureMode;
+  /**
+   * The manual exposure value at ISO 100, in [−6, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.
+   */
+  ev100?: number | null;
+  /**
+   * The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [−6, 20]; absent is −6.
+   */
+  minimum?: number | null;
+  /**
+   * The highest EV100 an automatic exposure adapts to, at or above Minimum. In [−6, 20]; absent is 20.
+   */
+  maximum?: number | null;
+  /**
+   * The stops an automatic exposure brightens the metered image by, in [−10, 10]. Absent is zero.
+   */
+  compensation?: number | null;
+  /**
+   * The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.
+   */
+  adaptation?: number | null;
+  /**
+   * The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.
+   */
+  local?: number | null;
 };
 
 export type WorldRenderFog = {
@@ -9514,6 +9551,10 @@ export type WorldRenderFog = {
    * The height fog's profile. Absent is a fog alike at every height.
    */
   height?: WorldRenderAirHeight | null;
+  /**
+   * The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky's own.
+   */
+  luminance?: BindableScalar;
 };
 
 export type WorldRenderHaze = {
@@ -9591,10 +9632,10 @@ export type WorldRenderIndirectSources = {
 /**
  * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.
  */
-export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightOccluder | null;
+export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightSpot | WorldRenderLightOccluder | null;
 
 /**
- * A Lambert directional light.
+ * A Lambert directional light, such as the sun.
  */
 export type WorldRenderLightDirectional = {
   $type?: "directional";
@@ -9603,13 +9644,13 @@ export type WorldRenderLightDirectional = {
    */
   direction?: BindableDirection;
   /**
-   * The light's colour.
+   * The light's colour, scaled to unit luminance so the light gives exactly its illuminance. Refused beside Temperature. Absent is white, or the temperature's.
    */
   color?: BindableColor;
   /**
-   * The diffuse weight. Absent is the pinned sun weight.
+   * The illuminance on a surface facing the light, in lux: a clear midday sun gives about 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun's.
    */
-  weight?: BindableScalar;
+  illuminance?: BindableScalar;
   /**
    * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
    */
@@ -9622,6 +9663,10 @@ export type WorldRenderLightDirectional = {
    * The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.
    */
   name?: string | null;
+  /**
+   * The light's colour as a black body's at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.
+   */
+  temperature?: BindableScalar;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -9630,7 +9675,7 @@ export type WorldRenderLightDirectional = {
 };
 
 /**
- * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.
+ * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table's capacity.
  */
 export type WorldRenderLightOccluder = {
   $type?: "occluder";
@@ -9662,7 +9707,7 @@ export type WorldRenderLightOccluder = {
 };
 
 /**
- * A point light with inverse-square falloff and a soft core: intensity = weight / (1 + (distance / radius)^2). No shadow march in v1 — a point light never occludes and is never occluded.
+ * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.
  */
 export type WorldRenderLightPoint = {
   $type?: "point";
@@ -9671,25 +9716,29 @@ export type WorldRenderLightPoint = {
    */
   position?: BindableVector3;
   /**
-   * The falloff radius. Absent is the engine default.
-   */
-  radius?: BindableScalar;
-  /**
    * An entity, entity part, or placement frame. A missing live target disables the light.
    */
   anchor?: WorldAnchor | null;
   /**
-   * The light's colour.
+   * The light's colour, scaled to unit luminance. Refused beside Temperature.
    */
   color?: BindableColor;
   /**
-   * The strength. Absent is the engine default.
+   * The luminous intensity, in candela. Refused beside Power; absent with it is the engine default.
    */
-  weight?: BindableScalar;
+  intensity?: BindableScalar;
   /**
    * The name a section key addresses the light by, unique among the lights.
    */
   name?: string | null;
+  /**
+   * The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb gives about 800. Refused beside Intensity.
+   */
+  power?: BindableScalar;
+  /**
+   * The light's colour as a black body's, in kelvin, in [1000, 40000]: a warm bulb about 2,700. Refused beside Color.
+   */
+  temperature?: BindableScalar;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -9698,7 +9747,7 @@ export type WorldRenderLightPoint = {
 };
 
 /**
- * A view-dependent silhouette brighten: weight · color · pow(1 − saturate(dot(normal, −rayDirection)), power), added after the material shade.
+ * A view-dependent silhouette brighten: luminance · color · pow(1 − saturate(dot(normal, −rayDirection)), power), added after the material shade.
  */
 export type WorldRenderLightRim = {
   $type?: "rim";
@@ -9707,9 +9756,9 @@ export type WorldRenderLightRim = {
    */
   color?: BindableColor;
   /**
-   * The strength. Absent is zero, which adds nothing.
+   * The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds nothing.
    */
-  weight?: BindableScalar;
+  luminance?: BindableScalar;
   /**
    * The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the engine default.
    */
@@ -9725,9 +9774,61 @@ export type WorldRenderLightRim = {
   bounce?: BindableScalar;
 };
 
+/**
+ * A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full strength inside the inner angle and smoothly to none at the outer, with the point light's windowed falloff, range, and tracing and occlusion by the irradiance volume while unanchored.
+ */
+export type WorldRenderLightSpot = {
+  $type?: "spot";
+  /**
+   * The world-space position, or the offset in the anchor's frame.
+   */
+  position?: BindableVector3;
+  /**
+   * The direction the light shines along, any nonzero length; in the anchor's frame when an anchor is authored. Absent is straight down.
+   */
+  direction?: BindableDirection;
+  /**
+   * An entity, entity part, or placement frame. A missing live target disables the light.
+   */
+  anchor?: WorldAnchor | null;
+  /**
+   * The cone's outer half angle, in (0, π/2] radians. Absent is 45 degrees.
+   */
+  angle?: BindableAngle;
+  /**
+   * The half angle inside which the light is at full strength, in [0, Angle] radians. Absent is three quarters of Angle.
+   */
+  innerAngle?: BindableAngle;
+  /**
+   * The light's colour, scaled to unit luminance. Refused beside Temperature.
+   */
+  color?: BindableColor;
+  /**
+   * The luminous intensity along the aim, in candela. Refused beside Power; absent with it is the engine default.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.
+   */
+  power?: BindableScalar;
+  /**
+   * The light's colour as a black body's, in kelvin, in [1000, 40000]. Refused beside Color.
+   */
+  temperature?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
+};
+
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
+   * The lights, at most SdfLights.MaxLights, in authored order; each view shades only those that can reach what it shows (SdfLightSelection). Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
    */
   lights?: (WorldRenderLight | null)[] | null;
   /**
@@ -9778,6 +9879,10 @@ export type WorldRenderMedium = {
    * BindableColor's grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.
    */
   color?: BindableColor;
+  /**
+   * The luminance, in nits, a Color of one in-scatters at. Absent is SdfSky.DefaultLuminance.
+   */
+  luminance?: BindableScalar;
 };
 
 /**
@@ -9906,6 +10011,10 @@ export type WorldRenderSkyLayerAurora = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -9998,6 +10107,10 @@ export type WorldRenderSkyLayerClouds = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10074,6 +10187,10 @@ export type WorldRenderSkyLayerFar = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10117,6 +10234,10 @@ export type WorldRenderSkyLayerGradient = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10190,6 +10311,10 @@ export type WorldRenderSkyLayerNoise = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10250,6 +10375,10 @@ export type WorldRenderSkyLayerPanel = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10301,6 +10430,10 @@ export type WorldRenderSkyLayerPanorama = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10361,6 +10494,10 @@ export type WorldRenderSkyLayerPattern = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10426,6 +10563,10 @@ export type WorldRenderSkyLayerStars = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10485,6 +10626,10 @@ export type WorldRenderSkyLayerSunDisc = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10561,6 +10706,10 @@ export type WorldRenderSkyLayerView = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10873,6 +11022,10 @@ export type WorldScreen = {
    * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
+  /**
+   * The display's peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld's unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world's own luminance whatever this says.
+   */
+  luminance?: number | null;
 };
 
 export type WorldScreenDisplay = {

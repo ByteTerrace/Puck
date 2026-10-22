@@ -300,6 +300,7 @@ public sealed partial class WorldScreenBinder {
         public IReadOnlyList<int> Screens => AllScreens;
 
         public bool Emits(int screen) => WorldScreenBinder.Emits(entry.Screens, screen);
+        public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: entry.Screens?.RowOf(screen: screen));
         public SourceMapping? MappingOf(int screen) => (((entry.Screens is { } screens) && screens.Mappings.TryGet(mapping: out var mapping, screen: screen)) ? mapping : null);
         public string? ReadOf(int view, int screen) => entry.Screens?.InstanceOf(screen: screen);
     }

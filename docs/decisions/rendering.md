@@ -76,6 +76,12 @@ distance at which the switch is barely perceptible (the owner's ruling). The
 switch distance is derived from the change's size on screen at the view's
 resolution, not fixed in metres.
 
+The lights follow the same rule: each view shades only the lights that can
+reach a surface it shows (`SdfLightSelection`), tested with the same
+`CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
+Skipping one changes no pixel, since a point or spot light's falloff is exactly
+zero at its range (below).
+
 Work that changes every frame updates less often where it is far or small on
 screen (the owner's request), by the same rule: a reduced rate is a visible
 trade-off, so each switches only where a held update jumps by at most two
@@ -92,6 +98,94 @@ rate, so game timing, audio and replay hashes do not move. The levers extend
 the per-pass cadence and the render graph's refresh, never a second scheduler,
 and `world.rates` switches each for comparison. Measured on the debug world
 ([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
+
+## Lights, screens and the camera are photometric
+
+**Every light, screen and emissive surface is authored in real units, and the
+frame shades in luminance (the owner's request).** A directional light's
+illuminance is in lux (a clear midday sun about 100,000), a point or spot
+light's luminous intensity in candela or its luminous power in lumens (a 60 W
+bulb about 800), with a colour or a colour temperature in kelvin; an emissive
+surface's, a sky layer's and a display's luminance is in nits (a CRT about 150).
+A light's colour is scaled to unit luminance, so it gives exactly its quantity.
+The frame's radiometric unit is the nit: a light record carries its illuminance
+(or intensity) over π, so a Lambertian albedo ρ under an illuminance E shows
+ρE/π, the irradiance volume traces and stores nits, and a light's specular lobe
+scales by its illuminance. `SdfPhotometry` owns the conversions, and the `.puck`
+language takes `lx`, `lm`, `cd`, `nit` and `K` on the fields that carry them.
+The sky is consistent with the sun because its colours are in units of a layer
+luminance whose default is a clear day's sky (10,000 nits) beside the default
+100,000-lux sun, so the sky lights the ground about a fifth as brightly as the
+sun does.
+
+**A camera exposure maps the luminance to the display, before the tonemap.**
+`render.exposure` is manual (an `EV100`) or automatic: a reflected-light meter
+reads the irradiance volume's luminance about each view's camera, weighted
+toward where it looks, and eases toward that reading less a compensation,
+within authored bounds, over presentation time. The eye adapts across a scene
+where a camera cannot, so an automatic exposure also adapts locally by an
+authored share (`render.exposure.local`): the composite moves each surface's
+exposure from the view's toward the one the volume's probes about the surface
+would meter looking at it, within four stops, so a room beside its sunlit
+windows reads as a room and the sunlit ground through the window as ground,
+while the sky share keeps the view's exposure. The probes are world-space and
+smooth over a cell, so the adaptation carries no halo across a depth edge and
+agrees between views of one world.
+Each view's composite multiplies its output by its exposure, so a dark lobby
+lit by its screens and a sunlit garden both read. A window onto another world
+and a sky layer's view carry the world beyond at an exposure between its own
+and the viewer's: the view beyond the glass applies its exposure to the window
+share (`SdfPhotometry.WindowAdaptation`, three quarters) and the view looking
+through applies the rest of its own, so the window shows
+`L · E_viewer · (E_window / E_viewer)^share`, a sunlit garden seen from a dim
+room reading as a garden rather than white, and a night field seen from a lit
+room as night rather than black; every level of windows within windows carries
+the same share, so the result is the same whatever the nesting. A display shows
+its picture at its peak luminance; terms that are display-referred by design
+(an ink line, the editor grid, an unbound screen's glass) are divided by the
+exposure. Exposure is presentation only: it reads presentation time and the
+volume, and nothing in simulation state depends on it.
+
+**A point or spot light ends at a range derived from its intensity (the lead's
+decision, delegated by the owner).** Its falloff is the windowed inverse square
+`saturate(1 − (d/r)⁴)² / d²`, smooth and exactly zero at the range `r`, the
+distance at which a white surface facing the light shows 1/256 of display white
+at the darkest exposure the world adapts to. Past it the light darkens nothing a
+view would show, and a view whose frustum misses its sphere skips it, which
+lifts the old eight-light cap: a world's lights table holds 128, and each view's
+pass block carries a mask of the ones it shades.
+
+**A fixture that stands still is occluded and bounced by the irradiance
+volume.** The frame has no shadow path for a positional light (the cascades are
+the sun's), so a static point or spot light (one with no anchor,
+`SdfLight.IsTraced`) is traced where the bounce already is: each probe records
+which such lights its centre sees, one bit a table record, and lights its hits
+by them under a traced shadow ray, so their light bounces about their room; the
+views pass takes a light's visibility at a surface as the share of the probes
+about it that see it, so a downlight lights nothing through the slab under it,
+and a room's own fixtures light it indirectly. The occlusion has the volume's
+resolution, so the wall, slab and doorway are what it resolves and a plinth's
+shadow is the ambient occlusion's. An anchored light moves with its anchor,
+which the volume cannot follow, so it lights through every wall and bounces
+nothing.
+
+**A matte surface reflects little of the sky.** The specular lobe's reflection
+of the environment is its directional albedo, the split-sum environment BRDF
+(`sdfMaterialEnvironmentBrdf`) over the environment blurred toward its
+irradiance as the roughness widens the lobe, and a material with no specular
+response reflects none of it; a Fresnel edge at grazing that ignored the
+lobe's width made painted stairs and placards read as chrome.
+
+**Considered, and set aside.** Scene-referred values left as stylized weights
+with a global gain, since no gain makes a 150-nit screen and a 100,000-lux sun
+read in one frame; exposure from a GPU histogram of the lit image, which needs a
+reduction and a readback the irradiance volume already answers on the CPU; a
+cutoff radius authored per light, which would make the range a look decision
+for every light rather than one derived threshold; a cube or dual-paraboloid
+shadow map per positional light, six raster passes of the world a light a frame
+where the hall holds 68 of them, for a sharper shadow than the rooms need; and
+a window published unexposed for the viewer to expose, under which a sunlit
+world seen from a dim room blows to white.
 
 ## The pipeline foundation
 
@@ -718,9 +812,14 @@ of the world reads the same volume.
 owns its layout, costs and limits.
 
 **It is presentation and bounds no leak by proof.** The volume holds back light
-through walls with its back-face weight and inside-geometry test alone; there
-is no per-probe visibility. Moving bodies receive its light and cast none into
-it.
+through walls with its back-face weight, its inside-geometry test, the read's
+preference for the probes in front of a surface and each probe's depth cube,
+which stops it at the wall or slab its rays meet along each axis; there is no
+per-probe visibility of the surfaces it lights. Each probe's cubes are averaged with the
+neighbouring probes its centre sees, since a probe's rays are few beside the
+contrast of a sunlit patch and the raw lattice showed as bands along a room's
+walls; a neighbour behind a wall takes no part. Moving bodies receive its light
+and cast none into it.
 
 **Considered, and set aside.**
 

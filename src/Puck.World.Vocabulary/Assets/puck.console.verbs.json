@@ -218,6 +218,7 @@
     { "name": "world.devices", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.dynamics", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.explain", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.exposure", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.extensions", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.extensions.catalog", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.faces", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

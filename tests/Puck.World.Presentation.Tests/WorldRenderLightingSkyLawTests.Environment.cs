@@ -60,7 +60,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(Vector3.UnitZ, panel.Direction);
         Assert.Equal(new Vector2(x: .2f, y: .4f), panel.Size);
         Assert.Equal(new Vector3(x: (64f / 255f), y: (128f / 255f), z: 1f), panel.Color);
-        Assert.Equal(actual: panel.Intensity, expected: 2f);
+        Assert.Equal(actual: panel.Intensity, expected: (2f * SdfSky.DefaultLuminance));
         Assert.Equal(actual: panel.Blur, expected: .1f);
         Assert.Equal(SdfSkyVisibility.Camera, resolved.Sky.LayerAt(index: 2).Visibility);
         Assert.Equal(.5f, resolved.Sky.LayerAt(index: 2).Opacity);

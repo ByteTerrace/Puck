@@ -174,17 +174,21 @@ public sealed partial class SdfWorldTables {
         // change invalidates the signature.
         m_decalRevision++;
     }
-    /// <summary>Sets whether the screen's acquired image emits light. Its GPU reduction supplies direct lighting; a camera
-    /// of the same world is excluded to prevent self illumination.</summary>
+    /// <summary>Sets the luminance a screen's picture shows at: a picture value of one is a display's peak luminance, in
+    /// nits, which scales both its face and the light its GPU reduction casts into the room. A screen its mapping draws as
+    /// an opening (no glass) shows the luminance of the world beyond it as it is, so it takes one whatever
+    /// <paramref name="luminance"/> says. Call it after <see cref="SetScreenMapping"/>, whose glass flag it reads.</summary>
     /// <param name="screenIndex">The screen slot (0..31, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
-    /// <param name="emits">Whether the source is an independent image or a view of another world.</param>
+    /// <param name="luminance">The display's peak luminance, in nits; zero or less, or not finite, shows its default.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
-    public void SetScreenEmission(int screenIndex, bool emits) {
+    public void SetScreenLuminance(int screenIndex, float luminance) {
         RequireScreenIndex(screenIndex: screenIndex);
-        var flag = (emits ? 1f : 0f);
+        var row = (screenIndex * ScreenMappingStride);
+        var glass = MemoryMarshal.Read<float>(source: m_screenMappingRegion.Contents[(row + ScreenGlassOffset)..]);
+        var value = ((glass == 0f) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
 
-        _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in flag)),
-            offset: (((screenIndex * ScreenMappingStride) + ScreenBoundOffset) + (sizeof(float) * 2)));
+        _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in value)),
+            offset: ((row + ScreenBoundOffset) + (sizeof(float) * 2)));
     }
     /// <summary>States whether a declared screen surface (see <see cref="SdfProgramBuilder"/>'s screen-surface
     /// <c>ScreenSlab</c> overload) at <paramref name="screenIndex"/> shows a source this frame: its row's bound flag, which

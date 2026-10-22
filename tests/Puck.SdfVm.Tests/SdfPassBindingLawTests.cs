@@ -7,14 +7,16 @@ namespace Puck.SdfVm.Tests;
 /// The counted cost of an <c>sdf.world</c> pass's constant data, held to the generated interface: every pass block is
 /// the world interface's pass block, which holds the view and frame values and no light or sky table, and each kernel
 /// the build deploys binds the lights table and the sky's block and tables only when its pass reads them (the lights
-/// views, the sky block and layers their evaluating passes, the coefficients
-/// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
+/// views, the sky block and layers their evaluating passes, the coefficients views and the composite, whose local
+/// adaptation reads the volume's sky share through them, and the environment map its radiance readers), as its SPIR-V
+/// reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
-    // the curvature shading, temporal history, indirect controls, the light-camera flag, twelve cascade rows, shadow
-    // parameters, 64 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 1840;
+    // The pass block's bytes: the extent and the world values, the view, the levers, the light count, the view's light mask,
+    // exposure and air light, the shadow slots, the curvature shading, temporal history, indirect controls, the
+    // light-camera flag, twelve cascade rows, shadow parameters, 64 bake-lattice rows and the irradiance volume,
+    // 16-aligned.
+    private const uint PassBlockBytes = 1872;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.
@@ -24,7 +26,7 @@ public sealed class SdfPassBindingLawTests {
         (SdfKernelInterfaces.Lights, [SdfKernel.Glass, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, SdfKernel.Glass, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
+        (SdfKernelInterfaces.SkyCoefficients, [SdfKernel.Composite, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, SdfKernel.Glass, .. ViewsKernels]),
     ];
 

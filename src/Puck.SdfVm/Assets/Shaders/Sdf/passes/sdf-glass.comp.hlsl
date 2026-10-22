@@ -85,25 +85,29 @@ float3 sdfGlassSky(float3 direction) {
     return (color * sdfSky[0].Reflection);
 }
 // The lights' highlights on the glass: each directional's and point's GGX lobe through the glass's own Fresnel
-// reflectance, unshadowed, since the glass casts into no cascade and reads none.
+// reflectance, unshadowed, since the glass casts into no cascade and reads none, scaled by the light's illuminance as
+// sdfLightResponse scales a surface's.
 float3 sdfGlassHighlights(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection) {
     float3 highlights = float3(0.0, 0.0, 0.0);
     uint count = worldLightCount();
 
     [loop]
     for (uint index = 0u; (index < count); index++) {
+        if (!worldLightSelected(index)) {
+            continue;
+        }
+
         SdfLight light = sdfLights[index];
 
         if (light.Kind == SDF_LIGHT_DIRECTIONAL) {
-            highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, light.Direction, light.Weight));
+            highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, light.Direction, (SDF_PI * light.Weight)));
         } else if (light.Kind == SDF_LIGHT_POINT) {
-            float3 toLight = (worldPointLightPosition(light) - position);
-            float pointDistance = length(toLight);
-            float3 pointDirection = (toLight / max(pointDistance, 1.0e-4));
-            float pointRatio = (pointDistance / max(light.Param, 1.0e-3));
-            float pointFalloff = (light.Weight / (1.0 + (pointRatio * pointRatio)));
+            float3 pointDirection;
+            float reach = (light.Weight * sdfPointReach(light, worldPointLightPosition(light), position, pointDirection));
 
-            highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, pointDirection, pointFalloff));
+            if (reach > 0.0) {
+                highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, pointDirection, (SDF_PI * reach)));
+            }
         }
     }
 
@@ -206,7 +210,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         reactive = saturate(length(at - own));
     }
 
-    output[pixel] = color;
+    output[pixel] = float4(min(color.rgb, SDF_LUMINANCE_CEILING), color.a);
     if ((passGroup.temporal != 0u) && glass) {
         uint index = sdfReactivityIndex(pixel, 0u, extent);
 

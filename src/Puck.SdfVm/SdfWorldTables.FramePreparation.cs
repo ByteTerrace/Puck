@@ -183,10 +183,14 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
+    /// <summary>Gets or sets the exposures of the views of the latest packed frame, which their pass blocks carry; none
+    /// exposes every view by one.</summary>
+    public SdfViewExposures? ViewExposures { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
-    /// instance-mask width, the mesh draws and the debug view mode.</summary>
+    /// instance-mask width, the mesh draws, the debug view mode and the views' exposures.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
+        Exposures: ViewExposures,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: MeshDrawCount,
         ScreenCount: BoundScreenCount()

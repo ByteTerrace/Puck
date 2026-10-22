@@ -123,6 +123,8 @@ public sealed partial class WorldScreenBinder {
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = WorldSessionSceneEmitter.ReducedQuality,
+            // A window shows the luminance beyond its glass, which the view looking through it exposes.
+            Unexposed = (feed.Projection == WorldScreenProjection.Window),
         },
         width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
     );

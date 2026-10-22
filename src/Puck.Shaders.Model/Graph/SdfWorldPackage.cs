@@ -72,6 +72,30 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the lights the lights table holds this frame, at most its records
     /// (<c>uint</c>).</summary>
     public const string LightCount = "lightCount";
+    /// <summary>The pass-group value holding the lights the view shades, one bit a record of the lights table, which
+    /// <c>SdfLightSelection</c> chooses by whether each light can reach what the view shows (<c>uint4</c>).</summary>
+    public const string LightMask = "lightMask";
+    /// <summary>The pass-group value holding the view's exposure: the multiplier, per nit, its composite maps the
+    /// luminance it shades to the display by before the tonemap, and the display-referred terms (an ink line, the editor
+    /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
+    public const string Exposure = "exposure";
+    /// <summary>The pass-group value holding the power the composite raises <see cref="Exposure"/> to before applying it
+    /// to the view's output (<c>float</c>): one for a view the display shows, and the window share
+    /// (<c>SdfPhotometry.WindowAdaptation</c>) for a view that publishes its luminance for a window onto it, whose
+    /// consumer applies the rest of its own exposure.</summary>
+    public const string ExposeShare = "exposeShare";
+    /// <summary>The pass-group value holding the share of the sky the air about the view's camera sees open, in [0, 1],
+    /// which scales the sky's and the light-casting bodies' in-scatter into its atmosphere, so a closed room's air is not
+    /// lit by the sky outside it (<c>float</c>).</summary>
+    public const string AirLight = "airLight";
+    /// <summary>The pass-group value holding the luminance, in nits, the view's meter read about its camera, which the
+    /// local adaptation measures each surface's surroundings against; zero while the meter has no reading
+    /// (<c>float</c>).</summary>
+    public const string MeterLuminance = "meterLuminance";
+    /// <summary>The pass-group value holding the share of the local adaptation, in [0, 1] (<c>SdfExposure.Local</c>):
+    /// how far the composite moves each surface's exposure from the view's toward the one its surroundings in the
+    /// irradiance volume would meter (<c>float</c>).</summary>
+    public const string LocalAdaptation = "localAdaptation";
     /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
     public const string ShadowSlots = "shadowSlots";
     /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
@@ -253,6 +277,12 @@ public static partial class SdfWorldPackage {
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
         Value(name: LightCount, type: ShaderValueType.Uint),
+        Value(name: LightMask, type: ShaderValueType.Uint4),
+        Value(name: Exposure, type: ShaderValueType.Float),
+        Value(name: ExposeShare, type: ShaderValueType.Float),
+        Value(name: AirLight, type: ShaderValueType.Float),
+        Value(name: MeterLuminance, type: ShaderValueType.Float),
+        Value(name: LocalAdaptation, type: ShaderValueType.Float),
         Value(name: ShadowSlots, type: ShaderValueType.Int4),
         Value(name: ShadowSlotCount, type: ShaderValueType.Uint),
         Value(name: ShadowFadeCount, type: ShaderValueType.Uint),

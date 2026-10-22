@@ -17,18 +17,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 |---|---|---|---|---|
 | `render.lighting.lights[].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
-| `render.lighting.lights[][directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
+| `render.lighting.lights[][directional].illuminance` | State | Binding | Binding | `WorldRenderLight.Directional.Illuminance` |
 | `render.lighting.lights[][directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
+| `render.lighting.lights[][directional].temperature` | State | Binding | Binding | `WorldRenderLight.Directional.Temperature` |
 | `render.lighting.lights[][directional].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
-| `render.lighting.lights[][rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
+| `render.lighting.lights[][rim].luminance` | State | Binding | Binding | `WorldRenderLight.Rim.Luminance` |
 | `render.lighting.lights[][rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
 | `render.lighting.lights[][rim].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
-| `render.lighting.lights[][point].radius` | State | Binding | Binding | `WorldRenderLight.Point.Radius` |
 | `render.lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
-| `render.lighting.lights[][point].weight` | State | Binding | Binding | `WorldRenderLight.Point.Weight` |
+| `render.lighting.lights[][point].intensity` | State | Binding | Binding | `WorldRenderLight.Point.Intensity` |
+| `render.lighting.lights[][point].power` | State | Binding | Binding | `WorldRenderLight.Point.Power` |
+| `render.lighting.lights[][point].temperature` | State | Binding | Binding | `WorldRenderLight.Point.Temperature` |
 | `render.lighting.lights[][point].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `render.lighting.lights[][spot].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][spot].angle` | State | Binding | Binding | `WorldRenderLight.Spot.Angle` |
+| `render.lighting.lights[][spot].innerAngle` | State | Binding | Binding | `WorldRenderLight.Spot.InnerAngle` |
+| `render.lighting.lights[][spot].color` | State | Binding | Binding | `WorldRenderLight.Spot.Color` |
+| `render.lighting.lights[][spot].intensity` | State | Binding | Binding | `WorldRenderLight.Spot.Intensity` |
+| `render.lighting.lights[][spot].power` | State | Binding | Binding | `WorldRenderLight.Spot.Power` |
+| `render.lighting.lights[][spot].temperature` | State | Binding | Binding | `WorldRenderLight.Spot.Temperature` |
+| `render.lighting.lights[][spot].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
 | `render.lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.lights[][occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
@@ -42,18 +52,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.clock` | Clock | Names | Read | `WorldRenderLighting.Clock` |
 | `render.lighting.keys[].lights{*}.bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.keys[].lights{*}[directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
-| `render.lighting.keys[].lights{*}[directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
+| `render.lighting.keys[].lights{*}[directional].illuminance` | State | Binding | Binding | `WorldRenderLight.Directional.Illuminance` |
 | `render.lighting.keys[].lights{*}[directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
+| `render.lighting.keys[].lights{*}[directional].temperature` | State | Binding | Binding | `WorldRenderLight.Directional.Temperature` |
 | `render.lighting.keys[].lights{*}[directional].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.keys[].lights{*}[rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
-| `render.lighting.keys[].lights{*}[rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
+| `render.lighting.keys[].lights{*}[rim].luminance` | State | Binding | Binding | `WorldRenderLight.Rim.Luminance` |
 | `render.lighting.keys[].lights{*}[rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
 | `render.lighting.keys[].lights{*}[rim].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
-| `render.lighting.keys[].lights{*}[point].radius` | State | Binding | Binding | `WorldRenderLight.Point.Radius` |
 | `render.lighting.keys[].lights{*}[point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.keys[].lights{*}[point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
-| `render.lighting.keys[].lights{*}[point].weight` | State | Binding | Binding | `WorldRenderLight.Point.Weight` |
+| `render.lighting.keys[].lights{*}[point].intensity` | State | Binding | Binding | `WorldRenderLight.Point.Intensity` |
+| `render.lighting.keys[].lights{*}[point].power` | State | Binding | Binding | `WorldRenderLight.Point.Power` |
+| `render.lighting.keys[].lights{*}[point].temperature` | State | Binding | Binding | `WorldRenderLight.Point.Temperature` |
 | `render.lighting.keys[].lights{*}[point].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `render.lighting.keys[].lights{*}[spot].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[spot].angle` | State | Binding | Binding | `WorldRenderLight.Spot.Angle` |
+| `render.lighting.keys[].lights{*}[spot].innerAngle` | State | Binding | Binding | `WorldRenderLight.Spot.InnerAngle` |
+| `render.lighting.keys[].lights{*}[spot].color` | State | Binding | Binding | `WorldRenderLight.Spot.Color` |
+| `render.lighting.keys[].lights{*}[spot].intensity` | State | Binding | Binding | `WorldRenderLight.Spot.Intensity` |
+| `render.lighting.keys[].lights{*}[spot].power` | State | Binding | Binding | `WorldRenderLight.Spot.Power` |
+| `render.lighting.keys[].lights{*}[spot].temperature` | State | Binding | Binding | `WorldRenderLight.Spot.Temperature` |
+| `render.lighting.keys[].lights{*}[spot].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.keys[].lights{*}[occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
 | `render.lighting.keys[].lights{*}[occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.keys[].lights{*}[occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
@@ -65,17 +85,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
 | `render.lighting.keys[].curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
 | `render.sky.layers[].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
 | `render.sky.layers[][gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][gradient].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.layers[][sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
 | `render.sky.layers[][sunDisc].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][sunDisc].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][sunDisc].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][sunDisc].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
@@ -83,6 +106,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
 | `render.sky.layers[][stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
 | `render.sky.layers[][stars].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][stars].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][stars].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][stars].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][clouds].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Coverage` |
@@ -92,6 +116,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
 | `render.sky.layers[][clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
 | `render.sky.layers[][clouds].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][clouds].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][clouds].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][clouds].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][aurora].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Intensity` |
@@ -101,49 +126,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][aurora].height` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Height` |
 | `render.sky.layers[][aurora].fold` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Fold` |
 | `render.sky.layers[][aurora].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][aurora].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][aurora].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][aurora].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][noise].low` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Low` |
 | `render.sky.layers[][noise].high` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.High` |
 | `render.sky.layers[][noise].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Coverage` |
 | `render.sky.layers[][noise].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][noise].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][noise].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][noise].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][pattern].colors` | State | Binding | Binding | `WorldRenderSkyLayer.Pattern.Colors` |
 | `render.sky.layers[][pattern].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][pattern].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][pattern].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][pattern].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][panorama].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panorama.Intensity` |
 | `render.sky.layers[][panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][panorama].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
 | `render.sky.layers[][panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
 | `render.sky.layers[][panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
 | `render.sky.layers[][panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][panel].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.layers[][view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][view].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
 | `render.sky.layers[][far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][far].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.clock` | Clock | Names | Read | `WorldRenderSky.Clock` |
 | `render.sky.keys[].layers{*}.opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}.luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}.transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}.transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.keys[].layers{*}[gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
 | `render.sky.keys[].layers{*}[gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[gradient].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.keys[].layers{*}[sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.keys[].layers{*}[sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
 | `render.sky.keys[].layers{*}[sunDisc].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[sunDisc].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[sunDisc].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[sunDisc].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
@@ -151,6 +186,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
 | `render.sky.keys[].layers{*}[stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
 | `render.sky.keys[].layers{*}[stars].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[stars].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[stars].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[stars].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[clouds].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Coverage` |
@@ -160,6 +196,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
 | `render.sky.keys[].layers{*}[clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
 | `render.sky.keys[].layers{*}[clouds].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[clouds].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[clouds].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[clouds].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[aurora].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Intensity` |
@@ -169,34 +206,41 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[aurora].height` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Height` |
 | `render.sky.keys[].layers{*}[aurora].fold` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Fold` |
 | `render.sky.keys[].layers{*}[aurora].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[aurora].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[aurora].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[aurora].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[noise].low` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Low` |
 | `render.sky.keys[].layers{*}[noise].high` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.High` |
 | `render.sky.keys[].layers{*}[noise].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Coverage` |
 | `render.sky.keys[].layers{*}[noise].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[noise].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[noise].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[noise].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[pattern].colors` | State | Binding | Binding | `WorldRenderSkyLayer.Pattern.Colors` |
 | `render.sky.keys[].layers{*}[pattern].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[pattern].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[pattern].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[pattern].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[panorama].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panorama.Intensity` |
 | `render.sky.keys[].layers{*}[panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[panorama].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
 | `render.sky.keys[].layers{*}[panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
 | `render.sky.keys[].layers{*}[panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
 | `render.sky.keys[].layers{*}[panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[panel].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.keys[].layers{*}[view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[view].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
 | `render.sky.keys[].layers{*}[far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[far].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.environment.ambient` | State | Binding | Binding | `WorldRenderEnvironment.Ambient` |
@@ -205,6 +249,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.atmosphere.fog.color` | State | Binding | Binding | `WorldRenderFog.Color` |
 | `render.atmosphere.fog.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
 | `render.atmosphere.fog.height.falloff` | State | Binding | Binding | `WorldRenderAirHeight.Falloff` |
+| `render.atmosphere.fog.luminance` | State | Binding | Binding | `WorldRenderFog.Luminance` |
 | `render.atmosphere.haze.amount` | State | Binding | Binding | `WorldRenderHaze.Amount` |
 | `render.atmosphere.haze.anisotropy` | State | Binding | Binding | `WorldRenderHaze.Anisotropy` |
 | `render.atmosphere.haze.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
@@ -212,6 +257,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.atmosphere.medium.surface` | State | Binding | Binding | `WorldRenderMedium.Surface` |
 | `render.atmosphere.medium.extinction` | State | Binding | Binding | `WorldRenderMedium.Extinction` |
 | `render.atmosphere.medium.color` | State | Binding | Binding | `WorldRenderMedium.Color` |
+| `render.atmosphere.medium.luminance` | State | Binding | Binding | `WorldRenderMedium.Luminance` |
 | `render.indirect.sources.lights` | State | Binding | Binding | `WorldRenderIndirectSources.Lights` |
 | `render.indirect.sources.emission` | State | Binding | Binding | `WorldRenderIndirectSources.Emission` |
 | `render.indirect.sources.screens` | State | Binding | Binding | `WorldRenderIndirectSources.Screens` |
@@ -2704,10 +2750,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
 | `render.lighting.lights[][rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.lights[][point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
+| `render.lighting.lights[][spot].name` | `WorldRenderLight.Spot.Name` | a light name a section key addresses |
 | `render.lighting.lights[][occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[spot].name` | `WorldRenderLight.Spot.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |

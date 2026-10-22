@@ -1,5 +1,5 @@
 // One group per acquired image. Four lanes sum each of the sixteen cells in source-pixel order; a fixed reduction
-// tree publishes the pixel-weighted whole-image mean. No CPU color or displayed-frame guess is read.
+// tree publishes the pixel-weighted whole-image mean, in nits. No CPU color or displayed-frame guess is read.
 #include "../isa/sdf-sky-environment.interface.hlsli"
 #include "../isa/sdf-isa.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
@@ -33,8 +33,10 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     if (lane == 0u) {
         float4 total = 0.0;
         [loop] for (uint part = 0u; part < 64u; part++) { total += sdfScreenSums[part]; }
+        // The mean picture value times the luminance a value of one shows at (the mapping's z): the face's mean
+        // luminance, in nits.
         sdfScreenEmissionRW[screen] = total.w > 0.0
-            ? float4(total.rgb / total.w, SDF_SCREEN_EMISSION_DIRECT_GAIN) : 0.0;
+            ? float4(((total.rgb / total.w) * mapping.state.z), 1.0) : 0.0;
         writes++;
     }
     puckCountDetail(0u, 0u, writes, 0u, 0u, samples);

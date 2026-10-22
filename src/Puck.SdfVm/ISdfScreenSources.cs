@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -22,6 +23,12 @@ public interface ISdfScreenSources {
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>Whether the bound image participates in the shared emission reduction.</returns>
     bool Emits(int screen);
+    /// <summary>Returns the luminance a screen's picture shows at: the peak luminance of a white picture on a display, in
+    /// nits. A screen drawn as an opening shows the luminance beyond it as it is, whatever this says.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The peak luminance, in nits; <see cref="SdfScreenEmission.DefaultLuminance"/> unless the screen's row
+    /// authors one.</returns>
+    float LuminanceOf(int screen) => SdfScreenEmission.DefaultLuminance;
     /// <summary>Returns the mapping a screen publishes, which the screen shading draws its face from.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound

@@ -56,14 +56,19 @@ west of it.
 | West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
 | West wall, z 32.5 | The level's light switch |
 
-Lighting: an emissive strip runs along the ceiling over each viewing aisle and
-two over each landing (`hallStrips`, part of the slab or roof above them); three
-small point lights warm the lobby, the stairwell and the lift car (the last
-rides the car's body). A point light neither occludes nor is occluded, so the
-lobby light also lights level 1's ceiling and walls through the slab
-(`docs/plans/open-items.md`); the rooms' light is otherwise the strips' and the
-windows', carried indoors by the traced indirect light, the shadow cascades
-under the roof and ambient occlusion.
+Lighting is in real units: the sun gives 100,000 lux, an emissive strip
+(2,500 nits) runs along the ceiling over each viewing aisle and two over each
+landing (`hallStrips`, part of the slab or roof above them), a 3,000-lumen
+neutral downlight hangs every 12 m along each strip (`hallDownlights`), an
+800-lumen pendant lights the stairwell and a 400-lumen lamp the lift car (it
+rides the car's body). The camera's exposure adapts to what each view sees
+(`render.exposure` in the Moth basis), so a dim room and the sunlit lawn both
+read. A fixture that stands still is traced into the irradiance volume, which
+bounces its light about its room and occludes it at every surface whose probes
+cannot see it, so a level's downlights stop at its slab; the lift car's lamp
+rides a body, so it is neither traced nor occluded. The rooms' light is
+otherwise the strips' and the windows', carried indoors by the traced indirect
+light, the shadow cascades under the roof and ambient occlusion.
 
 Each level's room lights switch on and off. `hallLights` holds each level's
 state (`Off` or `On`): level 0, the lobby where the gaming devices stand,
@@ -71,8 +76,9 @@ starts `Off`, so its light is the windows' and the device screens', and levels
 1 to 3 start `On`. A level that is off shows the dark variant of the slab or
 roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
 pale, unlit diffuser in the strips' palette slot) through the placement's
-`respond` facet, and its point light (`hallLamps`: the lobby's for level 0, the
-stairwell's for level 1) reads weight 0; the lift car's lamp stays with the car.
+`respond` facet, and its fixtures (`hallLamps`: each level's downlights, and
+the stairwell's pendant for level 1) read a power of 0 lumens; the lift car's
+lamp stays with the car.
 A swap shows the same geometry, so the mesh library answers it without a bake,
 and a responding row registers both variants' palettes, so it moves no other
 group's material ids; the irradiance volume retraces under the new materials and
@@ -119,7 +125,7 @@ stairwell, which is open between floors.
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
 | Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the one at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body |
-| Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao and shadow; a view's name selects it |
+| Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
 The lift car is a population body (`lift-car`, body 40) whose look draws the

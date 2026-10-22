@@ -24,6 +24,22 @@ let pilotHeadScale = 0.68
 let pilotHeadAt = [0, 1.527, 0.095]
 
 let pilotSoftness = 2.2
+// The plait's lobes down her braid's core, alternating either side of it, and the half-angle each leans by.
+let braidLobes = [
+  [-0.112, 1.335, 0.0904]
+  [-0.1278, 1.313, 0.0951]
+  [-0.102, 1.291, 0.0994]
+  [-0.1187, 1.269, 0.1032]
+  [-0.0938, 1.247, 0.1065]
+  [-0.1113, 1.225, 0.1094]
+  [-0.089, 1.203, 0.1104]
+  [-0.1095, 1.181, 0.1107]
+  [-0.0881, 1.159, 0.1106]
+  [-0.1088, 1.137, 0.1102]
+  [-0.0876, 1.115, 0.1095]
+]
+let braidTwist = 0.247404
+let braidUntwist = 0.9689124
 let diagonal = 0.7071068
 
 // Her joints on her left side, each a swing pivot: hip (0.09, 0.86, 0), knee (0.1, 0.475, 0.012), ankle
@@ -74,8 +90,17 @@ let belt = 12 // the belt
 let ochre = 13 // the belt buckle, harness plate and braid tie
 let collarKnit = 14 // the undersuit's high collar
 let strap = 15 // the harness's front straps, with their ochre buckles painted
-let handheld = 16 // the handheld's see-through orange shell, its screen and controls painted
+let brickGlass = 16 // the Humble Gaming Brick's see-through atomic-orange shell, the devices' own glass
 let sleeve = 17 // the undersuit's sleeves, with the lavender shoulder patches painted
+let brickLens = 18 // the brick's dark screen lens, its picture painted
+let brickKeys = 19 // the d-pad and the speaker's slots
+let brickButtons = 20 // the smoked A and B buttons
+let brickRubber = 21 // select and start
+let brickBoard = 22 // the pale green board under the face
+let brickChip = 23 // the processor
+let brickCartridge = 24 // the cartridge down its slot
+let brickCell = 25 // the two AA cells in the battery bay
+let brickLed = 26 // the red power light
 
 // Authored darker than the sheet reads: the studio's light lifts a charcoal about half again, as it lifts the suit's
 // lavender #744080 to the owner's dusty #B186B6.
@@ -550,11 +575,27 @@ prototypes {
       schema: "puck.creation.v1"
       name: "moth-pilot"
       frames [
-        // Holding: the handheld leaves its rest inside her chest for her hands, its screen toward her eyes.
+        // Holding: the handheld leaves its rest inside her chest for her hands, its screen toward her eyes. A frame poses
+        // each shape it names, not the shapes riding it, so every part of the brick is posed with the shell: its rest
+        // offset from the shell's centre turned by the shell's 30 degrees and added to the shell's held place.
         {
           name: "hold"
           transforms [
-            { id: 230, position [0, 1.2, 0.34], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 230, position [0, 1.2, 0.3378], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 243, position [0, 1.16238, 0.33196], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 244, position [0, 1.19594, 0.33084], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 245, position [0.002, 1.18528, 0.3233], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 246, position [0, 1.24241, 0.36834], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 247, position [0, 1.17584, 0.33165], rotation [0.183, -0.183, 0.68299, 0.68299] }
+            { id: 248, position [0, 1.16199, 0.32365], rotation [0.183, -0.183, 0.68299, 0.68299] }
+            { id: 249, position [0, 1.23267, 0.34321], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 250, position [0.0335, 1.24479, 0.35021], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 251, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 252, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 253, position [-0.0262, 1.18812, 0.31738], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 254, position [-0.0132, 1.18137, 0.31348], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 255, position [0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
+            { id: 256, position [-0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
           ]
         }
         // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face.
@@ -657,7 +698,7 @@ prototypes {
           color: "#FFF8EF"
           roughness: 0.2
           specular: 0.04
-          emissive: 0.8
+          emissive: 1200
         }
         {
           color: "#1A1B1F"
@@ -704,20 +745,9 @@ prototypes {
             { parent: "torso", type: "Box", position [-0.068, 0.095, 0.078], scale [0.02, 0.015, 0.04], color: ochreTone }
           ]
         }
-        // The handheld's shell; its screen faces its -Z side, the d-pad on its +X half and the two buttons on its -X.
-        {
-          color: "#E8781E"
-          roughness: 0.25
-          specular: 0.12
-          coat: 0.6
-          paints [
-            { parent: "handheld", type: "Box", position [0, 0.025, -0.014], scale [0.027, 0.025, 0.004], color: "#1A1C20" }
-            { parent: "handheld", type: "Box", position [0.017, -0.026, -0.014], scale [0.011, 0.0035, 0.004], color: "#2A2A2E" }
-            { parent: "handheld", type: "Box", position [0.017, -0.026, -0.014], scale [0.0035, 0.011, 0.004], color: "#2A2A2E" }
-            { parent: "handheld", type: "Box", position [-0.013, -0.022, -0.014], scale [0.006, 0.006, 0.004], color: "#2A2A2E" }
-            { parent: "handheld", type: "Box", position [-0.026, -0.03, -0.014], scale [0.006, 0.006, 0.004], color: "#2A2A2E" }
-          ]
-        }
+        // The Humble Gaming Brick's shell: the same atomic-orange acrylic glass as the device in the gallery
+        // (devices.puck), so the board, cells and cartridge read through a saturated orange.
+        { color: "#FF4F10", roughness: 0.06, glass { depth: 0.009, ior: 1.49 } }
         // The sleeves, the lavender patch over each shoulder's cap.
         {
           color: fabric
@@ -729,6 +759,25 @@ prototypes {
             { parent: "upperArm-right", type: "Box", position [-0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
           ]
         }
+        // The brick's opaque parts, after its gallery copy: the lens with a dim picture painted on it, the keys, buttons,
+        // rubber, board, processor, cartridge, cells and power light.
+        {
+          color: "#17181C"
+          specular: 0.05
+          roughness: 0.08
+          coat: 0.6
+          paints [
+            { parent: "brickLens", type: "Box", position [0, 0.001, -0.002], scale [0.022, 0.0195, 0.003], color: "#2F3A2C" }
+          ]
+        }
+        { color: "#2A2624", roughness: 0.4, specular: 0.04 }
+        { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
+        { color: "#5E5E64", roughness: 0.75 }
+        { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
+        { color: "#151617", roughness: 0.6, specular: 0.04 }
+        { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
+        { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
+        { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
       ]
 
       // The whole body rides the pelvis, which turns her hips into a diagonal, trails a turn, leans into her planar
@@ -940,8 +989,9 @@ prototypes {
 
       mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, lip, eyeWhite, iris, pupil, glint, hair)
 
-      // The braid roots beside her right cheek and falls over her right collarbone onto her chest, three plaited
-      // strands to an ochre tie and a short tassel. It rides her head, so it sways a little as she walks.
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, which a core carries over her
+      // right collarbone onto her chest; the plait's lobes alternate down the core to an ochre tie and a short tassel.
+      // It rides her head, so it sways a little as she walks.
       shape Sweep "braid-0" {
         id: 220
         position [-0.12, 1.478, 0.03]
@@ -951,11 +1001,8 @@ prototypes {
           a [0, 0, 0]
           b [-0.03, -0.068, 0.03]
           c [-0.005, -0.133, 0.058]
-          radiusStart: 0.009
-          radiusEnd: 0.009
-          strands: 3
-          strandOffset: 0.011
-          twist: 1.6
+          radiusStart: 0.01
+          radiusEnd: 0.016
         }
       }
 
@@ -968,11 +1015,8 @@ prototypes {
           a [0, 0, 0]
           b [0.015, -0.058, 0.014]
           c [0.025, -0.125, 0.022]
-          radiusStart: 0.009
-          radiusEnd: 0.0085
-          strands: 3
-          strandOffset: 0.011
-          twist: 1.6
+          radiusStart: 0.012
+          radiusEnd: 0.011
         }
       }
 
@@ -985,11 +1029,20 @@ prototypes {
           a [0, 0, 0]
           b [0.002, -0.07, 0.002]
           c [0.002, -0.135, -0.002]
-          radiusStart: 0.0085
-          radiusEnd: 0.0075
-          strands: 3
-          strandOffset: 0.01
-          twist: 1.7
+          radiusStart: 0.011
+          radiusEnd: 0.009
+        }
+      }
+
+      for (lobe, i) in braidLobes {
+        shape Superellipsoid $"braidLobe-{i}" {
+          id: 231 + i
+          position: lobe
+          rotation: ((i % 2) == 0) ? [0, 0, braidTwist, braidUntwist] : [0, 0, -braidTwist, braidUntwist]
+          scale [0.0125, 0.02, 0.0135]
+          material: hair
+          parent: "collar"
+          exponent: pilotSoftness
         }
       }
 
@@ -1016,18 +1069,170 @@ prototypes {
       pilotLeg("left", 1, 180)
       pilotLeg("right", -1, 200)
 
-      // The handheld, 75 x 133 x 27.5 mm, rests hidden inside her chest; the hold frame seats it in her hands.
+      // The handheld is the Humble Gaming Brick of the gallery, a faithful simplified copy: 75 x 133 x 23 mm of orange
+      // glass with the battery bay 4.5 mm proud of its back, 27.5 mm in all. It rests hidden inside her chest, and the
+      // hold frame seats it in her hands; every part rides it. In its frame (its centre at rest, (0, 1.17, -0.005)) the
+      // face is its -Z side, toward her eyes when held, so the d-pad on the face's left as she looks at it lies at +X.
       shape Prism "handheld" {
         id: 230
-        position [0, 1.17, -0.005]
-        scale [0.0375, 0.0665, 0.01375]
-        material: handheld
+        position [0, 1.17, -0.00725]
+        scale [0.0375, 0.0665, 0.0115]
+        material: brickGlass
         parent: "torso"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.24
+        }
+        rounding: 0.0022
+      }
+
+      shape Prism "brickBay" {
+        id: 243
+        position [0, 1.1345, 0.0065]
+        scale [0.029, 0.021, 0.00225]
+        material: brickGlass
+        parent: "handheld"
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 0.3
         }
-        rounding: 0.004
+        rounding: 0.0015
+      }
+
+      shape Box "brickBoard" {
+        id: 244
+        position [0, 1.163, -0.01125]
+        scale [0.034, 0.054, 0.0006]
+        material: brickBoard
+        parent: "handheld"
+      }
+
+      shape Box "brickChip" {
+        id: 245
+        position [0.002, 1.15, -0.01245]
+        scale [0.0075, 0.0075, 0.0006]
+        material: brickChip
+        parent: "handheld"
+      }
+
+      shape Box "brickCartridge" {
+        id: 246
+        position [0, 1.222, -0.002]
+        scale [0.0285, 0.023, 0.0038]
+        material: brickCartridge
+        parent: "handheld"
+      }
+
+      shape Cylinder "brickCell-upper" {
+        id: 247
+        position [0, 1.146, -0.0005]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.00725, 0.02525, 0.00725]
+        material: brickCell
+        parent: "handheld"
+        rounding: 0.001
+      }
+
+      shape Cylinder "brickCell-lower" {
+        id: 248
+        position [0, 1.13, -0.0005]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.00725, 0.02525, 0.00725]
+        material: brickCell
+        parent: "handheld"
+        rounding: 0.001
+      }
+
+      shape Prism "brickLens" {
+        id: 249
+        position [0, 1.201, -0.0189]
+        scale [0.0285, 0.0245, 0.0006]
+        material: brickLens
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.16
+        }
+      }
+
+      shape Sphere "brickLed" {
+        id: 250
+        position [0.0335, 1.215, -0.0189]
+        scale [0.0011, 0.0011, 0.0011]
+        material: brickLed
+        parent: "handheld"
+      }
+
+      shape Box "brickDpad-across" {
+        id: 251
+        position [0.0215, 1.1445, -0.0193]
+        scale [0.0105, 0.0036, 0.0016]
+        material: brickKeys
+        parent: "handheld"
+        chamfer: 0.0007
+      }
+
+      shape Box "brickDpad-down" {
+        id: 252
+        position [0.0215, 1.1445, -0.0193]
+        scale [0.0036, 0.0105, 0.0016]
+        material: brickKeys
+        parent: "handheld"
+        chamfer: 0.0007
+      }
+
+      shape Prism "brickButton-a" {
+        id: 253
+        position [-0.0262, 1.1495, -0.019]
+        scale [0.0048, 0.0048, 0.0014]
+        material: brickButtons
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0009
+      }
+
+      shape Prism "brickButton-b" {
+        id: 254
+        position [-0.0132, 1.1417, -0.019]
+        scale [0.0048, 0.0048, 0.0014]
+        material: brickButtons
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0009
+      }
+
+      shape Prism "brickSelect" {
+        id: 255
+        position [0.0085, 1.1235, -0.0189]
+        rotation [0, 0, 0.2164, 0.9763]
+        scale [0.0052, 0.0017, 0.0009]
+        material: brickRubber
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0006
+      }
+
+      shape Prism "brickStart" {
+        id: 256
+        position [-0.0085, 1.1235, -0.0189]
+        rotation [0, 0, 0.2164, 0.9763]
+        scale [0.0052, 0.0017, 0.0009]
+        material: brickRubber
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0006
       }
 
       drivers [

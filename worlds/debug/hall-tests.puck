@@ -1,8 +1,8 @@
 // The gallery hall's room lights and blinds (hall.puck), each scenario booted in the whole debug world:
 // `puck test worlds/debug/hall-tests.puck`. `hallLights` holds each level's state (Off 0, On 1) and `hallLamps` the
-// point-light weights that follow it; a level's switch stands on the west wall at z = 32.5, and a body posed at
-// x = 11.1 on that level stands in its reach box. Enum members are written as their numbers: the rows reach this file
-// only through the debug world's import of hall.puck.
+// fixtures' luminous power, in lumens, that follows it; a level's switch stands on the west wall at z = 32.5, and a
+// body posed at x = 11.1 on that level stands in its reach box. Enum members are written as their numbers: the rows
+// reach this file only through the debug world's import of hall.puck.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -17,8 +17,8 @@ test "the lobby starts dark and the levels above lit" {
     hallLights[level1] == 1
     hallLights[level2] == 1
     hallLights[level3] == 1
-    hallLamps[lobby] == 0
-    hallLamps[stairs] == 0.7
+    hallLamps[level0] == 0
+    hallLamps[stairs] == 800
   }
 }
 
@@ -31,7 +31,7 @@ test "the context button at the lobby switch turns its lights on" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[lobby] == 0.9
+    hallLamps[level0] == 3000
     hallLights[level1] == 1
   }
 }
@@ -47,7 +47,7 @@ test "a second press turns them off again" {
   }
   expect {
     hallLights[level0] == 0
-    hallLamps[lobby] == 0
+    hallLamps[level0] == 0
   }
 }
 
@@ -87,7 +87,7 @@ test "writing a level's cell, as gallery.lights does, switches it" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[lobby] == 0.9
+    hallLamps[level0] == 3000
     hallLights[level1] == 0
     hallLamps[stairs] == 0
   }

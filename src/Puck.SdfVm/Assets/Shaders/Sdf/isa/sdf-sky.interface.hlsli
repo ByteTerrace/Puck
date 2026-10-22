@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/dcc6b3a133be6522c3228e54990c85bbb055a9f2941f8f26d25c5f16883ebb67). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/0297574cad8ef1d885aebff22660f541e171e42508711e277028569bd9f04108). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -11,6 +11,8 @@ struct SdfLight {
     [[vk::offset(36)]] uint Shadows;
     [[vk::offset(40)]] int DynamicSlot;
     [[vk::offset(44)]] float Bounce;
+    [[vk::offset(48)]] float3 SpotAxis;
+    [[vk::offset(60)]] float SpotOffset;
 };
 
 struct SdfSkyBlock {
@@ -110,8 +112,8 @@ struct SdfSkyFrame {
 [[vk::binding(12, 1)]] StructuredBuffer<uint> sdfMeshIrradiance : register(t12, space1);
 [[vk::binding(13, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t13, space1);
 [[vk::binding(14, 1)]] SamplerState samplers[2] : register(s14, space1);
-[[vk::binding(16, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b : register(t16, space1);
-#define sdfLights sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b
+[[vk::binding(16, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t16, space1);
+#define sdfLights sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5
 [[vk::binding(17, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t17, space1);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(18, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t18, space1);
@@ -124,10 +126,10 @@ struct SdfSkyFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct SdfSkyPass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] float aspectRatio;
-    [[vk::offset(12)]] float curvatureCavity;
-    [[vk::offset(16)]] float curvatureInk;
-    [[vk::offset(20)]] uint _pad20;
+    [[vk::offset(8)]] float airLight;
+    [[vk::offset(12)]] float aspectRatio;
+    [[vk::offset(16)]] float curvatureCavity;
+    [[vk::offset(20)]] float curvatureInk;
     [[vk::offset(24)]] uint _pad24;
     [[vk::offset(28)]] uint _pad28;
     [[vk::offset(32)]] float3 curvatureInkColor;
@@ -138,14 +140,14 @@ struct SdfSkyPass {
     [[vk::offset(60)]] uint disableAmbientOcclusion;
     [[vk::offset(64)]] uint disableScreenLights;
     [[vk::offset(68)]] uint disableSoftShadows;
-    [[vk::offset(72)]] float farDistance;
-    [[vk::offset(76)]] uint _pad76;
-    [[vk::offset(80)]] float2 frustumOffset;
-    [[vk::offset(88)]] uint geometryOnly;
-    [[vk::offset(92)]] uint gridFlags;
-    [[vk::offset(96)]] float gridLineWidth;
-    [[vk::offset(100)]] uint _pad100;
-    [[vk::offset(104)]] uint _pad104;
+    [[vk::offset(72)]] float exposeShare;
+    [[vk::offset(76)]] float exposure;
+    [[vk::offset(80)]] float farDistance;
+    [[vk::offset(84)]] uint _pad84;
+    [[vk::offset(88)]] float2 frustumOffset;
+    [[vk::offset(96)]] uint geometryOnly;
+    [[vk::offset(100)]] uint gridFlags;
+    [[vk::offset(104)]] float gridLineWidth;
     [[vk::offset(108)]] uint _pad108;
     [[vk::offset(112)]] float4 gridObjectFrame;
     [[vk::offset(128)]] float3 gridObjectOrigin;
@@ -170,57 +172,62 @@ struct SdfSkyPass {
     [[vk::offset(276)]] uint instanceMaskWordCount;
     [[vk::offset(280)]] float2 jitter;
     [[vk::offset(288)]] uint lightCount;
-    [[vk::offset(292)]] uint meshBakeCount;
+    [[vk::offset(292)]] uint _pad292;
     [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
-    [[vk::offset(304)]] float4 meshBakeLattices[64];
-    [[vk::offset(1328)]] uint meshDraws;
-    [[vk::offset(1332)]] uint _pad1332;
-    [[vk::offset(1336)]] uint _pad1336;
-    [[vk::offset(1340)]] uint _pad1340;
-    [[vk::offset(1344)]] int4 meshIrradianceLow;
-    [[vk::offset(1360)]] uint4 meshIrradianceVolume;
-    [[vk::offset(1376)]] float4 meshShadowCascades[12];
-    [[vk::offset(1568)]] uint meshShadowCount;
-    [[vk::offset(1572)]] uint _pad1572;
-    [[vk::offset(1576)]] uint _pad1576;
-    [[vk::offset(1580)]] uint _pad1580;
-    [[vk::offset(1584)]] float4 meshShadowParameters;
-    [[vk::offset(1600)]] uint meshShadowTexels;
-    [[vk::offset(1604)]] float nearDistance;
+    [[vk::offset(304)]] uint4 lightMask;
+    [[vk::offset(320)]] float localAdaptation;
+    [[vk::offset(324)]] uint meshBakeCount;
+    [[vk::offset(328)]] uint _pad328;
+    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(336)]] float4 meshBakeLattices[64];
+    [[vk::offset(1360)]] uint meshDraws;
+    [[vk::offset(1364)]] uint _pad1364;
+    [[vk::offset(1368)]] uint _pad1368;
+    [[vk::offset(1372)]] uint _pad1372;
+    [[vk::offset(1376)]] int4 meshIrradianceLow;
+    [[vk::offset(1392)]] uint4 meshIrradianceVolume;
+    [[vk::offset(1408)]] float4 meshShadowCascades[12];
+    [[vk::offset(1600)]] uint meshShadowCount;
+    [[vk::offset(1604)]] uint _pad1604;
     [[vk::offset(1608)]] uint _pad1608;
     [[vk::offset(1612)]] uint _pad1612;
-    [[vk::offset(1616)]] float4 previousView[6];
-    [[vk::offset(1712)]] uint resolvedSurface;
-    [[vk::offset(1716)]] uint screenCount;
-    [[vk::offset(1720)]] float screenFidelity;
-    [[vk::offset(1724)]] uint shadowFadeCount;
-    [[vk::offset(1728)]] uint shadowSlotCount;
-    [[vk::offset(1732)]] uint _pad1732;
-    [[vk::offset(1736)]] uint _pad1736;
-    [[vk::offset(1740)]] uint _pad1740;
-    [[vk::offset(1744)]] int4 shadowSlots;
-    [[vk::offset(1760)]] uint2 skyFieldExtent;
+    [[vk::offset(1616)]] float4 meshShadowParameters;
+    [[vk::offset(1632)]] uint meshShadowTexels;
+    [[vk::offset(1636)]] float meterLuminance;
+    [[vk::offset(1640)]] float nearDistance;
+    [[vk::offset(1644)]] uint _pad1644;
+    [[vk::offset(1648)]] float4 previousView[6];
+    [[vk::offset(1744)]] uint resolvedSurface;
+    [[vk::offset(1748)]] uint screenCount;
+    [[vk::offset(1752)]] float screenFidelity;
+    [[vk::offset(1756)]] uint shadowFadeCount;
+    [[vk::offset(1760)]] uint shadowSlotCount;
+    [[vk::offset(1764)]] uint _pad1764;
     [[vk::offset(1768)]] uint _pad1768;
     [[vk::offset(1772)]] uint _pad1772;
-    [[vk::offset(1776)]] float4 skyViews[40];
-    [[vk::offset(2416)]] float tanHalfFieldOfView;
-    [[vk::offset(2420)]] uint temporal;
-    [[vk::offset(2424)]] uint viewBase;
-    [[vk::offset(2428)]] uint _pad2428;
-    [[vk::offset(2432)]] float3 viewForward;
-    [[vk::offset(2444)]] uint _pad2444;
-    [[vk::offset(2448)]] float3 viewPosition;
+    [[vk::offset(1776)]] int4 shadowSlots;
+    [[vk::offset(1792)]] uint2 skyFieldExtent;
+    [[vk::offset(1800)]] uint _pad1800;
+    [[vk::offset(1804)]] uint _pad1804;
+    [[vk::offset(1808)]] float4 skyViews[40];
+    [[vk::offset(2448)]] float tanHalfFieldOfView;
+    [[vk::offset(2452)]] uint temporal;
+    [[vk::offset(2456)]] uint viewBase;
     [[vk::offset(2460)]] uint _pad2460;
-    [[vk::offset(2464)]] float3 viewRight;
+    [[vk::offset(2464)]] float3 viewForward;
     [[vk::offset(2476)]] uint _pad2476;
-    [[vk::offset(2480)]] float3 viewUp;
-    [[vk::offset(2492)]] uint viewportCount;
-    [[vk::offset(2496)]] uint workCounterRow;
-    [[vk::offset(2500)]] uint workCounterRowDetail;
+    [[vk::offset(2480)]] float3 viewPosition;
+    [[vk::offset(2492)]] uint _pad2492;
+    [[vk::offset(2496)]] float3 viewRight;
+    [[vk::offset(2508)]] uint _pad2508;
+    [[vk::offset(2512)]] float3 viewUp;
+    [[vk::offset(2524)]] uint viewportCount;
+    [[vk::offset(2528)]] uint workCounterRow;
+    [[vk::offset(2532)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa58424600 : register(b0, space3);
-#define passGroup passGroupIsa58424600
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa2F18CD5C : register(b0, space3);
+#define passGroup passGroupIsa2F18CD5C
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);
