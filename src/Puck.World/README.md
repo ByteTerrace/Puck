@@ -2626,7 +2626,14 @@ ticks, pin console lines to boot ticks with `world.at`
 drain right after its tick completes, whatever ingress armed it, so a script
 armed over MCP lands on the same ticks as one piped on stdin. `world.wait until
 <tick>` holds a session until an absolute tick has completed, and `world.at`
-alone reads back what ran. The procedure and its measured repeatability are in
+alone reads back what ran. Two presentation levers make the stills of a repeat
+match: `world.lockstep on` has the windowed host step at most once a frame and
+hand presentation exactly the ticks it stepped, as the offscreen host does
+(`PresentPacingControl.TickLocked`), so gait and exposure adaptation advance
+with the ticks rather than wall time; and `view.reseed <body>`
+(`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
+followers as for a new occupant, which a `body.pose` teleport deliberately does
+not. The procedure and its measured repeatability are in
 the `puck-world` skill's
 [captures reference](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture).
 

@@ -587,6 +587,12 @@ Free Cam do not alter the logical movement basis.
   probes ignore it. Session presentation only: no document field, nothing the
   simulation or a replay reads. Headless it records and echoes the isolation
   with nothing to draw.
+- `view.reseed [<body>]` — restarts a body's presentation-only animation (gait
+  driver phases and weights, foot plants, root and part followers) as for a new
+  occupant (`WorldStampPool.Reseed`). A `body.pose` teleport of the same
+  occupant keeps its gait phases so it never pops; pin `view.reseed` beside it
+  when a scripted motion must look the same on a repeat
+  ([tick-exact debug capture](schedules-and-tests.md#tick-exact-debug-capture)).
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).
