@@ -110,9 +110,11 @@ the desktop without opening it.
 the desktop the World claims the chord system-wide, and `source.passthrough`
 says `chord claimed`), or X on a pad, or E while the World's window is in
 front. Each closes the passthrough source, releasing every button and key the
-pad holds, brings the World's window back to the front so the keyboard is the
-game's, and eases the camera back to the Moth; `source.passthrough` then reads
-`none opened`. A headless or offscreen boot has no window and no
+pad holds, brings the World's window back to the front (restoring it when it
+was minimized) so the keyboard is the game's, and eases the camera back to the
+Moth; `source.passthrough` then reads `none opened`. Leaving any other way
+(`body.disengage` at the console) brings the window back too. Clicking the
+World's window or its taskbar button gives it the keyboard as for any window. A headless or offscreen boot has no window and no
 `source.passthrough` verb.
 
 ### With a pad
@@ -136,7 +138,14 @@ presses at it, whichever window is in front:
 
 The cursor stays on the display. Where it rests on the World's window over the
 picture, a press is the World's own press there and lands where the picture
-shows, as a mouse click does. Its feel is the screen route's `padPointer` in
+shows, as a mouse click does. On the World's own frame (its title bar, the
+title bar's buttons and its borders) the pad clicks rather than presses: A on
+minimize, maximize (restore when maximized) or close does that at once, A
+anywhere else on the frame brings the World to the front, and the other buttons
+do nothing there. So the pad cannot drag or resize the World's window: Windows
+holds the World's window thread in a press on its frame until the button comes
+up, and that thread is the one that would send the pad's release, so a held
+press there would stop the World for good. Its feel is the screen route's `padPointer` in
 `desktop.puck`: `speed` (display heights a second at full tilt), `curve` (how
 much finer a small tilt is), `boost` reached after `rampSeconds` of held tilt,
 and `scrollSpeed` (notches a second); `world.screens` echoes it. The verbs the

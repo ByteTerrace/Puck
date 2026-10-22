@@ -11,7 +11,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // THE LAW: a framed desktop takes the pointer through its picture and the pad as its mouse, never the keyboard. A
     // press on the picture opens it and reaches it, while the keys stay the game's; the pad moves the desktop's cursor by
     // the route's feel in desktop heights, and presses, scrolls and types at it; while a seat frames it the chord is
-    // claimed system-wide, and its press leaves in one step, releasing what the pad held and handing the keyboard back.
+    // claimed system-wide, and its press leaves in one step, releasing what the pad held and handing the keyboard back;
+    // leaving any other way hands it back too.
     [Fact]
     public void AFramedDesktopTakesThePictureAndThePadAndTheChordLeaves() {
         var (screens, instance) = EngageableScreen();
@@ -92,10 +93,14 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.True(condition: (desktop.Returned > 0));
         Assert.False(condition: passthrough.PadKey(key: KeyCode.ArrowUp, pressed: false, slot: 0));
 
-        // A seat that stops framing it gives the chord back.
+        // A seat that leaves the engagement any other way (the pad's context button, the console) gives the chord back
+        // and brings the host's window to the front.
+        var returned = desktop.Returned;
+
         anchor.PublishEngagedScreen(screenIndex: -1, slot: 0);
         Assert.Null(@object: passthrough.TakeWarp());
         Assert.False(condition: desktop.ClaimsChord);
+        Assert.Equal(expected: (returned + 1), actual: desktop.Returned);
     }
 
     // A 200 by 100 pixel desktop that records what it is given.
