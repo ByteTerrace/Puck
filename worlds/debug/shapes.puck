@@ -983,7 +983,7 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "EMISSIVE", extra: [{ color: "#FFB347", emissive: 3 }])
+      exhibit(label: "EMISSIVE", extra: [{ color: "#FFB347", emissive: 300 }])
     }
   }
   prototype "shape-wrap-soften" {
@@ -1151,7 +1151,7 @@ template surfacePrototypes() {
           speed: 1.2
           seed: 7
           steps: 40
-          intensity: 30
+          intensity: 3000
           pulseAmplitude: 0.2
           pulseFrequency: 3
           ramp [
@@ -1699,7 +1699,7 @@ template motionPrototypesB() {
           speed: 1.2
           seed: 7
           steps: 40
-          intensity: 30
+          intensity: 3000
           ramp [
             {
               density: 0

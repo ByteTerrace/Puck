@@ -206,7 +206,7 @@ prototypes {
       palette [
         {
           color: "#F2C230"
-          emissive: 0.35
+          emissive: 14000
           roughness: 0.5
           specular: 0.3
         }

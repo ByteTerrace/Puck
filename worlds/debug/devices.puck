@@ -105,7 +105,7 @@ let advancedPalette = [
   { color: "#C8CBD2", metal: 1, roughness: 0.12, specular: 0.6 }
   { color: "#1A1B1F", roughness: 0.22, specular: 0.05, coat: 0.3 }
   { color: "#5F636B", roughness: 0.5, specular: 0.04 }
-  { color: "#7CFFB0", emissive: 3 }
+  { color: "#7CFFB0", emissive: 300 }
   { color: "#D9DBDF", metal: 1, roughness: 0.3, specular: 0.5 }
 ]
 // The Advanced Gaming Brick's slots: anodised aluminium shells, the edge-to-edge dark glass and speaker slots, polished
@@ -202,7 +202,7 @@ prototypes {
         { color: "#2A2624", roughness: 0.4, specular: 0.04 }
         { color: "#5E5E64", roughness: 0.75 }
         { color: "#BFC2C7", metal: 1, roughness: 0.28, specular: 0.5 }
-        { color: "#FF3A2A", emissive: 4, roughness: 0.3 }
+        { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
         { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
         { color: "#151617", roughness: 0.6, specular: 0.04 }
@@ -716,7 +716,7 @@ prototypes {
         { color: "#141618", specular: 0.05, roughness: 0.06, coat: 0.6 }
         { color: "#1E1F22", roughness: 0.45, specular: 0.04 }
         { color: "#151517", roughness: 0.8, specular: 0.04 }
-        { color: "#FF2A1A", emissive: 3 }
+        { color: "#FF2A1A", emissive: 300 }
         { color: "#D0D3D8", metal: 1, roughness: 0.15, specular: 0.6 }
       ]
       shape Box "bezel" {
@@ -809,7 +809,7 @@ prototypes {
         { color: "#C7C9CE", metal: 0.9, roughness: 0.3, specular: 0.5 }
         { color: "#141517", roughness: 0.3, specular: 0.05 }
         { color: "#8B8E94", roughness: 0.55, specular: 0.04 }
-        { color: "#EAF4FF", emissive: 3 }
+        { color: "#EAF4FF", emissive: 300 }
         { color: "#B8312F", roughness: 0.3, specular: 0.05, coat: 0.3 }
         { color: "#F2F2F2", roughness: 0.5 }
         { color: "#F2E23A", roughness: 0.5 }
@@ -1208,7 +1208,9 @@ hud {
 // square to its device's face. A screen's `origin` is the glass's front face, not its middle (the slab runs 2 halfDepth
 // back from it), and it stands proud of the lens or tube round it (1 mm on the handhelds, 3 mm on the television, whose
 // bake is coarser), the rest of its depth sunk into the face: a face behind the lens's is hidden by it and shows no
-// picture. Each handheld's origin is its real offset from the plinth's top.
+// picture. Each handheld's origin is its real offset from the plinth's top. Each shows its picture at its real peak
+// luminance (`luminance`, in nits), which also sets the light it casts into the room: the handhelds' panels a dim 70 and
+// 90, the television's tube 150.
 //
 //   screen 0, the brick: 160 by 144 at 0.275 mm, 44 by 39.6 mm, leaning back 20 degrees with the brick
 //   screen 1, the advanced brick: 240 by 160 at 0.255 mm, 61.2 by 40.8 mm, leaning back 30 degrees with its upper half
@@ -1232,6 +1234,7 @@ screens [
     halfDepth: 0.001
     round: 0
     source: machine(instance: `humble-gaming-brick`, output: "video")
+    luminance: 70nit
     route: deviceRoute
   }
   {
@@ -1244,6 +1247,7 @@ screens [
     halfDepth: 0.001
     round: 0
     source: machine(instance: `advanced-gaming-brick`, output: "video")
+    luminance: 90nit
     route: deviceRoute
   }
   {
@@ -1256,6 +1260,7 @@ screens [
     halfDepth: 0.003
     round: 0
     source: machine(instance: `humble-gaming-deck`, output: "video")
+    luminance: 150nit
     // The deck has two controller ports; an engaged seat plays the first.
     route {
       engageable: true

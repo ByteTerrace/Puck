@@ -153,7 +153,7 @@ prototypes {
       palette [
         { color: "#2B2E33", metal: 0.4, roughness: 0.4, specular: 0.3 }
         { color: "#141619", roughness: 0.8, specular: 0.05 }
-        { color: "#4FA3FF", emissive: 2.5, roughness: 0.3 }
+        { color: "#4FA3FF", emissive: 250, roughness: 0.3 }
       ]
       deskBox(label: "case", x0: 10.42, x1: 10.9, y0: 0.07, y1: 0.55, z0: 24.52, z1: 24.73, slot: 0, bevel: 0.004)
       deskBox(label: "front", x0: 10.89, x1: 10.91, y0: 0.08, y1: 0.54, z0: 24.53, z1: 24.72, slot: 1, bevel: 0.003)
@@ -292,6 +292,8 @@ screens [
     halfDepth: glassHalfDepth
     round: 0
     source: producer(id: "capture", settings: claudeCapture)
+    // A desktop monitor's 250 nits.
+    luminance: 250nit
     filter: Linear
     // Engaged on the Moth's context button like a device: the camera frames its picture as large as the World's window
     // holds, on the fill, and a click on the picture hands the window the mouse and keyboard (desktop.md).

@@ -54,11 +54,15 @@ west of it.
 | z 28, x 12.5, 15 and 17.5 | The device row, facing -Z toward the door ([`devices.md`](devices.md)) |
 | West wall, z 32.5 | The level's light switch |
 
-Lighting: an emissive strip runs along the ceiling over each viewing aisle and
-two over each landing (`hallStrips`, part of the slab or roof above them); three
-small point lights warm the lobby, the stairwell and the lift car (the last
-rides the car's body). A point light neither occludes nor is occluded, so the
-lobby light also lights level 1's ceiling and walls through the slab
+Lighting is in real units: the sun gives 100,000 lux, an emissive strip
+(2,500 nits) runs along the ceiling over each viewing aisle and two over each
+landing (`hallStrips`, part of the slab or roof above them), a 1,500-lumen
+warm downlight hangs every 12 m along each strip (`hallDownlights`), an
+800-lumen pendant lights the stairwell and a 400-lumen lamp the lift car (it
+rides the car's body). The camera's exposure adapts to what each view sees
+(`render.exposure` in the Moth basis), so a dim room and the sunlit lawn both
+read. A point or spot light neither occludes nor is occluded, so a level's
+downlights also reach the floor below through its slab as far as their range
 (`docs/plans/open-items.md`); the rooms' light is otherwise the strips' and the
 windows', carried indoors by the traced indirect light, the shadow cascades
 under the roof and ambient occlusion.
@@ -69,8 +73,9 @@ starts `Off`, so its light is the windows' and the device screens', and levels
 1 to 3 start `On`. A level that is off shows the dark variant of the slab or
 roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
 pale, unlit diffuser in the strips' palette slot) through the placement's
-`respond` facet, and its point light (`hallLamps`: the lobby's for level 0, the
-stairwell's for level 1) reads weight 0; the lift car's lamp stays with the car.
+`respond` facet, and its fixtures (`hallLamps`: each level's downlights, and
+the stairwell's pendant for level 1) read a power of 0 lumens; the lift car's
+lamp stays with the car.
 A swap shows the same geometry, so the mesh library answers it without a bake,
 and a responding row registers both variants' palettes, so it moves no other
 group's material ids; the irradiance volume retraces under the new materials and
