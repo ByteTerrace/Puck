@@ -354,6 +354,16 @@ path is taken as-is), so the `.ico` travels beside the world file:
 Authoring neither wears the executable's own icon and `Puck: World`. An icon
 this OS cannot read falls back the same way rather than refusing the boot.
 
+**Physical devices.** A windowed World opens every gamepad and receives the
+window's keyboard and mouse events. `--devices none` opens no pad (no gamepad
+manager, arbiter or capture is registered) and drops every OS key, text and
+pointer event before a seat sees it; stdin, `player.signal`, `body.*`, schedule
+rows and MCP are unaffected, and stderr opens with `[world.host] physical input
+devices are off`. It is an operator's per-run choice with no document member, and
+the default is `all`. Agents and `puck` verbs that boot a World pass it
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+A headless or offscreen boot opens no device either way.
+
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device—the
 authoritative server, console, and tape only:

@@ -1078,6 +1078,7 @@ public static class WorldBootComposition {
 
         return AddWorldBootShape(
             hostSettings: hostSettings,
+            physicalDevices: inputs.PhysicalDevices,
             seatBindings: seatBindings,
             services: services
         );
@@ -1091,9 +1092,10 @@ public static class WorldBootComposition {
     /// <param name="services">The service collection <see cref="AddWorldAuthoritativeCore"/> already composed.</param>
     /// <param name="hostSettings">The resolved host settings; their presentation selects the shape and their backend the
     /// GPU host.</param>
+    /// <param name="physicalDevices">Whether the windowed shape opens the machine's physical input devices.</param>
     /// <param name="seatBindings">The per-seat bindings the fixed-step simulation folds each tick's input through.</param>
     /// <returns>The same service collection.</returns>
-    private static IServiceCollection AddWorldBootShape(IServiceCollection services, WorldHostSettings hostSettings, WorldSeatBindings seatBindings) {
+    private static IServiceCollection AddWorldBootShape(IServiceCollection services, WorldHostSettings hostSettings, bool physicalDevices, WorldSeatBindings seatBindings) {
         ArgumentNullException.ThrowIfNull(argument: services);
         ArgumentNullException.ThrowIfNull(argument: hostSettings);
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
@@ -1128,7 +1130,10 @@ public static class WorldBootComposition {
             // format. The shared easy path owns the one fixed-step accumulator, turns every physical/console input
             // into a per-tick snapshot, applies it, and invokes WorldSimulation (client + screens + editor, over the
             // shared server-step shell). Rendering consumes interpolation state only.
-            services.AddWorldPresentation(hostsOnDirectX: hostSettings.HostsOnDirectX);
+            services.AddWorldPresentation(
+                hostsOnDirectX: hostSettings.HostsOnDirectX,
+                physicalDevices: physicalDevices
+            );
             services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
         }
 
@@ -1338,8 +1343,12 @@ public static class WorldBootComposition {
     /// <param name="services">The service collection.</param>
     /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan) — needed eagerly (not
     /// deferred to a factory) because the Windows/Linux hosted-presentation registration below branches on it.</param>
+    /// <param name="physicalDevices">Whether the boot opens the machine's physical input devices. <see langword="false"/>
+    /// registers no gamepad manager, arbiter, capture or hosted service, and makes the window input filters consume
+    /// every event (<see cref="WorldWindowInputFilters.ConsumesEveryEvent"/>), so no OS key, text or pointer event
+    /// reaches a seat.</param>
     /// <returns>The same service collection, for chaining.</returns>
-    public static IServiceCollection AddWorldPresentation(this IServiceCollection services, bool hostsOnDirectX) {
+    public static IServiceCollection AddWorldPresentation(this IServiceCollection services, bool hostsOnDirectX, bool physicalDevices) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
         services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
@@ -1412,11 +1421,14 @@ public static class WorldBootComposition {
         // thread), the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the
         // hosted service that governs device lifetime (hotplug rescans every ~1.5 s). Presentation-only — a headless
         // host has no window to give input focus to, so nothing here would ever fire.
-        if (OperatingSystem.IsWindowsVersionAtLeast(
-            major: 10,
-            minor: 0,
-            build: 10240
-        )) {
+        if (
+            physicalDevices &&
+            OperatingSystem.IsWindowsVersionAtLeast(
+                major: 10,
+                minor: 0,
+                build: 10240
+            )
+        ) {
             services.AddSingleton(implementationFactory: static sp => WindowsInputTransports.CreateGamepadManager(
                 clock: sp.GetRequiredService<IInputClock>(),
                 diagnostics: static message => Console.Error.WriteLine(value: message)
@@ -1551,7 +1563,9 @@ public static class WorldBootComposition {
             viewports: sp.GetRequiredService<WorldSeatViewports>(),
             windows: sp.GetRequiredService<WorldScreenBinder>()
         ));
-        services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
+        // With the physical devices off the filters consume every event, so the window delivers nothing to the
+        // observers, the passthrough door or the router.
+        services.AddSingleton(implementationFactory: sp => new HostCapabilityContribution(
             CapabilityType: typeof(IWindowInputFilter),
             Instance: new WorldWindowInputFilters(
                 new WorldAnnotationInput(
@@ -1559,7 +1573,7 @@ public static class WorldBootComposition {
                     viewports: sp.GetRequiredService<WorldSeatViewports>()
                 ),
                 sp.GetRequiredService<WorldSourcePassthrough>()
-            ),
+            ) { ConsumesEveryEvent = !physicalDevices },
             IsHeld: true
         ));
         services.AddSingleton<ICommandModule, WorldPassthroughCommandModule>();

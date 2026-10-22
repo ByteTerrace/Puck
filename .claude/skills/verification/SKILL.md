@@ -64,6 +64,18 @@ reports drift. Restore a fresh worktree once
 (`dotnet restore Puck.slnx -nodeReuse:false`) before its first build with
 `--no-restore` or `puck references`: both fail on an unrestored tree.
 
+## Boot every World with `--devices none`
+
+A World you boot to verify a change passes `--devices none`: the stdin recipe,
+an MCP World with its own `--state-dir`, a scratch `.puck` world. Without it
+the World opens the owner's pads and reads the owner's keyboard and mouse
+through its window, so the owner's presses drive your run. The ruling, what the
+flag does and the verbs that pass it themselves are in
+[the `puck-world` skill](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device).
+Drive a verification World with scripted input only (`player.signal`, `body.*`,
+schedule rows); a stderr naming a `[gamepad]` or `[gameinput]` device means the
+flag was missed.
+
 ## Build before you test
 
 - A failed build leaves the previous binaries in place, so a test or run after

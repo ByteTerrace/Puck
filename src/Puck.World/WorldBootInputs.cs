@@ -42,6 +42,11 @@ public sealed record WorldBootInputs(
     /// as a first console line <c>world.control start</c> would; <see langword="false"/> leaves it closed until a
     /// console line starts it.</summary>
     public bool Control { get; init; }
+    /// <summary>Gets whether the windowed boot opens the machine's physical input devices (<c>--devices all</c>, the
+    /// default): every gamepad, and the keyboard and mouse events the window receives. <see langword="false"/>
+    /// (<c>--devices none</c>) opens no pad and drops every OS key, text and pointer event before a seat sees it;
+    /// scripted input is unaffected. A headless or offscreen boot opens none either way.</summary>
+    public bool PhysicalDevices { get; init; } = true;
     /// <summary>Gets the service-extension configuration (<c>--extensions-config-file</c>), or
     /// <see langword="null"/> for none.</summary>
     public WorldExtensionConfiguration? ExtensionsConfiguration { get; init; }

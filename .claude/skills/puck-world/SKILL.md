@@ -41,8 +41,9 @@ process id) that reaches exactly that World; name it whenever more than one
 runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
 `body.*`, `player.*`, `view.override`) changes what the owner sees: make one
 only when the task allows it, and restore what you changed. To run your own
-edits, boot your own World from your worktree with its own `--state-dir` (and
-`--control` to attach to it), name it on every call, and stop only that
+edits, boot your own World from your worktree with its own `--state-dir`,
+`--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)) and
+`--control` to attach to it, name it on every call, and stop only that
 process ([references/hosting-and-release.md](references/hosting-and-release.md)).
 
 ## The model
@@ -235,8 +236,31 @@ Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
 ## Running it
 
 ```text
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
+
+### An agent's World opens no physical device
+
+The owner's ruling: any World an agent boots passes `--devices none`. Without it
+a windowed World opens every physical controller (GameInput, XInput, HID pads)
+and keeps reading them while its window is in the background, so the owner's
+pad presses drive the agent's test World (one boot opened the owner's Xbox pad
+as player 1). Focus gating is rejected: the owner's whole-desktop feature needs
+the pad read while another window is in front, so the default stays `all`, and
+the choice is the operator's per run, never a document member (a document must
+not decide whose hardware a run reads). `--devices none` opens no pad, registers
+no gamepad manager, arbiter or capture, and drops every OS key, text and pointer
+event the window receives before a seat sees it
+(`WorldWindowInputFilters.ConsumesEveryEvent`). stdin, the console,
+`player.signal`, `body.*`, schedule rows and MCP drive the World as before. The
+boot says `[world.host] physical input devices are off` on stderr; a stderr with
+a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or
+offscreen boot opens no device either way, and the flag is harmless there. The
+verbs that boot a windowed or offscreen World for you (`puck canary`, `puck
+parity`, `puck counters`, `puck verbs`, `puck docs citations`, `puck bench
+startup`) pass it themselves (`WorldDevices.NoneArguments`). The owner's own World
+(`.claude/launch.json`'s `debug-world`) omits it. Never inject real input to
+check the flag: the owner may be holding the pad.
 
 - **Build first.** A failed build leaves the previous binaries in place, so a
   run after it exercises old code and shows nothing about the change, however
@@ -316,7 +340,7 @@ Smoke session:
 
 ```text
 printf 'world.status\nbody.where 0\nworld.grants console\n' |
-  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 6 --state-dir "$TMP/puck-state"
+  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 6 --state-dir "$TMP/puck-state"
 ```
 
 ## Subsystem index
