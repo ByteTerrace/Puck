@@ -259,16 +259,34 @@ public static class WorldPlacementStamper {
         );
     }
     /// <summary>The engine-frame <see cref="SdfMesh"/> of an inline prototype mesh, converted once: prototype rows are
-    /// replaced, never mutated, so every placement, stamp and rebuild of one row shares one mesh.</summary>
+    /// replaced, never mutated, so every placement, stamp and rebuild of one row shares one mesh. An authored mesh has no
+    /// winding contract, and the opaque mesh pass culls back faces (<c>GpuCullMode.Back</c>), as the bake's meshes,
+    /// wound outward, need: the mesh carries each triangle in both windings, so whichever side or transform (a mirror
+    /// included) faces the camera draws.</summary>
     /// <param name="mesh">The prototype's inline mesh.</param>
     /// <returns>The shared mesh.</returns>
     internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
         createValueCallback: static authored => new SdfMesh(
-            indices: authored.Indices.ToArray(),
+            indices: TwoSided(indices: authored.Indices),
             positions: authored.EngineVertices.ToArray()
         ),
         key: mesh
     );
+    // The triangles in their authored winding, then each again with its last two vertices swapped.
+    private static uint[] TwoSided(IReadOnlyList<uint> indices) {
+        var doubled = new uint[(indices.Count * 2)];
+
+        for (var index = 0; (index < indices.Count); index += 3) {
+            doubled[index] = indices[index];
+            doubled[(index + 1)] = indices[(index + 1)];
+            doubled[(index + 2)] = indices[(index + 2)];
+            doubled[(indices.Count + index)] = indices[index];
+            doubled[(indices.Count + index + 1)] = indices[(index + 2)];
+            doubled[(indices.Count + index + 2)] = indices[(index + 1)];
+        }
+
+        return doubled;
+    }
 
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.

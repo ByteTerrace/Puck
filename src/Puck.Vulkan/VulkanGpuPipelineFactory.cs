@@ -13,7 +13,7 @@ namespace Puck.Vulkan;
 /// <c>VkDescriptorSetLayoutBinding</c> at the compute stage and takes the optional push-constant range. A graphics
 /// pipeline goes through <see cref="IVulkanGraphicsPipelineApi"/>: it reads its vertex attributes from the description,
 /// writes every color attachment of the render pass opaquely, tests and writes its depth attachment by the description's
-/// comparison, draws an unculled triangle list, and takes its viewport and scissor dynamically:
+/// comparison, draws a triangle list that culls the description's faces (a face is front when it appears counter-clockwise), and takes its viewport and scissor dynamically:
 /// <see cref="VulkanGpuRecorder.BeginRenderPass"/> sets a negative-height viewport that points clip-space +y at the top
 /// of the attachment, as Direct3D 12 does.
 /// <para>A description with a layout (<see cref="GpuComputePipelineDescription.Layout"/>, and every
@@ -31,6 +31,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
     private const uint BlendFactorZero = 0;
     private const uint BlendOpAdd = 0;
     private const uint ColorComponentRgbaBits = 0x0000000F;
+    private const uint CullModeBack = 2;
     private const uint CullModeNone = 0;
     private const uint DynamicStateScissor = 1;
     private const uint DynamicStateViewport = 0;
@@ -292,7 +293,9 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 PipelineCache: logicalDevice.PipelineCache,
                 PipelineLayoutHandle: groups.PipelineLayoutHandle,
                 Rasterization: new VkPipelineRasterizationStateCreateInfo {
-                    CullMode = CullModeNone,
+                    CullMode = ((description.Cull == GpuCullMode.Back)
+                        ? CullModeBack
+                        : CullModeNone),
                     DepthBiasEnable = False,
                     DepthClampEnable = False,
                     // A triangle wound counter-clockwise as it appears on the attachment is a front face, the sense of the

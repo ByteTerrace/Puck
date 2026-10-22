@@ -83,6 +83,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
             try {
                 layout.PsoHandle = BuildPso(
+                    cull: description.Cull,
                     depthCompare: description.DepthCompare,
                     device: device,
                     library: deviceContext.PipelineLibrary,
@@ -130,6 +131,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         ),
     };
     private static nint BuildPso(
+        GpuCullMode cull,
         GpuDepthCompare? depthCompare,
         ID3D12Device* device,
         DirectXPipelineLibrary? library,
@@ -173,7 +175,9 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             RasterizerState = new D3D12_RASTERIZER_DESC {
                 AntialiasedLineEnable = false,
                 ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
-                CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE,
+                CullMode = ((cull == GpuCullMode.Back)
+                    ? D3D12_CULL_MODE.D3D12_CULL_MODE_BACK
+                    : D3D12_CULL_MODE.D3D12_CULL_MODE_NONE),
                 DepthBias = 0,
                 DepthBiasClamp = 0f,
                 DepthClipEnable = true,
@@ -213,7 +217,8 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
         if (library is not null) {
             // The fixed state this factory varies besides the stages and root signature: the render-target count and
-            // formats, the depth-stencil format, the depth test (-1 for none), the rasterizer's front face, and each vertex attribute's format, offset and semantic index.
+            // formats, the depth-stencil format, the depth test (-1 for none), the rasterizer's cull mode and front
+            // face, and each vertex attribute's format, offset and semantic index.
             var colorCount = renderPass.ColorFormats.Count;
             var state = new byte[(sizeof(int) * ((4 + colorCount) + (3 * ((int)inputElementCount))))];
             var words = MemoryMarshal.Cast<byte, int>(span: state.AsSpan());
@@ -228,7 +233,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             words[(2 + colorCount)] = ((depthCompare is { } test)
                 ? ((int)test)
                 : -1);
-            words[(3 + colorCount)] = (psoDesc.RasterizerState.FrontCounterClockwise ? 1 : 0);
+            words[(3 + colorCount)] = ((((int)psoDesc.RasterizerState.CullMode) << 1) | (psoDesc.RasterizerState.FrontCounterClockwise ? 1 : 0));
 
             for (var index = 0; (index < inputElementCount); index++) {
                 words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
