@@ -47,6 +47,8 @@ internal sealed class FakeGpuDevice :
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
     private readonly Lock m_trackGate = new();
+    // Pipeline builds record on worker threads, so every count goes through one gate.
+    private readonly Lock m_callGate = new();
 
     private readonly bool m_trackObjects;
 
@@ -235,7 +237,9 @@ internal sealed class FakeGpuDevice :
     }
     private void Hit(string key) {
         if (m_countCalls) {
-            CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
+            lock (m_callGate) {
+                CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
+            }
         }
 
         OnCall?.Invoke(obj: key);

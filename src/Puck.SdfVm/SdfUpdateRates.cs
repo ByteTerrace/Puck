@@ -120,10 +120,7 @@ public static class SdfUpdateRateCounts {
 
     private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ScreensRated];
 
-    /// <summary>Gets the kinds the counters count, in report order.</summary>
-    public static ReadOnlySpan<WorkKind> Kinds => DeclaredKinds;
-
     /// <summary>Creates the counters a host's frames count into.</summary>
-    /// <returns>A set over <see cref="Kinds"/>, every count zero.</returns>
+    /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>
     public static WorkCounterSet Counters() => new(kinds: DeclaredKinds, name: SourceName);
 }

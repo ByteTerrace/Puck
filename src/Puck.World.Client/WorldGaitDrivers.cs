@@ -22,6 +22,11 @@ public static class WorldGaitDrivers {
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
     /// catalog rig's own gait so a creation limb and a catalog limb answer a jump the same way.</summary>
     public const float MaxTravelPerFrame = WorldMirroredAvatarBand.MaxGaitTravelPerFrame;
+    /// <summary>The fastest body motion, metres per second, a rate signal (<c>speed</c>, the accelerations and the travel
+    /// direction) reads — four times the rate <see cref="MaxTravelPerFrame"/> allows at 60 Hz. A rate is travel over
+    /// the frame's seconds, so it bounds the rate and never the travel: a frame that runs long still reads the body's
+    /// real speed, where a per-frame travel cap would read it low.</summary>
+    public const float MaxRate = 60f;
     /// <summary>The eased rendered speed, metres per second, above which the <c>moving</c> gate token holds. The
     /// speed it tests is low-passed over <see cref="CreationDriverDocument.WeightSeconds"/>, so a body crossing the
     /// threshold does not flicker the gate frame to frame.</summary>
@@ -96,12 +101,13 @@ public static class WorldGaitDrivers {
 
         var moving = (easedSpeed > MovingSpeed);
         var travelLength = travel.Length();
+        var rateLimit = (MaxRate * deltaSeconds);
 
         kinematics?.Observe(
             blend: blend,
             deltaSeconds: deltaSeconds,
-            travel: ((travelLength > MaxTravelPerFrame)
-                ? (travel * (MaxTravelPerFrame / travelLength))
+            travel: ((travelLength > rateLimit)
+                ? (travel * (rateLimit / travelLength))
                 : travel),
             yaw: VectorFunctions.YawOf(attitude: orientation)
         );
@@ -118,8 +124,7 @@ public static class WorldGaitDrivers {
             x: travel.Length(),
             y: MaxTravelPerFrame
         );
-        // A zero delta yields zero rates rather than infinities: the frame charged no time, so nothing moved per
-        // second either.
+        // A zero delta reads no rate, never an infinite one.
         var perSecond = ((deltaSeconds > 0f)
             ? (1f / deltaSeconds)
             : 0f
@@ -217,8 +222,17 @@ public static class WorldGaitDrivers {
                 continue;
             }
             if (!CreationDriverDocument.Integrates(signal: driver.Signal)) {
+                // A frame that charged no time (a held capture) has no rate to read: the phase holds what the last
+                // frame with time read, where a zero rate would drop a speed-driven swing to rest.
+                if (deltaSeconds <= 0f) {
+                    continue;
+                }
+
                 var target = (cadence * (driver.Signal switch {
-                    CreationDriverDocument.SignalSpeed => (planar * perSecond),
+                    CreationDriverDocument.SignalSpeed => MathF.Min(
+                        x: (groundTravel * perSecond),
+                        y: MaxRate
+                    ),
                     CreationDriverDocument.SignalVerticalSpeed => (travel.Y * perSecond),
                     CreationDriverDocument.SignalTravelDirection => (kinematics?.TravelDirection ?? 0f),
                     CreationDriverDocument.SignalLateralAcceleration => (kinematics?.LateralAcceleration ?? 0f),
