@@ -1801,8 +1801,11 @@ turn likewise, a move reaches nothing, and the desktop takes no keyboard: keys
 go wherever Windows sends them. A press whose point shows the World's own
 window, mirrored in the picture, is sent nowhere. Over a framed desktop the pad
 is the desktop's mouse, moving the system cursor across the monitor, and the
-leaving chord is claimed system-wide; leaving brings the World's window to the
-front. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
+leaving chord is claimed system-wide; leaving, however the seat leaves, brings
+the World's window to the front. The pad never holds a press on the World's
+own window frame, which Windows would answer with a modal loop on the World's
+window thread that only the pad's unsent release could end: a click there runs
+the caption button's command at once. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
 the worked case.
 A headless or offscreen boot has no window and no such verb.
 

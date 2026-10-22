@@ -28,7 +28,17 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
     // How far below its frame's top edge a window's caption is clicked, in physical pixels.
     private const int CaptionInset = 12;
     private const nint HitCaption = 2;
+    private const nint HitClient = 1;
+    private const nint HitClose = 20;
+    private const nint HitMaximize = 9;
+    private const nint HitMinimize = 8;
+    private const uint ScClose = 0xF060;
+    private const uint ScMaximize = 0xF030;
+    private const uint ScMinimize = 0xF020;
+    private const uint ScRestore = 0xF120;
+    private const int ShowRestore = 9;
     private const uint WmNcHitTest = 0x0084;
+    private const uint WmSysCommand = 0x0112;
     // The extra information every input this sends carries (dwExtraInfo, which GetMessageExtraInfo reads back): the
     // ASCII bytes PUCK, naming the input as the host's own.
     private const nint Signature = 0x4B435550;
@@ -73,6 +83,8 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
     private readonly Action<SystemInput[]> m_send;
     private readonly string m_title;
     private readonly Dictionary<int, SourcePassthroughPoint> m_presses = [];
+    // The pad's buttons pressed on this process's own window frame, which were never sent and so send no release.
+    private readonly HashSet<int> m_framePresses = [];
 
     private nint m_chordWindow;
     private int m_chords;
@@ -211,15 +223,15 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
         inputs: inputs,
         size: Marshal.SizeOf<SystemInput>()
     );
-    // Whether a window of this process shows at a physical screen point.
-    private static bool IsOwn(Point point) {
+    // The top-level window of this process that shows at a physical screen point, or zero.
+    private static nint OwnAt(Point point) {
         var root = User32.GetAncestor(
             flags: AncestorRoot,
             windowHandle: User32.WindowFromPoint(point: point)
         );
 
         if (root == 0) {
-            return false;
+            return 0;
         }
 
         _ = User32.GetWindowThreadProcessId(
@@ -227,8 +239,34 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
             windowHandle: root
         );
 
-        return (process == ((uint)Environment.ProcessId));
+        return ((process == ((uint)Environment.ProcessId)) ? root : 0);
     }
+    private static bool IsOwn(Point point) => (OwnAt(point: point) != 0);
+    private static nint HitTest(nint window, Point point) => User32.SendMessage(
+        lParam: ((nint)((point.Y << 16) | (point.X & 0xFFFF))),
+        message: WmNcHitTest,
+        wParam: 0,
+        windowHandle: window
+    );
+    // The window of this process whose frame (caption, caption buttons, borders) shows under the cursor, and the part of
+    // the frame there; a zero window when the cursor shows another process's window or this process's client area.
+    private static (nint Window, nint Hit) OwnFrameAtCursor() => InContext(read: () => {
+        var at = default(Point);
+        var own = (User32.GetCursorPos(point: out at)
+            ? OwnAt(point: at)
+            : 0);
+
+        if (own == 0) {
+            return ((nint)0, (nint)0);
+        }
+
+        var hit = HitTest(
+            point: at,
+            window: own
+        );
+
+        return ((hit > HitClient) ? (own, hit) : (0, 0));
+    });
     // The monitor's rectangle in physical pixels.
     private bool TryMonitor(out Rectangle monitor) {
         var info = new MonitorInfo { Size = ((uint)Marshal.SizeOf<MonitorInfo>()) };
@@ -493,16 +531,71 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
         }
     }
     /// <inheritdoc/>
+    /// <remarks>A press on the frame of this process's own window (its caption, caption buttons or borders) is never
+    /// sent: the system would hold this thread in its frame's modal loop (the caption button's tracking, a move, a
+    /// resize) until the button comes up, and only this thread, stalled in that loop, sends the pad's release. A left
+    /// press there runs what its click would (<see cref="FrameCommandOf"/>) at once, and brings the window forward
+    /// elsewhere on the frame; its release sends nothing.</remarks>
     public void PressPointer(int button, bool pressed) {
         var (down, up, data) = ButtonOf(button: button);
 
-        if (down != 0u) {
+        if (down == 0u) {
+            return;
+        }
+        if (!pressed) {
+            if (!m_framePresses.Remove(item: button)) {
+                Send(MouseOf(
+                    data: data,
+                    flags: up
+                ));
+            }
+
+            return;
+        }
+
+        var (frame, hit) = OwnFrameAtCursor();
+
+        if (frame == 0) {
             Send(MouseOf(
                 data: data,
-                flags: (pressed ? down : up)
+                flags: down
             ));
+
+            return;
+        }
+
+        _ = m_framePresses.Add(item: button);
+
+        if (button != 0) {
+            return;
+        }
+        if (FrameCommandOf(
+            hit: hit,
+            zoomed: User32.IsZoomed(windowHandle: frame)
+        ) is { } command) {
+            _ = User32.PostMessage(
+                lParam: 0,
+                message: WmSysCommand,
+                wParam: ((nint)command),
+                windowHandle: frame
+            );
+        } else {
+            ReturnForeground();
         }
     }
+    /// <summary>Returns the system command a left click on a part of a window's frame runs: its minimize, maximize or
+    /// restore, and close buttons'.</summary>
+    /// <param name="hit">The part of the frame, as <c>WM_NCHITTEST</c> names it (<c>HTMINBUTTON</c>, <c>HTMAXBUTTON</c>,
+    /// <c>HTCLOSE</c>, …).</param>
+    /// <param name="zoomed">Whether the window is maximized, so its maximize button restores it.</param>
+    /// <returns>The <c>WM_SYSCOMMAND</c> command (<c>SC_MINIMIZE</c>, <c>SC_MAXIMIZE</c>, <c>SC_RESTORE</c> or
+    /// <c>SC_CLOSE</c>), or <see langword="null"/> for a part whose click runs none.</returns>
+    public static uint? FrameCommandOf(nint hit, bool zoomed) => hit switch {
+        HitMinimize => ScMinimize,
+        HitMaximize => (zoomed ? ScRestore : ScMaximize),
+        HitClose => ScClose,
+        _ => null,
+    };
     /// <inheritdoc/>
     /// <remarks>Windows lets a process bring its window forward only while it holds the last input; when it does not,
     /// a tap of Alt, sent as the keyboard's, gives it that before the window comes forward, and where the shell still
@@ -524,8 +617,16 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
             threadId: Kernel32.GetCurrentThreadId()
         );
 
+        if (own == 0) {
+            return;
+        }
+        if (User32.IsIconic(windowHandle: own)) {
+            _ = User32.ShowWindow(
+                command: ShowRestore,
+                windowHandle: own
+            );
+        }
         if (
-            (own == 0) ||
             (User32.GetForegroundWindow() == own) ||
             User32.SetForegroundWindow(windowHandle: own)
         ) {
@@ -571,11 +672,9 @@ public sealed class Win32DesktopPassthrough : ISourcePassthroughDesktop {
 
             if (
                 !IsOwn(point: caption) ||
-                (User32.SendMessage(
-                    lParam: ((nint)((caption.Y << 16) | (caption.X & 0xFFFF))),
-                    message: WmNcHitTest,
-                    wParam: 0,
-                    windowHandle: own
+                (HitTest(
+                    point: caption,
+                    window: own
                 ) != HitCaption)
             ) {
                 return 0;

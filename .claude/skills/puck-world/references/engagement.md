@@ -383,7 +383,17 @@ cursor or the bar can step aside while engaged.
   the picture: the stick moves the system cursor across the monitor in
   monitor heights (`ISourcePassthroughDesktop.MovePointer`, any window in
   front), buttons, wheel and arrows are sent at it, and the first press opens
-  the source (`OpenFramed`).
+  the source (`OpenFramed`). A pad press on the frame of the host's own window
+  (caption, caption buttons, borders) is never sent
+  (`Win32DesktopPassthrough.PressPointer`): Windows runs a press there as a
+  modal loop on the window pump thread (caption-button tracking, move, size)
+  until the button comes up, and the pad's release is read and sent only by
+  that stalled thread, so the World would freeze for good. A left press there
+  runs its click's `WM_SYSCOMMAND` at once (`FrameCommandOf`: minimize,
+  maximize or restore, close) or brings the window forward. Leaving the
+  engagement any way (the context button, the console) brings the window back
+  to the front once the seat's desktop is given back (`ClaimChord`), restoring
+  a minimized window.
   The page binds `source.passthrough.pointer` and `.scroll` (sticks),
   `.button.<left|right|middle|back|forward>` and `.arrow.<up|down|left|right>`
   (`WorldPassthroughPadCommandModule`, core-registered for vocabulary parity).

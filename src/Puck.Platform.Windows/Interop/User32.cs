@@ -214,6 +214,15 @@ internal static partial class User32 {
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint windowHandle);
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool PostMessage(nint windowHandle, uint message, nint wParam, nint lParam);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsIconic(nint windowHandle);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsZoomed(nint windowHandle);
     // EnumThreadWindows takes a managed delegate callback, as EnumWindows does.
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
