@@ -108,9 +108,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   (`SdfMeshIrradiance.Filter`), and a probe lights only what lies within its
   depth cube along one axis (`sdfMeshProbeDepthVisibility`): a leak through a
   wall off the axes, or a storey the 2 m lattice straddles, is the lattice's
-  coarseness. The composite's local adaptation (`render.exposure.local`,
-  `sdfLocalAdaptationGain`) reads the same probes toward each surface, so a
-  surface lit wrongly by the volume is also exposed wrongly by it. A nested
+  coarseness. The views stage's local adaptation (`render.exposure.local`, in
+  `sdfLightStage`) reads the same gather's indirect light as part of each
+  surface's illumination, so a surface lit wrongly by the volume is also
+  exposed wrongly by it. A nested
   world's views read their own volume at their own authored tier.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of

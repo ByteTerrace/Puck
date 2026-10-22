@@ -29,13 +29,14 @@
 #include "../shade/shade-volumes.hlsli"
 
 // The factor the local adaptation scales a view's sky share by: one where the sky's brightest already lies at or below
-// white under the exposure the composite applies.
+// white under the view's exposure, and one for a view a window shows, whose output is not display-referred (the view
+// looking through the window applies the rest of the exposure, and its own sky share is the one it scales).
 float sdfSkyPeakGain() {
-    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.skyPeakLuminance > 0.0)) {
+    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.skyPeakLuminance > 0.0) || (passGroup.exposeShare < 1.0)) {
         return 1.0;
     }
 
-    float exposed = (pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare) * passGroup.skyPeakLuminance);
+    float exposed = (max(passGroup.exposure, 1.0e-12) * passGroup.skyPeakLuminance);
 
     return min(1.0, (SDF_SKY_PEAK_TARGET / max(exposed, 1.0e-12)));
 }

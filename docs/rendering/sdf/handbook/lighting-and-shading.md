@@ -297,12 +297,20 @@ camera, which carries every traced light's bounce, aims for
 `log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
 over the adaptation time of presentation time, snapping at a camera cut
 (`SdfViewExposures`). An automatic exposure's `local` share then adapts each
-surface on its own in the composite (`sdfLocalAdaptationGain`): the probes
-about the surface, read toward it, meter its surroundings, and the surface's
-exposure moves that share of the way from the view's toward that reading,
-within `SdfExposure.LocalRange` stops; the sky share and a pixel the volume
-holds no probe about keep the view's exposure. The pass block carries the
-view's meter reading (`meterLuminance`) and the share (`localAdaptation`).
+surface on its own in the views stage (`sdfLightStage`): the illumination
+arriving at the surface, the lights' diffuse terms and the volume's indirect
+light, is read against the view's meter reading taken as a scene of
+`SdfExposure.LocalReflectance` albedo, and the surface's exposure moves that
+share of the way from the view's toward the one that illumination would meter,
+within `SdfExposure.LocalRange` stops, before the display-referred curvature
+and grid terms, so a dark paint under the same light stays dark and no outline
+is scaled with it. The composite scales a display-referred view's sky share so
+the sky's brightest texel (`skyPeakLuminance`, which the volume's lighting
+measures over its environment map) reaches display white
+(`SdfExposure.SkyPeakTarget`) rather than clipping; a view a window shows
+leaves its sky to the viewer. The pass block carries the view's meter reading
+(`meterLuminance`), the share (`localAdaptation`) and the sky's peak
+(`skyPeakLuminance`).
 `world.exposure` echoes the authored exposure and each view's `EV100`, multiplier
 and meter reading. A view onto another world through a window, or a sky layer's
 view, publishes its luminance raised by its own exposure to the window share

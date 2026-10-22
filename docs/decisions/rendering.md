@@ -124,13 +124,18 @@ reads the irradiance volume's luminance about each view's camera, weighted
 toward where it looks, and eases toward that reading less a compensation,
 within authored bounds, over presentation time. The eye adapts across a scene
 where a camera cannot, so an automatic exposure also adapts locally by an
-authored share (`render.exposure.local`): the composite moves each surface's
-exposure from the view's toward the one the volume's probes about the surface
-would meter looking at it, within four stops, so a room beside its sunlit
-windows reads as a room and the sunlit ground through the window as ground,
-while the sky share keeps the view's exposure. The probes are world-space and
-smooth over a cell, so the adaptation carries no halo across a depth edge and
-agrees between views of one world.
+authored share (`render.exposure.local`): the views stage moves each surface's
+exposure from the view's toward the one its own illumination (the lights'
+diffuse terms and the volume's indirect light, read as a scene of 0.4 albedo)
+would meter, within six stops, so a room beside its sunlit windows reads as a
+room and the sunlit ground through the window as ground, while a dark paint
+under the same light stays dark; the composite scales the sky share so the
+sky's brightest texel reaches display white rather than clipping, and a window
+from a dim room shows the sky's gradient. The gain reads illumination, never a
+surface's own luminance, so no outline, ridge light or dark albedo is lifted by
+it, and the volume's share of that illumination is smooth over a cell, so the
+adaptation carries no halo across a depth edge and agrees between views of one
+world.
 Each view's composite multiplies its output by its exposure, so a dark lobby
 lit by its screens and a sunlit garden both read. A window onto another world
 and a sky layer's view carry the world beyond at an exposure between its own
