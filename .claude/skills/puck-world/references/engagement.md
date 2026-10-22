@@ -394,8 +394,9 @@ creation look holds the look's `pose` frame, the screen's own slab is not drawn
 the look's named ungrouped box is emitted in the screen's material
 (`WorldStampPool.CarriedScreenMaterials`), the screen's surface rides the box's
 front face (author `-Z`) every frame through the residency's screen-surface
-transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, from
-`WorldStampPool.TryCarriedScreen`), and the framed view frames the picture
+transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, the pool's
+`ScreenSurfaceTransforms` over `TryCarriedScreen`; `WorldScreenCarryLawTests`
+runs it on the CPU), and the framed view frames the picture
 there (`EngagedScreenRow`). Picking it up or putting it down rebuilds the
 program (`WorldSceneEmitter`'s carried-screen revision component). Rules read an
 engagement through `engaged(each, <screen>)` (`$engaged:<bodyRef>:<screen>`,

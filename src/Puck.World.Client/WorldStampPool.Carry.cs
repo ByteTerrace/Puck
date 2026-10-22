@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -69,6 +70,67 @@ public sealed partial class WorldStampPool {
         }
 
         return false;
+    }
+    /// <summary>Resolves a screen row to where its picture is this frame: the row at its carrier's box while a body carries
+    /// it (<see cref="TryCarriedScreen"/>), else the row as authored.</summary>
+    /// <param name="screen">The screen row.</param>
+    /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
+    /// <returns>The screen row at its carried frame, or <paramref name="screen"/> itself when no body carries it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> or <paramref name="client"/> is
+    /// <see langword="null"/>.</exception>
+    public WorldScreen Carried(WorldScreen screen, IWorldStampSource client) => (TryCarriedScreen(
+        carried: out var held,
+        client: client,
+        screen: screen
+    )
+        ? held
+        : screen);
+    /// <summary>Creates the screen-surface transform providers of every engine screen slot, polled every frame: a carried
+    /// screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at, or its authored frame while no
+    /// body carries it, so its picture rides the carrier's hands and returns to the device when put down; every other slot
+    /// answers <see langword="null"/> and keeps the frame its program declares.</summary>
+    /// <param name="client">The client whose definition names the screens and whose interpolated body poses root the
+    /// body-rooted stamps.</param>
+    /// <returns>One provider per slot below <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>, keyed by screen index.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
+    public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> ScreenSurfaceTransforms(IWorldStampSource client) {
+        ArgumentNullException.ThrowIfNull(argument: client);
+
+        var providers = new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(capacity: SdfProgramBuilder.MaxScreenSurfaces);
+
+        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
+            var slot = index;
+
+            providers[index] = () => SurfaceTransform(
+                client: client,
+                index: slot
+            );
+        }
+
+        return providers;
+    }
+    // The frame a carried screen's surface takes this frame; null for a screen no body can carry.
+    private SdfScreenSurfaceTransform? SurfaceTransform(IWorldStampSource client, int index) {
+        foreach (var screen in client.Definition.Screens) {
+            if ((screen.Index != index) || (screen.Carry is null)) {
+                continue;
+            }
+
+            var frame = Carried(
+                client: client,
+                screen: screen
+            );
+
+            return new SdfScreenSurfaceTransform(
+                HalfHeight: frame.HalfHeight,
+                HalfWidth: frame.HalfWidth,
+                Origin: frame.Origin,
+                Right: Vector3.Normalize(value: frame.Right),
+                Up: Vector3.Normalize(value: frame.Up)
+            );
+        }
+
+        return null;
     }
     // The 1-based timeline frame a frame name selects, or 0 for none — the numbering PoseFrame holds.
     private static int FrameNumber(CreationDocument document, string name) {

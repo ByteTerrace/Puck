@@ -6,6 +6,7 @@ using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 using Xunit;
 
@@ -30,11 +31,11 @@ public sealed class WorldScreenCarryLawTests {
             Value: CellValue.Fixed(rawBits: raw)
         )]
     );
-    private static CreationDocument Holder() => (CreationFixtures.Rig(
+    private static CreationDocument Holder(string frame = "hold", string picture = "picture") => (CreationFixtures.Rig(
         drivers: [],
         (CreationFixtures.Shape(type: SdfSolidPrimitive.Box, scale: PictureHalf) with {
             Id = 1,
-            Name = "picture",
+            Name = picture,
             Position = PictureAt,
         }),
         (CreationFixtures.Shape(type: SdfSolidPrimitive.Sphere) with {
@@ -44,16 +45,16 @@ public sealed class WorldScreenCarryLawTests {
         })
     ) with {
         Frames = [new FrameDocument(
-            Name: "hold",
+            Name: frame,
             Transforms: [new FrameTransformDocument(Id: 1, Position: PictureAt, Rotation: Quaternion.Identity)]
         )],
     });
-    private static WorldLook HolderLook() => new(
+    private static WorldLook HolderLook(params string[] poses) => new(
         Name: "holder",
         Source: new WorldLookSource.Creation(PrototypeId: "rig"),
         Scale: 1f,
         Motion: (WorldLookMotion.Default with {
-            Poses = new Dictionary<string, string> { ["hold"] = $"state.{HeldRow}.$body" },
+            Poses = poses.ToDictionary(keySelector: pose => pose, elementSelector: _ => $"state.{HeldRow}.$body"),
         })
     );
     private static WorldScreen CarriedScreen(WorldScreenCarry carry) => new(
@@ -69,11 +70,12 @@ public sealed class WorldScreenCarryLawTests {
         Up: new DocumentVector3(value: Vector3.UnitY),
         Carry: carry
     );
-    private static WorldDefinition World(WorldScreenCarry carry, long held = 0L) => (CreationFixtures.RigWorld(
-        creation: Holder(),
+    // The poses are the frame names a body can hold; the creation's timeline names only the frame.
+    private static WorldDefinition World(WorldScreenCarry carry, long held = 0L, string frame = "hold", string[]? poses = null) => (CreationFixtures.RigWorld(
+        creation: Holder(frame: frame),
         state: [Held(raw: held)]
     ) with {
-        LookRowsRaw = [HolderLook()],
+        LookRowsRaw = [HolderLook(poses: (poses ?? ["hold"]))],
         ScreensRaw = [CarriedScreen(carry: carry)],
     });
     private static string Refusal(WorldDefinition definition) => (WorldDefinitionValidator.TryValidateLocally(
@@ -84,8 +86,14 @@ public sealed class WorldScreenCarryLawTests {
         : reason
     );
     // Packs one frame of body 0 wearing the holder at the origin, facing the engine's default heading.
-    private static (WorldStampPool Pool, WorldClient Client) Pack(WorldDefinition world) {
-        var creation = WorldDefinitionRows.FindCreation(creations: world.Creations, id: "rig")!;
+    // The surface the frame's program declares for the carried screen; the slots above it are the reserved band's.
+    private static SdfScreenSurface Surface(SdfFrame frame) => Assert.Single(
+        collection: frame.Program.ScreenSurfaces,
+        predicate: surface => (surface.ScreenIndex == ScreenIndex)
+    );
+    // The stamp wears the world's creation unless a stamped one is given, as a live edit leaves it out of step.
+    private static (WorldStampPool Pool, WorldClient Client) Pack(WorldDefinition world, WorldPrototype? stamped = null) {
+        var creation = (stamped ?? WorldDefinitionRows.FindCreation(creations: world.Creations, id: "rig")!);
         var client = ClientFixtures.Client(definition: world);
         var pool = new WorldStampPool();
 
@@ -175,6 +183,20 @@ public sealed class WorldScreenCarryLawTests {
 
         Assert.False(condition: restingPool.TryCarriedScreen(screen: heldWorld.Screens[0], client: restingClient, carried: out _));
         Assert.False(condition: restingPool.TryCarriedScreen(screen: (heldWorld.Screens[0] with { Carry = null }), client: restingClient, carried: out _));
+
+        // The frame the residency polls: the box's face while held, the authored frame at rest, nothing for any other slot.
+        var held = pool.ScreenSurfaceTransforms(client: client);
+        var resting = restingPool.ScreenSurfaceTransforms(client: restingClient);
+
+        Assert.Equal(expected: SdfProgramBuilder.MaxScreenSurfaces, actual: held.Count);
+        Assert.Null(@object: held[ScreenIndex + 1]());
+        Assert.Equal(expected: ((Vector3)carried.Origin).X, actual: held[ScreenIndex]()!.Value.Origin.X, tolerance: 1e-6f);
+        Assert.Equal(expected: 1f, actual: held[ScreenIndex]()!.Value.Right.Length(), tolerance: 1e-5f);
+        Assert.Equal(expected: 1f, actual: held[ScreenIndex]()!.Value.Up.Length(), tolerance: 1e-5f);
+        Assert.Equal(expected: new SdfScreenSurfaceTransform(Origin: new Vector3(x: 5f, y: 0.1f, z: 5f), Right: Vector3.UnitX, Up: Vector3.UnitY, HalfWidth: 0.022f, HalfHeight: 0.0198f), actual: resting[ScreenIndex]());
+        Assert.Same(expected: heldWorld.Screens[0], actual: restingPool.Carried(screen: heldWorld.Screens[0], client: restingClient));
+        Assert.NotSame(expected: heldWorld.Screens[0], actual: pool.Carried(screen: heldWorld.Screens[0], client: client));
+        Assert.Throws<ArgumentNullException>(testCode: () => pool.ScreenSurfaceTransforms(client: null!));
     }
     [Fact]
     public void ACarryWhoseLookPoseOrBoxDoesNotResolveIsRefusedByName() {
@@ -189,6 +211,175 @@ public sealed class WorldScreenCarryLawTests {
                 expectedSubstring: refusal,
                 comparisonType: StringComparison.Ordinal
             );
+        }
+    }
+    // A carry is read against the creation the stamp wears, which a live edit can leave out of step with the look's: a
+    // timeline without the carry's pose frame, or without its box, carries nothing and draws the box in no screen material.
+    [Fact]
+    public void AStampWhoseCreationLacksThePoseFrameOrTheBoxCarriesNothing() {
+        var carry = new WorldScreenCarry(Look: "holder", Pose: "hold", Shape: "picture");
+        var world = World(carry: carry, held: FixedQ4816.One.Value, frame: "wave", poses: ["hold", "wave"]);
+        var (framePool, frameClient) = Pack(world: world);
+
+        Assert.False(condition: framePool.TryCarriedScreen(screen: world.Screens[0], client: frameClient, carried: out _));
+
+        var heldWorld = World(carry: carry, held: FixedQ4816.One.Value);
+        var (boxPool, boxClient) = Pack(world: heldWorld, stamped: (heldWorld.Creations[^1] with { Document = Holder(picture: "other") }));
+
+        Assert.False(condition: boxPool.TryCarriedScreen(screen: heldWorld.Screens[0], client: boxClient, carried: out _));
+    }
+    // The scene emitter watches which screens a body carries, rebuilds the program on a pick-up and a put-down, and has
+    // the carried screen's surface at the box's face and no slab drawn for it.
+    [Fact]
+    public void APickUpAndAPutDownRebuildTheSceneWithTheSurfaceAtTheBoxThenAsAuthored() {
+        var carry = new WorldScreenCarry(Look: "holder", Pose: "hold", Shape: "picture");
+        var scene = new Scene(carry: carry);
+        var resting = scene.Run();
+        var authored = Surface(frame: resting);
+
+        Assert.Equal(expected: new Vector3(x: 5f, y: 0.1f, z: 5f), actual: authored.Origin);
+
+        scene.Hold(raw: FixedQ4816.One.Value);
+
+        var lifted = scene.Run();
+        var surface = Surface(frame: lifted);
+
+        Assert.True(condition: scene.Pool.TryCarriedScreen(screen: scene.Client.Definition.Screens[0], client: scene.Client, carried: out var carried));
+        Assert.Equal(expected: 0f, actual: Vector3.Distance(value1: surface.Origin, value2: carried.Origin), tolerance: 1e-4f);
+        Assert.True(condition: (lifted.Program.InstructionCount < resting.Program.InstructionCount), userMessage: "the carried screen still draws its slab.");
+
+        scene.Hold(raw: 0L);
+
+        var dropped = scene.Run();
+
+        Assert.Equal(expected: authored, actual: Surface(frame: dropped));
+        Assert.Equal(expected: resting.Program.InstructionCount, actual: dropped.Program.InstructionCount);
+    }
+
+    // The real scene emitter over one client, composed as a presenter composes it, with body 0 wearing the holder.
+    private sealed class Scene {
+        private const float FrameSeconds = (1f / 60f);
+
+        private readonly Guid m_activation = Guid.NewGuid();
+        private readonly WorldScreenCarry m_carry;
+        private readonly WorldSceneEmitter m_emitter;
+        private readonly SdfCompositionFrameSource m_frames;
+        private long m_sequence = 1;
+        private ulong m_tick;
+
+        public Scene(WorldScreenCarry carry) {
+            m_carry = carry;
+
+            var definition = World(carry: carry);
+            var routes = new WorldSeatAuthorityRouter();
+
+            Client = new WorldClient(
+                composition: new WorldCompositionState(),
+                definition: definition,
+                roster: new PlayerRoster(
+                    definition: definition,
+                    link: new SilentLink(),
+                    seatBindings: new WorldSeatBindings(definition: definition)
+                ),
+                seatRouter: routes
+            );
+            Client.DeliverDefinition(definition: definition, version: new WorldDocumentVersion(Activation: m_activation, Sequence: m_sequence));
+            m_emitter = new WorldSceneEmitter(
+                animator: Pool,
+                audio: new SilentAudio(),
+                client: Client,
+                continuum: new WorldContinuum(
+                    Client,
+                    routes,
+                    new NoNeighbours()
+                ),
+                text: new WorldTextCatalog(source: new(
+                    Definition: definition,
+                    SourcePath: "unused.world.json"
+                ))
+            );
+            m_frames = new SdfCompositionFrameSource(
+                dresser: new BareDresser(),
+                emitters: [m_emitter]
+            );
+        }
+
+        public WorldClient Client { get; }
+        public WorldStampPool Pool { get; } = new();
+
+        // Delivers the held cell's new value the way a mutation's definition delivery reaches the client.
+        public void Hold(long raw) => Client.DeliverDefinition(
+            definition: World(carry: m_carry, held: raw),
+            version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence)
+        );
+        // Runs frames until the pose the stamp latched and the revision watching it have settled, and returns the last.
+        public SdfFrame Run() {
+            SdfFrame? frame = null;
+
+            for (var count = 0; (count < 3); count++) {
+                Client.DeliverSnapshot(snapshot: new WorldSnapshot(
+                    Authority: "a",
+                    Entries: ((EntitySnapshot[])[new EntitySnapshot(
+                        Active: true,
+                        BodyColor: Vector3.One,
+                        CatalogRig: 0,
+                        Continuity: EntityContinuity.Continuous,
+                        Generation: 1,
+                        Index: 0,
+                        Kit: 0,
+                        Look: 0,
+                        Orientation: Quaternion.Identity,
+                        Position: Vector3.Zero
+                    )]),
+                    Revision: 1,
+                    StepTicks: 1UL,
+                    Tick: ++m_tick
+                ));
+                Client.UpdateRenderPoses(alpha: 1f);
+                m_emitter.Tick(deltaSeconds: FrameSeconds);
+                Pool.Tick(deltaSeconds: FrameSeconds);
+                frame = m_frames.CaptureFrame(
+                    deltaSeconds: FrameSeconds,
+                    height: 64,
+                    interpolationAlpha: 0f,
+                    width: 64
+                );
+            }
+
+            return frame!;
+        }
+    }
+    // Dresses nothing: the law reads the program the emitter composed.
+    private sealed class BareDresser : ISdfFrameDresser {
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(
+            Program: program,
+            ProgramChanged: false,
+            Time: 0f,
+            Views: []
+        ) {
+            DynamicTransforms = transforms,
+            MeshDraws = meshDraws,
+            MeshDrawsRevision = meshDrawsRevision,
+            MovedTransforms = moved,
+        };
+    }
+    private sealed class SilentAudio : IWorldAudioCueSink {
+        public void SubmitCue(string eventToken, Vector3? site) { }
+    }
+    private sealed class NoNeighbours : IWorldAdjacencySource {
+        public void BeginTick(ulong tick) { }
+        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
+        public WorldEntityAddress LocalEntityAddress(int index) => default;
+        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
+            neighbour = null;
+
+            return false;
+        }
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
         }
     }
 }

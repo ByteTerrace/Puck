@@ -181,7 +181,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // live source verb) lights it without a definition revision.
     private readonly WorldScreenDecals m_decals;
     // Every engine screen slot's surface transform, which moves a carried screen's picture with its carrier.
-    private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenTransforms;
+    private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenTransforms;
     // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
     private readonly WorldBakedColors m_queryColors;
 
@@ -839,7 +839,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         foreach (var screen in m_client.Definition.Screens) {
             if (screen.Index == index) {
-                return Carried(screen: screen);
+                return m_animator.Carried(
+                    client: m_client,
+                    screen: screen
+                );
             }
         }
 
@@ -2028,7 +2031,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             colors: new WorldBakedColors(mirror: client.StateMirror),
             textAt: binder.TextSourceAt
         );
-        m_screenTransforms = NewScreenTransforms(presenter: this);
+        m_screenTransforms = animator.ScreenSurfaceTransforms(client: client);
         m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
@@ -2176,4 +2179,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public int ProgramWordCapacity { get; }
     /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
+    /// <inheritdoc/>
+    /// <remarks>A carried screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at this frame
+    /// (<see cref="WorldStampPool.ScreenSurfaceTransforms"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => m_screenTransforms;
 }
