@@ -2013,20 +2013,21 @@ before anything (re-)establishes), so a re-shape that moves a screen from
 one declared link to another within the SAME reconcile always succeeds
 rather than silently failing while the old link still owns the screen.
 Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
-`replay.record` starts a tape from the boot image only while nothing has stepped:
-no world tick, no pumped addon (`WorldServer.AnyAddonEverPumped`) and no stepped
-machine (`AnyMachineEverPumped`). There it refuses once any screen op has
-applied (`AnyScreenOpEverApplied`), because screen ops apply synchronously,
-between fixed steps, and change live host state the definition never reflects.
-A named machine operation sets that latch too when it reaches its runtime
-commit barrier, even if the provider then faults. Past that point the tape
-starts from an authority checkpoint taken at the arm
-(`WorldReplaySnapshot.StartCheckpoint`). The checkpoint holds the machine cores
-and the named bindings' memo a checkpoint host captures, and the offline
-replay restores them into its fresh host. A state the checkpoint cannot
-capture refuses the arm by name (`ReplayRefusal.StartNotCheckpointable`): a
-pumped addon guest, a screen op, a stepped machine without checkpoint support,
-a coupled link or rewind history. `Puck.World.WorldScreenBinder`
+`replay.record` starts a tape from the boot image only while nothing has moved
+the live state off it: no world tick, no pumped addon
+(`WorldServer.AnyAddonEverPumped`), no stepped machine (`AnyMachineEverPumped`)
+and no screen op reaching host dispatch (`AnyScreenOpEverApplied`; a named
+machine operation sets that latch too when it reaches its runtime commit
+barrier, even if the provider then faults). Past that point the tape starts
+from an authority checkpoint taken at the arm
+(`WorldReplaySnapshot.StartCheckpoint`). The checkpoint holds the machine cores,
+every screen slot's selector and link membership, the link rows
+(`WorldMachineHostCheckpoint`), the named bindings' memo and the live sessions,
+and the offline replay and the live drive restore them into their hosts. A
+state the checkpoint cannot capture refuses the arm by name
+(`ReplayRefusal.StartNotCheckpointable`): a pumped addon guest, a stepped
+machine without checkpoint support, a coupled link or rewind history.
+`Puck.World.WorldScreenBinder`
 is a pure reader of this type's outputs for presentation (a machine source
 instance's upload writes an output's frames, `WriteFrame`, and the light
 lights the room) and still owns the genuinely presentation

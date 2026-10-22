@@ -33,7 +33,7 @@ public sealed partial class WorldReplayTape {
         return ("puck-replay:" + Convert.ToBase64String(inArray: stream.ToArray()));
     });
 
-    private WorldReplaySnapshot SnapshotRecording(IReadOnlyList<WorldReplaySnapshot>? companions = null) {
+    private WorldReplaySnapshot SnapshotRecording(IReadOnlyList<WorldReplaySnapshot>? companions = null, IReadOnlyList<WorldReplayMachineDigest>? machineDigests = null) {
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_definitionJson is null) ||
@@ -54,7 +54,12 @@ public sealed partial class WorldReplayTape {
             MountedAddons = [.. m_mountedAddons],
             PipelineSourceDirectory = m_pipelineSourceDirectory,
             RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
+            // A fork whose parent recorded no per-component trace continues without one.
+            RecordedComponentHashes = ((m_liveComponentHashes.Count == m_ticks.Count)
+                ? [.. m_liveComponentHashes]
+                : []),
             RecordedHashes = [.. m_liveHashes],
+            RecordedMachineDigests = (machineDigests ?? []),
             Seats = [.. m_seats],
             SimulationRate = m_recordRateHz,
             StartCheckpoint = m_startCheckpoint,

@@ -184,6 +184,59 @@ public static partial class WorldStateHashComposition {
         server: server,
         tick: tick
     );
+    // One single-component order per authoritative component, so a per-component read allocates no order per call.
+    private static readonly WorldStateHashComponent[][] AuthoritativeSingles = [.. AuthoritativeOrder.Select(selector: static component => new[] { component })];
+
+    /// <summary>Folds each component of <see cref="Authoritative"/> on its own, under the authoritative domain, in
+    /// fold order: the read that names which component two authoritative digests disagree in.</summary>
+    /// <param name="server">The live server.</param>
+    /// <param name="tick">The simulation tick.</param>
+    /// <returns>One digest per component of <see cref="Authoritative"/>, in its order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
+    public static ulong[] AuthoritativeComponents(WorldServer server, ulong tick) {
+        ArgumentNullException.ThrowIfNull(argument: server);
+
+        var digests = new ulong[AuthoritativeSingles.Length];
+
+        for (var index = 0; (index < digests.Length); index++) {
+            digests[index] = Fold(
+                order: AuthoritativeSingles[index],
+                seed: AuthoritativeDomain,
+                server: server,
+                tick: tick
+            );
+        }
+
+        return digests;
+    }
+    /// <summary>Names the components of <see cref="Authoritative"/> whose digests differ between two per-component
+    /// reads (<see cref="AuthoritativeComponents"/>).</summary>
+    /// <param name="left">One read.</param>
+    /// <param name="right">The other.</param>
+    /// <returns>The differing components, in fold order; empty when the reads agree.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="left"/> or <paramref name="right"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The reads are not both one digest per authoritative component.</exception>
+    public static IReadOnlyList<WorldStateHashComponent> DifferingComponents(IReadOnlyList<ulong> left, IReadOnlyList<ulong> right) {
+        ArgumentNullException.ThrowIfNull(argument: left);
+        ArgumentNullException.ThrowIfNull(argument: right);
+
+        if (
+            (left.Count != AuthoritativeOrder.Length) ||
+            (right.Count != AuthoritativeOrder.Length)
+        ) {
+            throw new ArgumentException(message: $"a per-component read holds {AuthoritativeOrder.Length} digests; got {left.Count} and {right.Count}");
+        }
+
+        var differing = new List<WorldStateHashComponent>();
+
+        for (var index = 0; (index < AuthoritativeOrder.Length); index++) {
+            if (left[index] != right[index]) {
+                differing.Add(item: AuthoritativeOrder[index]);
+            }
+        }
+
+        return differing;
+    }
     /// <summary>Folds the store's own contents, the rows its host owns, and the topologies they are declared
     /// over.</summary>
     /// <param name="server">The live server.</param>

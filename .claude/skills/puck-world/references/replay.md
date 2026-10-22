@@ -62,7 +62,10 @@ surface.
   and transaction facts, not taped transfer handshakes. The escrow section also
   carries the crossing sequence, the watermark crossing-log recovery redoes from.
   Rule-latch hashing sorts
-  into reusable scratch; storage layout is not part of the hash. Neighbor decision
+  into reusable scratch and folds a key-bound entry by its key's name
+  (`RuleLatch.AppendStateHash`'s `keyNames`), never its interned ordinal: a
+  restored arena interns the captured key ledger in sorted order, so an ordinal
+  is layout and would make a faithful restore hash differently. Neighbor decision
   grids and diagnostic counters are derived, not persisted. The reconsideration
   count derives bit-reversed neighbor sample phases; the shared spatial sampler
   separates cell and occupant rotation. Checkpoint journals
@@ -97,7 +100,10 @@ surface.
   body that is no active local seat in the re-drive (`SeatSwitchRefused`).
   The fourteenth is `replay.record`'s
   `StartNotCheckpointable`: the world has stepped, so the tape would start from a
-  checkpoint of the live state, and that state is one no checkpoint captures.
+  checkpoint of the live state, and that state is one no checkpoint captures (a
+  mounted or pumped addon guest, a stepped machine whose runtime has no
+  checkpoint capability, a live coupled link or rewind history, an engagement in
+  flight, an edit not yet applied); the refusal names the guest, machine or link.
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -126,13 +132,22 @@ module content hash, fuel/tick — copied from the instances that MOUNTED,
 never the document rows), and the active local seats with a pinned profile
 (`WorldIdentityProjection`, including id, name, authored color, records and raw
 fixed-point movement rates). A recording armed after the world stepped (or after a
-guest or machine ran) also carries a start checkpoint
+guest or machine ran, or a screen op applied) also carries a start checkpoint
 (`WorldReplaySnapshot.StartCheckpoint`, an optional header block after the document
 path, `WorldReplayTape.Start.cs`): the authority checkpoint taken at the arm,
 passed through `WorldReplaySnapshot.ForTape`, which empties the owned-world section
-and the host row. The re-drive restores it (`WorldServer.FromCheckpoint` with
+and the host row. That checkpoint holds what the session reached: poses, cells,
+grants, latches, the live sessions with their rows and last forwarded input
+(`WorldGrantsCheckpoint.Sessions`; a boot-image tape re-admits them through a
+first-tick prefix of `SessionAdmitted`/`SessionEmbodied` entries instead), every
+screen slot's magazine selector and link membership and every link row
+(`WorldMachineHostCheckpoint.Slots`/`Links`), and every machine core's image with
+its generation and step count (`WorldMachineHostCheckpoint.Instances`, each
+runtime's `IMachineCheckpointRuntime.CaptureCheckpoint`, taken after its accepted
+steps drain). The re-drive restores it (`WorldServer.FromCheckpoint` with
 `restoreOwnedIdentities: false`) instead of booting the definition and joining the
-seats, so its seats keep the projections the population checkpoint carries. Encode
+seats, so its seats keep the projections the population checkpoint carries; the
+restored sessions have no observer and end where the tape ends them. Encode
 and `Read` both refuse a start checkpoint that holds an owned document or describes
 another document than the tape embeds; `ReplayStartPrivacyLawTests` searches a
 mid-run tape's bytes for an owned document's markers. Input the history's capture
@@ -304,9 +319,10 @@ only the LIFECYCLE ACT of mounting/unmounting a guest is captured, not its
 per-tick output — as the `UpsertAddon`/`RemoveAddon` mutation entry the
 ordinary mutation leaf already carries, gated (and outcome-pinned) exactly
 like any other mutation, never a lifecycle-specific leaf. `replay.*` verbs
-never reach the loopback. Machine state is
-not recorded directly: the fresh replay `WorldMachineHost` boots from the
-embedded definition, re-applies taped screen operations, and steps from
+never reach the loopback. Machine state is not recorded per tick: the replay
+`WorldMachineHost` boots from the embedded definition (a boot-image tape) or
+restores the start checkpoint's core images over the machines that definition
+booted (a checkpoint tape), re-applies taped screen operations, and steps from
 re-derived pads. Pixels, camera rigs, overlays, and audio remain excluded.
 
 **Replay verification is side-effect-free.** Replay
@@ -373,7 +389,16 @@ are derived again from authored kit/producer names and current state handles on
 restore; their diagnostic evaluation/failure counters do not enter the hash.
 It excludes the rest of the document, grants, journal, HUD/presentation,
 pending transport work, and screen-machine cores. It is not a whole-world
-checkpoint comparison. A kit's `dynamics`-shaped planar follower state rides alongside the hashed pose
+checkpoint comparison. The cores are pinned once instead, at the tape's end:
+`replay.stop` captures the live host's checkpoint (one drain of every queued
+machine) and records each core image's FNV-1a digest
+(`WorldReplaySnapshot.RecordedMachineDigests`, `MachineDigests`); the stop and
+verify re-drives digest the shadow's cores after the last tick and a drive
+that reaches the tape's end digests the live host's, each naming a core that
+re-derived another state (`WorldReplayVerdict.MachineDivergence`, the verdict
+reads `machine cores MATCH (3)` otherwise). A per-tick core digest would wait
+on every queued machine worker every tick, so the history keeps none and says
+so (`MachineCoresOutsideProof`). A kit's `dynamics`-shaped planar follower state rides alongside the hashed pose
 (`WorldBody`'s own Q32 follower raws feed `m_planarVelocity`, which the
 tracked pose derives from every tick), so a follower divergence still surfaces
 as a hash MISMATCH on the very next tick it moves the pose — but the follower
@@ -407,18 +432,17 @@ and fed the recorded ticks, with local seat input masked at the loopback.
 
 - `replay.record <name>` — in addition to bad args/name/already-recording,
   refuses while a drive is in progress (`replay.cancel` ends it; a fork is
-  the way to record from a drive). Before the world's first step (and before
-  any guest or machine has run) the tape starts from the boot image, and it
-  refuses once any authority-admitted screen operation has reached host
-  dispatch. That gate includes host refusals because a failed `Select` can
-  still move its selector; authority denials return before dispatch and do not
-  latch it. Later the tape starts from a checkpoint taken at the arm, which
-  holds what the session reached: poses, cells, grants, latches, the machine
-  cores and binding memo a checkpoint host captures. A state no checkpoint
-  captures refuses by name with `StartNotCheckpointable`: a mounted or pumped
-  addon guest, a screen operation, a stepped machine without checkpoint
-  support, a coupled link or rewind history, a live session, an engagement in
-  flight, or an edit not yet applied. The
+  the way to record from a drive). Before the world's first step, and before
+  any guest or machine has run or any authority-admitted screen operation has
+  reached host dispatch (a failed `Select` still moves its selector; authority
+  denials return before dispatch and do not latch it), the tape starts from
+  the boot image. Later it starts from a checkpoint taken at the arm, which
+  holds what the session reached: poses, cells, grants, latches, the live
+  sessions, the screen slots and links, the machine cores and the binding memo
+  (above). A state no checkpoint captures refuses by name with
+  `StartNotCheckpointable`: a mounted or pumped addon guest, a stepped machine
+  without checkpoint support, a coupled link or rewind history, an engagement
+  in flight, or an edit not yet applied. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
   and `WriteMask` included.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
@@ -484,7 +508,14 @@ recorded world authored), hash.
   and reads MISMATCH at tick 0).
   **Any later tick means the start matched and the trajectory
   drifted — a genuine determinism defect.** `replay.stop` echoes exactly
-  this reading.
+  this reading, and names the authoritative components that differ at the
+  divergent tick (`differing components: RuleLatch`): a recording keeps one
+  per-component read per tick beside its trace
+  (`WorldStateHashComposition.AuthoritativeComponents`, the tape's
+  `RecordedComponentHashes`, 16 digests per tick), the re-drive reads the
+  shadow the same way (`WorldReplayVerdict.DivergentComponents`), and a live
+  drive's divergence line names them too. A history branch's draft tape
+  records none, and a fork of a tape without them continues without them.
 
 ### Sets of tapes and crossings
 
@@ -546,7 +577,8 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
 - `--poses`: re-drives through the untouched `WorldReplaySnapshot.Drive`,
   observing the shadow population at the addon seam's third pump point
   (`IWorldAddonHost.ResolveReads`, after the population advanced) through a
-  forwarding host around the ordinary factory's product; each printed line
+  forwarding host around the ordinary factory's product, indexed from the tick
+  after the tape's start checkpoint (tick 1 for a boot-image tape); each printed line
   gains ` | body:0 pos=(x, y, z) yaw=…° pitch=…° roll=…°` per active body,
   and a pose that MOVED (the recorded hash differs from the previous
   tick's; tick 0 always) counts as an edge, so a body advancing under a
@@ -575,11 +607,14 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   `RateMismatch`/zero ticks/target out of range; refuse when the live joined
   player set differs from the tape's seat set (a seat cannot be respawned
   through the session door — `player.join`/`player.leave` to match first),
-  when a screen or machine operation has applied (including successful screen
-  memory access), when the tape's world declares screens and a machine has
-  stepped, when the tape pins addons and a guest has pumped (the
+  when the tape pins addons and a guest has pumped (the
   rebuild door reuses an unchanged row's guest with its state), or when an
-  engagement is in flight. Transfer transactions or mobility credentials,
+  engagement is in flight. Stepped machines and applied screen ops are no
+  obstacle: the forced load keeps an unchanged machine row's runtime running
+  (and re-creates a changed one from its content), and the checkpoint restore
+  below installs the tape's core images, screen slots and links over it, each
+  runtime behind the steps it already accepted; a live coupled link refuses
+  the shadow capture a boot-image tape needs, naming the link. Transfer transactions or mobility credentials,
   remote occupants, and
   host-owned queued/in-doubt transfers or forwarding history also refuse:
   a single-authority tape cannot rewind another authority's obligations. A
@@ -592,10 +627,15 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   reconcile, addon plan, document grants, journal clear, base replace; the
   `[world.definition: world.load applied …]` line is the evidence, and the
   boot document's path is the file origin so relative machine content keeps
-  resolving), then the complete authority checkpoint a fresh server reaches
-  after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
-  `WorldServer.RestoreCheckpoint` resets clocks, decisions,
-  rule latches, fields, grants, held input, events, and population together.
+  resolving), then the tape's start checkpoint, or, for a boot-image tape, the
+  complete authority checkpoint a fresh server reaches after
+  `SeatRecordedSeats` joins the recorded seats on their pinned rates.
+  `WorldServer.RestoreCheckpoint` resets clocks, decisions, rule latches,
+  fields, grants, sessions, held input, events, screen slots, machine cores
+  and population together; the sessions it restores have no observer, and
+  `EndUnobservedSessions` ends them when the drive ends (a live screen that
+  the load ended is re-admitted under a fresh ordinal meanwhile, and a recorded
+  admission landing on that ordinal displaces it).
   The replay boot restore keeps the pinned seat identities detached and leaves
   the owned catalog unchanged; recovery's home-seat rebind does not run here.
   A drive's end (`EndDriveCore`, a cancel or the target reached) runs `RebindOwnedSeats`:
@@ -644,7 +684,10 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   Camera and look never touch the tape, so they stay the viewer's.
 - **Ending (`EndDrive`).** Seats return to live input, one stderr line
   reports `reached`/`cancelled at tick N of T` and the verdict, and the
-  world stays where the drive left it. A completed fork hands over to
+  world stays where the drive left it. The recorded-extension epoch opens
+  again (`WorldExtensions.CompleteReplay`): a runtime admitted before the
+  drive stays retired, and a fresh `WorldRecordedExtension` admits and
+  contributes ([Extensions.md](../../../../src/Puck.World.Server/Extensions.md#replay-and-lifetime)). A completed fork hands over to
   `Recording` instead of `Idle`: `m_ticks` = the parent's tick groups
   `0..tick-1` (the same objects, verbatim), `m_liveHashes` = the hashes the
   LIVE session reached during the drive (equal to the parent's on a matching
@@ -719,12 +762,14 @@ The contracts a change must keep:
   before it appends, so no recorded entry lies ahead of the cursor that a seek
   did not scan to get there; a seek scans only from where it starts.
 - **Refuse uncaptured state.** Seek checks under the authority gate for pending
-  input and provider contributions, live sessions, addon guests, screen
-  operations, unsupported machines and external obligations. Recorded spans
+  input and provider contributions, live sessions (a keyframe carries one, but
+  its observer's view is another authority's, which the history does not
+  rewind), addon guests, unsupported machines and external obligations. Recorded spans
   refuse external authority events, changed rebuild content, and a hosted
   world's reload, which is replayed from its store and no history holds one. Seek retires
   providers from the abandoned timeline and suppresses save effects while
-  re-simulating; only an explicit extension epoch admits fresh providers.
+  re-simulating; its end opens the extension epoch again, where a fresh
+  provider admits and the retired ones stay retired.
 - **Steady ticks allocate nothing.** Capture buffers are reused when only the
   history records, spans are sized on the keyframe tick, and per-tick paths
   avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.

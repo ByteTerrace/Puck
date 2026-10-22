@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Testing;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -32,6 +33,71 @@ public sealed class ReplayArmingLawTests {
         Assert.True(condition: stop.Verdict!.Passing, userMessage: stop.Verdict.Describe());
         Assert.Equal(expected: 20UL, actual: ReadTape(path: stop.Path).StartTick);
         Assert.True(condition: harness.Tape.Verify(name: "mid-run").Passing);
+    }
+    // A viewer observing through a portal holds a session on this world: rows with no body and the input it last
+    // forwarded. Both ride the start checkpoint, so a mid-run arm with a live session re-drives clean, and the tape
+    // opens with no re-admission prefix.
+    [Fact]
+    public void AMidRunArmWithALiveSessionCarriesItInTheStartCheckpoint() {
+        var document = Fixtures.BuildDocument();
+
+        using var harness = new WorldHistoryHarness(
+            definition: (document with {
+                Admission = [new WorldAdmissionEntry(
+                    Algorithm: string.Empty,
+                    Disclosure: WorldDisclosureTier.Replica,
+                    Domain: WorldAdmissionEntry.AnyAuthority,
+                    Grants: [new WorldAdmissionGrant(
+                        Budget: 64,
+                        Capability: WorldCapability.Observe,
+                        Subject: GrantSubject.All
+                    )],
+                    Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                    PublicKey: string.Empty,
+                    Subject: null
+                )],
+            }),
+            on: false,
+            seats: 1
+        );
+        var server = harness.Fixture.Server;
+
+        harness.Steps(count: 5);
+
+        using var observation = server.TryObserveAsSession(
+            refusal: out var observeRefusal,
+            sink: new WorldSessionMirror(placeholder: WorldProjection.Undisclosed),
+            sourceAuthority: "viewer/replay"
+        );
+
+        Assert.True(condition: (observation is not null), userMessage: observeRefusal);
+
+        var channels = new ChannelValues();
+
+        channels[0] = Puck.Maths.FixedQ4816.One;
+        harness.Transport.SubmitIntent(submission: new IntentSubmission(
+            EntityIndex: -1,
+            Intent: new PlayerIntent(Channels: channels, SourceRay: null),
+            Principal: observation!.Session,
+            Tick: server.NextInputTick
+        ));
+        harness.Steps(count: 3);
+        Assert.True(condition: server.IsLiveSession(principal: observation.Session));
+        Assert.True(condition: harness.Tape.TryBeginRecording(name: "session", refusal: out var refusal), userMessage: refusal);
+        harness.Steps(count: 10);
+
+        var stop = harness.Tape.StopRecording();
+
+        Assert.True(condition: stop.Verdict!.Passing, userMessage: stop.Verdict.Describe());
+
+        var tape = ReadTape(path: stop.Path);
+        var session = Assert.Single(collection: tape.StartCheckpoint!.Grants.Sessions);
+
+        Assert.Equal(expected: observation.Session, actual: session.Session);
+        Assert.Equal(expected: Puck.Maths.FixedQ4816.One, actual: session.Input[0]);
+        Assert.Contains(collection: tape.StartCheckpoint.Grants.Grantees, filter: row => (row.Grantee.TryGetPrincipal(principal: out var principal) && (principal == observation.Session)));
+        Assert.Empty(collection: tape.Ticks[0].Authority);
+        Assert.True(condition: harness.Tape.Verify(name: "session").Passing);
     }
     // The history keeps the capture attached, so input submitted for the next tick before the arm is already in the
     // open tick when the recording starts. That input already reached the server, where the start checkpoint holds it,
