@@ -1,7 +1,7 @@
 // The gaming devices: one of each the World hosts, each on its stand, whose screen shows the machine running, with the
 // cartridges it can swap to in the folders its `contentFolders` name. The debug world imports this file whole. They
 // stand in Wonderland (wonderland.puck), the room beyond the gallery lobby's west wall that the Moth reaches a quarter
-// her size through the lobby's big door, every device facing +X, toward the mouse hole she comes out of:
+// her size through the lobby's big painting, every device facing +X, toward the mouse hole she comes out of:
 //
 //   (1.4, 30.5)   the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 27-inch
 //                 television, on a walnut AV cabinet whose top is 0.65 m up, its back to the west wall; a flight of

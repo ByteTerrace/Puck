@@ -2,7 +2,7 @@
 
 The debug world shows one of each gaming device the World hosts in Wonderland
 ([`wonderland.md`](wonderland.md)), the room beyond the gallery lobby's west
-wall that the Moth reaches a quarter her size through the lobby's big door.
+wall that the Moth reaches a quarter her size through the lobby's big painting.
 Every device faces +X, toward the mouse hole she comes out of: the deck's
 television on the west wall 7.8 m ahead of her, the Advanced Gaming Brick on
 its plinth to her right and the Humble Gaming Brick on the floor to her left.

@@ -1,41 +1,56 @@
-// Wonderland: a portal pair of two sizes, Alice's way down. A gilt door stands on the gallery lobby's west wall, and
-// its counterpart is the same door a quarter the size, a mouse hole at the foot of the east wall of the room next door.
-// A pair's scale is its counterpart's size over its own (WorldFrameIsometry.Scale), so a body walking into the big
-// door comes out of the mouse hole a quarter its size, moving a quarter as fast, and walking back into the mouse hole
-// comes out of the big door at full size. Each glass is a window as well as a door: the big door shows the room as
-// she will see it once she is small, its walls towering, and the mouse hole shows the lobby as she will see it once she
-// is big again. The debug world imports this file whole, after loop.puck, whose `self` reference names the debug
-// world's own document. wonderland.md beside this file says how to get in and what to watch.
+// Wonderland: a portal pair of two sizes, Alice's way down. A gilt-framed painting hangs on the gallery lobby's west
+// wall, and its counterpart is the same painting at a quarter the size, a mouse hole at the foot of the east wall of
+// the room next door. A pair's scale is its counterpart's size over its own (WorldFrameIsometry.Scale), so a body
+// walking into the big painting comes out of the mouse hole a quarter its size, moving a quarter as fast, and walking
+// back into the mouse hole comes out of the big painting at full size. Each canvas is a window as well as a door, and
+// ripples like the painting wing's (paintings.puck): the big one shows the room as she will see it once she is small,
+// the mouse hole shows the lobby as she will see it once she is big again. Both are framed in the painting wing's
+// ornate style, and both hang on their wall's face, the wall giving way while a body stands in the opening
+// (Puck.World.Server.WorldPortalHoleContactField). The debug world imports this file whole, after paintings.puck, whose
+// `self` reference names the debug world's own document. wonderland.md beside this file says how to get in and what to
+// watch.
 //
-//   (10.9, 0.05, 30.5)   the big door, on the lobby's west wall (x 10 .. 10.3), facing +X into the lobby
+//   (10.3, 0.05, 30.5)   the big painting, on the lobby west wall's inner face, facing +X into the lobby
 //   x 0.7 .. 9.7         the room, z 23.7 .. 34.3, walls 0.3 m thick and 4.5 m tall, open to the sky
-//   (9.2, 0.05, 30.5)    the mouse hole, on the room's east wall, facing -X into the room
+//   (9.4, 0.05, 30.5)    the mouse hole, on the room east wall's inner face, facing -X into the room
 //   (4.5, 0.05, 23.7)    the room's own doorway, in its south wall: walked through at full size, she looms in it
 //
 // A body's size is its cell of `bodyScale` (bodies.scaleRow, debug.puck): a crossing multiplies it by the pair's scale
-// and refuses one that would leave the row's 0.25 .. 1. Every value in this file is a world coordinate.
+// and refuses one that would leave the row's 0.25 .. 1. Every value in this file is a world coordinate, except inside
+// the two paintings, which are authored in their own frame (x across the canvas, y up, z out of the wall).
 
-let wonderGilt = { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
 let wonderWall = "#6FA6A8"
 let wonderFloor = "#C9B79C"
 let wonderSkirting = "#3A3F47"
-let wonderBoard = "#F2EEE4"
-let wonderLetters = "#3A3F47"
 // The stairs' game cases, in turn: red, blue, yellow, green.
 let wonderCaseSlots = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
 // What a glass shows past the deepest level of windows inside windows.
-let wonderFallback = "#FF00FF"
+let wonderFallback = "#10141B"
 
-// The two doors' common height and depth: the gallery lobby's floor and the room's are both at 0.05.
+// The lobby's floor and the room's are both at 0.05.
 let wonderFloorTop = 0.05
 let wonderZ = 30.5
-// The big door's glass stands 0.6 m proud of the lobby's west wall, the mouse hole's 0.2 m proud of the room's east
-// wall, so a body's origin passes either glass before its collider meets the wall behind it.
-let bigDoorX = 10.9
-let smallDoorX = 9.2
-// The mouse hole is the big door at a quarter of its size. Every extent below is a multiple of a sixteenth, so both
-// sizes are exact in fixed point and so is their ratio, as a crossing needs (WorldFrameIsometry.TryScale).
+// The lobby west wall's inner face and the room east wall's inner face.
+let bigDoorX = 10.3
+let smallDoorX = 9.4
+// The mouse hole is the big painting at a quarter of its size. The canvas's half extents (1.125 by 1.4375 m) and every
+// size below are multiples of a sixty-fourth, so both canvases are exact in fixed point and so is their ratio, as a
+// crossing needs (WorldFrameIsometry.TryScale): the painting wing's own 1.12 by 1.42 canvas has no exact quarter.
 let smallDoor = 0.25
+
+// The painting wing's palette slots (paintings.puck): gilt, the dark lip, the black rim, the cream plaque and its ink.
+let wonderPaintGilt = 0
+let wonderPaintLip = 1
+let wonderPaintBlack = 2
+let wonderPaintBoard = 3
+let wonderPaintInk = 4
+let wonderPaintPalette = [
+  { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
+  { color: "#5C2B26", roughness: 0.55, specular: 0.2 }
+  { color: "#15171B", roughness: 0.45, specular: 0.2 }
+  { color: "#F2EEE4", roughness: 0.6 }
+  { color: "#3A3F47", roughness: 0.6 }
+]
 
 // One box given its world bounds, in the creation's author frame (turned 180 degrees about up from the world's) for a
 // placement at the origin with no yaw.
@@ -47,30 +62,50 @@ template wonderBox(label, x0, x1, y0, y1, z0, z1, slot) {
   }
 }
 
-// A gilt door at `size` times the garden frame's: a 2.5 by 3.5 m rim round a 2.2 by 3.2 m opening at full size. Face 0,
-// the rim, carries the glass, so the door's aperture is the rim's rectangle, from the floor to its top. The rim is
-// palette slot 0 of `slots`.
-template wonderDoor(label, size, slots) {
+// One box given its bounds in a painting's own frame.
+template wonderPaintBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+// Three bars round a canvas of half-width `ix`, from `y0` up to `y1` and out by `w`, standing `depth` proud of the
+// wall; the floor closes the fourth side.
+template wonderRing(label, ix, y0, y1, w, depth, slot) {
+  wonderPaintBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  wonderPaintBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  wonderPaintBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+}
+
+// A painting at `size` times the big one, in the painting wing's ornate frame: face 0, the black rim on the wall's
+// plane (z 0), names the glass, and its lower eighth of a metre (at full size) sinks below the floor so a body's feet
+// stand within the opening; a dark lip and a gilt border ring it.
+template wonderPainting(label, size) {
   behavior {
     faces [{ name: "glass", shapeId: 0 }]
   }
   name: label
-  palette: slots
   schema: "puck.creation.v1"
+  palette: wonderPaintPalette
   shape Box "rim" {
-    material: 0
-    position [0, (1.75 * size), 0]
-    scale [(1.25 * size), (1.75 * size), (0.0625 * size)]
+    material: wonderPaintBlack
+    position [0, (1.3125 * size), 0]
+    scale [(1.125 * size), (1.4375 * size), (0.0625 * size)]
   }
   shape Box "opening" {
     blend: Subtraction
-    material: 0
-    position [0, (1.75 * size), 0]
-    scale [(1.125 * size), (1.625 * size), (0.25 * size)]
+    material: wonderPaintBlack
+    position [0, (1.3125 * size), 0]
+    scale [(1.109375 * size), (1.421875 * size), (0.3125 * size)]
   }
+  wonderRing(label: "lip", ix: (1.125 * size), y0: (-0.125 * size), y1: (2.75 * size), w: (0.0625 * size), depth: (0.078125 * size), slot: wonderPaintLip)
+  wonderRing(label: "border", ix: (1.1875 * size), y0: (-0.125 * size), y1: (2.8125 * size), w: (0.21875 * size), depth: (0.109375 * size), slot: wonderPaintGilt)
 }
 
-// The same-world destination both doors lead to: the debug world itself, through loop.puck's `self` reference.
+// The same-world destination both paintings lead to: the debug world itself, through paintings.puck's `self`
+// reference.
 destinations [
   {
     durability: persisted
@@ -81,60 +116,48 @@ destinations [
 ]
 
 spawnPoints [
-  // Two and a half metres in front of the big door in the gallery lobby, facing it; walk ahead to go through.
-  { id: "wonderland", position [13.4, wonderFloorTop, wonderZ], yawDegrees: 90 }
+  // Three metres in front of the big painting in the gallery lobby, facing it; walk ahead to go through.
+  { id: "wonderland", position [13.3, wonderFloorTop, wonderZ], yawDegrees: 90 }
   // Outside the room's own doorway, facing in: walk in at whatever size she is.
   { id: "wonderland-room", position [4.5, 0, 21.5], yawDegrees: 180 }
 ]
 
+// A door onto its twin and a window showing what lies past it, rippling as the painting wing's do.
+template wonderFace(counterpart) {
+  faceSources [
+    {
+      face: "glass"
+      filter: linear
+      portal {
+        arrival: "mapped"
+        counterpart: counterpart
+        destination: "wonderland"
+        travel: "body"
+      }
+      source {
+        $type: "session"
+        destination: "wonderland"
+        fallback: wonderFallback
+        projection: window
+        ripple: true
+      }
+    }
+  ]
+}
+
 placements {
-  // Each glass is a door onto the other and a window showing what lies past it, through the `wonderland` destination.
   placement "wonderland-door" {
     prototype: "wonderland-door"
     position [bigDoorX, wonderFloorTop, wonderZ]
-    yawDegrees: -90
-    faceSources [
-      {
-        face: "glass"
-        filter: linear
-        portal {
-          arrival: "mapped"
-          counterpart: "wonderland-mouse-hole/glass"
-          destination: "wonderland"
-          travel: "body"
-        }
-        source {
-          $type: "session"
-          destination: "wonderland"
-          fallback: wonderFallback
-          projection: window
-        }
-      }
-    ]
+    yawDegrees: 270
+    wonderFace(counterpart: "wonderland-mouse-hole/glass")
   }
 
   placement "wonderland-mouse-hole" {
     prototype: "wonderland-mouse-hole"
     position [smallDoorX, wonderFloorTop, wonderZ]
     yawDegrees: 90
-    faceSources [
-      {
-        face: "glass"
-        filter: linear
-        portal {
-          arrival: "mapped"
-          counterpart: "wonderland-door/glass"
-          destination: "wonderland"
-          travel: "body"
-        }
-        source {
-          $type: "session"
-          destination: "wonderland"
-          fallback: wonderFallback
-          projection: window
-        }
-      }
-    ]
+    wonderFace(counterpart: "wonderland-door/glass")
   }
 
   placement "wonderland-room" {
@@ -156,25 +179,21 @@ placements {
 }
 
 prototypes {
-  // The big door, and the sign over it on the lobby wall naming where it goes.
+  // The big painting, and its plaque on the wall to its right, as the painting wing hangs one.
   prototype "wonderland-door" {
     document {
-      wonderDoor(label: "wonderland-door", size: 1, slots: [wonderGilt, { color: wonderBoard, roughness: 0.6 }, { color: wonderLetters, roughness: 0.6 }])
-      shape Box "sign" {
-        material: 1
-        position [0, 3.95, -0.55]
-        scale [1.1, 0.28, 0.02]
-      }
+      wonderPainting(label: "wonderland-door", size: 1)
+      wonderPaintBox(label: "plaque", x0: 1.55, x1: 2.55, y0: 1, y1: 1.4, z0: 0, z1: 0.025, slot: wonderPaintBoard)
       textRuns [
-        { text: "WONDERLAND", position [0, 4.02, -0.53], rotation [0, 0, 0, 1], emHeight: 0.16, depth: 0.004, mode: "emboss", material: 2, align: "center" }
-        { text: "step through: you come out a quarter your size", position [0, 3.83, -0.53], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 2, align: "center", maxWidth: 2 }
+        { text: "WONDERLAND", position [2.05, 1.31, 0.025], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: wonderPaintInk, align: "center", maxWidth: 0.94 }
+        { text: "Step in and you step out of the mouse hole next door, a quarter your size. Back through it, you are big again.", position [2.05, 1.22, 0.025], rotation [0, 0, 0, 1], emHeight: 0.028, depth: 0.003, mode: "emboss", material: wonderPaintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
       ]
     }
   }
 
   prototype "wonderland-mouse-hole" {
     document {
-      wonderDoor(label: "wonderland-mouse-hole", size: smallDoor, slots: [wonderGilt])
+      wonderPainting(label: "wonderland-mouse-hole", size: smallDoor)
     }
   }
 
