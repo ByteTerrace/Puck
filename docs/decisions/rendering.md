@@ -76,6 +76,23 @@ distance at which the switch is barely perceptible (the owner's ruling). The
 switch distance is derived from the change's size on screen at the view's
 resolution, not fixed in metres.
 
+Work that changes every frame updates less often where it is far or small on
+screen (the owner's request), by the same rule: a reduced rate is a visible
+trade-off, so each switches only where a held update jumps by at most two
+pixels on screen for the speed it is sized for (`SdfUpdateRateTiers`). A body's
+pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz at or
+below 15, its root followed every frame; a nested portal or session view
+renders at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60;
+a screen's source uploads at 30 Hz once shown at or below its own height and
+15 Hz at or below half of it; the far shadow cascade refreshes at 30 Hz, its
+fit held between refreshes so a static shadow stays exact. Rates are absolute,
+so a display at or below 30 Hz holds nothing at the 30 Hz tier. Everything is
+presentation: the simulation ticks every body and every machine runs at its own
+rate, so game timing, audio and replay hashes do not move. The levers extend
+the per-pass cadence and the render graph's refresh, never a second scheduler,
+and `world.rates` switches each for comparison. Measured on the debug world
+([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable

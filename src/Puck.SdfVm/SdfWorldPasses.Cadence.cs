@@ -13,7 +13,13 @@ public sealed partial class SdfWorldPasses {
         var tables = view.Residency.Submit(context: in context);
         var frame = view.Residency.Frame!;
 
-        if (tables.ForcesPass(frame: frame, part: part) || entry.Picker.Pending || (entry.Convergence is { IsActive: true })) { return null; }
+        // A held far cascade stands whatever forces the frame's other passes (SdfWorldPasses.Rates).
+        if ((part == SdfWorldPackage.Parts.ShadowFar) && HoldsFar(frame: frame, instance: instance, view: view.View)) {
+            return FarSignatureOf(entry: entry, signature: null);
+        }
+        if (tables.ForcesPass(frame: frame, part: part) || entry.Picker.Pending || (entry.Convergence is { IsActive: true })) {
+            return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
+        }
         UpdateSurfaceInputs(entry: entry, tables: tables, view: view);
         if (entry.CadenceFrame != m_frame) {
             entry.CadenceFrame = m_frame;
@@ -28,7 +34,7 @@ public sealed partial class SdfWorldPasses {
         hash.Add(value: tables.PassSignature(frame: frame, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1)), part: part));
         hash.Add(value: entry.Bindings);
         hash.Add(value: entry.SampleRevision);
-        return hash.Value;
+        return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: hash.Value) : hash.Value);
     }
 
     private static void UpdateSurfaceInputs(Entry entry, SdfWorldView view, SdfWorldTables tables) {

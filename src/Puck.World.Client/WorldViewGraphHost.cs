@@ -620,7 +620,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
     /// <param name="sharpens">Whether a temporally resolved view sharpens at its rect's own extent.</param>
-    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false) {
+    /// <param name="displayHertz">The display's presented frames a second, or zero when unknown, which the
+    /// <c>world.rates</c> levers count a rated footprint's refresh in.</param>
+    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false, int displayHertz = 0) {
+        m_displayHertz = displayHertz;
         Reconcile(
             sharpens: sharpens,
             tonemap: tonemap,
@@ -1533,6 +1536,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // the render graph's one footprint rule (RenderGraphExtent.Quantize), so a window renders at the extent it is seen
     // at and reallocates only when its need leaves the held step's shrink band.
     private void ResetFootprints() {
+        MeasureDisplayShares();
         m_footprints.Clear();
 
         if (m_synthesized is { } synthesized) {
@@ -1541,8 +1545,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         foreach (var footprint in m_screenFootprints) {
             if (!m_portals.Contains(item: footprint.Producer)) {
-                m_footprints.Add(item: footprint);
-
+                m_footprints.Add(item: (footprint with { Refresh = ScreenRefresh(footprint: in footprint) }));
                 continue;
             }
 
@@ -1565,6 +1568,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     m_portalExtents[footprint.Producer] = held;
                     m_footprints.Add(item: (footprint with {
                         Height = held.Height,
+                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height),
                         Width = held.Width,
                     }));
 
@@ -1583,6 +1587,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     break;
             }
         }
+
+        RateEnvironmentReads();
     }
     // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with, and how much
     // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or

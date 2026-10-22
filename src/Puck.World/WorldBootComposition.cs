@@ -105,6 +105,8 @@ public static class WorldBootComposition {
         }
 
         host.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
+        // The world.rates levers rate the nested views and screens the host's footprints demand.
+        host.RenderSettings = sp.GetService<WorldRenderSettings>();
         return host;
     }
     // Both GPU shapes inspect their actual composed view through one cursor feed and picker. Offscreen has no
@@ -355,6 +357,8 @@ public static class WorldBootComposition {
         // The live render settings boot from the definition's render-lever defaults (then the console verbs move
         // them live).
         services.AddSingleton(implementationFactory: static sp => ReadRenderQuality(definition: sp.GetRequiredService<WorldDefinition>()));
+        // What the world.rates levers held: the bodies, views, screens and far cascades that updated less often.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderSettings>().RateCounts);
 
         // The live-content platform seams the screen binder pulls CPU pixels through: the webcam (Media Foundation
         // on Windows, the CPU tier) and compositor-owned desktop-window capture. Registered here (not presentation)

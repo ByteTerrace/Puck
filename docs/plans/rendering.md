@@ -7378,6 +7378,74 @@ occlusion, indirect and temporal off, which keep its open device loss away)
 draws the lobby through the counted indirect draw within one code of
 `frustum`.
 
+**P20-3, landed: update what is far or small on screen less often.** Work that
+changes every frame updates at 30 or 15 Hz where it is far or small on screen
+(the owner's request), presentation only, each lever switching only where a
+held update jumps by at most two pixels on screen for the speed it is sized for
+(`SdfUpdateRateTiers`; [decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+`world.rates [status|on|off|<lever> on|off]` switches each lever
+(`SdfUpdateRates`) and `world.counters sdf.rates` counts what each held.
+
+- *The far cascade* stands between 30 Hz refreshes: a view holds the cascade's
+  depth and fit (`SdfWorldPasses.Rates`), every pass reads the depth through
+  the camera it was drawn from, and the `shadow-far` pass's signature is the
+  one its refresh recorded, so the per-pass cadence stands it whatever forces
+  the frame's other passes. A static caster's shadow is exact on a held frame;
+  a dynamic caster beyond the near cascade lags by under one far texel at
+  walking speed. A light turn, a texel or extent change, a cut, a camera turn
+  past half a degree or a move past half a metre, or a converging capture
+  refreshes at once.
+- *Nested portal and session views* render at 30 Hz at or below 120 display
+  pixels high and 15 Hz at or below 60: each footprint carries a refresh
+  (`RenderGraphFootprint.Refresh`), which the scheduler honours as it does a
+  root's, the most frequent demand winning, from the glass's coverage of its
+  consumer times the consumer's share of the display
+  (`WorldViewGraphHost.Rates`). Resolution already follows coverage, one texel
+  for each pixel the glass covers, so no lower resolution is taken.
+- *Screens' source uploads* run at 30 Hz once a screen stands at or below its
+  image's height on the display and 15 Hz at or below half of it, through the
+  same footprint refresh; a session showing the source bounds it by its own
+  image, and the sky environment's reads of the screens take their views'
+  refresh. The machine behind the screen runs at its own rate. The desktop pane
+  is the viewer's direct view and is not rated.
+- *Bodies* evaluate their pose (drivers, effectors, part followers) at 30 Hz at
+  or below 30 pixels per metre and 15 Hz at or below 15 in every view that may
+  see them, unseen counting as none; the root follows the body every frame and
+  the other slots ride it rigidly between packs, and the next full pack
+  advances by every second the holds carried past (`WorldStampPool.Rates`).
+  The skinned vertices ride those slots in the mesh pass's vertex stage, so the
+  pose evaluation is the work a held body saves; there is no skinning dispatch.
+
+Measured on the debug world, Direct3D 12 Release, RTX 4070 over Remote Desktop,
+whose display presents at 32 Hz: at 32 Hz the 30 Hz tiers hold nothing, as
+they should, so the levers' counts below were read with the display counted at
+60 Hz (a measurement build, not landed), `world.cadence off`, P20's camera
+lines and the places' chase cameras, each window 64 presented frames with the
+levers off against on. Per-frame triangles are a rendered frame's
+`gpu.vertices` over three; renders and uploads are node submissions.
+
+| View | Far cascade a rendered frame | Far cascade renders, off → on | Nested view renders, off → on | Screen uploads, off → on |
+|---|---:|---:|---|---|
+| Lobby | 34.3 M | 64 → 32 | four sessions 64 → 16, one → 32; garden and night windows 64 → 16 | three machines 48 of 52 → 16 of 64 |
+| Level 1 aisle | 27.0 M | 64 → 32 | seven sessions 64 → 16 or 32 | — |
+| Outdoors, facing the hall | 41.6 M | 64 → 32 | eleven sessions 64 → 16, one → 32; both windows → 16 | three machines 60 → 32, 16, 16 |
+| Painting wing (chase) | 11.6 M | 42 → 21 | none in view | — |
+| Wonderland room (chase) | 35.9 M | 63 → 31 | the wonderland painting 63 → 62 (large on screen) | — |
+| Devices (chase) | 38.3 M | 63 → 32 | — | three machines 60 → 16, 16, 32 |
+| The Moth 59 m from the camera | 41.7 M | 64 → 32 | eleven sessions 64 → 16 | — |
+
+So the far cascade's triangles a frame halve at 60 Hz (13 to 21 M fewer in the
+lobby, the aisle and outside), and quarter at 120 Hz. Bodies, read in
+interleaved windows of 34 frames with the Moth walking 59 m from the camera,
+evaluate 9.1 poses a frame with the lever off and 4.4 and 3.6 with it on. A
+still lobby's presented bursts with the levers on and off show the same
+per-frame changes, and frames of the same jitter phase differ by one code in
+about 600 pixels; a chase-camera walk's burst changes 30 to 33% of the pixels
+every frame with no alternating pattern; the Moth walking 59 m away changes
+200 to 390 pixels around her every frame, her root never holding still; and
+settled captures of the hall with the levers on and off differ only along
+geometry edges, the temporal jitter's, not at any window or screen.
+
 **Design for what follows.** Presentation only: nothing here reaches
 simulation state, and a world that declares nothing keeps P20-1's cull.
 
@@ -7396,7 +7464,11 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    with no change to the image. The near cascade follows the camera more often
    and gains less. A receiver-side test (a caster stacked under the roof cannot
    shadow what the roof already shadows) is the occlusion pass above run from
-   the light.
+   the light. P20-3's 30 Hz refresh already halves the far cascade at 60 Hz;
+   the cache gains beyond it only while the fit holds still, and the fit snaps
+   to the far cascade's texels (12 cm at the `high` tier), so a walking camera
+   moves it every frame or two: the cache pays only with a coarser snap and a
+   sphere grown by it, a resolution trade that is a look decision.
 3. **Levels of detail from the bake.** A second contour of each static group at
    a coarser spacing, chosen per draw by its projected size, and planar-face
    merging of the contour (a wall's coplanar quads into the polygon they tile)
@@ -7443,7 +7515,12 @@ kernel's dispatches (its two phases, the pyramid's levels, about eleven at
 1280×900, and the test) and its two render passes, so its time is read whole
 against `frustum`'s; the lobby, the aisle and the view of the hall are where it
 should pay, and the spawn and the look out the entrance, which hide nothing,
-show its fixed cost.
+show its fixed cost. For P20-3, on a display presenting at 60 Hz or more: each
+view of P20-3's table with `world.rates on` against `off`, the `shadow-far`
+pass's time averaged over 64 frames (it stands on held frames), the nested
+views' and machine sources' nodes, and the frame's produce phase in
+`host.frames`; and the frame-thread cost of a pose evaluation the bodies lever
+saves, against the rigid carry it does instead.
 
 ## Sequencing
 

@@ -288,6 +288,7 @@ the verdict alone.
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
+world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at 30 or 15 Hz
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.budget           # program words, instances, scopes, segments
 ```

@@ -60,6 +60,8 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private WorldViewDefaults m_document = Views;
     private long m_frame;
     private RenderGraphHistory? m_history;
+    // The display rate each frame begins at, which the world.rates levers count a footprint's refresh in.
+    private int m_displayHertz;
 
     public WorldViewPaneMappingLawTests() {
         m_host = new WorldViewGraphHost(
@@ -102,6 +104,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     // The host's half of a frame, as the presenter's PrepareGraph drives it: begin, place, publish.
     private void Prepare(NormalizedRect? pane) {
         m_host.BeginFrame(
+            displayHertz: m_displayHertz,
             tonemap: m_tonemap,
             views: m_document
         );
