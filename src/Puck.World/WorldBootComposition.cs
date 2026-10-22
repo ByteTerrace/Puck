@@ -723,11 +723,15 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldScheduleRunner>());
         services.AddSingleton<ICommandModule, WorldScheduleCommandModule>();
         // Console lines pinned to exact boot ticks (world.at), published at the same call site as the schedule rows.
-        services.AddSingleton(implementationFactory: static sp => new WorldTickScript(
-            registry: sp.GetRequiredService<Func<CommandRegistry>>(),
-            server: sp.GetRequiredService<WorldServer>(),
-            source: () => sp.GetRequiredService<TextCommandSource>()
-        ));
+        services.AddSingleton(implementationFactory: static sp => {
+            var server = sp.GetRequiredService<WorldServer>();
+
+            return new WorldTickScript(
+                completedTick: () => ((server.NextInputTick > 0UL) ? (server.NextInputTick - 1UL) : 0UL),
+                registry: sp.GetRequiredService<Func<CommandRegistry>>(),
+                source: () => sp.GetRequiredService<TextCommandSource>()
+            );
+        });
         services.AddSingleton<ICommandModule, WorldTickScriptCommandModule>();
         services.AddSingleton(implementationFactory: static sp => {
             var source = sp.GetRequiredService<WorldDefinitionSource>();

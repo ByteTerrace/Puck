@@ -948,7 +948,9 @@ Facts a script needs:
   ([`Puck.Mcp`](../Puck.Mcp/README.md#tools-and-results)).
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
-  after a `world.wait` that releases at tick R runs before tick R+1. The
+  after a `world.wait` that releases at tick R runs before tick R+1;
+  `world.wait until <tick>` releases at an absolute tick, and `world.at <tick>
+  <line>` pins a line to one whatever ingress armed it. The
   [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
   owns this contract. End a script with `quit` to stop the World when the script
   ends; `--exit-after-seconds` stops it after a wall-clock time instead.
@@ -2608,6 +2610,25 @@ luma that changed from the frame before, over the region or the whole frame.
 The host's clock runs on during it; `world.wait captures <seconds>` fences it.
 The MCP form is `puck_capture_frame` with `mode: "presented"`
 ([Puck.Mcp](../Puck.Mcp/README.md#tools-and-results)).
+
+A settled still is exact to its tick. It records the tick it is held at and that
+tick's state hashes, and once it lands stderr carries `[still] <path> tick=<T>
+hash=<capture hash, as world.state.hash reads it> pose=<pose hash> shown=<tick
+the frame shows>` (`WorldCaptureScheduler.Stamp`); the operator attachment's
+answer carries the same stamp. `world.screenshot <path.png> slots` also cuts
+the frame at each slot of the active layout and writes `<stem>-<camera>.png`
+per slot (`WorldSlotStills`), so a four-camera layout (`view.override layout
+motion`) gives four stills of one tick. To land stills and inputs on chosen
+ticks, pin console lines to boot ticks with `world.at`
+(`WorldTickScript`): `world.at <tick>|+<n> <line>`, or a whole script in one line,
+`world.at {"start": "+30", "steps": [{"at": 0, "run": "body.pose 0 0 0 0 0 0"},
+{"at": 45, "run": "world.screenshot <path.png> slots"}]}`. Each line runs in the
+drain right after its tick completes, whatever ingress armed it, so a script
+armed over MCP lands on the same ticks as one piped on stdin. `world.wait until
+<tick>` holds a session until an absolute tick has completed, and `world.at`
+alone reads back what ran. The procedure and its measured repeatability are in
+the `puck-world` skill's
+[captures reference](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture).
 
 `world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
 the gallery and anything else a document names by a token; `near` names the

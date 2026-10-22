@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -22,7 +21,10 @@ namespace Puck.World;
 /// tick past the line's tick until a frame of that tick serves it.</para>
 /// <para>Every member runs on the host pump.</para>
 /// </remarks>
-internal sealed class WorldTickScript(WorldServer server, Func<TextCommandSource> source, Func<CommandRegistry> registry) {
+/// <param name="completedTick">Reads the boot world's last completed tick.</param>
+/// <param name="source">Resolves the console text source the lines' session drains through.</param>
+/// <param name="registry">Resolves the command registry the lines are submitted to.</param>
+public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandSource> source, Func<CommandRegistry> registry) {
     private sealed class Line(ulong tick, string text) {
         public string Answer = string.Empty;
         public string Outcome = Pending;
@@ -48,7 +50,7 @@ internal sealed class WorldTickScript(WorldServer server, Func<TextCommandSource
     private TextCommandSession? m_session;
 
     /// <summary>Gets the boot world's last completed tick, the coordinate every armed line is pinned to.</summary>
-    public ulong CompletedTick => ((server.NextInputTick > 0UL) ? (server.NextInputTick - 1UL) : 0UL);
+    public ulong CompletedTick => completedTick();
     /// <summary>Gets the number of lines armed and not yet run.</summary>
     public int PendingCount => m_pendingCount;
 

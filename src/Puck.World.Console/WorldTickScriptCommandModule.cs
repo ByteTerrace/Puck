@@ -8,7 +8,8 @@ namespace Puck.World;
 /// The console surface of <see cref="WorldTickScript"/>: <c>world.at</c>, which pins console lines to exact ticks of
 /// the boot world, one at a time or as a whole script in one line, and reads back what is armed and what ran.
 /// </summary>
-internal sealed class WorldTickScriptCommandModule(WorldTickScript script) : ICommandModule {
+/// <param name="script">The pinned lines this verb arms and reads back.</param>
+public sealed class WorldTickScriptCommandModule(WorldTickScript script) : ICommandModule {
     private const string Usage = "world.at <tick>|+<ticks> <console line>, world.at {\"start\": <tick>|\"+<ticks>\", \"steps\": [{\"at\": <offset>, \"run\": \"<console line>\"}, …]}, world.at clear, or world.at";
 
     // A tick token: an absolute tick, or +N ticks after the completed tick.
@@ -65,6 +66,7 @@ internal sealed class WorldTickScriptCommandModule(WorldTickScript script) : ICo
                 if (
                     (step.ValueKind != JsonValueKind.Object) ||
                     !step.TryGetProperty(propertyName: "at", value: out var at) ||
+                    (at.ValueKind != JsonValueKind.Number) ||
                     !at.TryGetUInt64(value: out var offset) ||
                     !step.TryGetProperty(propertyName: "run", value: out var run) ||
                     (run.ValueKind != JsonValueKind.String) ||

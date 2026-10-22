@@ -9,14 +9,14 @@ namespace Puck.World;
 /// in fractions of it with the origin top-left, and the name its file carries.</summary>
 /// <param name="Name">The file-safe name: the slot's camera, its <c>views.graphs</c> instance, or <c>seat&lt;n&gt;</c>.</param>
 /// <param name="Region">The slot's region of the composed frame.</param>
-internal sealed record WorldSlotStill(string Name, NormalizedRect Region);
+public sealed record WorldSlotStill(string Name, NormalizedRect Region);
 
 /// <summary>
 /// Writes each viewport of a multi-slot layout as its own PNG beside a settled capture (<c>world.screenshot &lt;path.png&gt;
 /// slots</c>): the composed frame cut at each slot's region, named <c>&lt;stem&gt;-&lt;camera&gt;.png</c>. The cut is of the
 /// frame the capture served, so every slot shows the same tick the capture's <c>[still]</c> line names.
 /// </summary>
-internal static class WorldSlotStills {
+public static class WorldSlotStills {
     /// <summary>Returns the stills the active layout's slots give, named by what each slot shows; a name two slots share
     /// is numbered by slot.</summary>
     /// <param name="slots">The composer's current slots.</param>

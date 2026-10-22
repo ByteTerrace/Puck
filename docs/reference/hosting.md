@@ -724,7 +724,14 @@ The margin cannot cover a pump stalled for longer than it, such as a frame that
 takes seconds; that call still ends at its deadline with an unknown outcome.
 
 Captures arm through `TextCommandSession.InvokeAsync`, then await the exact
-`FrameCaptureRequest.Completion` off the pump. Cancellation after arming leaves
+`FrameCaptureRequest.Completion` off the pump. A settled capture whose
+`ControlCapture.Tick` is set first queues `world.wait until <tick>` in the
+session, so the capture behind it arms in the drain right after that tick
+completes; a refused wait, or a tick already passed (the arming host's
+`FrameCaptureRequest.StateTick` differs), fails the capture rather than
+answering with another tick. The answer reports the host's
+`FrameCaptureRequest.StateStamp`, the tick and state hashes the still is held
+at. Cancellation after arming leaves
 the capture alive, with a cleanup continuation owning its unique, user-only temporary directory
 until completion. Successful reads and failed captures also clean that path.
 A process crash can leave a temporary artifact; crash recovery is not promised.
