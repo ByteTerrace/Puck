@@ -15,9 +15,10 @@ leads. Each canvas ripples like an event horizon (see
 
 The wing is x 51 to 69.7, z 12.3 to 39.7. A partition wall at x = 51 shuts it
 off from the exhibit rows, with a doorway at z 24 to 28 under a "PAINTING WING"
-board, and a lining over the south, north and east walls hides their windows. A
-point light (`hall-wing`) lights the room and each canvas, which shows a live
-view, lights it further. Each painting has a plaque; the floor painting's lies on
+board, and a lining over the south, north and east walls hides their windows.
+Level 0's downlights light the room and a track of wall washes (`hall-wash-*`,
+hall.puck) lights each wall painting, all on the lobby's switch; each canvas,
+which shows a live view, lights it further. Each painting has a plaque; the floor painting's lies on
 the floor before it, and a rail rings the hole in level 1's floor over the
 ceiling painting (below).
 

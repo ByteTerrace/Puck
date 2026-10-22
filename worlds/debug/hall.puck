@@ -162,8 +162,17 @@ let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, 
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
-// ceiling, each a warm-white spot casting down in a 50-degree cone.
-let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(((k == 3) ? [15, 37] : hallLightAisles[k]), [], (aisle, z) => concat(aisle, map([27, 39, 51, 63], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
+// ceiling, each a warm-white spot casting down in a 50-degree cone. Level 0's columns step round the painting wing's
+// partition at x 51 (paintings.puck), which would swallow a fixture on it, and add one over the wing's west half.
+let hallDownlightColumns = [[27, 39, 49, 56, 63], [27, 39, 51, 63], [27, 39, 51, 63], [27, 39, 51, 63]]
+let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(((k == 3) ? [15, 37] : hallLightAisles[k]), [], (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
+// The painting wing's washes (paintings.puck): a track under level 0's ceiling, 1.2 m off each wall a painting hangs
+// on, each a warm spot aimed down the wall at a canvas's height, so the canvases and the wall about them carry a
+// gallery's light (some 300 lux at a canvas) rather than the downlights' spill alone.
+let wingWashes = concat(
+  map([54, 57, 60, 64, 67], x => { x: x, z: 38.2, aim [0, -2.65, 1.2] }),
+  [{ x: 52.5, z: 34.5, aim [-1.2, -2.65, 0] }, { x: 68.2, z: 34.5, aim [1.2, -2.65, 0] }]
+)
 
 // The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
 // stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
@@ -554,7 +563,9 @@ placements {
 
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
-// car's body under its ceiling, a wash over the painting wing and Wonderland's lamp next door. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
+// car's body under its ceiling, a track of washes over the painting wing's canvases and Wonderland's lamp next door. A
+// fixture's power reads its level's `hallLamps` cell, so it follows that level's switch; the wing's washes read level
+// 0's.
 // A point or spot light reaches only as far as its light still shows at the darkest exposure the world takes, and each
 // view shades only the fixtures that reach what it sees. A fixture that stands still is traced into the irradiance
 // volume, which bounces its light and occludes it where the probes about a surface cannot see it; the lift car's lamp
@@ -567,11 +578,11 @@ render {
         directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
         point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], temperature: 3500K, power: 400lm)
-        point(name: "hall-wing", position: [60.4, 3.4, 26], color: "#FFE9CC", power: 2000lm)
         // Wonderland's one lamp (wonderland.puck), dim enough that its device screens glow under the roof.
         point(name: "wonderland-lamp", position: [5.2, 4.3, 29], temperature: 2700K, power: 300lm)
       ],
-      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}"))
+      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}")),
+      map(range(0, length(wingWashes)), i => spot(name: $"hall-wash-{i}", position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z], direction: wingWashes[i].aim, angle: 35deg, innerAngle: 20deg, temperature: 3000K, power: "state.hallLamps.level0"))
     )
   }
 }
