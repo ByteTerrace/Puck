@@ -998,6 +998,7 @@ public static class WorldBootComposition {
         // Read by either backend's registration when it creates the device; a headless boot creates none.
         services.AddSingleton(implementationInstance: new GpuDeviceOptions {
             NameObjects = ((inputs.Validation != GpuValidation.Off) || (inputs.CaptureTool is not null)),
+            Software = inputs.Software,
             Validation = inputs.Validation,
         });
         // The operator's gpu.capture, over the capture tool the boot loaded, if any; a GPU host drives it every frame.

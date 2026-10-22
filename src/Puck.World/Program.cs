@@ -95,6 +95,11 @@ var debugLayersOption = new Option<GpuValidation>(name: "--debug-layers") {
     DefaultValueFactory = static _ => GpuValidation.Off,
     Description = "Create the GPU device with its backend's validation. A bare flag (or 'basic') is the API layer: [vulkan-debug] lines with synchronization validation on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. 'full' adds GPU-based validation with state tracking and synchronized queue validation on Direct3D 12, GPU-assisted validation and best-practices checks (NVIDIA's included) on Vulkan, and makes pipeline creation and every frame much slower. Every level names the device's objects. On some Direct3D 12 configurations the layer makes device creation fail.",
 };
+// A device choice, never world-authored: WARP runs the Direct3D 12 host on the CPU, so a machine with no usable GPU
+// (a CI agent baking the mesh store) or one whose GPU another job holds boots the same frames, slowly.
+var softwareGpuOption = new Option<bool>(name: "--software-gpu") {
+    Description = "Create the Direct3D 12 device on WARP, the software rasterizer, instead of a hardware adapter. Needs --backend directx.",
+};
 // A developer diagnostic, never world-authored: a capture tool hooks the graphics API from inside the process, so it
 // loads before anything can create a device, and gpu.capture then captures the frames the operator asks for.
 var captureToolOption = new Option<string?>(name: "--capture-tool") {
@@ -161,6 +166,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     captureDirOption,
     captureToolOption,
     debugLayersOption,
+    softwareGpuOption,
     scheduleDirOption,
     unpacedOption,
     exitAfterSecondsOption,
@@ -236,6 +242,11 @@ if (parseResult.GetValue(option: backendOption) is { } backendName) {
 
         return 1;
     }
+}
+if (parseResult.GetValue(option: softwareGpuOption) && (backendOverride != WorldBackendPreference.DirectX)) {
+    Console.Error.WriteLine(value: "--software-gpu creates a WARP device, which only the Direct3D 12 host has; pass --backend directx with it.");
+
+    return 1;
 }
 PresentMode? presentModeOverride = null;
 if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
@@ -484,6 +495,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     Validation = ((parseResult.GetResult(option: debugLayersOption) is { Implicit: false, Tokens.Count: 0 })
         ? GpuValidation.Basic
         : parseResult.GetValue(option: debugLayersOption)),
+    Software = parseResult.GetValue(option: softwareGpuOption),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
     ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),

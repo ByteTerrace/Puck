@@ -45,29 +45,4 @@
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
     </ItemGroup>
 
-    <!--
-        The sources whose code decides a baked mesh's bytes on the CPU: the bake's lattices, its sample decoding and
-        meshing, the geometry it is keyed by, the frame block rows and point table the bake kernel reads, and the store's
-        own format. Their content hash is the assembly's PuckMeshBakeSources metadata, which SdfMeshStore.CodeIdentity
-        keys every stored mesh by, beside Puck.SignedDistance's build (the lattice and the contouring) and the bake
-        kernels' bytecode, so an edit to the rest of the renderer keeps the stored meshes and an edit here bakes afresh.
-        A file the bake comes to read belongs in this list.
-    -->
-    <ItemGroup>
-        <PuckMeshBakeSource Include="SdfFrameBlock.Mesh.cs;SdfMesh.cs;SdfMeshBakeGroup.cs;SdfMeshGeometry.cs;SdfMeshLibrary.cs;SdfMeshMaterialCut.cs;SdfMeshPathBake.cs;SdfMeshStore.cs;SdfWorldTables.MeshBakePoints.cs;../Puck.Shaders.Model/Graph/SdfWorldPackage.Mesh.cs" />
-    </ItemGroup>
-    <Target Name="PuckMeshBakeSourcesHash" BeforeTargets="GetAssemblyAttributes">
-        <GetFileHash Files="@(PuckMeshBakeSource)" Algorithm="SHA256">
-            <Output TaskParameter="Items" ItemName="_PuckMeshBakeSourceHashed" />
-        </GetFileHash>
-        <Hash ItemsToHash="@(_PuckMeshBakeSourceHashed->'%(FileHash)')">
-            <Output TaskParameter="HashResult" PropertyName="_PuckMeshBakeSourcesHash" />
-        </Hash>
-        <ItemGroup>
-            <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
-                <_Parameter1>PuckMeshBakeSources</_Parameter1>
-                <_Parameter2>$(_PuckMeshBakeSourcesHash)</_Parameter2>
-            </AssemblyAttribute>
-        </ItemGroup>
-    </Target>
 </Project>

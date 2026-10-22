@@ -232,7 +232,11 @@ API layer (on Vulkan with synchronization validation), which `puck canary
 (Direct3D 12 GPU-based validation, Vulkan GPU-assisted validation and best
 practices), at the cost of minutes of pipeline instrumentation and much slower
 frames ([Direct3D 12](../../docs/rendering/directx.md#validation),
-[Vulkan](../../docs/rendering/vulkan.md#validation)). `--capture-tool pix|renderdoc`
+[Vulkan](../../docs/rendering/vulkan.md#validation)). `--software-gpu` (with
+`--backend directx`) creates the Direct3D 12 device on WARP, the software
+rasterizer, so a machine whose GPU another job holds, or one with none, boots the
+same frames on the CPU, slowly; its bake keys meshes by the same identity as a
+hardware bake. `--capture-tool pix|renderdoc`
 loads a GPU capture tool into the process before the device exists (PIX for
 Direct3D 12 only, RenderDoc for either backend) and names the device's objects,
 so `gpu.capture` can capture chosen frames

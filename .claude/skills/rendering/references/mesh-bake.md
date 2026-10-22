@@ -280,11 +280,36 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   `ResponsePaletteLawTests`), and a creation with nothing to draw emits no
   instance, so a response swaps one row's materials alone.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
-  device cache), keyed by geometry and the bake's identity: the bake kernels'
-  bytecode, `Puck.SignedDistance`'s build, and the hash of the
-  `PuckMeshBakeSource` files listed in `Puck.SdfVm.csproj`
-  (`SdfMeshStore.CodeIdentity`). A new `Puck.SdfVm` file the bake's CPU code
-  reads joins that list, or an edit to it reads stale meshes. A boot that bakes
+  device cache), keyed by geometry and the bake's identity
+  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
+  and the code the bake runs (`SdfMeshBakeClosure`). The code part is read from
+  the build's assemblies: from the bake's roots (`SdfMeshPathBake`, the group,
+  geometry, mesh and material-cut types, `SdfFrameBlock.WriteMeshBake`, the
+  point table and program upload, the store's entry format) it follows every
+  call, delegate, override of a type the bake constructs and implementation of
+  an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
+  references, and hashes each method's IL with its tokens written as the
+  members they name, its locals, exception regions and loaded field data, and
+  each named type's layout. It stops at `SdfMeshLibrary` and `SdfMeshStore`,
+  which hold meshes, and at the runtime. So an edit to `Puck.Maths` code the
+  contour calls re-bakes, while an edit to the rest of the renderer, a new
+  public member of a referenced assembly, a comment or another checkout path
+  keeps every entry, and worktrees of one bake share one set. Code the bake
+  reaches only through reflection or a runtime callback on a type it does not
+  construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.
+- **A miss names its cause.** Each identity's parts and code members are
+  recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
+  and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity
+  … unchanged: geometry new to the store, or evicted from it (N entries, B of C
+  bytes)`, or `identity … new since <earlier>: the code, K members (Puck.Maths
+  1: Puck.Maths.VectorFunctions.IsFinite) changed`. `puck mesh identity --build <dir>
+  --against <dir>` prints the same comparison for two builds with no boot, and
+  its value is the key a cache of the store is saved under.
+- **The store holds several worlds' sets.** The debug world's meshes fill
+  about 1.26 GB in 1,153 entries under one identity and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes`
+  (8 GiB, about six sets) least recently used out, shared by every World and worktree on
+  the machine. Under a cap smaller than one set, each boot evicts the
+  groups it baked first and re-bakes them on the next. A boot that bakes
   nothing shows `done … loaded=N` with `dispatches=0`.
 
 ## Shadows and indirect light

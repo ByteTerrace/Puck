@@ -1094,11 +1094,15 @@ arrives from another world (a body crossing between the debug world and the
 garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
-`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to a gibibyte by
-the caches' one retention, `CacheRetention`), keyed by the group's geometry and
-the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s build
-and the hash of the bake's own sources in `Puck.SdfVm` (their list is
-`PuckMeshBakeSource` in its project). A program's group the store holds loads
+`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to
+8 GiB, about six of the debug world's sets, by the caches' one retention, `CacheRetention`), keyed by the group's
+geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'
+bytecode and the code the bake runs, the IL of every method its own code reaches
+across the `Puck` assemblies with the layouts of the types they name
+(`SdfMeshBakeClosure`), so an edit outside what the bake runs, or a build in
+another checkout, keeps every entry. A start that bakes groups logs why in one
+line (`[sdf.mesh-bake] miss … identity … unchanged` or `… new since …: … changed`,
+naming the kernel or the code members that differ). A program's group the store holds loads
 from disk on the thread pool instead of baking, so an unchanged world reboots
 without baking and a changed creation bakes only its own groups; an entry that
 fails its checksum, names another key or is no mesh is refused by name

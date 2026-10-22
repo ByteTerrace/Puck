@@ -230,6 +230,29 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", "not-hex"), text: "mesh scene: --identity takes 32 hex digits"));
         Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "scene", "--world", malformed), text: "failed to load"));
     }
+    // mesh identity prints this build's bake identity with its parts, names nothing changed against itself, says how the
+    // walk reached a member, and refuses a backend it has no kernels for and a directory holding no build.
+    [Fact]
+    public void TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers() {
+        using var directory = new TemporaryDirectory(prefix: "puck-mesh-identity-");
+        var build = AppContext.BaseDirectory;
+        var (printed, report) = Invoke("mesh", "identity", "--build", build, "--against", build, "--members", "--why", "SdfDualContouring.Extract");
+
+        Assert.Equal(expected: 0, actual: printed);
+        Assert.Contains(expectedSubstring: SdfMeshBakeClosure.Of(directory: build).Hash.ToString(format: "x32", provider: null), actualString: report);
+        Assert.Contains(expectedSubstring: "Puck.SignedDistance ", actualString: report);
+        Assert.Contains(expectedSubstring: "the same identity", actualString: report);
+        Assert.Contains(expectedSubstring: "code 0 member(s) differ", actualString: report);
+        Assert.Contains(expectedSubstring: "  why Puck.SignedDistance!Puck.SignedDistance.Baking.SdfDualContouring.Extract", actualString: report);
+        Assert.Contains(expectedSubstring: "    from Puck.SdfVm!", actualString: report);
+
+        var (named, against) = Invoke("mesh", "identity");
+
+        Assert.Equal(expected: (0, false), actual: (named, against.Contains(value: "against", comparisonType: StringComparison.Ordinal)));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "identity", "--backend", "metal"), text: "unknown --backend 'metal'"));
+        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "identity", "--build", directory.RootPath), text: "cannot read the bake identity"));
+        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "identity", "--against", directory.RootPath), text: "cannot read the bake identity"));
+    }
     [Fact]
     public void TheRestScenesSurroundSendsAndAnswersNothing() {
         var inert = new RestScene.Inert();
