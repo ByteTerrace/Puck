@@ -43,6 +43,7 @@ public sealed partial class WorldReplayTape {
         public int DivergedAt { get; set; } = -1;
         public List<ulong> LiveHashes { get; } = [];
         public List<ulong> LiveAuthoritativeHashes { get; } = [];
+        public List<ulong[]> LiveComponentHashes { get; } = [];
         public List<bool> ExpectedMutationOutcomes { get; } = [];
         public Queue<bool> ReplayedMutationOutcomes { get; } = new();
     }
@@ -181,10 +182,15 @@ public sealed partial class WorldReplayTape {
         m_ticks = prefix;
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
+        m_liveComponentHashes.Clear();
         // The child's prefix hashes are what the live session reached while re-driving the parent — identical to
-        // the parent's on a matching drive, and the honest live trace on a diverged one.
+        // the parent's on a matching drive, and the honest live trace on a diverged one. A parent with no
+        // per-component trace leaves the child without one.
         m_liveHashes.AddRange(collection: drive.LiveHashes);
         m_liveAuthoritativeHashes.AddRange(collection: drive.LiveAuthoritativeHashes);
+        if (source.RecordedComponentHashes.Count == source.TickCount) {
+            m_liveComponentHashes.AddRange(collection: drive.LiveComponentHashes);
+        }
         m_forkedFrom = new WorldReplayForkProvenance(
             ParentName: drive.SourceName,
             Tick: drive.Target
@@ -260,8 +266,14 @@ public sealed partial class WorldReplayTape {
             tick: (m_liveServer.NextInputTick - 1UL)
         );
 
+        var liveComponents = WorldStateHashComposition.AuthoritativeComponents(
+            server: m_liveServer,
+            tick: (m_liveServer.NextInputTick - 1UL)
+        );
+
         drive.LiveHashes.Add(item: liveHash);
         drive.LiveAuthoritativeHashes.Add(item: liveAuthoritativeHash);
+        drive.LiveComponentHashes.Add(item: liveComponents);
         drive.Injected = false;
 
         try {
@@ -292,9 +304,13 @@ public sealed partial class WorldReplayTape {
         ) {
             drive.DivergedAt = tick;
             if (m_liveServer.Output.HasNarrationSink) {
+                var components = ((drive.Source.RecordedComponentHashes.Count == drive.Source.TickCount)
+                    ? $"; differing components: {string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: drive.Source.RecordedComponentHashes[tick], right: liveComponents))}"
+                    : string.Empty);
+
                 m_liveServer.Output.Narrate(
                     channel: "replay.drive",
-                    text: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]"
+                    text: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}{components}; the drive continues]"
                 );
             }
         }

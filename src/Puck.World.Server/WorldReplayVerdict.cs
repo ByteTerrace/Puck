@@ -1,3 +1,5 @@
+using Puck.World.Server;
+
 namespace Puck.World;
 
 /// <summary>
@@ -15,7 +17,10 @@ namespace Puck.World;
 /// <param name="Recorded">The LIVE session's tail hash — the state the running world actually reached.</param>
 /// <param name="Replayed">The fresh re-drive's tail hash.</param>
 /// <param name="DivergedAt">The first tick at which the traces differ, or <c>-1</c> when they never do.</param>
-public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulong Replayed, int DivergedAt) {
+/// <param name="DivergentComponents">The authoritative hash components that differ at <paramref name="DivergedAt"/>,
+/// in fold order, when the comparison had both sides' per-component reads for that tick (a <c>replay.stop</c>, whose
+/// live recording kept them); <see langword="null"/> when it did not, as a tape carries no per-component trace.</param>
+public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulong Replayed, int DivergedAt, IReadOnlyList<WorldStateHashComponent>? DivergentComponents = null) {
     /// <summary>Gets whether the traces differ from the very first tick, which indicts the starting state rather than
     /// the simulation's trajectory.</summary>
     public bool DivergedAtStart => (DivergedAt == 0);
@@ -23,7 +28,7 @@ public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulon
     public bool Match => (DivergedAt < 0);
 
     /// <summary>Renders the shared verdict fragment both replay verbs report, naming the divergence tick when there is
-    /// one.</summary>
+    /// one, and the components that differ there when the comparison could read them.</summary>
     /// <returns>The verdict text.</returns>
     public string Describe() {
         if (Match) {
@@ -34,7 +39,10 @@ public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulon
             ? "at tick 0 (the starting state itself differs)"
             : $"first at tick {DivergedAt} of {Ticks} (the starting state matched)"
         );
+        var components = ((DivergentComponents is { Count: > 0 } differing)
+            ? $" | differing components: {string.Join(separator: ", ", values: differing)}"
+            : string.Empty);
 
-        return $"MISMATCH {where} | live tail=0x{Recorded:X16} replayed=0x{Replayed:X16}";
+        return $"MISMATCH {where} | live tail=0x{Recorded:X16} replayed=0x{Replayed:X16}{components}";
     }
 }

@@ -215,7 +215,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.stop",
-            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH at tick 0 = the start the re-drive restored is not where the session stood at the arm; later = trajectory drift) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
+            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH at tick 0 = the start the re-drive restored is not where the session stood at the arm; later = trajectory drift; either names the authoritative hash components that differ at that tick, which only this in-session comparison can read) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

@@ -62,7 +62,10 @@ surface.
   and transaction facts, not taped transfer handshakes. The escrow section also
   carries the crossing sequence, the watermark crossing-log recovery redoes from.
   Rule-latch hashing sorts
-  into reusable scratch; storage layout is not part of the hash. Neighbor decision
+  into reusable scratch and folds a key-bound entry by its key's name
+  (`RuleLatch.AppendStateHash`'s `keyNames`), never its interned ordinal: a
+  restored arena interns the captured key ledger in sorted order, so an ordinal
+  is layout and would make a faithful restore hash differently. Neighbor decision
   grids and diagnostic counters are derived, not persisted. The reconsideration
   count derives bit-reversed neighbor sample phases; the shared spatial sampler
   separates cell and occupant rotation. Checkpoint journals
@@ -496,7 +499,14 @@ recorded world authored), hash.
   and reads MISMATCH at tick 0).
   **Any later tick means the start matched and the trajectory
   drifted — a genuine determinism defect.** `replay.stop` echoes exactly
-  this reading.
+  this reading, and names the authoritative components that differ at the
+  divergent tick (`differing components: RuleLatch`): a recording keeps one
+  per-component read per tick beside its trace
+  (`WorldStateHashComposition.AuthoritativeComponents`, the tape's
+  `RecordedComponentHashes`, 16 digests per tick), the re-drive reads the
+  shadow the same way (`WorldReplayVerdict.DivergentComponents`), and a live
+  drive's divergence line names them too. A history branch's draft tape
+  records none, and a fork of a tape without them continues without them.
 
 ### Sets of tapes and crossings
 

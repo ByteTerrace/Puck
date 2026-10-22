@@ -340,6 +340,13 @@ public sealed partial class WorldReplaySnapshot {
     /// latches, body action state, live fields, and poses. Replay verdicts compare this trace;
     /// <see cref="RecordedHashes"/> remains the population-only diagnostic trace.</summary>
     public required ulong[] RecordedAuthoritativeHashes { get; init; }
+    /// <summary>Gets the live session's per-tick authoritative trace read one component at a time
+    /// (<see cref="WorldStateHashComposition.AuthoritativeComponents"/>): one row per recorded tick, each one digest
+    /// per component of <see cref="WorldStateHashComposition.Authoritative"/> in its order, so a verdict or a live
+    /// drive names the components that differ at the first divergent tick. Empty for a tape that recorded none (a
+    /// history branch's draft, or a fork whose parent recorded none); otherwise exactly <see cref="TickCount"/>
+    /// rows.</summary>
+    public IReadOnlyList<ulong[]> RecordedComponentHashes { get; init; } = [];
     /// <summary>Gets the live session's per-tick population hash trace — one entry per recorded tick, sampled off the live
     /// population after each tick's server step, so the last entry is the state the running world actually reached. A
     /// replay recomputes this diagnostic trace by re-driving the recording through a fresh world

@@ -68,6 +68,7 @@ public sealed partial class WorldReplaySnapshot {
         MountedAddons = MountedAddons,
         PipelineSourceDirectory = PipelineSourceDirectory,
         RecordedAuthoritativeHashes = RecordedAuthoritativeHashes,
+        RecordedComponentHashes = RecordedComponentHashes,
         RecordedHashes = pose,
         Seats = Seats,
         SimulationRate = SimulationRate,

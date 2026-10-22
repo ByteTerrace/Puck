@@ -54,6 +54,10 @@ public sealed partial class WorldReplayTape {
             MountedAddons = [.. m_mountedAddons],
             PipelineSourceDirectory = m_pipelineSourceDirectory,
             RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
+            // A fork whose parent recorded no per-component trace continues without one.
+            RecordedComponentHashes = ((m_liveComponentHashes.Count == m_ticks.Count)
+                ? [.. m_liveComponentHashes]
+                : []),
             RecordedHashes = [.. m_liveHashes],
             Seats = [.. m_seats],
             SimulationRate = m_recordRateHz,
