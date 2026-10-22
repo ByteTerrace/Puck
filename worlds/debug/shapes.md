@@ -59,7 +59,7 @@ west of it.
 Lighting is in real units: the sun gives 100,000 lux, an emissive strip
 (2,500 nits) runs along the ceiling over each viewing aisle and two over each
 landing (`hallStrips`, part of the slab or roof above them), a 1,500-lumen
-warm downlight hangs every 12 m along each strip (`hallDownlights`), an
+neutral downlight hangs every 12 m along each strip (`hallDownlights`), an
 800-lumen pendant lights the stairwell and a 400-lumen lamp the lift car (it
 rides the car's body). The camera's exposure adapts to what each view sees
 (`render.exposure` in the Moth basis), so a dim room and the sunlit lawn both
