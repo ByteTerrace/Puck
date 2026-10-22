@@ -391,7 +391,13 @@ arrival loads its carried registers into the lane through
 envelope — a range clamps to its nearest admitted value, a closed set has none
 to clamp to and settles the register to its authored initial, narrated by name
 on `body.arrival`. A register the arrival does not name keeps what this
-authority's own birth put there. `BodyActionStateLaneLawTests` pins all of it.
+authority's own birth put there. A world rule writes a `state.body` Counter
+with `setBodyState` (`WorldBodyStateEffect`, `WorldRuleHost.FireBodyState`),
+settled through the body's envelope like a kit action's write and rewound with
+the firing's journal scope. A kit recompile (`WorldBody.RecompileKit`) leaves
+the lanes alone and keeps the read-back of every slot declared again under the
+same name, kind and lifetime. `BodyActionStateLaneLawTests` pins the lanes and
+`RowSelectorLawTests` the rule write, the recompile and the crossing.
 
 A cell write or removal composes through an arena, not through the row list:
 the write's row record decides its kind and its cycle from the candidate built
@@ -756,11 +762,13 @@ a detached-seat/peer transfer restore), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
 previous occupant's value nor sits at the unscaled default the row itself
 disagrees with. The same resync resolves each body's kit and look from the kit
-and look assignments' `select` rows (`WorldPopulation.Selection.cs`): the
-selection outranks the entry's `KitIndex`/`LookIndex` and the seat kit in
-`ResolveKitIndex`, a body whose kit moves recompiles in place, and a moved kit
-or look bumps `Revision` so the client re-latches the stamp
-([schema](../Puck.World.Schema/README.md#kit-and-look-selected-by-a-bodys-cell)).
+and look assignments' `select` registers (`WorldPopulation.SyncBodySelections`,
+which also runs once a tick right after the world rules and when an escrow
+landing has loaded a traveller's carried registers): the selection outranks the
+entry's `KitIndex`/`LookIndex` and the seat kit in `ResolveKitIndex`, a body
+whose kit moves recompiles in place with its slot-lane registers untouched, and
+a moved kit or look bumps `Revision` so the client re-latches the stamp
+([schema](../Puck.World.Schema/README.md#kit-and-look-selected-by-a-bodys-register)).
 A crossing of a portal pair of two sizes writes the row:
 `WorldServer.TryApplyInPlaceCrossing` multiplies the body's cell by the pair's
 scale (`WorldFrameIsometry.Scale`, the counterpart face's width over the

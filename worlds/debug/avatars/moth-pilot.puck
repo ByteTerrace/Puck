@@ -3,7 +3,7 @@
 // contact harness, lavender shoulder patches and flat ankle boots, her hands bare. Her head is the suited Moth's own
 // (the moth-head library at the same 0.68 scale), so one head model serves both forms.
 //
-// suit.puck wears her through the `moth-pilot` look when the body's suit cell is 0. Every coordinate is in the author
+// suit.puck wears her through the `moth-pilot` look when the body's suit register is 0. Every coordinate is in the author
 // frame (+Y up, +Z her front, +X her left), with her soles at Y = 0. A template's `side` is 1 for her left and -1 for
 // her right: it mirrors X, the Y and Z of a rotation's vector part, and the sign of a swing about a sideways-tilting axis.
 //
