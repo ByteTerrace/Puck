@@ -83,6 +83,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             ScreenMappingData opening = worldScreenMapping((uint)(material - SDF_SCREEN_MATERIAL - 1));
 
             reactivity = (((opening.imageU.w != 0.0) && (opening.state.w == 0.0)) ? 0.0 : (reactivity * picture));
+            // A picture value of one shows at the screen's luminance in nits (one for an opening, whose image is the
+            // luminance beyond it). The view's screen fidelity eases it to the value that leaves the composite's exposure
+            // as the picture itself, so a framed screen shows its source exactly.
+            color *= lerp(opening.state.z, (1.0 / max(passGroup.exposure, 1.0e-12)), saturate(passGroup.screenFidelity));
         }
     }
 #endif
@@ -100,9 +104,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
-            // from a faint sun tint. The whole sentinel range is tested: a screen-instance id is SDF_SCREEN_MATERIAL + 1 +
-            // screenIndex and never indexes the material table.
-            color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
+            // from a faint sun tint, display-referred: the composite's exposure leaves it as this color. The whole
+            // sentinel range is tested: a screen-instance id is SDF_SCREEN_MATERIAL + 1 + screenIndex and never indexes
+            // the material table.
+            color = ((ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse))) / max(passGroup.exposure, 1.0e-12));
         } else {
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
@@ -172,7 +177,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 attenuation *= response.attenuation;
             }
 
-            color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0);
+            color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
 
             if (meshIndirect) {
                 color += sdfMeshIndirect(surfacePoint, normal) * shadeMaterial.albedo
@@ -180,20 +185,26 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                     * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                         * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             }
-            // Authored fill is the indirect-off look. It never adds a second approximation while the volume is on.
+            // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface. It never
+            // adds a second approximation while the volume is on.
             if (!meshIndirect) {
-                color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+                color += ((shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance()) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
             }
 
-            // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion.
+            // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion; with the irradiance
+            // volume on, only as far as the volume sees the sky open that way, and the surroundings' light where not.
             {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
                 float3 fresnel = (f0 + ((max(float3(1.0, 1.0, 1.0) - shadeMaterial.roughness, f0) - f0) * pow((1.0 - nDotV), 5.0)));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
+                float3 environment = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
 
-                color += ((worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness) * fresnel) * ambientOcclusion);
+                if (meshIndirect) {
+                    environment = sdfMeshReflection(surfacePoint, normal, reflectDirection, environment);
+                }
+                color += ((environment * fresnel) * ambientOcclusion);
             }
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
@@ -204,17 +215,18 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
             color = selfEmission + (color - selfEmission) * attenuation;
 
-            // The stylized curvature terms (cavity darkening, ridge light, ink outline).
+            // The stylized curvature terms (cavity darkening, ridge light, ink outline), display-referred: they apply to
+            // the color the view's exposure shows, so an ink line reads as its color at every exposure.
             if (curvatureShading) {
-                color = applyCurvatureShading(color, s.curvature);
+                color = (applyCurvatureShading((color * passGroup.exposure), s.curvature) / max(passGroup.exposure, 1.0e-12));
             }
         }
     }
 
     if (useFinalShading) {
         // The editor grid tints the lit color before the composite's distance fog, so a far grid still recedes. It reads
-        // the geometric normal.
-        color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
+        // the geometric normal, and tints the color the view's exposure shows.
+        color = (sdfApplyGrid((color * passGroup.exposure), surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t)) / max(passGroup.exposure, 1.0e-12));
     }
 
     return color;

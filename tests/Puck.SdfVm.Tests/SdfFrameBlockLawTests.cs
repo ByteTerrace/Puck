@@ -98,10 +98,15 @@ public sealed class SdfFrameBlockLawTests {
             Lights = Lights(),
         };
     }
-    // Lights whose count, shadow light and curvature gains are none of them zero.
+    // Lights whose count, shadow light and curvature gains are none of them zero, and a full table of directionals, which
+    // every view shades, so every word of the view's light mask is set.
     private static SdfLights Lights() {
         var lights = SdfLights.Default();
 
+        for (var index = 2; (index < SdfLights.MaxLights); index++) {
+            lights.Set(index: index, light: lights[0]);
+        }
+        lights.Count = SdfLights.MaxLights;
         lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
         lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 1);
         lights.ShadowSlots.SetSlot(light: 1, slot: 0);
@@ -212,7 +217,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: (1u, 1)
+            expected: ((uint)SdfLights.MaxLights, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from

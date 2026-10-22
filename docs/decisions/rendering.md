@@ -66,6 +66,61 @@ distance at which the switch is barely perceptible (the owner's ruling). The
 switch distance is derived from the change's size on screen at the view's
 resolution, not fixed in metres.
 
+The lights follow the same rule: each view shades only the lights that can
+reach a surface it shows (`SdfLightSelection`), tested with the same
+`CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
+Skipping one changes no pixel, since a point or spot light's falloff is exactly
+zero at its range (below).
+
+## Lights, screens and the camera are photometric
+
+**Every light, screen and emissive surface is authored in real units, and the
+frame shades in luminance (the owner's request).** A directional light's
+illuminance is in lux (a clear midday sun about 100,000), a point or spot
+light's luminous intensity in candela or its luminous power in lumens (a 60 W
+bulb about 800), with a colour or a colour temperature in kelvin; an emissive
+surface's, a sky layer's and a display's luminance is in nits (a CRT about 150).
+A light's colour is scaled to unit luminance, so it gives exactly its quantity.
+The frame's radiometric unit is the nit: a light record carries its illuminance
+(or intensity) over π, so a Lambertian albedo ρ under an illuminance E shows
+ρE/π, the irradiance volume traces and stores nits, and a light's specular lobe
+scales by its illuminance. `SdfPhotometry` owns the conversions, and the `.puck`
+language takes `lx`, `lm`, `cd`, `nit` and `K` on the fields that carry them.
+The sky is consistent with the sun because its colours are in units of a layer
+luminance whose default is a clear day's sky (10,000 nits) beside the default
+100,000-lux sun, so the sky lights the ground about a fifth as brightly as the
+sun does.
+
+**A camera exposure maps the luminance to the display, before the tonemap.**
+`render.exposure` is manual (an `EV100`) or automatic: a reflected-light meter
+reads the irradiance volume's luminance about each view's camera, weighted
+toward where it looks, plus the point lights' light there, and eases toward that
+reading less a compensation, within authored bounds, over presentation time.
+Each view's composite multiplies its output by its exposure, so a dark lobby
+lit by its screens and a sunlit garden both read. A window onto another world
+and a sky layer's view publish their luminance unexposed, and the view looking
+through them exposes it, so a portal reads as the world beyond it; a display
+shows its picture at its peak luminance; terms that are display-referred by
+design (an ink line, the editor grid, an unbound screen's glass) are divided by
+the exposure. Exposure is presentation only: it reads presentation time and the
+volume, and nothing in simulation state depends on it.
+
+**A point or spot light ends at a range derived from its intensity (the lead's
+decision, delegated by the owner).** Its falloff is the windowed inverse square
+`saturate(1 − (d/r)⁴)² / d²`, smooth and exactly zero at the range `r`, the
+distance at which a white surface facing the light shows 1/256 of display white
+at the darkest exposure the world adapts to. Past it the light darkens nothing a
+view would show, and a view whose frustum misses its sphere skips it, which
+lifts the old eight-light cap: a world's lights table holds 128, and each view's
+pass block carries a mask of the ones it shades.
+
+**Considered, and set aside.** Scene-referred values left as stylized weights
+with a global gain, since no gain makes a 150-nit screen and a 100,000-lux sun
+read in one frame; exposure from a GPU histogram of the lit image, which needs a
+reduction and a readback the irradiance volume already answers on the CPU; and a
+cutoff radius authored per light, which would make the range a look decision
+for every light rather than one derived threshold.
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable

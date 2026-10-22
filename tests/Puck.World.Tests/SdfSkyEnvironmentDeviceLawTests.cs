@@ -247,7 +247,8 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         var mappingBytes = new byte[((SdfWorldTables.MaxScreenSurfaces * 7) * 16)];
 
         if (!screenPixels.IsEmpty) {
-            // Three mapped/bound sources: only screen zero has both acquired-image and emission admission.
+            // Three mapped/bound sources at a luminance of one nit a picture value: only screen zero has both acquired-image
+            // and emission admission (screen one shows at no luminance).
             for (var screen = 0; (screen < 3); screen++) {
                 BinaryPrimitives.WriteSingleLittleEndian(destination: mappingBytes.AsSpan(start: ((screen * 112) + 44)), value: 1f);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: mappingBytes.AsSpan(start: ((screen * 112) + 96)), value: 1f);

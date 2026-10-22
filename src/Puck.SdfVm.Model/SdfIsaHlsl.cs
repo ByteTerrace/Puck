@@ -221,7 +221,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_CONVEX_COUNT_BITS", value: SdfPrismProfile.ConvexCountBits);
         declarations.Count(name: "SDF_MAX_PATH_EDGES", value: SdfPathProfile.MaxEdges);
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
-        declarations.Real(name: "SDF_SCREEN_EMISSION_DIRECT_GAIN", value: SdfScreenEmission.DirectGain);
+        declarations.Real(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
+        declarations.Real(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
             value: SdfWorldPackage.MinimumNear
@@ -289,6 +290,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_BEHIND", value: SdfMeshIrradianceProbe.Behind);
         declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).");
         declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
         declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfTemporalSamples.Period);

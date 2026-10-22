@@ -108,10 +108,16 @@ public static class WorldRenderKeys {
                             field: static part => part.Direction,
                             parts: parts
                         ),
-                        Weight = Scalar(
-                            authored: directional.Weight,
+                        Illuminance = Scalar(
+                            authored: directional.Illuminance,
                             clock: clock,
-                            field: static part => part.Weight,
+                            field: static part => part.Illuminance,
+                            parts: parts
+                        ),
+                        Temperature = Scalar(
+                            authored: directional.Temperature,
+                            clock: clock,
+                            field: static part => part.Temperature,
                             parts: parts
                         ),
                     };
@@ -135,10 +141,10 @@ public static class WorldRenderKeys {
                             field: static part => part.Power,
                             parts: parts
                         ),
-                        Weight = Scalar(
-                            authored: rim.Weight,
+                        Luminance = Scalar(
+                            authored: rim.Luminance,
                             clock: clock,
-                            field: static part => part.Weight,
+                            field: static part => part.Luminance,
                             parts: parts
                         ),
                     };
@@ -162,18 +168,41 @@ public static class WorldRenderKeys {
                             field: static part => part.Color,
                             parts: parts
                         ),
-                        Radius = Scalar(
-                            authored: point.Radius,
+                        Intensity = Scalar(
+                            authored: point.Intensity,
                             clock: clock,
-                            field: static part => part.Radius,
+                            field: static part => part.Intensity,
                             parts: parts
                         ),
-                        Weight = Scalar(
-                            authored: point.Weight,
+                        Power = Scalar(
+                            authored: point.Power,
                             clock: clock,
-                            field: static part => part.Weight,
+                            field: static part => part.Power,
                             parts: parts
                         ),
+                        Temperature = Scalar(
+                            authored: point.Temperature,
+                            clock: clock,
+                            field: static part => part.Temperature,
+                            parts: parts
+                        ),
+                    };
+                }
+            case WorldRenderLight.Spot spot: {
+                    var parts = Parts(
+                        keys: stated,
+                        select: static part => (part as WorldRenderLight.Spot)
+                    );
+
+                    return spot with {
+                        Position = Vector(authored: spot.Position, clock: clock, field: static part => part.Position, parts: parts),
+                        Direction = Direction(authored: spot.Direction, clock: clock, field: static part => part.Direction, parts: parts),
+                        Angle = Angle(authored: spot.Angle, clock: clock, field: static part => part.Angle, parts: parts),
+                        InnerAngle = Angle(authored: spot.InnerAngle, clock: clock, field: static part => part.InnerAngle, parts: parts),
+                        Color = Color(authored: spot.Color, clock: clock, field: static part => part.Color, parts: parts),
+                        Intensity = Scalar(authored: spot.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
+                        Power = Scalar(authored: spot.Power, clock: clock, field: static part => part.Power, parts: parts),
+                        Temperature = Scalar(authored: spot.Temperature, clock: clock, field: static part => part.Temperature, parts: parts),
                     };
                 }
             case WorldRenderLight.Occluder occluder: {
@@ -280,6 +309,7 @@ public static class WorldRenderKeys {
 
         return expanded with {
             Opacity = Scalar(authored: layer.Opacity, clock: clock, field: static part => part.Opacity, parts: common),
+            Luminance = Scalar(authored: layer.Luminance, clock: clock, field: static part => part.Luminance, parts: common),
             Transform = (((turn is null) && (tilt is null)) ? layer.Transform : new WorldRenderSkyTransform(Tilt: tilt, Turn: turn)),
         };
     }

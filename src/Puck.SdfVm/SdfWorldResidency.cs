@@ -497,6 +497,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The bake takes its batch before the upload, which carries the batch's surface points.
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
+        Exposures.Stage(frame: m_frame!, irradiance: MeshIrradiance, seconds: context.FrameDeltaSeconds);
+        tables.ViewExposures = Exposures;
 
         tables.UpdateTablesSignature();
         // The views render once the views kernel is built; the residency is ready then.
@@ -675,6 +677,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
     public SdfMeshIrradiance MeshIrradiance { get; } = new();
+    /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
+    public SdfViewExposures Exposures { get; } = new();
     /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled with indirect light
     /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
@@ -862,8 +866,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );
-            tables.SetScreenEmission(
-                emits: sources.Emits(screen: screen),
+            tables.SetScreenLuminance(
+                luminance: sources.LuminanceOf(screen: screen),
                 screenIndex: screen
             );
         }

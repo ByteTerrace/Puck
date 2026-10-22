@@ -218,6 +218,7 @@
     { "name": "world.devices", "bindable": false, "audience": "anyone" },
     { "name": "world.dynamics", "bindable": false, "audience": "anyone" },
     { "name": "world.explain", "bindable": false, "audience": "anyone" },
+    { "name": "world.exposure", "bindable": false, "audience": "anyone" },
     { "name": "world.extensions", "bindable": false, "audience": "anyone" },
     { "name": "world.extensions.catalog", "bindable": false, "audience": "anyone" },
     { "name": "world.faces", "bindable": false, "audience": "anyone" },

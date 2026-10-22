@@ -16,4 +16,8 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The share of a cell a shaded point is pushed along its surface normal before the probes about it are
     /// read.</summary>
     public const float NormalBias = 0.35f;
+    /// <summary>The share of a cell a probe may lie behind a shaded surface's plane and still light it. A probe farther
+    /// behind lies past the wall or slab the surface belongs to, in a room that may be lit many times as brightly, and
+    /// lights the surface only where no probe lies in front of it.</summary>
+    public const float Behind = 0.1f;
 }

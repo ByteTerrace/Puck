@@ -121,6 +121,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Write(
                 atmosphere: definition.Render.Atmosphere,
                 environment: definition.Render.Environment,
+                exposure: WorldRenderExposure.Resolve(exposure: definition.Render.Exposure),
                 lighting: m_lighting,
                 mirror: mirror,
                 sky: m_sky
@@ -149,7 +150,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
-        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky);
+        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: WorldRenderExposure.Resolve(exposure: definition.Render.Exposure));
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
@@ -167,6 +168,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         for (var index = 0; (index < count); index++) {
             var anchor = lights[index] switch {
                 WorldRenderLight.Point point => point.Anchor,
+                WorldRenderLight.Spot spot => spot.Anchor,
                 WorldRenderLight.Occluder occluder => occluder.Anchor,
                 _ => null,
             };
@@ -178,6 +180,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             var pose = resolveLightAnchor?.Invoke(anchor);
             var light = output[index];
 
+            // An anchored spot's aim turns with its anchor, as its position does.
             output.Set(
                 index: index,
                 light: ((pose is { } frame)
@@ -187,6 +190,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                             light.Direction,
                             frame.Orientation
                         )),
+                        SpotAxis = Vector3.Transform(light.SpotAxis, frame.Orientation),
                     }
                     : light with { DynamicSlot = SdfProgram.NoDynamicTransformSlot, Weight = 0f })
             );
@@ -206,7 +210,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Kind: SdfLightKind.Directional,
             Direction: SdfLights.DefaultSunDirection,
             Color: Vector3.One,
-            Weight: SdfLights.DefaultSunWeight,
+            Weight: SdfPhotometry.DirectionalWeight(lux: SdfLights.DefaultSunIlluminance),
             Param: SdfLights.DefaultPenumbraSlope,
             Shadows: false
         ),
@@ -218,12 +222,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Param: 1f,
             Shadows: false
         ),
-        WorldRenderLight.Point => new SdfLight(
+        WorldRenderLight.Point or WorldRenderLight.Spot => new SdfLight(
             Kind: SdfLightKind.Point,
             Direction: Vector3.Zero,
             Color: Vector3.One,
-            Weight: SdfLights.DefaultPointWeight,
-            Param: SdfLights.DefaultPointRadius,
+            Weight: SdfPhotometry.PositionalWeight(candela: SdfLights.DefaultPointIntensity),
+            Param: 0f,
             Shadows: false
         ),
         _ => new SdfLight(
@@ -235,6 +239,36 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Shadows: false
         ),
     });
+    // A point or spot light's range: where its light falls below the range threshold at the world's brightest exposure.
+    private static SdfLight Ranged(SdfLight light, in SdfExposure exposure) =>
+        (light with { Param = SdfPhotometry.RangeOf(exposure: exposure.BrightestGain, weight: light.Weight) });
+    // A light's colour: a black body's at its temperature, or its authored colour, scaled to unit luminance so the light
+    // gives exactly its photometric quantity; white when it authors neither.
+    private Vector3 Chroma(WorldStateMirror mirror, BindableColor? color, BindableScalar? temperature, WorldValueField field, in WorldValueSite site) {
+        if (temperature is not null) {
+            return SdfPhotometry.Blackbody(kelvin: Scalar(fallback: 6500f, field: field, mirror: mirror, scalar: temperature, site: in site));
+        }
+
+        return SdfPhotometry.UnitLuminance(color: Rgb(color: color, fallback: Vector3.One, mirror: mirror));
+    }
+    // A spot light's record: a point light's at its position, its intensity from its power over the outer cone when it
+    // authors power, and its cone's lanes about its aim.
+    private SdfLight SpotOf(WorldStateMirror mirror, WorldRenderLight.Spot spot, SdfLight pinned, in WorldValueSite lightSite) {
+        var angle = Angle(angle: spot.Angle, fallback: WorldRenderLight.Spot.DefaultAngle, field: WorldValueFields.SpotAngle, mirror: mirror, site: in lightSite);
+        var inner = Angle(angle: spot.InnerAngle, fallback: (angle * WorldRenderLight.Spot.DefaultInnerShare), field: WorldValueFields.SpotInnerAngle, mirror: mirror, site: in lightSite);
+        var (axis, offset) = SdfPhotometry.Cone(aim: Direction(direction: spot.Direction, fallback: -Vector3.UnitY, mirror: mirror), angle: angle, innerAngle: inner);
+        var candela = ((spot.Power is not null)
+            ? SdfPhotometry.SpotIntensity(angle: angle, lumens: Scalar(fallback: 0f, field: WorldValueFields.SpotPower, mirror: mirror, scalar: spot.Power, site: in lightSite))
+            : Scalar(fallback: SdfLights.DefaultPointIntensity, field: WorldValueFields.SpotIntensity, mirror: mirror, scalar: spot.Intensity, site: in lightSite));
+
+        return (pinned with {
+            Color = Chroma(color: spot.Color, field: WorldValueFields.SpotTemperature, mirror: mirror, site: in lightSite, temperature: spot.Temperature),
+            Direction = Position(fallback: pinned.Direction, mirror: mirror, position: spot.Position),
+            SpotAxis = axis,
+            SpotOffset = offset,
+            Weight = SdfPhotometry.PositionalWeight(candela: candela),
+        });
+    }
     private bool BoundSlotMoved(WorldStateMirror mirror) {
         foreach (var (slot, value) in m_bound) {
             _ = mirror.TryValue(slot: slot, value: out var presented);
@@ -417,7 +451,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     // pinned sun) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
     // An absent atmosphere is the default look's (SdfAtmosphere.Default); an authored one is exactly the kinds it states.
-    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere, WorldRenderEnvironment? environment) {
+    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere, WorldRenderEnvironment? environment, in SdfExposure exposure) {
         var into = m_resolvedLights;
 
         into.CopyFrom(source: ((lighting?.Lights is null)
@@ -451,10 +485,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                     index: index,
                     light: (authored switch {
                         WorldRenderLight.Directional directional => pinned with {
-                            Color = Rgb(
+                            Color = Chroma(
                                 color: directional.Color,
-                                fallback: pinned.Color,
-                                mirror: mirror
+                                field: WorldValueFields.DirectionalTemperature,
+                                mirror: mirror,
+                                site: in lightSite,
+                                temperature: directional.Temperature
                             ),
                             Direction = Direction(
                                 direction: directional.Direction,
@@ -471,13 +507,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 ))
                                 : pinned.Param),
                             Shadows = 0u,
-                            Weight = Scalar(
-                                fallback: pinned.Weight,
+                            Weight = SdfPhotometry.DirectionalWeight(lux: Scalar(
+                                fallback: SdfLights.DefaultSunIlluminance,
                                 mirror: mirror,
-                                scalar: directional.Weight,
-                                field: WorldValueFields.DirectionalWeight,
+                                scalar: directional.Illuminance,
+                                field: WorldValueFields.DirectionalIlluminance,
                                 site: lightSite
-                            ),
+                            )),
                         },
                         WorldRenderLight.Rim rim => pinned with {
                             Color = Rgb(
@@ -495,8 +531,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: rim.Weight,
-                                field: WorldValueFields.RimWeight,
+                                scalar: rim.Luminance,
+                                field: WorldValueFields.RimLuminance,
                                 site: lightSite
                             ),
                         },
@@ -521,32 +557,24 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 site: lightSite
                             ),
                         },
-                        WorldRenderLight.Point point => pinned with {
-                            Color = Rgb(
+                        WorldRenderLight.Point point => Ranged(exposure: exposure, light: pinned with {
+                            Color = Chroma(
                                 color: point.Color,
-                                fallback: pinned.Color,
-                                mirror: mirror
+                                field: WorldValueFields.PointTemperature,
+                                mirror: mirror,
+                                site: in lightSite,
+                                temperature: point.Temperature
                             ),
                             Direction = Position(
                                 fallback: pinned.Direction,
                                 mirror: mirror,
                                 position: point.Position
                             ),
-                            Param = Scalar(
-                                fallback: pinned.Param,
-                                mirror: mirror,
-                                scalar: point.Radius,
-                                field: WorldValueFields.PointRadius,
-                                site: lightSite
-                            ),
-                            Weight = Scalar(
-                                fallback: pinned.Weight,
-                                mirror: mirror,
-                                scalar: point.Weight,
-                                field: WorldValueFields.PointWeight,
-                                site: lightSite
-                            ),
-                        },
+                            Weight = SdfPhotometry.PositionalWeight(candela: ((point.Power is not null)
+                                ? SdfPhotometry.PointIntensity(lumens: Scalar(fallback: 0f, field: WorldValueFields.PointPower, mirror: mirror, scalar: point.Power, site: in lightSite))
+                                : Scalar(fallback: SdfLights.DefaultPointIntensity, field: WorldValueFields.PointIntensity, mirror: mirror, scalar: point.Intensity, site: in lightSite))),
+                        }),
+                        WorldRenderLight.Spot spot => Ranged(exposure: exposure, light: SpotOf(lightSite: in lightSite, mirror: mirror, pinned: pinned, spot: spot)),
                         _ => pinned,
                     })
                 );
@@ -668,7 +696,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
             into.FogDensity = Scalar(fallback: SdfSky.DefaultFogDensity, field: WorldValueFields.FogDensity, mirror: mirror, scalar: fog.Density, site: fogSite);
             into.FogColorAuthored = (fog.Color is not null);
-            into.FogColor = Rgb(color: fog.Color, fallback: Vector3.Zero, mirror: mirror);
+            into.FogColor = (Rgb(color: fog.Color, fallback: Vector3.Zero, mirror: mirror) * Scalar(fallback: SdfSky.DefaultLuminance, field: WorldValueFields.FogLuminance, mirror: mirror, scalar: fog.Luminance, site: fogSite));
             (into.FogBase, into.FogFalloff) = Height(height: fog.Height, mirror: mirror, site: (fogSite with { Inner = "fog.height" }));
         }
         if (atmosphere.Haze is { } haze) {
@@ -683,7 +711,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
             into.MediumSurface = Scalar(fallback: 0f, field: WorldValueFields.MediumSurface, mirror: mirror, scalar: medium.Surface, site: mediumSite);
             into.MediumExtinction = Scalar(fallback: SdfAtmosphere.DefaultMediumExtinction, field: WorldValueFields.MediumExtinction, mirror: mirror, scalar: medium.Extinction, site: mediumSite);
-            into.MediumColor = Rgb(color: medium.Color, fallback: SdfAtmosphere.DefaultMediumColor, mirror: mirror);
+            into.MediumColor = (Rgb(color: medium.Color, fallback: SdfAtmosphere.DefaultMediumColor, mirror: mirror) * Scalar(fallback: SdfSky.DefaultLuminance, field: WorldValueFields.MediumLuminance, mirror: mirror, scalar: medium.Luminance, site: mediumSite));
         }
 
         // An absent profile is a level kind, falloff zero; an authored one takes the default falloff unless it states one.
@@ -705,18 +733,20 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
         var tier = WorldSkyLayers.TierOf(layer: layer);
         var opacity = Scalar(fallback: 1f, field: WorldValueFields.SkyLayerOpacity, mirror: mirror, scalar: layer.Opacity, site: site);
+        // Every colour and brightness a layer carries is in units of its luminance, in nits.
+        var nits = Scalar(fallback: SdfSky.DefaultLuminance, field: WorldValueFields.SkyLayerLuminance, mirror: mirror, scalar: layer.Luminance, site: site);
         var at = layer switch {
-            WorldRenderSkyLayer.Gradient gradient => into.Add(blend: blend, label: label, opacity: opacity, parameters: GradientOf(gradient: gradient, mirror: mirror, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.SunDisc disc => into.Add(blend: blend, label: label, opacity: opacity, parameters: DiscOf(disc: disc, lights: lights, mirror: mirror, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Stars stars => into.Add(blend: blend, label: label, opacity: opacity, parameters: StarsOf(mirror: mirror, site: site, stars: stars), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Clouds clouds => into.Add(blend: blend, label: label, opacity: opacity, parameters: CloudsOf(clouds: clouds, mirror: mirror, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Aurora aurora => into.Add(blend: blend, label: label, opacity: opacity, parameters: AuroraOf(aurora: aurora, mirror: mirror, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, noise: noise, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, panel: panel, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Gradient gradient => into.Add(blend: blend, label: label, opacity: opacity, parameters: GradientOf(gradient: gradient, mirror: mirror, nits: nits, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.SunDisc disc => into.Add(blend: blend, label: label, opacity: opacity, parameters: DiscOf(disc: disc, lights: lights, mirror: mirror, nits: nits, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Stars stars => into.Add(blend: blend, label: label, opacity: opacity, parameters: StarsOf(mirror: mirror, nits: nits, site: site, stars: stars), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Clouds clouds => into.Add(blend: blend, label: label, opacity: opacity, parameters: CloudsOf(clouds: clouds, mirror: mirror, nits: nits, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Aurora aurora => into.Add(blend: blend, label: label, opacity: opacity, parameters: AuroraOf(aurora: aurora, mirror: mirror, nits: nits, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, nits: nits, noise: noise, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, nits: nits, pattern: pattern), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, nits: nits, panel: panel, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, nits: nits, panorama: panorama, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror, nits: nits), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror, nits: nits), tier: tier, visibility: visibility),
             _ => -1,
         };
 
@@ -767,9 +797,17 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return (mirror.TryPhase(clock: out _, name: clock, phase: out var phase) ? ((float)phase) : 0f);
     }
-    private SdfSkyGradient GradientOf(WorldStateMirror mirror, WorldRenderSkyLayer.Gradient gradient, in WorldValueSite site) {
+    private SdfSkyGradient GradientOf(WorldStateMirror mirror, WorldRenderSkyLayer.Gradient gradient, float nits, in WorldValueSite site) {
         if (gradient.Stops is not { } stops) {
-            return SdfSky.DefaultGradient;
+            var fallback = SdfSky.DefaultGradient;
+
+            for (var index = 0; (index < fallback.Count); index++) {
+                var (color, elevation) = fallback.Stop(index: index);
+
+                fallback.SetStop(color: (color * nits), elevation: elevation, index: index);
+            }
+
+            return fallback;
         }
 
         var parameters = new SdfSkyGradient();
@@ -783,11 +821,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             var stop = stops[index];
 
             parameters.SetStop(
-                color: Rgb(
+                color: (Rgb(
                     color: stop?.Color,
                     fallback: Vector3.One,
                     mirror: mirror
-                ),
+                ) * nits),
                 elevation: Scalar(
                     fallback: 0f,
                     mirror: mirror,
@@ -805,8 +843,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     }
     // A disc's light is its authored one, or the first directional; a disc that names none follows the first shadow slot
     // once the frame's slots are known (ApplySunDiscLight).
-    private SdfSkyDisc DiscOf(WorldStateMirror mirror, WorldRenderSkyLayer.SunDisc disc, SdfLights lights, in WorldValueSite site) => new() {
-        Color = Rgb(color: disc.Color, fallback: Vector3.One, mirror: mirror),
+    private SdfSkyDisc DiscOf(WorldStateMirror mirror, WorldRenderSkyLayer.SunDisc disc, SdfLights lights, float nits, in WorldValueSite site) => new() {
+        Color = (Rgb(color: disc.Color, fallback: Vector3.One, mirror: mirror) * nits),
         Intensity = Scalar(
             fallback: 0f,
             mirror: mirror,
@@ -824,19 +862,19 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         ),
         Screen = (disc.Texture?.Screen ?? -1),
     };
-    private SdfSkyStars StarsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Stars stars, in WorldValueSite site) {
+    private SdfSkyStars StarsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Stars stars, float nits, in WorldValueSite site) {
         var parameters = new SdfSkyStars();
 
         parameters.Density = (stars.Density ?? parameters.Density);
         parameters.Sparsity = (stars.Sparsity ?? parameters.Sparsity);
         parameters.RadiusFraction = (stars.Size ?? parameters.RadiusFraction);
-        parameters.Brightness = Scalar(
+        parameters.Brightness = (Scalar(
             fallback: 0f,
             mirror: mirror,
             scalar: stars.Brightness,
             field: WorldValueFields.StarBrightness,
             site: site
-        );
+        ) * nits);
         parameters.Seed = (stars.Seed ?? 0u);
 
         if (stars.Twinkle is not { } twinkle) {
@@ -887,7 +925,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return parameters;
     }
-    private SdfSkyClouds CloudsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Clouds clouds, in WorldValueSite site) {
+    private SdfSkyClouds CloudsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Clouds clouds, float nits, in WorldValueSite site) {
         var parameters = new SdfSkyClouds();
 
         parameters.Coverage = Scalar(
@@ -912,11 +950,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             site: site
         );
         parameters.Seed = (clouds.Seed ?? 0u);
-        parameters.Color = Rgb(
+        parameters.Color = (Rgb(
             color: clouds.Color,
             fallback: parameters.Color,
             mirror: mirror
-        );
+        ) * nits);
         parameters.Curl = Angle(
             angle: clouds.Curl,
             fallback: 0f,
@@ -948,14 +986,14 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     }
     // An aurora's angles become the heights the kernel reads: the base's sine, the height its top rises to above it, and
     // the fold's sway at the base's elevation.
-    private SdfSkyAurora AuroraOf(WorldStateMirror mirror, WorldRenderSkyLayer.Aurora aurora, in WorldValueSite site) {
+    private SdfSkyAurora AuroraOf(WorldStateMirror mirror, WorldRenderSkyLayer.Aurora aurora, float nits, in WorldValueSite site) {
         var parameters = new SdfSkyAurora();
         var baseAngle = Angle(angle: aurora.Base, fallback: 0.3f, field: WorldValueFields.AuroraBase, mirror: mirror, site: site);
         var height = Angle(angle: aurora.Height, fallback: 0.35f, field: WorldValueFields.AuroraHeight, mirror: mirror, site: site);
         var fold = Angle(angle: aurora.Fold, fallback: 0.08f, field: WorldValueFields.AuroraFold, mirror: mirror, site: site);
         var baseHeight = Math.Sin(a: baseAngle);
 
-        parameters.Intensity = Scalar(fallback: 0f, field: WorldValueFields.AuroraIntensity, mirror: mirror, scalar: aurora.Intensity, site: site);
+        parameters.Intensity = (Scalar(fallback: 0f, field: WorldValueFields.AuroraIntensity, mirror: mirror, scalar: aurora.Intensity, site: site) * nits);
         parameters.Color = Rgb(color: aurora.Color, fallback: parameters.Color, mirror: mirror);
         parameters.TopColor = Rgb(color: aurora.Top, fallback: parameters.TopColor, mirror: mirror);
         parameters.Base = ((float)baseHeight);
@@ -967,11 +1005,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return parameters;
     }
-    private SdfSkyNoise NoiseOf(WorldStateMirror mirror, WorldRenderSkyLayer.Noise noise, in WorldValueSite site) {
+    private SdfSkyNoise NoiseOf(WorldStateMirror mirror, WorldRenderSkyLayer.Noise noise, float nits, in WorldValueSite site) {
         var parameters = new SdfSkyNoise();
 
-        parameters.ColorLow = Rgb(color: noise.Low, fallback: parameters.ColorLow, mirror: mirror);
-        parameters.ColorHigh = Rgb(color: noise.High, fallback: parameters.ColorHigh, mirror: mirror);
+        parameters.ColorLow = (Rgb(color: noise.Low, fallback: parameters.ColorLow, mirror: mirror) * nits);
+        parameters.ColorHigh = (Rgb(color: noise.High, fallback: parameters.ColorHigh, mirror: mirror) * nits);
         parameters.Coverage = Scalar(fallback: parameters.Coverage, field: WorldValueFields.NoiseCoverage, mirror: mirror, scalar: noise.Coverage, site: site);
         parameters.Softness = (noise.Softness ?? parameters.Softness);
         parameters.Scale = (noise.Scale ?? parameters.Scale);
@@ -981,7 +1019,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return parameters;
     }
-    private SdfSkyPattern PatternOf(WorldStateMirror mirror, WorldRenderSkyLayer.Pattern pattern) {
+    private SdfSkyPattern PatternOf(WorldStateMirror mirror, WorldRenderSkyLayer.Pattern pattern, float nits) {
         var parameters = new SdfSkyPattern();
 
         parameters.Shape = (pattern.Shape switch {
@@ -989,30 +1027,30 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldSkyPatternShape.Grid => SdfSkyPatternShape.Grid,
             _ => SdfSkyPatternShape.Checker,
         });
-        parameters.ColorA = Rgb(color: ((pattern.Colors is [var first, ..]) ? first : null), fallback: parameters.ColorA, mirror: mirror);
-        parameters.ColorB = Rgb(color: ((pattern.Colors is [_, var second, ..]) ? second : null), fallback: parameters.ColorB, mirror: mirror);
+        parameters.ColorA = (Rgb(color: ((pattern.Colors is [var first, ..]) ? first : null), fallback: parameters.ColorA, mirror: mirror) * nits);
+        parameters.ColorB = (Rgb(color: ((pattern.Colors is [_, var second, ..]) ? second : null), fallback: parameters.ColorB, mirror: mirror) * nits);
         parameters.Cells = (pattern.Cells ?? parameters.Cells);
         parameters.Line = (pattern.Line ?? parameters.Line);
         parameters.Softness = (pattern.Softness ?? parameters.Softness);
 
         return parameters;
     }
-    private SdfSkyPanorama PanoramaOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panorama panorama, in WorldValueSite site) => new() {
-        Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanoramaIntensity, mirror: mirror, scalar: panorama.Intensity, site: site),
+    private SdfSkyPanorama PanoramaOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panorama panorama, float nits, in WorldValueSite site) => new() {
+        Intensity = (Scalar(fallback: 1f, field: WorldValueFields.PanoramaIntensity, mirror: mirror, scalar: panorama.Intensity, site: site) * nits),
         Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
         Screen = (panorama.Screen ?? -1),
     };
-    private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, in WorldValueSite site) => new() {
+    private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, float nits, in WorldValueSite site) => new() {
         Direction = (panel.Direction ?? Vector3.UnitY),
         Size = (panel.Size ?? new Vector2(value: 0.3f)),
         Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
-        Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
+        Intensity = (Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site) * nits),
         Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),
     };
     // The view fit supplies the camera basis, rectangle and image for this static layer each frame.
-    private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage) => new() {
+    private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage, float nits) => new() {
         Coverage = (coverage ? 1u : 0u),
-        Fallback = Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror),
+        Fallback = (Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror) * nits),
     };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var site = new WorldValueSite("render.environment");
@@ -1025,4 +1063,5 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 /// <param name="Lights">The lights table.</param>
 /// <param name="Sky">The sky.</param>
 /// <param name="Indirect">The source, solve and receiver controls.</param>
-public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect);
+/// <param name="Exposure">The camera exposure the frame's views map luminance to the display by.</param>
+public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect, SdfExposure Exposure);

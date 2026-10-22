@@ -248,6 +248,8 @@ public sealed partial class WorldScreenBinder {
             screens: feed.Nested
         );
         /// <inheritdoc/>
+        public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: feed.Nested?.RowOf(screen: screen));
+        /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) => (((feed.Nested is { } screens) && screens.Mappings.TryGet(
             mapping: out var mapping,
             screen: screen
@@ -270,6 +272,8 @@ public sealed partial class WorldScreenBinder {
             screen: screen,
             screens: binder.m_routedScreens.GetValueOrDefault(key: scene)
         );
+        /// <inheritdoc/>
+        public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: binder.m_routedScreens.GetValueOrDefault(key: scene)?.RowOf(screen: screen));
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) {
             if (

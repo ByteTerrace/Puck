@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -25,6 +26,10 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
         WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldInstanceHost.BootInstanceName)),
         _ => false,
     }));
+    /// <inheritdoc/>
+    public float LuminanceOf(int screen) => LuminanceOf(row: RowOf(screen: screen));
+    // A screen row's authored peak luminance, or the default display's.
+    private static float LuminanceOf(WorldScreen? row) => (row?.Luminance ?? SdfScreenEmission.DefaultLuminance);
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
     public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(

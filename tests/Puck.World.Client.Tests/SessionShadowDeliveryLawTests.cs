@@ -15,7 +15,7 @@ public sealed class SessionShadowDeliveryLawTests {
             new StateCell(Key: CellName.Parse(candidate: "third"), Value: CellValue.Int(value: third)),
         ]);
     private static WorldRenderLight.Directional Light(string name, string binding) => new(
-        Name: name, Shadow: WorldShadowMode.Auto, Weight: new BindableScalar(binding: binding));
+        Name: name, Shadow: WorldShadowMode.Auto, Illuminance: new BindableScalar(binding: binding));
     private static WorldDefinition Definition() => (Fixtures.BuildDocument() with {
         RenderRaw = new WorldRenderDefaults(ShadowLights: 2, Lighting: new WorldRenderLighting(Lights: [
             Light(binding: "state.weights.first", name: "first"), Light(binding: "state.weights.second", name: "second"), Light(binding: "state.weights.third", name: "third"),
@@ -54,7 +54,7 @@ public sealed class SessionShadowDeliveryLawTests {
         return definition with {
             RenderRaw = new WorldRenderDefaults(ShadowLights: 1, Lighting: new WorldRenderLighting(Lights: [
                 Light(binding: "state.power.0", name: "field"),
-                new WorldRenderLight.Directional(Name: "steady", Shadow: WorldShadowMode.Auto, Weight: new BindableScalar(literal: 1f)),
+                new WorldRenderLight.Directional(Name: "steady", Shadow: WorldShadowMode.Auto, Illuminance: new BindableScalar(literal: 1f)),
             ])),
         };
     }

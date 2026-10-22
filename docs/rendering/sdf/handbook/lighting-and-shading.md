@@ -185,8 +185,19 @@ in the frame.
 - **Limits.** Moving bodies receive the volume's light and cast none into it.
   Point lights and screens contribute no bounced light. The sky's bounced share
   is captured when a generation of probes traces, so drifting clouds change
-  only the direct sky term. Leaks are held back by the back-face weight and the
-  inside-geometry test alone; there is no per-probe visibility.
+  only the direct sky term. Leaks are held back by the back-face weight, the
+  inside-geometry test and the read's preference for the probes in front of a
+  surface (a probe more than a tenth of a cell behind its plane, past the wall
+  or slab it belongs to, answers only where none lies in front); there is no
+  per-probe visibility, so a probe across an opening still sees both rooms.
+- **Reflections.** A surface reflects the lighting-visible sky in its mirror
+  direction only as far as the probes about it see the sky open that way, and
+  the light the surfaces about them send back where they do not
+  (`sdfMeshReflection`), so a room reflects its walls rather than the sky
+  outside it.
+- **Exposure.** The volume is also the automatic exposure's meter: the
+  luminance the probes about a view's camera see along their six axes, weighted
+  toward where the camera looks ([photometric units](#photometric-units-and-exposure)).
 
 ## Ambient occlusion: screen-space obscurance
 
@@ -218,14 +229,46 @@ nothing.
 ## Every light answers through one interface
 
 The views pass lights a surface by walking one list of lights: the lights
-table's (directional, point, rim and occluder, in authored order),
-then every bound screen. Each is one `SdfLightSource`, and one function,
-`sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
-surface: a diffuse term that joins the radiance the material shade lights by, a
-specular lobe (a point light's own), a rim brighten, and a factor on reflected
-light (an occluder's dimming). The stage sums each kind of term over the walk
-and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
-kind, so a new kind is one branch of that function.
+table's (directional, point and spot, rim and occluder, in authored order) that
+the view shades, then every bound screen. Each is one `SdfLightSource`, and one
+function, `sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at
+the surface: a diffuse term that joins the radiance the material shade lights
+by, a specular lobe (a directional's or a point's own, scaled by its
+illuminance), a rim brighten, and a factor on reflected light (an occluder's
+dimming). The stage sums each kind of term over the walk and adds each total
+once, so the order the terms combine in is the walk's. No other kernel source
+branches on a light's kind, so a new kind is one branch of that function.
+
+A point or spot light falls off as the windowed inverse square
+`saturate(1 − (d/r)⁴)² / max(d, 5 cm)²` (`sdfPointReach`), exactly zero at its
+range `r`, and a spot's cone multiplies it by
+`saturate(dot(−l, SpotAxis) + SpotOffset)²`. The range is where the light shows
+1/256 of display white on a white surface at the world's darkest exposure
+(`SdfPhotometry.RangeOf`). Each view's pass block carries a mask of the table's
+lights it shades (`SdfLightSelection`): a light whose sphere of range the view's
+frustum cannot see changes none of its pixels and is skipped, so a world holds up
+to 128 lights and a view pays only for those near what it shows.
+
+## Photometric units and exposure
+
+The frame shades luminance in nits. A light record carries its illuminance (a
+directional's lux) or its luminous intensity (a point's or spot's candela) over
+π, so an albedo ρ under an illuminance E shows ρE/π; an emissive material's
+`emissive`, a sky layer's `luminance` and a display's `luminance` are nits; the
+irradiance volume traces and stores nits. Each view's composite multiplies its
+output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
+(`SdfPhotometry.ExposureOf`), before the root's tonemap. `render.exposure` holds
+`EV100` fixed or adapts it: the meter reads the irradiance volume about the
+camera plus the point lights' light there, aims for `log2(L · 100 / 12.5)` less
+the compensation within the bounds, and eases there over the adaptation time of
+presentation time, snapping at a camera cut (`SdfViewExposures`).
+`world.exposure` echoes the authored exposure and each view's `EV100`, multiplier
+and meter reading. A view onto another world through a window, or a sky layer's
+view, publishes its luminance unexposed (`SdfViewSnapshot.Unexposed`) for the
+view looking through it to expose. The ink line, the editor grid and an unbound
+screen's glass are display-referred: they apply to the exposed colour. The lit
+images store half floats, so a view holds its luminance below
+`SdfPhotometry.LuminanceCeiling`.
 
 ## Glass
 
@@ -250,7 +293,10 @@ distinctive light source in the engine, because each screen is *both a picture
 and a light*.
 
 As a **picture**, a bound screen is emissive: it is its own light source, like a
-real display, so no scene lighting dims or tints it. Its pixels are the
+real display, so no scene lighting dims or tints it. A picture value of one
+shows at the screen's peak luminance (`WorldScreen.Luminance`, nits; a window
+onto another world shows that world's own luminance), and the view's screen
+fidelity eases that to the value the exposure leaves as the picture itself. Its pixels are the
 emulator's framebuffer, drawn from the screen's published mapping (the glass's
 bezel inset, the layout, any letterbox and the crop) through a CRT glass-face
 model—a soft bezel edge, soft cosine scanlines between the source's rows, an
@@ -265,8 +311,10 @@ source holds them; every other view carries 0.
 
 As a **light**, every bound screen is a colored area light illuminating the
 room, one of the lights the views pass walks. Its position and orientation come from the screen-surface table; its
-color is the per-frame average of what it's displaying—so a screen showing a
-green field spills green onto the wall beside it. A `dot(screenNormal, −L)` gate
+color is the per-frame average luminance of what it's displaying—so a screen showing a
+green field spills green onto the wall beside it. A face of luminance L and area
+A casts `E = L · A · cos / (d² + A/π)` on a surface facing it, the exact
+on-axis illuminance of a disc of that area. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
 its face, never behind it.
 
