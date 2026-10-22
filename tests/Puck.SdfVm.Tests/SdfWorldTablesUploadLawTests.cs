@@ -399,7 +399,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
-        const int Rows = 7;
+        // A screen's record: its seven mapping rows, then its five ripple rows, which this mapping leaves zero.
+        const int Rows = 12;
         const float Border = 0.03f;
         using var rig = new Rig(slots: 1);
         var mapping = new SourceMapping(

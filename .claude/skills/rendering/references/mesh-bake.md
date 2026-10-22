@@ -282,6 +282,9 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
   (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
+  (their source closure is `passes/sdf-bake-world.hlsli`, the field
+  interpreter and the work counters, with no lighting, screen or view module,
+  so an edit to one of those leaves their bytecode as it was on both backends)
   and the code the bake runs (`SdfMeshBakeClosure`). The code part is read from
   the build's assemblies: from the bake's roots (`SdfMeshPathBake`, the group,
   geometry, mesh and material-cut types, `SdfFrameBlock.WriteMeshBake`, the

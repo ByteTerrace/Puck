@@ -121,6 +121,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `passes/sdf-world.hlsli` itself. The shader cache keys, and a reload
   recompiles, by include closure, so routing a stage module through another
   wrapper makes an edit to it recompile both kernels.
+- **The bake kernels include `passes/sdf-bake-world.hlsli`, never
+  `sdf-world.hlsli`.** Their compiled bytecode keys the stored meshes
+  (`SdfMeshBakeIdentity`), and SPIR-V orders its constants by first use in the
+  whole source, dead code included, so a lighting, screen or view module in
+  their closure can move a stored mesh's key. Add to `sdf-bake-world.hlsli`
+  only what the bake reads, and check with `puck mesh identity --against`.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:

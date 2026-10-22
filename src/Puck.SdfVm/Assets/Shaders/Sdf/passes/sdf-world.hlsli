@@ -1,5 +1,5 @@
-// The modules every world kernel reads: the bake's mask and sampler, which walk the SDF program, and the surface and
-// views passes, which read only its material table and the baked meshes. Views shades the visibility records into the
+// The modules every world kernel reads but the bake's (passes/sdf-bake-world.hlsli): the surface and views passes, which
+// read only the SDF program's material table and the baked meshes. Views shades the visibility records into the
 // view's lit image, which the sky and composite passes (passes/sdf-sky-runs.comp.hlsl, passes/sdf-composite.comp.hlsl)
 // put over the sky. KEEP IN SYNC with SdfWorldTables's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
