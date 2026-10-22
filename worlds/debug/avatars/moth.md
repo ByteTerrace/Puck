@@ -4,12 +4,15 @@
 dimensions and rig. The [original concept sheets](../../../docs/game/art/moth-concept-pack/README.md)
 are the visual standard.
 
-The character renders inside Puck as a native SDF creation. It uses curved ivory shin
-shells with lilac arch trim, swept shoulder plates, an
-open hood, a compact collar, inset eyes and a braid rooted in the front opening.
-Exactly two curved flight pods carry two ivory bands and a recessed nozzle each.
-The materials include a modest clear coat, studio reflections and restrained
-edge weathering.
+The character renders inside Puck as a native SDF creation: the suited Moth of
+the concept pack's turnaround, a 2.06 m mech suit of thick lavender and ivory
+plates over charcoal joints. Her real head sits inside the open hood with dark
+lining round it, the braid rooted by her right cheek. A flat chest slab, two
+stacked shoulder slabs on round pivots, heavy gauntlets, hip pivot discs,
+pistons at the elbows and knees, flared greaves and heavy boots on thick
+charcoal soles carry the silhouette. Exactly two curved flight pods carry two
+ivory bands and a recessed nozzle each. The plates are pristine, as on the
+sheets: a modest clear coat and studio reflections, and no wear.
 
 ## Open the studio
 
@@ -130,48 +133,64 @@ everything parented beneath them, still posed and animated by the hidden body;
 The creation uses superellipsoids for smooth volumes, convex extrusions for
 armor plates, quadratic sweeps for digits and facial lines, and axial profiles
 for flared shins. Scoped subtraction and intersection isolate the hood opening,
-eye sockets, plate boundaries and ankle arches. The shin's cream arch bands and
+eye sockets, plate boundaries and ankle arches. The shin's ivory arch bands and
 side panels are fitted geometry. Detail that is colour rather than form is paint
 (`palette[].paints`), drawn crisp at the pixel and absent from the bake:
-the hood's cream trim, the shin seams and fasteners, the boot rims,
-the bracers' ovals, the mouth, the stripes on the shoulder plates and pods,
-the cuirass neckline and seams, and the upper lids and lashes where their tubes cross the eye
+the hood's ivory trim, the chest slab's lavender centre, the shoulder slabs'
+ivory bands, the gauntlets' lavender inner halves, the vent slot pairs on the
+outer faces of the gauntlets and shin panels, the boot seams, the mouth, the
+pods' plates, and the upper lids and lashes where their tubes cross the eye
 whites. The near-ellipsoidal forms use
 exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
 the rebuilt world was verified at `stepScale 1`.
 
-The torso follows the concept's fitted cream cuirass: a tapered outline meets
-a shallow ridged front, with a lavender neckline and separate lilac plates
-wrapping around the ribs. One small cream abdominal plate sits above the
-segmented charcoal waist, compact gold belt and outlined pelvic inset. The
-chest, side plates and abdomen inherit the torso's breathing and lean; the
-belt and pelvic armor inherit the pelvis. Fine panel joins are paint, not
-thin raised strips. The debug studio's `studio-torso` layout frames the front,
-both quarters and an oblique profile with the full avatar visible.
+The palette is the concept pack's: lavender plates authored `#744080`, which
+the studio's lighting renders at the owner's dusty `#B186B6`, and warm ivory
+plates authored `#F2C49A`. The colour-conversion path and the studio's light
+brighten and cool both, so judge a palette change from a capture, sampled
+against the sheet, never from the hex alone. The plates carry no wear: every
+plate's weathering floor is `plateWear`, 0, and lane 0 is constant.
 
-The pauldrons follow the concept's compact domed caps, swept lower plates and
-lavender front pivots with small cream fasteners. A cream stripe wraps each
-lower plate; a fine painted seam divides the crown. Rounded underside cuts
-clear the upper arms, and both layers follow the existing upper-arm rig.
-`studio-armor` shows front, quarter, rear quarter and full-body views together
-on the debug platform.
-The mesh audit still finds a few small folds at the left shoulder's clipped
-underside and cap rim; the groups are closed, with no uncovered surface.
+Her head is the [`moth-head`](moth-head.puck) library's `mothHead` template,
+placed by `headAt` and scaled by `headScale` (0.68, about 0.26 m crown to chin)
+about the face's front at eye level. The template scales every position, extent,
+curve, sweep radius and blend radius, and takes the creation's palette slots, so
+the off-suit pilot reuses it at its own scale. The mouth and lid paints and the
+blink frame (`blinkPose`) live in the creation and scale by the same
+`headScale`. A charcoal onion shell (`hoodLining`) lines the hood, so the
+headroom round her face reads as padded interior. The braid's root sweep starts
+at her cheek and bridges to the unscaled braid below it.
 
-The hard armor has restrained edge chips revealing primer and dark alloy,
-with small asymmetric scuffs on the shoulders, cuirass, gauntlets and thigh.
-The curvature mask concentrates wear on tight exposed edges; sparse parented
-paints place the longer scratches. Skin, hair and the flexible charcoal suit
-retain their own materials. Brass and nozzle metal use a separate duller
-substrate, and the painted plates retain their clear coat between worn areas.
+The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
+lavender centre, above the segmented charcoal waist and the ochre belt; the
+ochre collar stands above it at the neck. A lavender plate (`pelvicShield`)
+narrows below the belt. The slab inherits the torso's breathing and lean; the
+belt and pelvic plate inherit the pelvis.
 
-The boots follow the reference's lavender armor, fitted cream ankle arches,
-sloping cream insteps, shaped violet toe caps, separate dark soles and split heel
-pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
+Each shoulder is a stack of two thick rounded slabs on a charcoal superellipsoid
+pivot, all riding the upper arm: the upper slab lavender with an ivory band, the
+lower one ivory above a lavender skirt. The upper slab's inner edge stays
+outboard of the hood through the gait and the flight splay. The gauntlets are
+squared blocks from the elbow to the wrist, faced square to the body rather than
+the forearm's twist. Each hip carries a large charcoal disc on the hip axis over
+an ivory guard, both riding the thigh; the thighs are bare charcoal.
+
+The pistons need no driver of their own. Each is a satin steel cylinder on the
+upper bone and a steel capsule rod on the lower bone, each aimed at the hinge,
+so at any bend they meet inside the joint ball and nothing stretches. The
+elbow's cylinder runs from under the shoulder stack, inside the bend, and its
+rod continues the same line at rest into the gauntlet, which covers most of the
+forearm, so the rod shows only between the joint and the gauntlet's top. The
+knee's cylinder and rod converge behind the knee from lugs on the thigh and the
+greave's top.
+
+The boots follow the reference's lavender armor, fitted ivory ankle arches,
+sloping ivory insteps, broad lavender toe caps on thick charcoal soles and split
+heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
 boot's rest frame; its lens and exhaust share that axis. The cyan lens and pale
 core stay softly lit at rest. An axial clearance cut passes through the cream
 instep and rubber ankle behind the nozzle; the raised rear arch clears the barrel.
-The two violet heel guards have softened concave cutouts. The existing airborne
+The two lavender heel guards have softened concave cutouts. The existing airborne
 driver splays the outer guards 16 degrees and the inner guards 6 degrees, leaving
 space between the boots, and folds the centre tread 60 degrees forward,
 sliding it toward the toe, before the second-jump burst. They close again on
@@ -206,13 +225,17 @@ and pelvis displacement as the body settles after impact.
 
 ## Verify edits
 
-Check document admission and the stamp budget:
+Check document admission and the stamp budget (355 of 367):
 
 ```powershell
 dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world worlds/debug/avatars/moth.puck --prototype moth
 ```
 
-Then inspect the live front, rear and face views. Exercise the airborne pose
+Then compare the live suit with the turnaround at the sheet's framing, standing
+at the stage spawn: `view.override camera orbit 0 1.03 0 7.5 <yaw> 0 19`, yaw
+180 front, 90 right side, 0 back and 140 three-quarter. Sheet 10's rear
+three-quarter is `view.override camera orbit 0 <her height + 1> 0 7 35 -4 22`
+after `body.press flight 1 0.1` and `body.press rise 1 0.7`. Exercise the airborne pose
 and landing through the declared jump channel:
 
 ```text
