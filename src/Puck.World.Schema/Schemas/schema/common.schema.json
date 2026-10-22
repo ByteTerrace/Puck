@@ -6601,7 +6601,7 @@
           "const": "setVerticalVelocity"
         },
         "velocity": {
-          "description": "The vertical velocity, in world units per second.",
+          "description": "The vertical velocity, in world units per second at the body\u0027s authored size; a body whose live scale (bodies.scaleRow) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.",
           "type": "number"
         },
         "key": {
@@ -6659,7 +6659,7 @@
           "description": "The unit direction in the body\u0027s own frame."
         },
         "speed": {
-          "description": "The overlay\u0027s speed, in world units per second.",
+          "description": "The overlay\u0027s speed, in world units per second at the body\u0027s authored size, times the body\u0027s live scale.",
           "type": "number"
         },
         "durationSeconds": {

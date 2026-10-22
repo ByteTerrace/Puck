@@ -5,8 +5,9 @@
 // the plain starting point the island is built up from, in engine: boot its package with `--world worlds/debug`, edit
 // this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
 // The standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
-// wheel) are imported documents, as are the device row (devices.puck), the Claude desktop app's window as a pane and a
-// screen (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
+// wheel) are imported documents, as are the gaming devices (devices.puck) in Wonderland, the room a portal pair of two
+// sizes shrinks the Moth into (wonderland.puck), the Claude desktop app's window as a pane and a screen
+// (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
 // `debug.go` console command that reaches them (places.puck), each with notes beside it.
 
 schema: "puck.world.definition.v1"
@@ -23,6 +24,7 @@ import "desktop"
 import "hall"
 import "chess"
 import "paintings"
+import "wonderland"
 import "places"
 
 // The test room's palette slots.
@@ -113,19 +115,21 @@ commands: galleryCommands
 
 // The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck), the chess
 // board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
-// settles it.
+// settles it. Each body's size is its cell of `bodyScale` (the state below).
 bodies {
   capacity: 42
+  scaleRow: bodyScale
 }
 
 placements {
-  // Six derived face screens: the painting wing's six canvases (paintings.puck).
+  // Eight derived face screens: the painting wing's six canvases (paintings.puck) and the Wonderland doors' two
+  // (wonderland.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 6
+    derivedFaceScreens: 8
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
@@ -183,6 +187,17 @@ placements {
 state {
   world {
     galleryState()
+    // Each body's size, the multiplier bodies.scaleRow names: one for the local seats at boot, written by a crossing of
+    // a pair of two sizes (wonderland.puck), within the envelope a quarter to one. A body with no cell is its authored
+    // size.
+    row {
+      name: "bodyScale"
+      kind: "Fixed"
+      capacity: 8
+      min: "0.25"
+      max: "1"
+      cells: map(range(0, 3), i => { key: $"{i}", value: "1" })
+    }
   }
 }
 

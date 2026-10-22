@@ -34,7 +34,9 @@ public static class WorldPredicate {
 /// belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
-    /// <param name="Velocity">The vertical velocity, in world units per second.</param>
+    /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
+    /// whose live scale (<c>bodies.scaleRow</c>) is not one launches at this times its scale, so under the gravity
+    /// that scales with it the jump rises the same number of its own heights.</param>
     /// <param name="Key">The body a world rule names — an index, a <c>$cell:</c> indirection, or a bound key. A kit's
     /// action names none: it acts on its own body, or on <paramref name="Target"/>.</param>
     /// <param name="Target">The participant a kit's action addresses; a world rule refuses any but the default.</param>
@@ -56,7 +58,8 @@ public static class WorldEffect {
     /// attitude at fire time and ridden as authored, never normalized, so it must be unit length, at
     /// <paramref name="Speed"/> for <paramref name="DurationSeconds"/>, an exact whole number of engine ticks.</summary>
     /// <param name="BodyDirection">The unit direction in the body's own frame.</param>
-    /// <param name="Speed">The overlay's speed, in world units per second.</param>
+    /// <param name="Speed">The overlay's speed, in world units per second at the body's authored size, times the
+    /// body's live scale.</param>
     /// <param name="DurationSeconds">How long the overlay rides.</param>
     /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
     /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>

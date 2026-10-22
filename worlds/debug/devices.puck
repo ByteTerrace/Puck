@@ -1,18 +1,21 @@
-// The device row: one of each gaming device the World hosts, each on a labelled stand whose screen shows the machine
-// running, with the cartridges it can swap to in the folders its `contentFolders` name. The debug world imports this
-// file whole. The row stands in the gallery hall's lobby (hall.puck) on its level 0 floor, at z = 28, every device
-// 2.5 m from the next and facing -Z, toward the entrance, so a visitor walking in faces the screens:
+// The gaming devices: one of each the World hosts, each on its stand, whose screen shows the machine running, with the
+// cartridges it can swap to in the folders its `contentFolders` name. The debug world imports this file whole. They
+// stand in Wonderland (wonderland.puck), the room beyond the gallery lobby's west wall that the Moth reaches a quarter
+// her size through the lobby's big painting, every device facing +X, toward the mouse hole she comes out of:
 //
-//   x 17.5  the Humble Gaming Brick: a Color brick in clear atomic-orange glass over its board and cells (75 x 133 x
-//           27.5 mm) leaning back 20 degrees on a machined stand, on a 1.15 m plinth
-//   x 15    the Advanced Gaming Brick: an aluminium clamshell (84.6 x 82 x 23.7 mm closed) open to its 150-degree stop
-//           on a 30-degree stand, on a 1.15 m plinth, its screen leaning back 30 degrees
-//   x 12.5  the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 27-inch television,
-//           on a walnut AV cabinet whose top is 0.65 m up
+//   (1.4, 30.5)   the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 27-inch
+//                 television, on a walnut AV cabinet whose top is 0.65 m up, its back to the west wall; a flight of
+//                 game cases climbs to the cabinet's top at its south end and the pad's extension cable runs out across
+//                 the floor (wonderland.puck)
+//   (5, 31.6)     the Advanced Gaming Brick: an aluminium clamshell (84.6 x 82 x 23.7 mm closed) open to its 150-degree
+//                 stop on a 30-degree stand, on a 0.8 m plinth, its screen leaning back 30 degrees
+//   (6.6, 29.4)   the Humble Gaming Brick: a Color brick in clear atomic-orange glass over its board and cells (75 x 133
+//                 x 27.5 mm), leaning back 20 degrees on its machined stand on the floor, where she walks right up to its
+//                 face
 //
-// Every device is at its real size (the owner's ruling). The handhelds stand on low plinths drawn out toward the walkway,
-// each with its name on an angled placard, so a player reads them close up the way a museum shows a small object; the deck
-// and its television stand on their cabinet at the row's own line. Each device is two or three placements at the same
+// Every device is at its real size (the owner's ruling): at a quarter her size the Moth walks under the plinth and the
+// television towers over her; at full size, walking in through the room's own doorway, she looms over them. The
+// Advanced Brick's plinth carries its name on an angled placard. Each device is two or three placements at the same
 // position: the stand (a plinth, or the deck's cabinet), solid, with the device's name on its face; and the device itself,
 // its own prototype so the bake meshes it at its own millimetre scale rather than at its stand's (a static placement
 // bakes as one group whose lattice is sized by the whole group). A handheld's prototype stands on the plinth's top, its
@@ -26,13 +29,18 @@
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list, swap,
 // engage, reset and eject each one, and the camera lines that frame each device.
 
-let deviceZ = 28
-// The lobby floor's top (hall.puck's level 0).
+// The room's floor top (wonderland.puck).
 let deviceFloor = 0.05
 // The handhelds' plinths: 0.4 m square and 0.8 m tall, so a handheld's screen stands about 0.95 m up, well under the
-// Moth's 1.75 m eye and turned up toward it, and they stand 0.6 m nearer the walkway than the deck's cabinet.
+// Moth's 1.75 m eye and turned up toward it.
 let plinthTop = 0.8
-let handheldZ = (deviceZ - 0.6)
+// Where each device stands on the floor. Every placement turns -90 degrees about up, so a device's front, -Z in its
+// own frame, faces +X: a prototype offset (dx, dy, dz) at no yaw lands at (-dz, dy, dx) from its placement, and a
+// screen's axes turn the same way (the screens below).
+let deckAt = [1.4, deviceFloor, 30.5]
+let advancedAt = [5, deviceFloor, 31.6]
+let brickAt = [6.6, deviceFloor, 29.4]
+let deviceYaw = -90
 
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
 let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
@@ -1058,49 +1066,44 @@ prototypes {
 }
 
 placements {
-  placement "device-humble-gaming-brick-plinth" {
-    prototype: "device-humble-gaming-brick-plinth"
-    position [17.5, deviceFloor, handheldZ]
-    yawDegrees: 0
-    solid
-  }
-
+  // The Humble Brick stands on its own machined stand on the floor, with no plinth, so at a quarter her size the Moth
+  // walks right up to its leaning face.
   placement "device-humble-gaming-brick" {
     prototype: "device-humble-gaming-brick"
-    position [17.5, (deviceFloor + plinthTop), handheldZ]
-    yawDegrees: 0
+    position: brickAt
+    yawDegrees: deviceYaw
   }
 
   placement "device-advanced-gaming-brick-plinth" {
     prototype: "device-advanced-gaming-brick-plinth"
-    position [15, deviceFloor, handheldZ]
-    yawDegrees: 0
+    position: advancedAt
+    yawDegrees: deviceYaw
     solid
   }
 
   placement "device-advanced-gaming-brick" {
     prototype: "device-advanced-gaming-brick"
-    position [15, (deviceFloor + plinthTop), handheldZ]
-    yawDegrees: 0
+    position [advancedAt[0], (deviceFloor + plinthTop), advancedAt[2]]
+    yawDegrees: deviceYaw
   }
 
   placement "device-humble-gaming-deck-stand" {
     prototype: "device-humble-gaming-deck-stand"
-    position [12.5, deviceFloor, deviceZ]
-    yawDegrees: 0
+    position: deckAt
+    yawDegrees: deviceYaw
     solid
   }
 
   placement "device-humble-gaming-deck-television" {
     prototype: "device-humble-gaming-deck-television"
-    position [12.5, deviceFloor, deviceZ]
-    yawDegrees: 0
+    position: deckAt
+    yawDegrees: deviceYaw
   }
 
   placement "device-humble-gaming-deck" {
     prototype: "device-humble-gaming-deck"
-    position [12.5, deviceFloor, deviceZ]
-    yawDegrees: 0
+    position: deckAt
+    yawDegrees: deviceYaw
   }
 }
 
@@ -1208,7 +1211,8 @@ hud {
 // square to its device's face. A screen's `origin` is the glass's front face, not its middle (the slab runs 2 halfDepth
 // back from it), and it stands proud of the lens or tube round it (1 mm on the handhelds, 3 mm on the television, whose
 // bake is coarser), the rest of its depth sunk into the face: a face behind the lens's is hidden by it and shows no
-// picture. Each handheld's origin is its real offset from the plinth's top.
+// picture. Each handheld's origin is its real offset from its stand's foot, and every offset and axis is turned with
+// the placements' yaw (deviceYaw), so each screen faces +X with its device.
 //
 //   screen 0, the brick: 160 by 144 at 0.275 mm, 44 by 39.6 mm, leaning back 20 degrees with the brick
 //   screen 1, the advanced brick: 240 by 160 at 0.255 mm, 61.2 by 40.8 mm, leaning back 30 degrees with its upper half
@@ -1224,9 +1228,9 @@ let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact"
 screens [
   {
     index: 0
-    origin [17.5, ((deviceFloor + plinthTop) + 0.105102), (handheldZ + 0.014043)]
-    right [-1, 0, 0]
-    up [0, 0.939693, 0.34202]
+    origin [(brickAt[0] - 0.014043), (deviceFloor + 0.105102), brickAt[2]]
+    right [0, 0, -1]
+    up [-0.34202, 0.939693, 0]
     halfWidth: ((160 * brickPitch) / 2)
     halfHeight: ((144 * brickPitch) / 2)
     halfDepth: 0.001
@@ -1236,9 +1240,9 @@ screens [
   }
   {
     index: 1
-    origin [15, ((deviceFloor + plinthTop) + 0.101622), (handheldZ + 0.035821)]
-    right [-1, 0, 0]
-    up [0, 0.866025, 0.5]
+    origin [(advancedAt[0] - 0.035821), ((deviceFloor + plinthTop) + 0.101622), advancedAt[2]]
+    right [0, 0, -1]
+    up [-0.5, 0.866025, 0]
     halfWidth: ((240 * advancedPitch) / 2)
     halfHeight: ((160 * advancedPitch) / 2)
     halfDepth: 0.001
@@ -1248,8 +1252,8 @@ screens [
   }
   {
     index: 2
-    origin [(12.5 - tvX), (deviceFloor + pictureY), (deviceZ - (tubeFront + 0.003))]
-    right [-1, 0, 0]
+    origin [(deckAt[0] + (tubeFront + 0.003)), (deviceFloor + pictureY), (deckAt[2] - tvX)]
+    right [0, 0, -1]
     up [0, 1, 0]
     halfWidth: pictureHalfWidth
     halfHeight: pictureHalfHeight

@@ -183,12 +183,17 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>
     public int? FrameSlot { get; init; }
-    /// <summary>Gets the rotation of the rigid carry every world position and normal the draw resolves goes through
-    /// last, after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn
-    /// for the copy of a body drawn through the pair.</summary>
+    /// <summary>Gets the rotation of the carry every world position and normal the draw resolves goes through last,
+    /// after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn for the
+    /// copy of a body drawn through the pair.</summary>
     public Quaternion CarryRotation { get; init; } = Quaternion.Identity;
-    /// <summary>Gets the translation of the rigid carry, applied after <see cref="CarryRotation"/>.</summary>
+    /// <summary>Gets the translation of the carry, applied after <see cref="CarryRotation"/> and
+    /// <see cref="CarryScale"/>.</summary>
     public Vector3 CarryTranslation { get; init; }
+    /// <summary>Gets the carry's uniform scale, applied to a position after <see cref="CarryRotation"/>: one for a draw
+    /// drawn where it stands, a portal pair's scale for the copy of a body drawn through a pair of two sizes. Normals
+    /// only turn.</summary>
+    public float CarryScale { get; init; } = 1f;
     /// <summary>Gets the world-space plane the draw is clipped by, <c>(n, d)</c>: a point where <c>dot(n, x) + d</c> is
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
@@ -422,6 +427,7 @@ public static class SdfMeshRegion {
             record[SdfMeshRecord.CarryTranslationWord] = BitConverter.SingleToUInt32Bits(value: shift.X);
             record[(SdfMeshRecord.CarryTranslationWord + 1)] = BitConverter.SingleToUInt32Bits(value: shift.Y);
             record[(SdfMeshRecord.CarryTranslationWord + 2)] = BitConverter.SingleToUInt32Bits(value: shift.Z);
+            record[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(value: draws[draw].CarryScale);
             record[SdfMeshRecord.ClipPlaneWord] = BitConverter.SingleToUInt32Bits(value: clip.X);
             record[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
             record[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);

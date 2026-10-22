@@ -478,4 +478,114 @@ public sealed class WorldFrameIsometryLawTests {
             b: PiRadians
         ) <= YawErrorBudgetRaw));
     }
+    // A face at the origin facing +Z, 6 by 8 unless `sourceWidth` and `sourceHeight` say otherwise, and a counterpart
+    // facing -Z ten metres along +X at `width` by `height` half-extents: the pair turns nothing, so the map is a pure
+    // scale about the two origins.
+    private static (WorldFaceFrame Source, WorldFaceFrame Destination) Sized(double width, double height, double sourceWidth = 3.0, double sourceHeight = 4.0) {
+        var source = (BuildFrame(
+            origin: FixedVector3.Zero,
+            yawDegrees: 0.0
+        ) with {
+            HalfHeight = FixedQ4816.FromDouble(value: sourceHeight),
+            HalfWidth = FixedQ4816.FromDouble(value: sourceWidth),
+        });
+        var destination = (BuildFrame(
+            origin: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: 10),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            yawDegrees: 180.0
+        ) with {
+            HalfHeight = FixedQ4816.FromDouble(value: height),
+            HalfWidth = FixedQ4816.FromDouble(value: width),
+        });
+
+        return (source, destination);
+    }
+    [Fact]
+    public void APairOfTwoSizesScalesPointsAndRatesByTheirRatio_AndDirectionsOnlyTurn() {
+        var (source, destination) = Sized(
+            height: 1.0,
+            width: 0.75
+        );
+        var quarter = FixedQ4816.FromDouble(value: 0.25);
+        var offset = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: 2),
+            Y: FixedQ4816.FromInteger(value: 1),
+            Z: FixedQ4816.FromInteger(value: 4)
+        );
+
+        Assert.True(condition: WorldFrameIsometry.TryScale(
+            destination: in destination,
+            reason: out var reason,
+            scale: out var scale,
+            source: in source
+        ), userMessage: reason);
+        Assert.Equal(
+            actual: scale,
+            expected: quarter
+        );
+        Assert.True(condition: (RawAbs(
+            a: (WorldFrameIsometry.MapPoint(
+                destination: in destination,
+                point: offset,
+                source: in source
+            ) - destination.Origin),
+            b: (WorldFrameIsometry.MapVector(
+                destination: in destination,
+                source: in source,
+                value: offset
+            ) * quarter)
+        ) <= PositionErrorBudgetRaw));
+        Assert.Equal(
+            actual: WorldFrameIsometry.MapRate(
+                destination: in destination,
+                source: in source,
+                value: Forward
+            ),
+            expected: (WorldFrameIsometry.MapVector(
+                destination: in destination,
+                source: in source,
+                value: Forward
+            ) * quarter)
+        );
+
+        var arrival = WorldFrameIsometry.MapArrival(
+            destination: in destination,
+            source: in source,
+            travelerPlanarVelocity: (Forward * FixedQ4816.FromInteger(value: 4)),
+            travelerPosition: offset,
+            travelerVerticalVelocity: FixedQ4816.FromInteger(value: -8),
+            travelerYawRadians: FixedQ4816.Zero
+        );
+
+        Assert.Equal(
+            actual: arrival.VerticalVelocity,
+            expected: FixedQ4816.FromInteger(value: -2)
+        );
+    }
+    [InlineData(0.75, 2.0, 3.0, 3.0, "not one rectangle at two sizes")]
+    [InlineData(3.0, 2.0, 3.0, 4.0, "one width and two heights")]
+    [InlineData(1.0, 1.0, 3.0, 3.0, "a power of two apart")]
+    [Theory]
+    public void APairNoOneExactScaleMapsIsRefusedByName(double width, double height, double sourceWidth, double sourceHeight, string refusal) {
+        var (source, destination) = Sized(
+            height: height,
+            sourceHeight: sourceHeight,
+            sourceWidth: sourceWidth,
+            width: width
+        );
+
+        Assert.False(condition: WorldFrameIsometry.TryScale(
+            destination: in destination,
+            reason: out var reason,
+            scale: out _,
+            source: in source
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: refusal
+        );
+    }
 }

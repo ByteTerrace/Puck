@@ -50,12 +50,13 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         var center = ((bounds.Low + bounds.High) * 0.5f);
         var half = ((bounds.High - bounds.Low) * 0.5f);
         var rotation = draw.CarryRotation;
+        var scale = draw.CarryScale;
 
         box = new SdfMeshBox(
-            Center: (Vector3.Transform(value: Vector3.Transform(position: center, matrix: matrix), rotation: rotation) + draw.CarryTranslation),
-            HalfX: Vector3.Transform(value: (half.X * new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13)), rotation: rotation),
-            HalfY: Vector3.Transform(value: (half.Y * new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23)), rotation: rotation),
-            HalfZ: Vector3.Transform(value: (half.Z * new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33)), rotation: rotation)
+            Center: ((Vector3.Transform(value: Vector3.Transform(position: center, matrix: matrix), rotation: rotation) * scale) + draw.CarryTranslation),
+            HalfX: (Vector3.Transform(value: (half.X * new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13)), rotation: rotation) * scale),
+            HalfY: (Vector3.Transform(value: (half.Y * new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23)), rotation: rotation) * scale),
+            HalfZ: (Vector3.Transform(value: (half.Z * new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33)), rotation: rotation) * scale)
         );
 
         return true;

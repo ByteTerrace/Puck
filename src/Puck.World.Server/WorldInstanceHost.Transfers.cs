@@ -526,6 +526,12 @@ public sealed partial class WorldInstanceHost {
                 transfer: in transfer
             )) {
                 abortReason = counterpartReason;
+            } else if (WorldFrameIsometry.Scale(
+                destination: in counterpartFrame,
+                source: transfer.SourceFrame.Value
+            ) != FixedQ4816.One) {
+                // A body's size lives in its own world's bodies.scaleRow, which another world does not hold.
+                abortReason = $"mapped arrival's counterpart '{transfer.Counterpart}' in '{targetName}' is a different size from its source face, and a scaled pair carries a traveller's size only within one world";
             }
         }
 

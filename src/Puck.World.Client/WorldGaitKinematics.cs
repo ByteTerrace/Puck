@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm.Views;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -43,19 +44,16 @@ public sealed class WorldGaitKinematics {
         ForwardAcceleration = 0f;
         Array.Clear(array: m_seeded);
     }
-    /// <summary>Turns the eased world-frame velocity with a rotation of the world about up — an in-place crossing
-    /// that turns its traveller — so the acceleration signals read no turn the body did not make. The body-frame
-    /// velocity and every driver follower are unchanged by it.</summary>
-    /// <param name="rotation">The unit rotation.</param>
-    public void Carry(Quaternion rotation) {
-        var turned = Vector3.Transform(
-            rotation: rotation,
-            value: new Vector3(
-                x: m_worldVelocity.X,
-                y: 0f,
-                z: m_worldVelocity.Y
-            )
-        );
+    /// <summary>Turns and scales the eased world-frame velocity with an in-place crossing's carry — a rotation of the
+    /// world about up and the pair's scale — so the acceleration signals read no turn or speed change the body did not
+    /// make. The body-frame velocity and every driver follower are unchanged by it.</summary>
+    /// <param name="carry">The crossing's carry.</param>
+    public void Carry(WorldPoseCarry carry) {
+        var turned = (carry.Direction(direction: new Vector3(
+            x: m_worldVelocity.X,
+            y: 0f,
+            z: m_worldVelocity.Y
+        )) * carry.Scale);
 
         m_worldVelocity = new Vector2(
             x: turned.X,

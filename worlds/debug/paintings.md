@@ -66,7 +66,7 @@ that falls into it from level 1 falls through the ceiling painting's back and
 onto the floor painting, and from there it is in the loop.
 
 - Each crossing narrates on stderr:
-  `[world.transfer: transfer=24 'boot' seat 1 crossed painting-fall-floor/glass -> painting-fall-ceiling/glass in place, at (66.00, 4.11, 22.60) moving (0.00, -10.20, 0.00) m/s]`.
+  `[world.transfer: transfer=24 'boot' seat 1 crossed painting-fall-floor/glass -> painting-fall-ceiling/glass in place, at (66.00, 4.11, 22.60) moving (0.00, -10.20, 0.00) m/s, scale 1.00]`.
   The fall speeds up on each lap until it holds at the Moth's 40 m/s sink
   speed (its `fall` hold's `envelope.sinkSpeed`).
 - `body.where 0` gives the pose and `vel=(x, y, z)`, the authoritative velocity

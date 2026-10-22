@@ -1,0 +1,51 @@
+// Wonderland's portal pair of two sizes (wonderland.puck), each scenario booted in the whole debug world:
+// `puck test worlds/debug/wonderland-tests.puck`, and `--reproduce` to show two runs agree. `bodyScale` holds each
+// body's size. A headless seat's camera faces -Z, so a strafe walks along X: -1 toward the lobby's west wall and the big
+// painting on the wall at x = 10.3, +1 toward the room's east wall and the mouse hole on it at x = 9.4. At full size
+// the wall round the mouse hole stops her before her feet reach its glass.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id: its doors lead through the `self` reference, which names the document `debug`, so a
+// scenario world under another id would resolve them to a second world rather than to itself.
+documentId: "debug"
+
+test "the big painting sets her down a quarter her size" {
+  when {
+    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    ticks 15
+    seat1: body.fly 0 -1 0 0 0 0 1.5 0
+    ticks 60
+  }
+  expect {
+    bodyScale[0] == 0.25
+  }
+}
+
+test "the mouse hole sets her down at full size again" {
+  when {
+    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    ticks 15
+    seat1: body.fly 0 -1 0 0 0 0 1.5 0
+    ticks 60
+    seat1: body.pose 8.8 0.05 30.5 -90 0 0 0
+    ticks 15
+    seat1: body.fly 0 1 0 0 0 0 1.5 0
+    ticks 60
+  }
+  expect {
+    bodyScale[0] == 1
+  }
+}
+
+test "at full size she cannot fit the mouse hole" {
+  when {
+    seat1: body.pose 8.4 0.05 30.5 -90 0 0 0
+    ticks 15
+    seat1: body.fly 0 1 0 0 0 0 1.5 0
+    ticks 60
+  }
+  expect {
+    bodyScale[0] == 1
+  }
+}

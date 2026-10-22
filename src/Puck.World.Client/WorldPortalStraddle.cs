@@ -21,7 +21,7 @@ public static class WorldPortalStraddle {
     /// <summary>One door of a same-world pair.</summary>
     /// <param name="Glass">The door's glass.</param>
     /// <param name="Counterpart">The counterpart's glass.</param>
-    /// <param name="Carry">The rigid motion the pair moves a traveller through.</param>
+    /// <param name="Carry">The motion and scale the pair moves a traveller through.</param>
     public readonly record struct Door(WorldFaceGeometry Glass, WorldFaceGeometry Counterpart, WorldPoseCarry Carry);
 
     /// <summary>Returns the doors of a world whose counterparts stand in the same world, derived once per definition.</summary>
@@ -79,6 +79,7 @@ public static class WorldPortalStraddle {
         return new SdfSlotClip(
             CopyPlane: PlaneOf(glass: door.Counterpart),
             CopyRotation: door.Carry.Rotation,
+            CopyScale: door.Carry.Scale,
             CopyTranslation: door.Carry.Translation,
             FirstSlot: firstSlot,
             Plane: PlaneOf(glass: door.Glass),
