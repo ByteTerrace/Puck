@@ -64,6 +64,12 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
     /// <summary>The <c>vkCmdDrawIndexed</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void> CmdDrawIndexed;
+    /// <summary>The device extension counted indirect draws need, <c>VK_KHR_draw_indirect_count</c>.</summary>
+    public const string DrawIndirectCountExtension = "VK_KHR_draw_indirect_count";
+    /// <summary>The <c>vkCmdDrawIndirectCountKHR</c> entry point; <see langword="null"/> unless
+    /// <c>VK_KHR_draw_indirect_count</c> is enabled, which the device enables only beside <c>multiDrawIndirect</c> and
+    /// <c>drawIndirectFirstInstance</c>.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void> CmdDrawIndirectCountKhr;
     /// <summary>The <c>vkCmdEndDebugUtilsLabelEXT</c> entry point; <see langword="null"/> unless <c>VK_EXT_debug_utils</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, void> CmdEndDebugUtilsLabelExt;
     /// <summary>The <c>vkCmdEndRenderPass</c> entry point.</summary>
@@ -212,7 +218,9 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
     /// <param name="deviceFaultEnabled">Whether the device was created with deviceFault enabled.</param>
     /// <param name="checkpointsEnabled">Whether the device was created with <see cref="VulkanDeviceCheckpoints.ExtensionName"/>.</param>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false) {
+    /// <param name="drawIndirectCountEnabled">Whether the device was created with <see cref="DrawIndirectCountExtension"/>;
+    /// <see cref="CmdDrawIndirectCountKhr"/> resolves only then.</param>
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false, bool drawIndirectCountEnabled = false) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         VulkanArgument.RequireHandle(
@@ -318,6 +326,12 @@ public sealed unsafe class VulkanDeviceCommands {
             deviceHandle: deviceHandle,
             functionName: "vkCmdDrawIndexed"u8
         ));
+        CmdDrawIndirectCountKhr = (drawIndirectCountEnabled
+            ? ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void>)procedures.ResolveOptionalDeviceProc(
+                deviceHandle: deviceHandle,
+                functionName: "vkCmdDrawIndirectCountKHR"u8
+            ))
+            : null);
         CmdEndDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, void>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkCmdEndDebugUtilsLabelEXT"u8

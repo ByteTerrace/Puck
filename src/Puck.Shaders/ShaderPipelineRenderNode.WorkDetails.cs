@@ -44,7 +44,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var rows = checked((m_passes.Length + count));
 
         if (rows <= counters.RowsOf(slot: slot)) { return; }
-        var replacementBytes = checked(((((ulong)rows) * ((ulong)GpuKernelCounters.RowBytes)) * 2UL));
+        var replacementBytes = checked((GpuKernelCounters.SlotBytesOf(rows: rows) * 2UL));
         var peak = checked((OwnedBytes + replacementBytes));
 
         if (peak > BudgetBytes) {

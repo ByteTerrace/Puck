@@ -319,6 +319,21 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.IndirectDispatchesColumn);
     }
+    public bool CanDrawIndirectCount =>
+        inner.CanDrawIndirectCount;
+    // The draws and vertices of the commands are the GPU's to count (GpuKernelCounters.DrawnWords); the call counts here.
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) {
+        inner.DrawIndirectCount(
+            argumentBufferHandle: argumentBufferHandle,
+            argumentBufferOffset: argumentBufferOffset,
+            commandBufferHandle: commandBufferHandle,
+            countBufferHandle: countBufferHandle,
+            countBufferOffset: countBufferOffset,
+            maxDrawCount: maxDrawCount,
+            pipelineLayoutHandle: pipelineLayoutHandle
+        );
+        Tally(column: GpuWork.IndirectDrawsColumn);
+    }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
         inner.ClearStorageImage(
             commandBufferHandle: commandBufferHandle,

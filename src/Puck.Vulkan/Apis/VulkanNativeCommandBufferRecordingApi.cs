@@ -598,6 +598,26 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void DrawIndirectCount(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount, uint stride) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        var drawIndirectCount = device.CmdDrawIndirectCountKhr;
+
+        if (drawIndirectCount is null) {
+            throw new NotSupportedException(message: $"The Vulkan device was created without {VulkanDeviceCommands.DrawIndirectCountExtension}.");
+        }
+
+        drawIndirectCount(
+            commandBufferHandle,
+            bufferHandle,
+            offset,
+            countBufferHandle,
+            countBufferOffset,
+            maxDrawCount,
+            stride
+        );
+    }
+    /// <inheritdoc/>
     public void BindIndexBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, uint indexType) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
