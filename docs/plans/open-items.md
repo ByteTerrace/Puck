@@ -16,14 +16,22 @@ runtime still has sixteen uniform channel slots; the design record is complete.
 - [ ] C2 relative input: Q32.32 displacement in the numeric bank, authored
   units/sensitivity/bounds, single consumption, and no tick-rate scaling.
 - [ ] C3 authoritative modes: finite state selectors, composed live sets,
-  per-combination allocation and permissions, named capacity refusals, and debug
-  form/engagement migration. Deliver with C4 before enabling slot reuse.
-- [ ] C4 switch barrier: input epochs, complete release and cancellation,
-  neutral rearming, reload/disconnect/route handling, and checkpoint continuity.
+  per-combination allocation and permissions, directed family-transition keep
+  sets, named capacity/continuity refusals, and the debug form/flight/engagement
+  migration policy. Deliver with C4 before enabling slot reuse.
+- [ ] C4 switch barrier and continuity: input epochs, release by default,
+  authored same-meaning held/toggle carry, consumed transition activations,
+  cancellation and neutral rearming for released/rebound sources,
+  reload/disconnect/route handling, bounded source provenance and
+  taped/checkpointed contributions, toggle, rearm and hold
+  continuity. Show run/autorun surviving compatible forms, autofly starting
+  flight and clearing on flight exit, and neutral board/screen entry and exit.
 - [ ] C5 timed ingress and history: sub-tick events, lateness admission,
-  calibration, bounded rings and overflow outcomes, replay and hash coverage.
+  calibration, bounded rings and overflow outcomes, held-origin continuation
+  across epochs, replay and hash coverage.
 - [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
-  patterns, consumption, tick buffers, and event-time beat judgement.
+  patterns, consumption, tick buffers, event-time beat judgement, and held-note
+  and charge continuity across a declared mode transition without a new press.
 - [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
