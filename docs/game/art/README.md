@@ -10,7 +10,7 @@ documents remain the implementation sources.
 | Document or package | Scope | Description |
 |---|---|---|
 | [Armored chibi hero implementation brief](armored-chibi-hero-brief.md) | Character design and motion | Aesthetic brief defining silhouette, chunky chibi anime armor, materials, and movement dynamics for the hero avatar within Puck's signed-distance renderer. |
-| [Moth concept pack](moth-concept-pack/README.md) | Concept art and model sheets | The Moth's visual standard: the suited turnaround, construction details, poses and expressions, the off-suit Moth with her scale and fit inside the suit, the handheld at true scale, the flight-pack references and prompt provenance. |
+| [Moth concept pack](moth-concept-pack/README.md) | Concept art and model sheets | The Moth's visual standard: the mech-suit turnaround, construction details, poses and expressions, flight, the off-suit Moth with her scale and fit inside the suit, the handheld at true scale, the flight-pack references and prompt provenance. |
 
 ## Authored avatars
 
