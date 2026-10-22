@@ -533,7 +533,7 @@ public sealed partial class SdfWorldPassesLawTests {
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false, bool glass = false) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false, bool glass = false, int displayHertz = 0) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
@@ -581,7 +581,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Runtime = runtime!;
             m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
-                StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
+                StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz);
             TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&

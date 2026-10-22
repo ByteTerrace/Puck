@@ -20,7 +20,7 @@ public sealed class WorldStampPoolRateLawTests {
     private const float Frame = (1f / 60f);
     private const float Step = 0.05f;
 
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage() {
+    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(bool rootDynamics = false) {
         var creation = CreationFixtures.Prototype(id: "walker", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "walker",
@@ -49,10 +49,13 @@ public sealed class WorldStampPoolRateLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var pool = new WorldStampPool();
 
+        // A look whose root follows the body through a dynamics row, as the Moth's does.
+        var follower = (WorldLook.Implicit with { Motion = (WorldLookMotion.Default with { Dynamics = "follow" }) });
+
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: (rootDynamics ? follower : WorldLook.Implicit))],
             creations: [creation],
-            dynamics: [],
+            dynamics: (rootDynamics ? [new DynamicsRow(Name: "follow", Frequency: 4f, Damping: 0.8f, Response: 0f)] : []),
             placements: []
         );
 
@@ -134,6 +137,56 @@ public sealed class WorldStampPoolRateLawTests {
             // The root follows the body every frame; the head rides it rigidly.
             Assert.Equal(expected: Step, actual: (roots[frame].X - roots[frame - 1].X), tolerance: 1e-4f);
             Assert.Equal(expected: offsets[0].Y, actual: offsets[frame].Y, tolerance: 1e-4f);
+        }
+    }
+    // A body whose root follows the body through a dynamics row keeps stepping that follower every frame between packs,
+    // and its parts ride the followed root rigidly.
+    [Fact]
+    public void AHeldBodyWhoseRootFollowsADynamicsRowStepsItsRootEveryFrame() {
+        var (client, pool, transforms) = Stage(rootDynamics: true);
+        var counts = SdfUpdateRateCounts.Counters();
+
+        pool.RateBy(counts: counts, height: 900U, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
+
+        var roots = new List<Vector3>();
+        var offsets = new List<Vector3>();
+
+        for (var tick = 1UL; (tick <= 9UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+            roots.Add(item: transforms[0].Position);
+            offsets.Add(item: (transforms[2].Position - transforms[0].Position));
+        }
+
+        Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
+
+        for (var frame = 1; (frame < roots.Count); frame++) {
+            Assert.True(condition: (roots[frame].X > roots[frame - 1].X));
+            Assert.Equal(expected: offsets[0].Y, actual: offsets[frame].Y, tolerance: 1e-4f);
+        }
+    }
+    // A view looking away from the body, or standing inside its reach, rates it as no view sees it or as a view at its
+    // nearest: the first poses at a reduced rate, the second every frame.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ABodyNoViewSeesPosesAtTheLeastRateAndOneAViewStandsInsidePosesEveryFrame(bool inside) {
+        var (client, pool, transforms) = Stage();
+        var counts = SdfUpdateRateCounts.Counters();
+        var camera = (inside
+            ? CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: 0f), target: new Vector3(x: 0f, y: 0.5f, z: 1f), viewportHeight: 900f, viewportWidth: 1280f)
+            : CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: -3f), target: new Vector3(x: 0f, y: 0.5f, z: -6f), viewportHeight: 900f, viewportWidth: 1280f));
+
+        pool.RateBy(counts: counts, height: 900U, rates: SdfUpdateRates.All, views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
+
+        for (var tick = 1UL; (tick <= 6UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+        }
+
+        if (inside) {
+            Assert.Equal(expected: 6L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
+            Assert.Equal(expected: 0L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesHeld));
+        } else {
+            Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
         }
     }
     [Fact]
