@@ -57,7 +57,8 @@ kits {
     }
   }
   rows [
-    // The woman inside the suit: 1.68 m tall and as quick on foot, with one jump and no flight pack. Her capsule's
+    // The woman inside the suit: 1.68 m tall and as quick on foot, walking and running, with one jump and no flight pack,
+    // so the fly channel does nothing for her. Her capsule's
     // 0.25 m spheres span 0 to 1.68 m and the 0.5 m across her shoulders and hanging hands.
     {
       bodyContact: Solid
@@ -108,7 +109,11 @@ kits {
           }
         ]
         speed {
-          value: 5
+          value: 2.5
+          held {
+            channel: "run"
+            multiplier: 2
+          }
         }
         stepHeight: 0.3
         turn {

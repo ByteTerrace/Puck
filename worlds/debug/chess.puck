@@ -1013,7 +1013,7 @@ bindingOverlays [
               { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
               { channel: "boardPick", id: "boardPick", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
               { channel: "boardCancel", id: "boardCancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
-              { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.buttonWest"] }
+              { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
             ]
           }
         }

@@ -373,7 +373,7 @@ aside while the picture is framed.
   released per frame in `TakeWarp`), and leaving brings the World's window
   back to the front (`ReturnForeground`: `SetForegroundWindow`, then an Alt
   tap, then a click on its caption, which dismisses Start and the shell's
-  flyouts). The pad's X leaves through the context button, as at every
+  flyouts). The pad's RB leaves through the context button, as at every
   device.
 - **The pad as a desktop pointer.** A seat captured on a capture's screen
   reads the `engagement` family's `passthrough` state
@@ -435,7 +435,8 @@ body holding the device instead of on the framed picture. The rig runs in
 whose axes are the picture's (+X right, +Y up, +Z its normal, toward the body
 looking at it), so `offset` and `lookAt` without `worldAxes` place the eye and
 the aim relative to the brick. `player.frame [seat]` (bindable, presentation
-only; the Moth basis binds the pad's East and `L`) switches the seat between the
+only; the Moth basis binds `L`, and the bar's View page the pad's East under the
+left trigger) switches the seat between the
 framed picture and the other view, which is the held view of a carried screen
 with a camera and the seat's own camera (the room) for any other screen; the
 choice lasts until the engaged screen changes (`WorldPerceptionAnchor.ToggleFrame`,
@@ -749,7 +750,7 @@ actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
 world's device row declares engageable machine screens 0 to 2 (kit
 `devicePad`, engage radius 3, engage channel `interact`, the Moth's context
-button on E and the pad's X; `devices.md` has the stand-there `body.pose`
+button on E and the pad's RB; `devices.md` has the stand-there `body.pose`
 lines), so the screen path runs in the live world: drive the button through
 the real input path with `player.signal keyboard.e press`, a `world.wait`, and
 `release`, never `body.engage`, when the probe is what you are showing. Remember actor ≠ target: every seat holds wide grants by default, so

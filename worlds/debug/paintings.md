@@ -81,7 +81,8 @@ showing the fallback colour.
 
 ### Get out
 
-Press Backspace (or L3 on a pad) to respawn at the stage spawn. From the console,
+Press Backspace (or the play wheel's Respawn sector on a pad) to respawn at the
+stage spawn. From the console,
 pose the body out of the shaft: `body.pose spawn:stage` returns it to the origin,
 or `debug.go portal-fall` stands it before the floor painting. Flying out sideways
 (`body.fly 0 1 0 0 0 0 1`) also works: a crossing keeps planar velocity, so the

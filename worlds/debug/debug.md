@@ -141,8 +141,8 @@ wheel are [`controls.puck`](controls.puck), and the key layout is
 
 | Hold | Page | What the twelve plates do |
 |---|---|---|
-| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)); LB opens the play wheel (`WH`) and RB the gallery's (`GW`) |
-| LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face, head, boots, shoulder), the chase camera, annotation, the jetpack alone |
+| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)): run, flight, jump, descend, fly, the context button (RB); LB opens the play wheel (`WH`) |
+| LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face), autorun (L3), autofly (R3), recenter, free look, the frame toggle, the jetpack alone |
 | RT or X | Debug | Where, history on, console, capture (`world.screenshot` to the state root's `screenshots/`), the inspector, the debug view, frame hold and compare, stop, and the suit toggle |
 | LT then RT | Go | `debug.go` to the stage, gallery, portals, Wonderland, hero studio, devices, chess, computer and the four gallery levels |
 | RT then LT | Tour | The gallery tour (next, previous, flag, slice), `world.quality next`, `world.rates toggle`, its lights and motion, and the garden and night paintings |

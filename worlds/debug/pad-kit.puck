@@ -7,7 +7,8 @@
 // The pad sources are the bar's slot set. The keyboard keys are the owner's rule made a layout: every control the bar
 // shows has a keyboard equivalent, so the d-pad is the arrow keys, the face diamond is the I, J, K, L diamond (I north, J
 // west, K south, L east), the shoulders are U and O and the stick presses N and M. Under a held page modifier (Z for the
-// left trigger, X for the right) each key does what its plate shows.
+// left trigger, X for the right) each key does what its plate shows. The resting page keeps N and M for the stick
+// presses (run on/off and fly) and gives the face buttons their own keys (avatars/moth.puck).
 
 let padUp = ["gamepad.dpadUp", "keyboard.arrowUp"]
 let padRight = ["gamepad.dpadRight", "keyboard.arrowRight"]

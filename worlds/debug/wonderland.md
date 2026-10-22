@@ -63,7 +63,7 @@ glass. To loom over the devices, walk in through the room's own doorway
   `[world.transfer: transfer=0 'boot' seat 1 crossed wonderland-door/glass -> wonderland-mouse-hole/glass in place, at (9.38, 0.06, 30.50) moving (-1.25, 0.00, 0.00) m/s, scale 0.25]`.
 - `body.where 0` reports `scale=0.25` after the big painting and `scale=1.00` after
   the mouse hole; `body.state 0` shows the `size` register.
-- At a quarter size the context button (E, X on a pad) engages a device from
+- At a quarter size the context button (E, RB on a pad) engages a device from
   within 0.75 m, on the ground plane; `body.engage <screen>` from farther says
   how near she must stand at her size.
 - A jump at a quarter size rises about 0.3 m, a quarter of her full jump.

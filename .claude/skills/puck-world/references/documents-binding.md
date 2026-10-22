@@ -27,11 +27,11 @@ its own drag, in either press order). A command row targeting a channel may auth
 `mode: Toggle`: each chord completion flips the input-side channel latch, and
 breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
-bespoke command or simulation state. No checked-in world authors one today; a profile can hold `look` (LT)
-plus `gamepad.leftStickPress` to toggle `forward` for autorun, and hold `look`
-plus `gamepad.rightStickPress` to toggle `up` for auto-jetpack. Each command
-chord consumes its stick press before the resting page's bare stick binding can
-see it. Toggle contributions are owned by the compiled command destination,
+bespoke command or simulation state. A page entry takes `mode: Toggle` the same way, and the
+debug world authors its auto-actions so: the Moth's resting page toggles `run` on the left stick's press beside the
+held `run` on West, and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
+stick's press (autorun) and `rise` on the right stick's press (autofly). The page's entry replaces the resting page's at
+that source, and the latch outlives the page, so the trigger lets go and she keeps going. Toggle contributions are owned by the compiled command destination,
 not by the button that flipped them; synthesized chord edges carry that stable
 logical source through press, reassertion, and release. Parallel auto-actions
 therefore coexist, while several bindings for the same destination operate one
@@ -97,7 +97,7 @@ shows only where `slotSet` places each member.
 **Openers.** A plate whose control the active page leaves unbound but whose hold opens a deeper page of the group (a
 chord row whose members are this page's plus that control) reads as that page's opener: bright, wearing the icon the
 bar's `iconRow` names for the OPENED PAGE'S ID (`state.barIcons."wheel-pad"`; `BindingPageView.Openers`). The Move
-page's LB opens the play wheel this way, as `WH`, and RB the gallery's wheel (`GW`). `WorldPresentationManifest`
+page's LB opens the play wheel this way, as `WH`. `WorldPresentationManifest`
 registers each page id as an icon key.
 
 `bindingBar.slotSet` (required, non-empty) names the physical controls the bar

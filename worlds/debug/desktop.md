@@ -76,7 +76,7 @@ ratio, centred in the slot with dark bars beside it, whatever the slot's shape.
 ## Use the desktop by engaging the monitor
 
 Screen 16 engages like a device: walk within 3 m of the monitor and press the
-context button (E, or X on a pad). The camera eases onto the monitor's picture
+context button (E, or RB on a pad). The camera eases onto the monitor's picture
 until it fills the window as large as fits, centred on black, with the room
 faded out around it, and the system arrow shows while the pointer is on the
 picture.
@@ -108,7 +108,7 @@ the desktop without opening it.
 
 **Leave in one step:** Control+Alt+Escape, from any window (while a seat frames
 the desktop the World claims the chord system-wide, and `source.passthrough`
-says `chord claimed`), or X on a pad, or E while the World's window is in
+says `chord claimed`), or RB on a pad, or E while the World's window is in
 front. Each closes the passthrough source, releasing every button and key the
 pad holds, brings the World's window back to the front so the keyboard is the
 game's, and eases the camera back to the Moth; `source.passthrough` then reads
@@ -129,9 +129,9 @@ presses at it, whichever window is in front:
 | A | Left click; hold it to drag. The first press opens the desktop |
 | Y | Right click |
 | B | Middle click |
-| LB / RB | Back / Forward (the mouse's fourth and fifth buttons) |
+| LB / X | Back / Forward (the mouse's fourth and fifth buttons) |
 | D-pad | Arrow keys, to whichever window has the keyboard |
-| X | Leaves |
+| RB | Leaves, the context button as everywhere |
 | Start | Nothing yet: the engine has no on-screen keyboard |
 
 The cursor stays on the display. Where it rests on the World's window over the
