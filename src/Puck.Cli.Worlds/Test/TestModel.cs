@@ -10,6 +10,18 @@ internal enum TestHost {
     Browser,
 }
 
+/// <summary>One world a <c>puck test</c> run boots: the name it is reported under and the document the leg boots.</summary>
+/// <param name="Name">The world's name: the generated world's name, or a document's own file name.</param>
+/// <param name="Path">The full path of the document the leg boots.</param>
+internal sealed record TestWorld(string Name, string Path) {
+    /// <summary>Returns a document that runs as it stands, reported under its file name.</summary>
+    /// <param name="path">The document's full path.</param>
+    /// <returns>The world.</returns>
+    public static TestWorld ForDocument(string path) => new(
+        Name: System.IO.Path.GetFileNameWithoutExtension(path: System.IO.Path.GetFileNameWithoutExtension(path: path)),
+        Path: path
+    );
+}
 /// <summary>One verdict row as the export declares and resolves it.</summary>
 /// <param name="Name">The verdict row's name.</param>
 /// <param name="Gate">The expectation the row's <c>verdict.gate</c> claims.</param>

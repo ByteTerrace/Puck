@@ -1780,6 +1780,13 @@ is admitted only for the verbs whose grammar carries a world token — `body.fly
 verb reaches the booted world whatever a row asks, so addressing a sibling with
 one is refused when the document is validated.
 
+Each generated world is staged in a directory of its own, under the file name its
+`documentId` gives it, with every document its `references` reach composed beside
+it from the directory each was authored in. A door onto a sibling document
+crosses into it, and the sibling's way back naming the test world's id returns
+to the instance the run booted ([crossing into another
+document](../authoring/testing-a-world.md#crossing-into-another-document)).
+
 This verb is the only door that runs a module's tests. `puck compile` lowers and
 does not boot, so a module whose tests fail still compiles. A source that emits
 several worlds is compiled to all of them, each world's module tests run, and a
@@ -1820,7 +1827,8 @@ puck test <path> --host server         the real Puck.World executable, headless 
 puck test <path> --world-artifact <p>  boot this already-built Puck.World.dll instead of
                                        the stored build of the checkout's sources
 puck test <path> --keep <dir>          run in <dir> and keep it: every generated test world
-                                       under <dir>/generated, plus transcripts, exports
+                                       in its own directory under <dir>/generated, beside
+                                       the documents it reaches, plus transcripts, exports
                                        and manifests
 puck test <path> --jobs <n>            run at most n isolated test worlds concurrently
 puck test <path> --reproduce           rerun every world and require byte-identical state

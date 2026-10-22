@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Worlds.Tests;
@@ -39,5 +40,86 @@ public sealed class TestCommandLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "is neither a world document, a .puck source, nor a directory"
         );
+    }
+    /// <summary>A test world stands where the document it tests stands: staged as the file its documentId names, beside
+    /// every document its references reach, and every document those reach, so a door onto a sibling crosses and the
+    /// sibling's way back names the test world's own file. A name nothing beside it answers as one document stays
+    /// unstaged, and a world with no documentId keeps its generated name.</summary>
+    [Fact]
+    public void ATestWorldIsStagedAsItsDocumentIdBesideEveryDocumentItReaches() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-staging-");
+
+        directory.WriteText(name: "worlds/home.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "home"
+
+            references [
+              { document: "home", name: "self" }
+              { document: "away", name: "away" }
+              { document: "far", name: "far" }
+              { document: "gone", name: "gone" }
+              { document: "broken", name: "broken" }
+              { document: "torn", name: "torn" }
+            ]
+
+            state {
+              world {
+                table probe { "0" = 1 }
+              }
+            }
+
+            test "it stands beside what it reaches" {
+              expect {
+                probe[0] == 1
+              }
+            }
+            """);
+        directory.WriteText(name: "worlds/plain.puck", text: """
+            schema: "puck.world.definition.v1"
+
+            state {
+              world {
+                table probe { "0" = 1 }
+              }
+            }
+
+            test "it keeps its name" {
+              expect {
+                probe[0] == 1
+              }
+            }
+            """);
+        directory.WriteText(name: "worlds/away.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "away"
+
+            references [
+              { document: "home", name: "home" }
+              { document: "beyond", name: "beyond" }
+            ]
+            """);
+        directory.WriteText(name: "worlds/far.world.json", text: "{ \"schema\": \"puck.world.definition.v1\", \"documentId\": \"far\" }");
+        directory.WriteText(name: "worlds/beyond.world.json", text: "{ \"schema\": \"puck.world.definition.v1\", \"documentId\": \"beyond\" }");
+        directory.WriteText(name: "worlds/broken.puck", text: "schema: \"puck.world.definition.v1\"\nreferences [\n");
+        directory.WriteText(name: "worlds/torn.world.json", text: "{ \"schema\":");
+
+        foreach (var (source, world) in ((ReadOnlySpan<(string, string)>)[("home", "home~it-stands-beside-what-it-reaches"), ("plain", "plain~it-keeps-its-name")])) {
+            var kept = directory.PathOf(name: $"run-{source}");
+            var (exitCode, output) = RunTest(directory.PathOf(name: $"worlds/{source}.puck"), "--keep", kept);
+
+            Assert.True(
+                condition: (exitCode == 0),
+                userMessage: output
+            );
+
+            var staged = Directory.GetFiles(path: Path.Combine(path1: kept, path2: "generated", path3: world)).Select(selector: Path.GetFileName).Order(comparer: StringComparer.Ordinal);
+
+            Assert.Equal(
+                actual: staged,
+                expected: ((source == "home")
+                    ? ["away.world.json", "beyond.world.json", "far.world.json", "home.world.json"]
+                    : [$"{world}.world.json"])
+            );
+        }
     }
 }

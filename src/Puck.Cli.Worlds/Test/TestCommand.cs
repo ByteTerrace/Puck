@@ -147,7 +147,7 @@ public static partial class TestCommand {
 
         return 0;
     }
-    private static TestWorldRun RunWorldCaptured(string world, string artifact, string worldDirectory, bool reproduce) {
+    private static TestWorldRun RunWorldCaptured(TestWorld world, string artifact, string worldDirectory, bool reproduce) {
         using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         using var error = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         var verdict = RunWorld(
@@ -155,7 +155,7 @@ public static partial class TestCommand {
             error: error,
             output: output,
             reproduce: reproduce,
-            world: world,
+            test: world,
             worldDirectory: worldDirectory
         );
 
@@ -166,8 +166,8 @@ public static partial class TestCommand {
         );
     }
     // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
-    private static int RunWorld(string world, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
-        var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: world));
+    private static int RunWorld(TestWorld test, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
+        var (name, world) = test;
 
         output.WriteLine(value: $"test {name}: {world}");
         output.WriteLine(value: $"  artifacts: {worldDirectory.Replace(newChar: '/', oldChar: '\\')}");
