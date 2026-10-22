@@ -18,8 +18,9 @@ public enum OverlayFact : byte {
     ConsoleOpen,
     /// <summary>The seat's camera control application is active (see <see cref="WorldSeatModeState.Target"/>).</summary>
     SeatCameraApplication,
-    /// <summary>The seat is captured on a screen it engaged, and its camera frames that screen.</summary>
-    ScreenEngaged,
+    /// <summary>The seat is captured on a screen it engaged, and its view shows that screen's picture alone (not the held
+    /// view of a carried screen, nor the room after <c>player.frame</c>).</summary>
+    ScreenFramed,
 }
 /// <summary>Who a subject-bearing presentation predicate is about — a seat's avatar, a placement, an entity, or a
 /// quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat's perceived

@@ -1278,6 +1278,7 @@ screens [
       look: "moth-pilot"
       pose: "hold"
       shape: "brickPicture"
+      camera: "brick-hold"
     }
   }
   {
@@ -1333,3 +1334,24 @@ rule "brick-put-down" {
   forEach: pilotHold
   pilotHold[$each] = 0
 }
+
+// The view an engagement starts on while she holds the brick (screen 0's `carry.camera`): the camera stands at her side
+// and a little above her hands, in the picture's own axes (+X the picture's right as she looks at it, +Y its up, +Z toward
+// her face), and looks between the brick and her face, so the brick, its live picture, her hands and her face share the
+// frame. The Frame control (player.frame) goes from here to the picture alone and back.
+cameras [
+  {
+    name: "brick-hold"
+    renderHeight: 450
+    renderWidth: 800
+    rig {
+      name: "brick-hold"
+      version: "puck.camera.program.v1"
+      operations [
+        { $type: "offset", value [0.7, 0.3, 0.6] }
+        { $type: "lookAt", subject { $type: "reference" }, targetOffset [-0.02, 0.06, 0.22] }
+        { $type: "fieldOfView", fieldOfViewRadians: 0.95 }
+      ]
+    }
+  }
+]

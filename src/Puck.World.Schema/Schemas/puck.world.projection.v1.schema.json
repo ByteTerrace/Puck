@@ -11279,6 +11279,14 @@
               "shape": {
                 "description": "The name of the ungrouped box in the look\u0027s creation that shows the picture.",
                 "type": "string"
+              },
+              "camera": {
+                "description": "The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture\u0027s front face whose axes are the picture\u0027s: \u002BX its right, \u002BY its up and \u002BZ its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [
@@ -13144,7 +13152,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         }
@@ -13169,7 +13177,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         },
@@ -13221,7 +13229,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   }
@@ -13246,7 +13254,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   },
@@ -13327,7 +13335,7 @@
                                               "WheelOpen",
                                               "ConsoleOpen",
                                               "SeatCameraApplication",
-                                              "ScreenEngaged"
+                                              "ScreenFramed"
                                             ],
                                             "title": "OverlayFact"
                                           }
@@ -13352,7 +13360,7 @@
                                               "WheelOpen",
                                               "ConsoleOpen",
                                               "SeatCameraApplication",
-                                              "ScreenEngaged"
+                                              "ScreenFramed"
                                             ],
                                             "title": "OverlayFact"
                                           },
@@ -24537,7 +24545,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       }
@@ -24562,7 +24570,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       },
@@ -28702,7 +28710,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         }
@@ -28727,7 +28735,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         },
@@ -28924,7 +28932,7 @@
                         "WheelOpen",
                         "ConsoleOpen",
                         "SeatCameraApplication",
-                        "ScreenEngaged"
+                        "ScreenFramed"
                       ],
                       "title": "OverlayFact"
                     }
@@ -28949,7 +28957,7 @@
                         "WheelOpen",
                         "ConsoleOpen",
                         "SeatCameraApplication",
-                        "ScreenEngaged"
+                        "ScreenFramed"
                       ],
                       "title": "OverlayFact"
                     },
@@ -29199,7 +29207,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       }
@@ -29224,7 +29232,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       },
@@ -29667,7 +29675,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   }
@@ -29692,7 +29700,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   },

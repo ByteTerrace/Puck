@@ -5237,6 +5237,7 @@ public static partial class WorldModelShape {
                 M("look", typeof(global::System.String), typeof(global::Puck.World.WorldScreenCarry), "Look", Read | Write, static value => ((global::Puck.World.WorldScreenCarry)value).Look),
                 M("pose", typeof(global::System.String), typeof(global::Puck.World.WorldScreenCarry), "Pose", Read | Write, static value => ((global::Puck.World.WorldScreenCarry)value).Pose),
                 M("shape", typeof(global::System.String), typeof(global::Puck.World.WorldScreenCarry), "Shape", Read | Write, static value => ((global::Puck.World.WorldScreenCarry)value).Shape),
+                M("camera", typeof(global::System.String), typeof(global::Puck.World.WorldScreenCarry), "Camera", Read | Write, static value => ((global::Puck.World.WorldScreenCarry)value).Camera),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenDisplay), true, JsonTypeInfoKind.Object, null,

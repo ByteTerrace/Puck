@@ -331,8 +331,9 @@ The route authors only the matte's surround (`screens[*].route.display`,
 `ValidateDisplay`, and only on an engageable route. Emulator-style borders or
 filler images around the matte belong there when they are built.
 `world.screens` echoes `display:fill=…` per engageable screen. The overlay fact
-`ScreenEngaged` (`WorldOverlayFacts`) reads the same anchor, so a panel, the
-cursor or the bar can step aside while engaged.
+`ScreenFramed` (`WorldOverlayFacts`) reads the same anchor
+(`WorldPerceptionAnchor.ScreenFramed`), so a panel, the cursor or the bar can step
+aside while the picture is framed.
 
 - `WorldViewGraphHost.FrameScreen` records each settled seat's screen and matte,
   and `PublishFramed` publishes the screen's own mapping (`Screens`) on the
@@ -426,6 +427,24 @@ example: `brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size
 Moth's `pilotHold` from it, the brick's placement responds to the same cell with
 an empty creation, and screen 0 carries onto her look's `brickPicture`. The
 server's screen row, engage radius and pointer mapping keep the authored frame.
+
+The held view and the frame toggle: a carry that names a `camera` (a `cameras`
+row, `WorldScreenCarry.Camera`) starts the engagement on a camera that shows the
+body holding the device instead of on the framed picture. The rig runs in
+`WorldFramePresenter.HeldView` against an anchor at the carried picture's face
+whose axes are the picture's (+X right, +Y up, +Z its normal, toward the body
+looking at it), so `offset` and `lookAt` without `worldAxes` place the eye and
+the aim relative to the brick. `player.frame [seat]` (bindable, presentation
+only; the Moth basis binds the pad's East and `L`) switches the seat between the
+framed picture and the other view, which is the held view of a carried screen
+with a camera and the seat's own camera (the room) for any other screen; the
+choice lasts until the engaged screen changes (`WorldPerceptionAnchor.ToggleFrame`,
+`ScreenFramed`, `HoldView`). `WorldScreenFraming.Apply` eases the seat camera to
+the held view and on to the framing on the rig's dynamics, and only the framing
+carries the screen fidelity, the matte and the near plane, so the held view and
+the room show the in-world look. The device's controls read the seat's channels,
+never the camera, so they play in both views. `WorldScreenFramingLawTests` and
+`WorldPerceptionAnchorFrameLawTests` hold the eases and the toggle.
 
 Known limits: the matte cuts in when the ease settles and out when it starts
 back, while the treatment fades over the ease; the uncovered display takes the

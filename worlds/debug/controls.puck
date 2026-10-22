@@ -37,7 +37,8 @@ let standardPieces = [
 ]
 
 // The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input. Both
-// step aside while the seat is engaged on a screen, so the framed screen shows its picture alone, and the bar steps aside
+// step aside while the seat's view frames an engaged screen, so the framed screen shows its picture alone (the held view
+// of a carried screen shows the bar, whose Frame control switches to the picture), and the bar steps aside
 // while a wheel is open, whose hold page is no page of the bar's.
 let shownWhilePlaying = {
   $type: "all"
@@ -48,7 +49,7 @@ let shownWhilePlaying = {
       windowSeconds: 6
       fadeSeconds: 1
     }
-    { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+    { $type: "not", predicate { $type: "now", fact: ScreenFramed } }
     { $type: "not", predicate { $type: "now", fact: WheelOpen } }
   ]
 }
@@ -71,7 +72,7 @@ hud {
             windowSeconds: 3
             fadeSeconds: 0.5
           }
-          { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+          { $type: "not", predicate { $type: "now", fact: ScreenFramed } }
         ]
       }
     }

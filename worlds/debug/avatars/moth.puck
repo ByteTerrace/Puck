@@ -377,6 +377,18 @@ bindingOverlays [
                   "gamepad.buttonWest"
                 ]
               }
+              // The engaged screen's view: the pad's East (B on an Xbox layout, the circle button on a PlayStation one) and
+              // L on a keyboard switch between the framed picture and the other view, which is the held view of a
+              // carried screen and the room for any other. A device plays on neither, and East keeps the descend above.
+              {
+                command: "player.frame"
+                id: "frame"
+                label: "Frame"
+                sources [
+                  "gamepad.buttonEast"
+                  "keyboard.l"
+                ]
+              }
               {
                 command: "view.override"
                 id: "camera1"

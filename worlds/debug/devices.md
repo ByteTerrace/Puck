@@ -220,8 +220,16 @@ is engaged on screen 0, the `brick-pick-up` rule (it reads the engagement as
 `engaged(each, 0)`) sets her `pilotHold` cell: her arms bring the brick up to
 her eyes, the brick's placement shows nothing on its machined rest (its
 `respond`, a placement of its own beside the rest's), and screen 0's `carry`
-moves the live picture onto the brick in her hands, where the camera frames it.
-Leaving puts the brick back on its rest and lowers her arms. In the suit, or at
+moves the live picture onto the brick in her hands. Engaging starts on a view of
+her holding the brick (`brick-hold`, the camera screen 0's `carry` names: at her
+side and a little above her hands, brick, picture, hands and face in frame), so
+the pickup shows; the Frame control (the pad's East, or `L` on a keyboard; the
+console line `player.frame`) goes to the picture alone, filling the window as at
+any device, and back. The device's controls play in both views. On any other
+engaged screen the same control goes between the picture and the room. The
+controller bar labels it Frame on the Move page, and steps aside only while the
+picture is framed. Leaving puts the brick back on
+its rest and lowers her arms. In the suit, or at
 a quarter her size, where the brick is a third her height, she plays it where
 it stands.
 

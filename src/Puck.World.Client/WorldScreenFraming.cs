@@ -6,6 +6,12 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
+/// <summary>A camera that shows the body holding a carried screen's device (<see cref="WorldScreenCarry.Camera"/>), as one
+/// frame resolved it.</summary>
+/// <param name="Eye">The eye, in world units.</param>
+/// <param name="Target">The point it looks at, in world units.</param>
+/// <param name="FieldOfViewRadians">The vertical field of view, in radians.</param>
+public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float FieldOfViewRadians);
 /// <summary>
 /// The engaged view: a seat captured on a screen it engaged pans and zooms its own camera onto the screen's picture (the
 /// glass inside its bezel band), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop
@@ -18,19 +24,26 @@ namespace Puck.World.Client;
 /// tone fade back in. While framed, the camera's near plane stands just short of the glass, so the engaging avatar and
 /// anything else between the eye and the device draws nothing, and once the ease settles (<see cref="Framed"/>) the
 /// root shows only the matte's part of the seat's view, which renders at native scale, so the pixels inside it are the
-/// ones the view drew there and only the world around the picture becomes the matte's fill. Presentation only: nothing
-/// here feeds the simulation.
+/// ones the view drew there and only the world around the picture becomes the matte's fill. A screen a body carries with
+/// a held view stands the camera on that view first (<see cref="WorldHeldView"/>), and the framing eases from it. Presentation
+/// only: nothing here feeds the simulation.
 /// </summary>
 public sealed class WorldScreenFraming {
     private readonly WorldFramingEase m_ease = new();
+    private readonly WorldFramingEase m_heldEase = new();
     private Vector3 m_frameEye;
     private float m_frameNear;
     private Vector3 m_frameTarget;
     private bool m_hasFrame;
+    private bool m_hasHeld;
+    private WorldHeldView m_held;
 
     /// <summary>Gets how far the seat's camera stands toward the framing, which is also the view's screen fidelity: 0 is
-    /// the seat's ordinary camera, 1 the framed picture.</summary>
+    /// the seat's ordinary camera or the held view, 1 the framed picture.</summary>
     public float Weight => m_ease.Weight;
+    /// <summary>Gets the camera's vertical field of view as of the last <see cref="Apply"/>, in radians: the seat
+    /// camera's, the held view's while the seat stands on it, and the seat camera's again once framed.</summary>
+    public float FieldOfView { get; private set; }
     /// <summary>Gets the screen whose framing the ease has settled on as of the last <see cref="Apply"/>, whose matte
     /// the seat's view narrows to, or <see langword="null"/> while the seat engages none, is easing in or out, or the
     /// screen's frame is degenerate.</summary>
@@ -209,25 +222,39 @@ public sealed class WorldScreenFraming {
         return true;
     }
 
-    /// <summary>Advances the ease one frame and blends the seat's camera toward the screen's framing by it.</summary>
-    /// <param name="screen">The screen the seat is captured on, or <see langword="null"/> when it engages none; the
-    /// ease then returns to the seat's camera from the last framing it held.</param>
-    /// <param name="dynamics">The seat rig's reported dynamics, which time the ease; <see cref="SdfCameraDynamics.None"/>
+    /// <summary>Advances the eases one frame and blends the seat's camera toward the held view and the screen's framing
+    /// by them: the seat's camera first goes to the held view (<paramref name="held"/>) by its ease, then that goes to
+    /// the framing by the framing's, so a framed seat arrives at the picture from the held view when it has one and from
+    /// the seat's own camera when it has none.</summary>
+    /// <param name="screen">The screen the seat frames, or <see langword="null"/> when it frames none; the ease then
+    /// returns from the last framing it held.</param>
+    /// <param name="held">The view that shows the body holding the engaged screen, or <see langword="null"/> when the seat
+    /// has none this frame; the ease then returns from the last one it held.</param>
+    /// <param name="dynamics">The seat rig's reported dynamics, which time both eases; <see cref="SdfCameraDynamics.None"/>
     /// cuts.</param>
-    /// <param name="fieldOfViewRadians">The seat camera's vertical field of view, in radians.</param>
+    /// <param name="fieldOfViewRadians">The seat camera's vertical field of view, in radians; the framing's field of view
+    /// too.</param>
     /// <param name="share">The share of the view's height the picture fills once framed (<see cref="Matte"/>).</param>
     /// <param name="deltaSeconds">The frame step, in seconds.</param>
     /// <param name="eye">The seat camera's eye, blended in place.</param>
     /// <param name="target">The seat camera's target, blended in place.</param>
     /// <param name="offset">Where the picture's centre lands from the view's centre, in picture heights
     /// (<see cref="MatteOffset"/>).</param>
-    /// <returns>The camera's near-plane distance, in world units: zero for the seat's own camera, the framing's near
-    /// plane once framed, and the blend between while easing.</returns>
-    public float Apply(WorldScreen? screen, in SdfCameraDynamics dynamics, float fieldOfViewRadians, float share, float deltaSeconds, ref Vector3 eye, ref Vector3 target, Vector2 offset = default) {
-        var goal = 0f;
+    /// <returns>The camera's near-plane distance, in world units: zero for the seat's own camera and the held view, the
+    /// framing's near plane once framed, and the blend between while easing. <see cref="FieldOfView"/> holds the field of
+    /// view the blend ends on.</returns>
+    public float Apply(WorldScreen? screen, WorldHeldView? held, in SdfCameraDynamics dynamics, float fieldOfViewRadians, float share, float deltaSeconds, ref Vector3 eye, ref Vector3 target, Vector2 offset = default) {
+        var frameGoal = 0f;
+        var heldGoal = 0f;
 
         Framed = null;
+        FieldOfView = fieldOfViewRadians;
 
+        if (held is { } view) {
+            m_held = view;
+            m_hasHeld = true;
+            heldGoal = 1f;
+        }
         if (
             (screen is not null) &&
             TryFrame(
@@ -244,26 +271,56 @@ public sealed class WorldScreenFraming {
             m_frameTarget = frameTarget;
             m_frameNear = frameNear;
             m_hasFrame = true;
-            goal = 1f;
+            frameGoal = 1f;
         }
 
-        if (!m_hasFrame) {
-            return 0f;
+        var heldWeight = 0f;
+        var weight = 0f;
+
+        if (m_hasHeld) {
+            heldWeight = m_heldEase.Step(
+                deltaSeconds: deltaSeconds,
+                dynamics: in dynamics,
+                goal: heldGoal
+            );
+
+            if (heldWeight <= 0f) {
+                m_hasHeld = false;
+            }
         }
+        if (m_hasFrame) {
+            weight = m_ease.Step(
+                deltaSeconds: deltaSeconds,
+                dynamics: in dynamics,
+                goal: frameGoal
+            );
 
-        var weight = m_ease.Step(
-            deltaSeconds: deltaSeconds,
-            dynamics: in dynamics,
-            goal: goal
-        );
-
+            if (weight <= 0f) {
+                m_hasFrame = false;
+            }
+        }
+        if (heldWeight > 0f) {
+            eye = Vector3.Lerp(
+                value1: eye,
+                value2: m_held.Eye,
+                amount: heldWeight
+            );
+            target = Vector3.Lerp(
+                value1: target,
+                value2: m_held.Target,
+                amount: heldWeight
+            );
+            FieldOfView = float.Lerp(
+                value1: FieldOfView,
+                value2: m_held.FieldOfViewRadians,
+                amount: heldWeight
+            );
+        }
         if (weight <= 0f) {
-            m_hasFrame = false;
-
             return 0f;
         }
         if (
-            (goal >= 1f) &&
+            (frameGoal >= 1f) &&
             (weight >= 1f)
         ) {
             Framed = screen;
@@ -277,6 +334,11 @@ public sealed class WorldScreenFraming {
         target = Vector3.Lerp(
             value1: target,
             value2: m_frameTarget,
+            amount: weight
+        );
+        FieldOfView = float.Lerp(
+            value1: FieldOfView,
+            value2: fieldOfViewRadians,
             amount: weight
         );
 

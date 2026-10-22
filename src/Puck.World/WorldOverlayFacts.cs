@@ -242,7 +242,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         visible: out var visible
     ) && visible),
         OverlayFact.SeatCameraApplication => m_seatBindings.IsCameraModeActive(slot: slot),
-        OverlayFact.ScreenEngaged => (m_perception.EngagedScreen(slot: slot) >= 0),
+        OverlayFact.ScreenFramed => m_perception.ScreenFramed(slot: slot),
         _ => false,
     };
     // A subject's speaking presence: the speech clock's last stamp for its body, through the same window/fade curve
