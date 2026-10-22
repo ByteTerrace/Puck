@@ -13,7 +13,8 @@ namespace Puck.World.Client;
 /// capture shows, and the <see cref="SourcePassthroughRouter"/> the window pump offers every raw event to
 /// (<see cref="IWindowInputFilter"/>). Two acts of the local user add a source, and nothing a world document declares
 /// reaches either: the <c>source.passthrough open</c> verb, which the host's own console alone may run, and a physical
-/// press on the glass of a window capture's screen a local seat engaged and frames in the world the host booted
+/// press on the glass of a capture's screen (a window's, or a whole desktop's, <see cref="ISourcePassthroughDesktop"/>)
+/// a local seat engaged and frames in the world the host booted
 /// (<see cref="WorldViewGraphHost.ShowsFramed"/>): a pointer press the window pump delivers, or a local pad's bound
 /// press (<see cref="PadButton"/>), so no script, <c>player.signal</c>, peer, addon or schedule makes it. Engaging the
 /// screen, by any principal, only shows the window; the press is what opens it, and the source closes once the seat no

@@ -101,7 +101,7 @@ public static class WorldSeatContextSync {
             var seated = (holdsOwn
                 ? null
                 : tabletop);
-            // A seat captured on a window capture's screen is at the window the local user may open.
+            // A seat captured on a capture's screen is at the window or desktop the local user may open.
             var framed = (holdsOwn
                 ? -1
                 : screen);
