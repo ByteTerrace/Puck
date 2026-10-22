@@ -169,29 +169,30 @@
 #define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
-#define SDF_MAX_INSTANCES               65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY  22u
-#define SDF_PAINT_VECTORS_PER_ENTRY     12u
-#define SDF_MAX_PAINTS_PER_MATERIAL     8u
-#define SDF_PAINT_WINNING_FRAME         0xFFFFFFFFu
-#define SDF_MAX_FIELD_SCOPE_DEPTH       2u
-#define SDF_FLARE_MIN_SCALE             0.05
-#define SDF_LANE_ERODE_RAGGED_AMOUNT    0.35
-#define SDF_SCREEN_MATERIAL             65535
-#define SDF_MAX_SCREEN_SURFACES         32u
-#define SDF_MAX_LIGHTS                  8u
-#define SDF_MAX_SHADOW_SLOTS            4u
-#define SDF_MAX_DISPATCH_GROUPS         65535u
-#define SDF_MAX_NOISE_OCTAVES           8u
-#define SDF_MAX_SWEEP_STRANDS           4u
-#define SDF_MAX_CONVEX_VERTICES         32u
-#define SDF_CONVEX_COUNT_BITS           5u
-#define SDF_MAX_PATH_EDGES              128u
-#define SDF_SCREEN_EMISSION_EDGE        4u
-#define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5
-#define SDF_MINIMUM_NEAR                0.02
-#define SDF_NOISE_PERIOD_CELLS          4096u
-#define SDF_VOLUME_VECTORS_PER_ENTRY    12u
+#define SDF_MAX_INSTANCES              65536u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 22u
+#define SDF_PAINT_VECTORS_PER_ENTRY    12u
+#define SDF_MAX_PAINTS_PER_MATERIAL    8u
+#define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
+#define SDF_MAX_FIELD_SCOPE_DEPTH      2u
+#define SDF_FLARE_MIN_SCALE            0.05
+#define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
+#define SDF_SCREEN_MATERIAL            65535
+#define SDF_MAX_SCREEN_SURFACES        32u
+#define SDF_MAX_LIGHTS                 128u
+#define SDF_MAX_SHADOW_SLOTS           4u
+#define SDF_MAX_DISPATCH_GROUPS        65535u
+#define SDF_MAX_NOISE_OCTAVES          8u
+#define SDF_MAX_SWEEP_STRANDS          4u
+#define SDF_MAX_CONVEX_VERTICES        32u
+#define SDF_CONVEX_COUNT_BITS          5u
+#define SDF_MAX_PATH_EDGES             128u
+#define SDF_SCREEN_EMISSION_EDGE       4u
+#define SDF_LIGHT_MINIMUM_DISTANCE     0.05
+#define SDF_LUMINANCE_CEILING          65000.0
+#define SDF_MINIMUM_NEAR               0.02
+#define SDF_NOISE_PERIOD_CELLS         4096u
+#define SDF_VOLUME_VECTORS_PER_ENTRY   12u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u
@@ -275,6 +276,7 @@
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS 13u
 #define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.35
+#define SDF_MESH_IRRADIANCE_BEHIND      0.1
 
 // The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
 #define SDF_HISTORY_SURFACE_WORDS      6u

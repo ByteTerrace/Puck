@@ -208,7 +208,7 @@ prototypes {
         }
         {
           color: "#FFC27A"
-          emissive: 3
+          emissive: 450
           roughness: 0.4
         }
       ]
@@ -233,7 +233,7 @@ prototypes {
       palette [
         {
           color: "#9FD8FF"
-          emissive: 0.6
+          emissive: 90
           roughness: 0.2
           specular: 0.6
         }
@@ -257,21 +257,23 @@ render {
   farDistance: 120
   lighting {
     lights [
-      directional(name: "key", direction: [-3, 3.5, -5], color: "#9DB4FF", weight: 0.6, shadow: always, angularRadius: 0.2)
-      directional(direction: [0.7, 0.3, 0.65], color: "#7C8CC8", weight: 0.25)
+      directional(name: "key", direction: [-3, 3.5, -5], color: "#9DB4FF", illuminance: 300lx, shadow: always, angularRadius: 0.2)
+      directional(direction: [0.7, 0.3, 0.65], color: "#7C8CC8", illuminance: 120lx)
     ]
   }
+  // A moonlit night brightened for the eye: a 300-lux moon and a 150-nit sky, which the Moth's darkest exposure (EV100 7)
+  // shows as the dark blue it is, and which a painting's window onto it shows beside the gallery's lit room.
   sky {
     layers [
-      gradient(name: "air", stops: [
+      gradient(name: "air", luminance: 150nit, stops: [
         { elevation: -1, color: "#04060C" }
         { elevation: 0, color: "#101A33" }
         { elevation: 0.5, color: "#070B16" }
         { elevation: 1, color: "#02030A" }
       ]
       )
-      stars(name: "stars", density: 90, brightness: 1.3, seed: 7, twinkle: { share: 0.3, depth: 0.5, rate: 1 })
-      sunDisc(name: "moon", light: 0, radius: 1.6deg, intensity: 4, color: "#DDE8FF")
+      stars(name: "stars", luminance: 150nit, density: 90, brightness: 1.3, seed: 7, twinkle: { share: 0.3, depth: 0.5, rate: 1 })
+      sunDisc(name: "moon", luminance: 150nit, light: 0, radius: 1.6deg, intensity: 4, color: "#DDE8FF")
     ]
   }
   atmosphere {

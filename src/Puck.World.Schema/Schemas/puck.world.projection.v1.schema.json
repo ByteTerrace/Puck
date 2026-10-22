@@ -474,7 +474,7 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
+              "description": "The lights, at most SdfLights.MaxLights, in authored order; each view shades only those that can reach what it shows (SdfLightSelection). Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
               "type": [
                 "array",
                 "null"
@@ -490,7 +490,7 @@
                 ],
                 "anyOf": [
                   {
-                    "description": "A Lambert directional light.",
+                    "description": "A Lambert directional light, such as the sun.",
                     "properties": {
                       "$type": {
                         "const": "directional"
@@ -556,7 +556,7 @@
                         ]
                       },
                       "color": {
-                        "description": "The light\u0027s colour.",
+                        "description": "The light\u0027s colour, scaled to unit luminance so the light gives exactly its illuminance. Refused beside Temperature. Absent is white, or the temperature\u0027s.",
                         "default": null,
                         "title": "BindableColor",
                         "anyOf": [
@@ -605,8 +605,8 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The diffuse weight. Absent is the pinned sun weight.",
+                      "illuminance": {
+                        "description": "The illuminance on a surface facing the light, in lux: a clear midday sun gives about 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun\u0027s.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -730,6 +730,59 @@
                         ],
                         "default": null
                       },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "lightName": {
                         "type": [
                           "string",
@@ -793,7 +846,7 @@
                     "title": "WorldRenderLightDirectional"
                   },
                   {
-                    "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+                    "description": "A view-dependent silhouette brighten: luminance \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
                     "properties": {
                       "$type": {
                         "const": "rim"
@@ -848,8 +901,8 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The strength. Absent is zero, which adds nothing.",
+                      "luminance": {
+                        "description": "The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds nothing.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -1025,7 +1078,7 @@
                     "title": "WorldRenderLightRim"
                   },
                   {
-                    "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+                    "description": "A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world\u0027s brightest exposure. No shadow march \u2014 a point light never occludes and is never occluded.",
                     "properties": {
                       "$type": {
                         "const": "point"
@@ -1064,59 +1117,6 @@
                                       },
                                       "minItems": 3,
                                       "maxItems": 3
-                                    },
-                                    "ease": {
-                                      "type": "string",
-                                      "enum": [
-                                        "Linear",
-                                        "Smooth",
-                                        "Step"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "at",
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              }
-                            },
-                            "required": [
-                              "clock",
-                              "keys"
-                            ],
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "radius": {
-                        "description": "The falloff radius. Absent is the engine default.",
-                        "default": null,
-                        "title": "BindableScalar",
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "clock": {
-                                "type": "string"
-                              },
-                              "keys": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "at": {
-                                      "type": "number"
-                                    },
-                                    "value": {
-                                      "type": "number"
                                     },
                                     "ease": {
                                       "type": "string",
@@ -1291,7 +1291,7 @@
                         "title": "WorldAnchor"
                       },
                       "color": {
-                        "description": "The light\u0027s colour.",
+                        "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
                         "default": null,
                         "title": "BindableColor",
                         "anyOf": [
@@ -1340,8 +1340,765 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The strength. Absent is the engine default.",
+                      "intensity": {
+                        "description": "The luminous intensity, in candela. Refused beside Power; absent with it is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "power": {
+                        "description": "The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb gives about 800. Refused beside Intensity.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]: a warm bulb about 2,700. Refused beside Color.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "lightName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bounce": {
+                        "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightPoint"
+                  },
+                  {
+                    "description": "A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full strength inside the inner angle and smoothly to none at the outer, with the point light\u0027s windowed falloff and range.",
+                    "properties": {
+                      "$type": {
+                        "const": "spot"
+                      },
+                      "position": {
+                        "description": "The world-space position, or the offset in the anchor\u0027s frame.",
+                        "default": null,
+                        "title": "BindableVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "direction": {
+                        "description": "The direction the light shines along, any nonzero length; in the anchor\u0027s frame when an anchor is authored. Absent is straight down.",
+                        "default": null,
+                        "title": "BindableDirection",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "anchor": {
+                        "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                            "properties": {
+                              "$type": {
+                                "const": "entity"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "index"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntity"
+                          },
+                          {
+                            "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                            "properties": {
+                              "$type": {
+                                "const": "entityPart"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index.",
+                                "type": "integer"
+                              },
+                              "partId": {
+                                "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "partId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntityPart"
+                          },
+                          {
+                            "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                            "properties": {
+                              "$type": {
+                                "const": "placement"
+                              },
+                              "placementId": {
+                                "description": "The referenced Id (must resolve).",
+                                "type": "string"
+                              },
+                              "shapeId": {
+                                "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "placementId",
+                              "shapeId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorPlacement"
+                          },
+                          {
+                            "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                            "properties": {
+                              "$type": {
+                                "const": "group"
+                              },
+                              "indices": {
+                                "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/2/properties/anchor/anyOf/3/properties/indices"
+                              },
+                              "smoothRate": {
+                                "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "indices",
+                              "smoothRate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorGroup"
+                          },
+                          {
+                            "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                            "properties": {
+                              "$type": {
+                                "const": "seat"
+                              },
+                              "number": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorSeat"
+                          },
+                          {
+                            "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                            "properties": {
+                              "$type": {
+                                "const": "recentSpeaker"
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorRecentSpeaker"
+                          }
+                        ],
+                        "default": null,
+                        "title": "WorldAnchor"
+                      },
+                      "angle": {
+                        "description": "The cone\u0027s outer half angle, in (0, \u03C0/2] radians. Absent is 45 degrees.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "innerAngle": {
+                        "description": "The half angle inside which the light is at full strength, in [0, Angle] radians. Absent is three quarters of Angle.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "color": {
+                        "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The luminous intensity along the aim, in candela. Refused beside Power; absent with it is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "power": {
+                        "description": "The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]. Refused beside Color.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -1461,10 +2218,10 @@
                       }
                     },
                     "additionalProperties": false,
-                    "title": "WorldRenderLightPoint"
+                    "title": "WorldRenderLightSpot"
                   },
                   {
-                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table\u0027s capacity.",
                     "properties": {
                       "$type": {
                         "const": "occluder"
@@ -2862,6 +3619,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -3302,6 +4111,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -3816,6 +4677,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -4550,6 +5463,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5144,6 +6109,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5595,6 +6612,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5944,6 +7013,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -6272,6 +7393,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -6727,6 +7900,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -7110,6 +8335,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -7500,6 +8777,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -8099,6 +9428,59 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "WorldRenderAirHeight"
+                },
+                "luminance": {
+                  "description": "The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky\u0027s own.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 }
               },
               "additionalProperties": false,
@@ -8478,6 +9860,59 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "luminance": {
+                  "description": "The luminance, in nits, a Color of one in-scatters at. Absent is SdfSky.DefaultLuminance.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
                               },
                               "ease": {
                                 "type": "string",
@@ -9045,6 +10480,67 @@
           "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
           "type": "number",
           "default": 1
+        },
+        "exposure": {
+          "description": "The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day\u0027s.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "mode": {
+              "description": "Manual or automatic. Absent is manual.",
+              "enum": [
+                "Manual",
+                "Auto"
+              ],
+              "default": "Manual",
+              "title": "SdfExposureMode"
+            },
+            "ev100": {
+              "description": "The manual exposure value at ISO 100, in [\u22126, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "minimum": {
+              "description": "The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [\u22126, 20]; absent is \u22126.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "maximum": {
+              "description": "The highest EV100 an automatic exposure adapts to, at or above Minimum. In [\u22126, 20]; absent is 20.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "compensation": {
+              "description": "The stops an automatic exposure brightens the metered image by, in [\u221210, 10]. Absent is zero.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "adaptation": {
+              "description": "The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderExposure"
         }
       },
       "additionalProperties": false,
@@ -9748,6 +11244,14 @@
             ],
             "default": "Nearest",
             "title": "GpuSamplerFilter"
+          },
+          "luminance": {
+            "description": "The display\u0027s peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld\u0027s unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world\u0027s own luminance whatever this says.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

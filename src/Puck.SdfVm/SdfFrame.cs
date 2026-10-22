@@ -60,6 +60,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// the CRT glass's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
+
+    /// <summary>Whether the view publishes the luminance it shades, in nits, unexposed: a window's view of the world
+    /// beyond its glass, or a sky layer's view of another world, whose consumer shows that luminance in its own scene and
+    /// exposes it with its own view. The default, <see langword="false"/>, exposes the view by the frame's
+    /// <see cref="SdfFrame.Exposure"/>, so its output is display-referred before the tonemap.</summary>
+    public bool Unexposed { get; init; }
 }
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>
@@ -183,6 +189,9 @@ public sealed record SdfFrame(
     /// carries it as <c>farDistance</c> (<see cref="SdfFrameBlock"/>), which the cadence signature folds, so a change
     /// re-renders.</summary>
     public float FarDistance { get; init; } = DefaultFarDistance;
+    /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
+    /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
+    public SdfExposure Exposure { get; init; } = SdfExposure.Default;
 
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the

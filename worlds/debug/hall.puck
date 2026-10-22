@@ -38,7 +38,7 @@ let hallPalette = [
   { color: "#E6E0D2", roughness: 0.85, specular: 0.04 }
   { color: "#8F8B84", roughness: 0.7, specular: 0.08 }
   { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
-  { color: "#FFF1DC", roughness: 0.5, emissive: 4 }
+  { color: "#FFF1DC", roughness: 0.5, emissive: 2500nit }
   { color: "#F2EEE4", roughness: 0.6 }
 ]
 // The same palette with the light strips switched off: a pale unlit diffuser in the strips' slot, so a slab drawn in it
@@ -116,14 +116,14 @@ let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15
 
 // The room lights. `hallLights` holds each level's state, Off or On: level 0 (the lobby, where the gaming devices'
 // screens light the room) starts Off and the levels above On. Off swaps the slab or roof above that level for its dark
-// variant, so its ceiling strips stop glowing, and darkens the point light that level owns (`hallLamps`); the lift
+// variant, so its ceiling strips stop glowing, and darkens the fixtures that level owns (`hallLamps`); the lift
 // car's lamp rides the car whatever its level. A level's switch stands on the west wall at z = switchZ, 1.1 to 1.46 m
 // over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
 // E or X on a pad) flips it while seat 1's body stands in the switch's reach box before it.
 let switchZ = 32.5
 let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (switchZ - 0.6), z1: (switchZ + 0.6), y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
 // On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
-let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 3 }, { name: "off", indicator: "#5BE38A", glow: 2 }]
+let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 300 }, { name: "off", indicator: "#5BE38A", glow: 200 }]
 
 // The blinds, tied to each level's lights: Off lowers them, On raises them. A level's windows open in the south, north and
 // east faces from 0.9 m to 3.3 m over its slab top (the south face's ten 3 m windows from x = 21, and above the lobby the
@@ -154,8 +154,16 @@ let blindPalette = [{ color: "#D8CFBD", roughness: 0.9, specular: 0.03 }]
 // The seams painted across a window's board, the most a palette slot's paints hold.
 let blindSeams = 8
 
-// The point lights a level owns, by `hallLamps` key, with the weight each shines at while its level is On.
-let hallLampLevels = [{ key: "lobby", level: 0, weight: 0.9 }, { key: "stairs", level: 1, weight: 0.7 }]
+// The ceiling fixtures a level owns, by `hallLamps` key, with the luminous power, in lumens, each emits while its level
+// is On: every level's downlights (a recessed LED downlight's 1,500 lm, a neutral 4,000 K), and the stairwell's pendant
+// (800 lm, a 60 W bulb's) on level 1's switch. A fixture neither occludes nor is occluded, so a brighter one would light
+// the level below through its slab.
+let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 1500 }), [{ key: "stairs", level: 1, lumens: 800 }])
+// Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
+let hallCeilings = [4.25, 8.75, 13.25, 17.75]
+// The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
+// ceiling, each a warm-white spot casting down in a 50-degree cone.
+let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(((k == 3) ? [15, 37] : hallLightAisles[k]), [], (aisle, z) => concat(aisle, map([27, 39, 51, 63], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
 
 // The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
 // stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
@@ -544,21 +552,24 @@ placements {
   }
 }
 
-// The hall's lights. The Moth basis's key and fill stay (a lights list replaces its basis's whole), and three warm
-// points light the inside: one over the lobby, one in the stairwell, and one riding the lift car's body under its
-// ceiling. A point light never occludes and is never occluded, so each is kept small and local; the rooms' light is
-// the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the occlusion.
-// The lobby's and the stairwell's weights read `hallLamps`, so they follow levels 0's and 1's switches.
+// The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
+// light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
+// car's body under its ceiling and a wash over the painting wing. A fixture's power reads its level's `hallLamps` cell, so it follows that level's switch.
+// A point or spot light never occludes and is never occluded, and reaches only as far as its light still shows at the
+// darkest exposure the world takes; each view shades only the fixtures that reach what it sees. The rooms' light is
+// also the emissive strips' and the windows', carried indoors by the traced indirect light, the shadows and the
+// occlusion.
 render {
   lighting {
-    lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
-      directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
-      point(name: "hall-lobby", position: [15, 3.4, 22], radius: 4, color: "#FFE9CC", weight: "state.hallLamps.lobby")
-      point(name: "hall-stairs", position: [12.2, 7.6, 37], radius: 3, color: "#FFE9CC", weight: "state.hallLamps.stairs")
-      point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], radius: 1.6, color: "#FFF4E6", weight: 1.2)
-      point(name: "hall-wing", position: [60.4, 3.4, 26], radius: 10, color: "#FFE9CC", weight: 0.55)
-    ]
+    lights: concat(
+      [
+        directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
+        point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
+        point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], temperature: 3500K, power: 400lm)
+        point(name: "hall-wing", position: [60.4, 3.4, 26], color: "#FFE9CC", power: 2000lm)
+      ],
+      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}"))
+    )
   }
 }
 
@@ -630,9 +641,13 @@ state {
       level2 = On
       level3 = On
     }
+    // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
-      lobby = 0.0
-      stairs = 0.7
+      level0 = 0.0
+      level1 = 1500
+      level2 = 1500
+      level3 = 1500
+      stairs = 800
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
@@ -722,7 +737,7 @@ for lamp in hallLampLevels {
   rule $"hall-lamp-{lamp.key}-on" {
     when hallLights[$"level{lamp.level}"] == 1
     mode: Edge
-    hallLamps[$"{lamp.key}"] = lamp.weight
+    hallLamps[$"{lamp.key}"] = lamp.lumens
   }
   rule $"hall-lamp-{lamp.key}-off" {
     when hallLights[$"level{lamp.level}"] == 0

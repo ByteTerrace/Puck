@@ -46,14 +46,14 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         Assert.Equal(actual: repeat.Screens, expected: first.Screens);
         Assert.Equal(actual: first.ScreenLoads, expected: 63L);
         Assert.Equal(actual: first.ScreenWrites, expected: 32L);
-        Near(new Vector4(w: SdfScreenEmission.DirectGain, x: (1f / 9f), y: 1f, z: (1f / 7f)), Read(bytes: first.Screens, row: 0));
+        Near(new Vector4(w: 1f, x: (1f / 9f), y: 1f, z: (1f / 7f)), Read(bytes: first.Screens, row: 0));
         Assert.All(first.Screens.Skip(count: 16), value => Assert.Equal(actual: value, expected: ((byte)0)));
 
         // A one-pixel fill lights the whole face with that pixel; it is loaded once, by the one cell that holds it.
         // This also observes a real changed acquired texture, not a host color.
         var fill = Run(services, extension, block, layers, new byte[] { 255, 0, 255, 255 });
 
-        Near(new Vector4(w: SdfScreenEmission.DirectGain, x: 1f, y: 0f, z: 1f), Read(bytes: fill.Screens, row: 0));
+        Near(new Vector4(w: 1f, x: 1f, y: 0f, z: 1f), Read(bytes: fill.Screens, row: 0));
         Assert.Equal(actual: fill.ScreenLoads, expected: 1L);
         Assert.Equal(actual: fill.ScreenWrites, expected: 32L);
 
@@ -65,7 +65,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         }
         var dark = Run(services, extension, block, layers, new byte[] { 0, 0, 0, 255 }, screenSeed: seed);
 
-        Near(new Vector4(w: SdfScreenEmission.DirectGain, x: 0f, y: 0f, z: 0f), Read(bytes: dark.Screens, row: 0));
+        Near(new Vector4(w: 1f, x: 0f, y: 0f, z: 0f), Read(bytes: dark.Screens, row: 0));
         Assert.Equal(actual: dark.ScreenLoads, expected: 1L);
         Assert.Equal(actual: dark.ScreenWrites, expected: 32L);
 

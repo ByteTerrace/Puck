@@ -11,10 +11,11 @@ namespace Puck.SdfVm.Tests;
 /// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
-    // the curvature shading, temporal history, indirect controls, the light-camera flag, twelve cascade rows, shadow
-    // parameters, 64 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 1840;
+    // The pass block's bytes: the extent and the world values, the view, the levers, the light count, the view's light mask,
+    // exposure and air light, the shadow slots, the curvature shading, temporal history, indirect controls, the
+    // light-camera flag, twelve cascade rows, shadow parameters, 64 bake-lattice rows and the irradiance volume,
+    // 16-aligned.
+    private const uint PassBlockBytes = 1872;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.

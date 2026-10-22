@@ -524,6 +524,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
+            // A window shows the luminance beyond its glass, which the view looking through it exposes.
+            Unexposed = (m_windowFit is not null),
         });
         Film?.Invoke(obj: m_views);
 
@@ -557,6 +559,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectBounces = environment.Indirect.Bounces,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
+            Exposure = environment.Exposure,
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,

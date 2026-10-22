@@ -59,7 +59,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         weights *= (1.0 - fidelity);
 
         float3 kinds = max(weights, skyAir.weights);
-        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? sdfSkyPassEnvironment(direction) : float3(0.0, 0.0, 0.0));
+        // The sky and the bodies light the air only as far as the air about the camera sees them open (airLight): a
+        // closed room's air is not lit by the sky outside it.
+        float airLight = saturate(passGroup.airLight);
+        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);
 
         if (kinds.x > 0.0) {
@@ -68,7 +71,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         if (kinds.y > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            hazeColor = (ambient + sdfAirBodies(direction, sdfSky[0].HazeAnisotropy));
+            hazeColor = (ambient + (sdfAirBodies(direction, sdfSky[0].HazeAnisotropy) * airLight));
             surface += (hazeColor * weights.y);
         }
         if (kinds.z > 0.0) {
@@ -108,8 +111,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    // The float working color; the display encode dithers and quantizes it.
-    output[id.xy] = float4(color, (geometryOnly ? litColor.a : 1.0));
+    // The view's exposure maps the luminance it shaded, in nits, to the display before the root's tonemap; a view that
+    // publishes its luminance unexposed, and a debug view, leave it as it is.
+    if ((passGroup.debugMode == 0u) && (passGroup.exposeOutput != 0u)) {
+        color *= passGroup.exposure;
+    }
+
+    // The float working color, held within the half-float range it is stored in; the display encode dithers and
+    // quantizes it.
+    output[id.xy] = float4(min(color, SDF_LUMINANCE_CEILING), (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

@@ -63,7 +63,7 @@
       ],
       "properties": {
         "lights": {
-          "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
+          "description": "The lights, at most SdfLights.MaxLights, in authored order; each view shades only those that can reach what it shows (SdfLightSelection). Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
           "type": [
             "array",
             "null"
@@ -278,6 +278,11 @@
               "$ref": "./common.schema.json#/$defs/WorldRenderAirHeight",
               "description": "The height fog\u0027s profile. Absent is a fog alike at every height.",
               "default": null
+            },
+            "luminance": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky\u0027s own.",
+              "default": null
             }
           },
           "additionalProperties": false,
@@ -331,6 +336,11 @@
             "color": {
               "$ref": "./common.schema.json#/$defs/BindableColor",
               "description": "BindableColor\u0027s grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.",
+              "default": null
+            },
+            "luminance": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The luminance, in nits, a Color of one in-scatters at. Absent is SdfSky.DefaultLuminance.",
               "default": null
             }
           },
@@ -493,6 +503,67 @@
       "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
       "type": "number",
       "default": 1
+    },
+    "exposure": {
+      "description": "The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day\u0027s.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "mode": {
+          "description": "Manual or automatic. Absent is manual.",
+          "enum": [
+            "Manual",
+            "Auto"
+          ],
+          "default": "Manual",
+          "title": "SdfExposureMode"
+        },
+        "ev100": {
+          "description": "The manual exposure value at ISO 100, in [\u22126, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "minimum": {
+          "description": "The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [\u22126, 20]; absent is \u22126.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "maximum": {
+          "description": "The highest EV100 an automatic exposure adapts to, at or above Minimum. In [\u22126, 20]; absent is 20.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "compensation": {
+          "description": "The stops an automatic exposure brightens the metered image by, in [\u221210, 10]. Absent is zero.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "adaptation": {
+          "description": "The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderExposure"
     }
   },
   "additionalProperties": false,

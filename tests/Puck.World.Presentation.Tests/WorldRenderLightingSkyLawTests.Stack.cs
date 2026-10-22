@@ -164,7 +164,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         var parameters = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref panorama);
 
         Assert.Equal(actual: parameters.Screen, expected: Fixtures.TestPatternScreenIndex);
-        Assert.Equal(actual: parameters.Intensity, expected: 0.7f);
+        Assert.Equal(actual: parameters.Intensity, expected: (0.7f * SdfSky.DefaultLuminance));
     }
     [Fact]
     public void SkyLayerName_AFixedRowsLabel_RefusesByName_ControlOtherNameClean() {

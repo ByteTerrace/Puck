@@ -64,6 +64,12 @@ public sealed class SdfMeshIrradiance {
     private const float InsideShare = 0.25f;
     // The probes one batch of the trace takes before it looks again at the camera and the lighting.
     private const int BatchProbes = 384;
+    /// <summary>The weight every axis of the meter's reading takes besides its facing (<see cref="TryMeter"/>): the
+    /// surround a center-weighted meter still reads.</summary>
+    public const float MeterSurround = 0.05f;
+    // The meter's sky visibility over the mean open share of a probe's six axes: on open ground the up axis sees the
+    // whole sky, the four sideways axes half of it and the down axis none, a mean of one half.
+    private const float OpenGroundShare = 2f;
 
     private readonly Lock m_gate = new();
     private readonly ConcurrentDictionary<(int X, int Y, int Z), Probe> m_cache = new();
@@ -160,6 +166,81 @@ public sealed class SdfMeshIrradiance {
         }
 
         return new SdfMeshIrradianceParameters(Dims: layout.Dims, Enabled: true, Low: m_low, Spacing: layout.Spacing);
+    }
+    /// <summary>Reads the volume as a center-weighted reflected-light meter at a camera: the luminance the traced probes
+    /// about the camera see along each of their six axes, the light the surfaces about it reflect and emit and the sky
+    /// through the openings it sees, averaged with each axis weighted by the squared cosine of its angle to where the
+    /// camera looks plus <see cref="MeterSurround"/>, so the axis ahead counts about four fifths of the reading. The
+    /// probes trace the directional lights, emission and the sky; the point lights and the screens are no part of the
+    /// reading.</summary>
+    /// <param name="position">The camera's position, in world units.</param>
+    /// <param name="forward">The camera's unit forward axis.</param>
+    /// <param name="luminance">The metered average luminance, in nits, when the method returns
+    /// <see langword="true"/>.</param>
+    /// <param name="skyVisibility">The share of the sky the probes about the camera see open, alike in every direction,
+    /// in [0, 1], when the method returns <see langword="true"/>: one on open ground, whose probes see the sky over the
+    /// upper half of their directions, near zero in a closed room.</param>
+    /// <returns><see langword="false"/> while no traced probe of the current lighting lies about the camera.</returns>
+    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility) {
+        luminance = 0f;
+        skyVisibility = 1f;
+
+        lock (m_gate) {
+            if ((m_lighting is not { } lighting) || !m_windowValid) {
+                return false;
+            }
+
+            var spacing = m_layout.Spacing;
+            var sample = ((position / spacing) - new Vector3(value: 0.5f));
+            var floor = new Vector3(x: MathF.Floor(sample.X), y: MathF.Floor(sample.Y), z: MathF.Floor(sample.Z));
+            var fraction = (sample - floor);
+            Span<float> axes = stackalloc float[6];
+            var open = 0f;
+            var total = 0f;
+
+            for (var corner = 0; (corner < 8); corner++) {
+                var offset = new Vector3(x: (corner & 1), y: ((corner >> 1) & 1), z: ((corner >> 2) & 1));
+                var cell = ((int)(floor.X + offset.X), (int)(floor.Y + offset.Y), (int)(floor.Z + offset.Z));
+
+                if (!m_cache.TryGetValue(key: cell, value: out var probe) || probe.Invalid) {
+                    continue;
+                }
+
+                var weight = ((((offset.X > 0f) ? fraction.X : (1f - fraction.X)) * ((offset.Y > 0f) ? fraction.Y : (1f - fraction.Y))) * ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z)));
+
+                if (weight <= 0f) {
+                    continue;
+                }
+
+                for (var axis = 0; (axis < 6); axis++) {
+                    var sky = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (probe.Sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
+
+                    axes[axis] += (SdfPhotometry.LuminanceOf(color: (probe.Radiance[axis] + sky)) * weight);
+                    open += ((probe.Sky[axis] * weight) / 6f);
+                }
+                total += weight;
+            }
+
+            if (total <= 0f) {
+                return false;
+            }
+
+            var sum = 0f;
+            var weights = 0f;
+
+            for (var axis = 0; (axis < 6); axis++) {
+                var ahead = MathF.Max(0f, Vector3.Dot(vector1: Axes[axis], vector2: forward));
+                var facing = (MeterSurround + (ahead * ahead));
+
+                sum += ((axes[axis] / total) * facing);
+                weights += facing;
+            }
+
+            luminance = (sum / weights);
+            skyVisibility = Math.Clamp(value: ((OpenGroundShare * open) / total), min: 0f, max: 1f);
+
+            return true;
+        }
     }
     /// <summary>Describes the volume: its tier's layout, the static scene, the probes cached and the rays traced.</summary>
     /// <returns>One line.</returns>
@@ -457,9 +538,13 @@ public sealed class SdfMeshIrradiance {
         var fraction = (sample - floor);
         var squared = (normal * normal);
         var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
+        // The probes in front of the surface, and apart those behind it, which answer only where none lies in front.
         var sky = 0f;
         var bounce = Vector3.Zero;
         var total = 0f;
+        var behindSky = 0f;
+        var behindBounce = Vector3.Zero;
+        var behindTotal = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
             var offset = new Vector3(x: (corner & 1), y: ((corner >> 1) & 1), z: ((corner >> 2) & 1));
@@ -487,11 +572,20 @@ public sealed class SdfMeshIrradiance {
 
             if (weight <= 0f) { continue; }
 
-            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
-            bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
-            total += weight;
+            if (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing)) {
+                sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
+                bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
+                total += weight;
+            } else {
+                behindSky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * weight);
+                behindBounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * weight);
+                behindTotal += weight;
+            }
         }
 
+        if (total <= 0f) {
+            (sky, bounce, total) = (behindSky, behindBounce, behindTotal);
+        }
         if (total <= 0f) {
             return skyIrradiance;
         }

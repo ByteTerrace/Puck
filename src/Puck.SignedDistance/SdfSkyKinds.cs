@@ -150,7 +150,8 @@ public record struct SdfSkyClouds : ISdfSkyKind {
     [FieldOffset(48)] public Vector3 LightDirection;
     /// <summary>The layer's rotation about the zenith at the frame's presented tick, in radians, reduced by a turn.</summary>
     [FieldOffset(60)] public float SpinAngle;
-    /// <summary>Baked: the colour of the light the clouds are lit by, or white when no light shadows.</summary>
+    /// <summary>Baked: the colour of the light the clouds are lit by, or white when no light shadows, at the luminance of
+    /// <see cref="Color"/>.</summary>
     [FieldOffset(64)] public Vector3 LightColor;
     /// <summary>How far the first fractal sum bends the second's domain, in cells.</summary>
     [FieldOffset(76)] public float Warp;

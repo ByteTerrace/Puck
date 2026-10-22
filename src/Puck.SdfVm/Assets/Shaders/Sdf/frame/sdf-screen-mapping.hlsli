@@ -11,7 +11,7 @@ struct ScreenMappingData {
     float4 imageV;      // xyz = the source v's coefficients of the warped u, v and 1; w = 1 when the fit letterboxes
     float4 crop;        // the crop: left, top, right, bottom
     float4 sampleClamp; // the crop inset by half a source pixel: left, top, right, bottom
-    float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = emits light, w = drawn through the screen glass (0 for an opening)
+    float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = the luminance in nits a picture value of one shows at (one for an opening), w = drawn through the screen glass (0 for an opening)
 };
 // A screen's record is its ScreenMappingData rows, then its ScreenRippleData rows. KEEP IN SYNC with
 // SdfWorldTables.ScreenMappingStride and SdfScreenRipple.Rows.

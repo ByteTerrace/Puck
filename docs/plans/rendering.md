@@ -77,9 +77,9 @@ beside the package that owns it. The open parts are:
   counted-default checks are named under their steps. P18-11's part-two binder
   work uses the existing layer and prototype vocabulary; P18-7's separate
   celestial body vocabulary remains open.
-- **P20:** P20-1, the per-pass cull of mesh draws by box, and P20-2, the mesh
-  pass's occlusion from depth, have landed; cached cascades, levels of detail,
-  residency and lights per view are open
+- **P20:** P20-1, the per-pass cull of mesh draws by box, P20-2, the mesh
+  pass's occlusion from depth, and the per-view selection of lights by range
+  have landed; cached cascades, levels of detail and residency are open
   ([P20](#p20--visibility-areas-and-residency)).
 
 Of P18's landed steps, the sky and the bounded media animate on the presented
@@ -7235,11 +7235,11 @@ history and `experimental/`):
   camera, traced on the CPU against the static draws (406 draws, 36 M
   triangles) and cached per cell. It traces geometry, so walls and slabs stop
   its rays; it knows nothing of areas.
-- *Lights.* At most eight a world (`SdfLights.MaxLights`, refused by the
-  validator), every one shading every pixel. A point light's falloff,
-  `weight / (1 + (d / r)^2)`, has no range, and point lights cast no shadow
-  ([open item](open-items.md)), so the lobby's lamp lights level 1 through
-  its slab.
+- *Lights.* At most 128 a world (`SdfLights.MaxLights`, refused by the
+  validator), each view shading only those whose range its frustum may see
+  (item 5). Point and spot lights cast no shadow ([open item](open-items.md)),
+  so a lobby downlight lights level 1 through its slab as far as its range
+  reaches.
 - *The debug world's structure.* `hall.puck` builds the gallery from box
   unions: a 60 × 28 m footprint, four storeys at y = 4.5k + 0.05 under a roof,
   slabs holed for the stairwell (x 10–14, z 35–40) and the lift shaft
@@ -7412,11 +7412,14 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    doors that close. Worlds are already the area granularity across portals: a
    routed residency stays live while its window shows. Which may pop (a
    distant group reloading from the store) is the owner's call, below.
-5. **Lights per area.** The eight-light cap is world-wide. Choosing each view's
-   eight from a larger set by their influence over the view's frustum (and,
-   with item 1, over what is unoccluded) lifts it, but a point light's falloff
-   has no range: a cutoff radius changes the lighting where it applies, which
-   is a look decision. Indirect light already stops at geometry; area scoping
+5. **Lights per view, landed.** A point or spot light ends at a range
+   derived from its intensity and the world's darkest exposure, under a
+   windowed inverse square that is exactly zero there, and each view shades only
+   the lights whose sphere of range its frustum may see (`SdfLightSelection`,
+   `CameraSnapshot.MaySee`); the eight-light cap is lifted to the 128-record
+   table ([decision](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)).
+   With item 1, the selection could also drop lights whose sphere lies wholly
+   behind occluders. Indirect light already stops at geometry; area scoping
    would add nothing to it until areas exist.
 6. **Glass and nested views** compose by construction: the glass pass culls
    with its view's box test, and every nested view culls by its own camera.
@@ -7431,8 +7434,9 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
 - *What may pop.* Distance residency (item 4) and levels of detail (item 3)
   each trade memory or triangles against a visible change at a boundary
   (a group loading, a coarser contour). P20-1 changes no pixel.
-- *Point-light range.* A cutoff lets lights be scoped per view (item 5) and
-  lifts the eight-light cap; it darkens what lies past the cutoff.
+- *Point-light range.* Decided by the lead on the owner's delegation: a range
+  derived from each light's intensity, where its light falls below 1/256 of
+  display white at the world's darkest exposure (item 5).
 
 **Timing to read on a quiet machine** (no other World, no build): each view of
 both tables above with `world.cadence off` and `world.gpu-timing on`, read under

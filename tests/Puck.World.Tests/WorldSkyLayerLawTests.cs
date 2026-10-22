@@ -19,8 +19,8 @@ public sealed class WorldSkyLayerLawTests {
     public void SoloAndMuteResolveThroughTheLeverSinkAndNeverSave() {
         var definition = Fixtures.BuildDocument() with {
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.125f)), Sky: new WorldRenderSky(Layers: [
-                new WorldRenderSkyLayer.Stars(Name: "faint", Brightness: 0.25f),
-                new WorldRenderSkyLayer.Stars(Name: "bright", Brightness: 2f),
+                new WorldRenderSkyLayer.Stars(Name: "faint", Brightness: 0.25f) { Luminance = 1f },
+                new WorldRenderSkyLayer.Stars(Name: "bright", Brightness: 2f) { Luminance = 1f },
                 new WorldRenderSkyLayer.Clouds(Coverage: 0.75f),
             ])),
         };

@@ -86,6 +86,16 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   the draw there.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **The frame shades luminance in nits, and each view's composite applies its
+  exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
+  A light record carries illuminance or intensity over π; emission, sky layers
+  and displays are nits. A new constant meant as a display colour (an outline,
+  a grid, a placeholder glass) is divided by `passGroup.exposure` or it vanishes
+  outdoors and blows out indoors. A window's view and a sky layer's view publish
+  unexposed nits (`SdfViewSnapshot.Unexposed`). A point or spot light's falloff
+  is exactly zero at its range, and each view shades only the lights its
+  frustum may reach (`SdfLightSelection`, the pass block's `lightMask`).
+  `world.exposure` reads each view's EV and meter.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

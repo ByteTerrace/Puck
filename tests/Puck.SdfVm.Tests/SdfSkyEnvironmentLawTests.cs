@@ -53,8 +53,8 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         // The default look, ground at -1 and zenith at +1: f(y) = mean + half · y, whose projection is the mean times
         // Y00 · 4π and half times Y1-1's normalization times the integral of y², 4π/3, with nothing in any other harmonic.
         var sky = new SdfSky();
-        var ground = SdfSky.DefaultGroundColor;
-        var zenith = SdfSky.DefaultZenithColor;
+        var ground = (SdfSky.DefaultGroundColor * SdfSky.DefaultLuminance);
+        var zenith = (SdfSky.DefaultZenithColor * SdfSky.DefaultLuminance);
         var coefficients = Project(sky: sky);
         var mean = (0.5f * (ground + zenith));
         var half = (0.5f * (zenith - ground));
@@ -72,7 +72,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         var worst = 0f;
 
         foreach (var direction in Directions()) {
-            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
+            worst = MathF.Max(x: worst, y: Error(actual: (SdfSkyEnvironment.Sample(direction: direction, map: map) / SdfSky.DefaultLuminance), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
         }
 
         Assert.InRange(actual: worst, high: HalfDisplayCode, low: 0f);
@@ -123,7 +123,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         // gradient's within the lookup's bound, so no texel holds the disc.
         var sky = new SdfSky();
 
-        _ = sky.Add(blend: SdfSkyBlend.Add, label: "disc", parameters: new SdfSkyDisc { Intensity = 50f, Light = 0 }, visibility: SdfSkyVisibility.Both);
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "disc", parameters: new SdfSkyDisc { Intensity = (50f * SdfSky.DefaultLuminance), Light = 0 }, visibility: SdfSkyVisibility.Both);
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
         var map = Render(block: out _, layers: layers, sky: sky);
@@ -136,7 +136,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
                 continue;
             }
 
-            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
+            worst = MathF.Max(x: worst, y: Error(actual: (SdfSkyEnvironment.Sample(direction: direction, map: map) / SdfSky.DefaultLuminance), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
         }
 
         Assert.InRange(actual: worst, high: HalfDisplayCode, low: 0f);
