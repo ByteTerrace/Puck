@@ -10,7 +10,7 @@ namespace Puck.World;
 /// run.
 /// </summary>
 /// <param name="pacing">The window pump's pacing control.</param>
-internal sealed class WorldLockstepCommandModule(PresentPacingControl pacing) : ICommandModule {
+public sealed class WorldLockstepCommandModule(PresentPacingControl pacing) : ICommandModule {
     private CommandResult Describe() => new(Output: (pacing.TickLocked
         ? "[world.lockstep: on — at most one tick a frame, and presentation advances exactly the ticks stepped]"
         : "[world.lockstep: off — presentation runs on the display's clock and interpolates between ticks]"));

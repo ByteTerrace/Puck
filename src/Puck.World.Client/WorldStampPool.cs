@@ -52,6 +52,32 @@ public sealed partial class WorldStampPool {
     /// applies to its registrations and the boot scene applies to its static placements.</summary>
     public WorldShapeIsolation Isolation { get; } = new();
 
+    /// <summary>Restarts the presentation-only animation state of every registration a body roots, as for a new
+    /// occupant: its gait drivers' phases, weights and eased speed, its foot plants and steps, and its root and part
+    /// followers seed again from the next frame's pose. Nothing the simulation reads changes. A teleport of the same
+    /// occupant otherwise keeps its gait phases, so a scripted motion repeated from one reset pose shows a different
+    /// stride; this is the reset that makes the repeat look the same.</summary>
+    /// <param name="bodyIndex">The 0-based entity index of the body.</param>
+    /// <returns>The number of registrations restarted, zero when the body roots none.</returns>
+    public int Reseed(int bodyIndex) {
+        var reseeded = 0;
+
+        foreach (var registration in m_pool) {
+            if (
+                (registration is not { } live) ||
+                (live.BodyIndex != bodyIndex)
+            ) {
+                continue;
+            }
+
+            live.DriverSeeded = false;
+            live.RootEpoch = -1;
+            reseeded++;
+        }
+
+        return reseeded;
+    }
+
     // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
     // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);

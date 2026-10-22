@@ -348,6 +348,24 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "view.reseed",
+            description: "Restarts a body's presentation-only animation as for a new occupant: view.reseed [<body>] (the 0-based entity index, default 0) seeds its gait drivers' phases, weights and eased speed, its foot plants and steps, and its root and part followers again from the next frame's pose. A teleport (body.pose) of the same occupant keeps its gait phases so it never pops, which makes a scripted motion repeated from one reset pose show a different stride; pin view.reseed to the same tick as the body.pose (world.at) and the repeat looks the same. Echoes [view.reseed: body <n> restarted <k> registration(s)]. Session presentation only: nothing the simulation reads or a replay hashes changes.",
+            handler: (_, args) => {
+                var body = 0;
+
+                if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out body) || (body < 0)))) {
+                    return CommandResult.Usage(form: "[<body>]", verb: "view.reseed");
+                }
+
+                return new CommandResult(Output: string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[view.reseed: body {body} restarted {stamps.Reseed(bodyIndex: body)} registration(s)]"
+                ));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.view.motion",
             description: "Echoes how evenly a seat's presentation moves from frame to frame: world.view.motion [frames] reads the last frames (default 120, at most 240) the presenter framed the traced seat in: the frame interval, how far the presented body and the camera's eye moved each frame (mean, spread, stalls under a fifth of the mean and jumps over twice it) and the range of the interpolation fraction its world presented by, naming the worlds that presented it. Hold a movement key while it records: an even walk reads a small spread with no stalls or jumps, and judder the frame rate does not show reads as stalls and jumps. world.view.motion seat <n> traces seat n (1-based) and forgets what was held; world.view.motion reset forgets it. Presentation only; a headless world frames no seat and holds none. A query (always echoes).",
             handler: (_, args) => Motion(args: args),
