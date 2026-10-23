@@ -12,22 +12,22 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-// The inner sphere is matte in both scenes. Only the outer detail shell emits, and the shell is the surface the bake
-// draws, so the resolve's reactivity input must describe the emissive material the views pass shaded. The readback uses the graph's
-// normal package-copy path and therefore observes the buffer the real views pass wrote on each backend.
+// The inner sphere is matte in both scenes. The outer detail shell is the surface the bake draws; its steady emission
+// must keep temporal history just as a matte surface does, so sub-pixel lights accumulate across jitter positions.
+// The readback observes the real views pass's reactivity buffer through the graph's normal package-copy path.
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfReactivityDeviceLawTests {
     private const uint Extent = 32;
 
     [Fact]
-    public void VulkanReactsToEmissionSelectedByDetailShading() {
+    public void VulkanKeepsHistoryForSteadyDetailEmission() {
         using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfReactivityDeviceLawTests));
 
         Verify(device: device, extension: ".spv");
     }
     [Fact]
-    public void DirectXReactsToEmissionSelectedByDetailShading() {
+    public void DirectXKeepsHistoryForSteadyDetailEmission() {
         using var device = DirectXTestDevices.Hardware();
 
         Verify(device: device, extension: ".dxil");
@@ -35,7 +35,7 @@ public sealed class SdfReactivityDeviceLawTests {
 
     private static void Verify(IGpuDeviceContext device, string extension) {
         Assert.InRange(actual: Reactivity(device: device, emissive: false, extension: extension), low: 0f, high: 0.001f);
-        Assert.InRange(actual: Reactivity(device: device, emissive: true, extension: extension), low: 0.8f, high: 1f);
+        Assert.InRange(actual: Reactivity(device: device, emissive: true, extension: extension), low: 0f, high: 0.001f);
     }
     // The default lights at zero strength: the room is unlit, so the emission alone decides the pixel's color.
     private static SdfLights Dark() {

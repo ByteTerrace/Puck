@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the message is the notification and git is the record.
+The response treats the author's message or claim as a notification rather than proof, requiring the lead to verify the base in git (the record) before sending the brief.

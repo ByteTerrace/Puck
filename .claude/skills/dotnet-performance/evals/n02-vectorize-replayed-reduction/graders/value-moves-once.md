@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says moving to a fixed lane grouping changes the float result once, as a deliberate correction, after which it stays bit-identical.
+The response explains that changing the reduction formulation (or replacing a replayed float reduction with a fixed-point or fixed-width tree) may change the result or state hash once as a deliberate correction, after which runs stay bit-identical.

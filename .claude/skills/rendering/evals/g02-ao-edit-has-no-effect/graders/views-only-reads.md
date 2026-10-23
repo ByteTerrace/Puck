@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the views stage only reads the occlusion the surface pass wrote into the visibility record, so there is nothing to edit there.
+The response explains that the views stage (`sdfViewsFilter` in `passes/sdf-views-stage.hlsli`) reads and 4x4-filters the occlusion that the surface pass (`sdfMeshAmbient` in `passes/sdf-surface-stage.hlsli`) estimated and wrote into the visibility record.

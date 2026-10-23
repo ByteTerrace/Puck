@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response uses --stat-trace and --render only as diagnostics and confirms the result with the relevant Post stage.
+The response treats diagnostic flags (`--stat-trace`, `--cosim`, or `--render`) as investigation tools and confirms the fix with the relevant Humble Post stage.

@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-maths-usage
+maths-usage|Puck\.Maths|FixedQ4816
