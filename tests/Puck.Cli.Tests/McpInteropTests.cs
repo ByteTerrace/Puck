@@ -277,23 +277,23 @@ public sealed class McpInteropTests {
 
                 var refused = await ExecAsync(command: "world.wait 3000", timeoutMs: 30000);
 
-                Assert.Equal(expected: "refused", actual: refused.Status);
-                Assert.StartsWith(expectedStartString: "[world.wait: refused (3000 ticks at 30 Hz take 100 s", actualString: refused.Output);
+                Assert.Equal(actual: refused.Status, expected: "refused");
+                Assert.StartsWith(actualString: refused.Output, expectedStartString: "[world.wait: refused (3000 ticks at 30 Hz take 100 s");
 
                 var before = await ExecAsync(command: "world.status", timeoutMs: 30000);
 
                 var baseline = Placements(status: before.Output);
 
                 var text = File.ReadAllText(path: source);
-                var edited = text.Replace(oldValue: "placements {\n", newValue: "placements {\n  placement \"mcp-reload\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", comparisonType: StringComparison.Ordinal);
+                var edited = text.Replace(comparisonType: StringComparison.Ordinal, newValue: "placements {\n  placement \"mcp-reload\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", oldValue: "placements {\n");
 
-                Assert.NotEqual(expected: text, actual: edited);
-                File.WriteAllText(path: source, contents: edited);
+                Assert.NotEqual(actual: edited, expected: text);
+                File.WriteAllText(contents: edited, path: source);
 
                 var reload = await ExecAsync(command: "world.reload", timeoutMs: 120000);
 
-                Assert.Equal(expected: "completed", actual: reload.Status);
-                Assert.StartsWith(expectedStartString: "[world.reload: world.reload applied", actualString: reload.Output);
+                Assert.Equal(actual: reload.Status, expected: "completed");
+                Assert.StartsWith(actualString: reload.Output, expectedStartString: "[world.reload: world.reload applied");
                 Assert.Equal(expected: (baseline + 1), actual: Placements(status: (await ExecAsync(command: "world.status", timeoutMs: 30000)).Output));
             }
             await host.StandardInput.WriteAsync(buffer: "quit\n".AsMemory(), cancellationToken: Token);
@@ -317,10 +317,10 @@ public sealed class McpInteropTests {
         var first = StageWorld(directory: directory, name: "worlds-a");
         var second = StageWorld(directory: directory, name: "worlds-b");
         var text = File.ReadAllText(path: second);
-        var edited = text.Replace(oldValue: "placements {\n", newValue: "placements {\n  placement \"mcp-second\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", comparisonType: StringComparison.Ordinal);
+        var edited = text.Replace(comparisonType: StringComparison.Ordinal, newValue: "placements {\n  placement \"mcp-second\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", oldValue: "placements {\n");
 
-        Assert.NotEqual(expected: text, actual: edited);
-        File.WriteAllText(path: second, contents: edited);
+        Assert.NotEqual(actual: edited, expected: text);
+        File.WriteAllText(contents: edited, path: second);
         using var a = LaunchWorld(announced: out var announcedA, directory: directory, source: first, stateName: "state-a");
         using var b = LaunchWorld(announced: out var announcedB, directory: directory, source: second, stateName: "state-b");
 
@@ -342,7 +342,7 @@ public sealed class McpInteropTests {
             }
             async Task<System.Text.Json.JsonElement[]> ListAsync() => [.. (await CallAsync(tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray()];
             async Task<(string Status, string Output, System.Text.Json.JsonElement World)> StatusAsync(string? world) {
-                var result = await CallAsync(tool: "puck_exec", world: world, command: "world.status");
+                var result = await CallAsync(command: "world.status", tool: "puck_exec", world: world);
 
                 return (result.GetProperty(propertyName: "status").GetString()!, result.GetProperty(propertyName: "output").GetString()!, result.GetProperty(propertyName: "world"));
             }
@@ -408,14 +408,14 @@ public sealed class McpInteropTests {
             foreach (var gone in new[] { idOf[b.Id], b.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) }) {
                 var refused = await StatusAsync(world: gone);
 
-                Assert.Equal(expected: "refused", actual: refused.Status);
+                Assert.Equal(actual: refused.Status, expected: "refused");
                 Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refused.World.ValueKind);
-                Assert.Contains(expectedSubstring: $"No running World matches '{gone}'", actualString: refused.Output);
+                Assert.Contains(actualString: refused.Output, expectedSubstring: $"No running World matches '{gone}'");
             }
 
             var survivor = await StatusAsync(world: idOf[a.Id]);
 
-            Assert.Equal(expected: "completed", actual: survivor.Status);
+            Assert.Equal(actual: survivor.Status, expected: "completed");
             Assert.Equal(expected: a.Id, actual: survivor.World.GetProperty(propertyName: "processId").GetInt32());
             Assert.Equal(expected: a.Id, actual: (await StatusAsync(world: null)).World.GetProperty(propertyName: "processId").GetInt32());
         } finally {
@@ -424,6 +424,7 @@ public sealed class McpInteropTests {
             }
         }
     }
+
     private static int Placements(string status) => int.Parse(
         provider: System.Globalization.CultureInfo.InvariantCulture,
         s: System.Text.RegularExpressions.Regex.Match(input: status, pattern: @" placements (\d+) ").Groups[1].Value
@@ -449,6 +450,7 @@ public sealed class McpInteropTests {
             Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: $"src/Puck.World/bin/{output.Parent!.Name}/{output.Name}/Puck.World.dll"),
             "--world", source,
             "--headless", "true",
+            "--devices", "none",
             "--state-dir", directory.PathOf(name: stateName),
             "--control",
         }) { world.ArgumentList.Add(item: argument); }
@@ -471,11 +473,11 @@ public sealed class McpInteropTests {
         return host;
     }
     private static void CopyTree(string source, string target) {
-        foreach (var file in Directory.EnumerateFiles(path: source, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {
-            var copy = Path.Combine(path1: target, path2: Path.GetRelativePath(relativeTo: source, path: file));
+        foreach (var file in Directory.EnumerateFiles(path: source, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+            var copy = Path.Combine(path1: target, path2: Path.GetRelativePath(path: file, relativeTo: source));
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: copy)!);
-            File.Copy(sourceFileName: file, destFileName: copy);
+            File.Copy(destFileName: copy, sourceFileName: file);
         }
     }
     private static Process Start(string attach, TemporaryDirectory directory) {
