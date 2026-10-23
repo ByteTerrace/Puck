@@ -156,6 +156,19 @@ These items belong to no single programme.
 - [ ] Refuse a `garden { … }` expectation that names a document the world does not reference at authoring time (`puck lint`, the language server, `puck compile`). Today `puck test` refuses it when it stages the test world (a usage error naming the document). The compile-time document does not hold the answer: a `references` row can arrive through an imported document composed only at load (the debug world's garden reference comes from `paintings.puck`), and a sibling can be reached through another sibling's references, so a check against the compiled rows would refuse claims that stage fine. It needs the composed document's references, which is the composer's to give.
 - [ ] Make the external prime comparisons reproducible as `puck bench` workloads: primecount 8.8 `-t1` on pi(10^16..10^18) and nth(10^15, 10^16), and machine-prime 1.5.7 `is_prime` per bucket (2^32 to 2^63) and input class (primes, composites with no factor through 163 or 727, random odd words), with agreement checked against a deterministic Miller-Rabin oracle. Both ran from session scratch harnesses on one Zen 4 machine; Intel (Alder Lake) and Zen 2 timings are unmeasured.
 
+- [ ] Fix the flaws the owner found walking the debug world on the GPU (Direct3D 12, 1280×900):
+  - [ ] Indirect light leaks through walls. The irradiance volume's indirect term carries:
+    - a soft rectangular band on the hall's outer wall that shifts as the camera moves;
+    - a near-white far half of the gallery hall, which also drags auto exposure and washes out the near hall;
+    - a stepped bright strip down a corner of the teal device room, where normals show the geometry closed and the shadow view shows direct light blocked.
+    The suspect is probes outside or behind walls that see the sky, together with the camera-following volume's edge falling back to unoccluded sky.
+  - [ ] The chase camera collapses into the Moth in tight spaces and never recovers. In the stairwell corner it ends up inside her backpack, below her looking up, and upside down, and it stays pinned against her afterwards on open floor. It must never enter the character, must not flip, and must ease back to its follow distance once the space clears.
+  - [ ] The lift does not carry a standing body. With the Moth at the car's centre, `gallery.lift 2` raised the car (`liftAt` 0 to 144) and left her on the shaft floor. The car is a bare platform: no walls, no car doors, no landing doors (the lift-doors item below), and the level numbers are painted on its back wall. Pure-white rectangles slide past in the shaft, and the chase camera wedges into the shaft and doorway.
+  - [ ] A grounded walker is not held to the ground. Walking up a ramp she keeps the climb's upward velocity past the crest, so she launches about 0.2 m above it and lands about 4 m further on. Walking down a slope she falls instead of following it. On a second rise she is lifted by position correction with zero vertical velocity. A walking body needs its velocity projected onto the surface and snapping to the ground within a snap distance.
+  - [ ] A round dais collides as its bounding box, so the Moth stands grounded on its invisible corners, 0.25 m above the visible floor, with a foot that never reaches down. It needs an exact cylinder or disc collision shape (the placement-box item above).
+  - [ ] Walking backward, the Moth's legs cross behind each other.
+  - [ ] The gallery's section and wayfinding signs stand on poles in the aisles. They hang from the ceiling above the exhibits instead (the owner's call), and per-exhibit labels stay on the plinths.
+
 ## Quarantined gates
 
 While the debug world is the one live world

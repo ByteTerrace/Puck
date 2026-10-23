@@ -38,7 +38,7 @@ trip during which the World keeps stepping, so separate calls never land a
 fixed number of ticks apart; pin everything that must land on a tick in one
 call instead.
 
-1. Boot your own World (`--devices none --control --state-dir <lane dir>`), or
+1. Start your own World with `puck_world_start` (`windowed: true`), or
    use the live one when the brief allows mutations, and turn `world.lockstep
    on` as early as you can (a piped script's first line runs before tick 1).
    Lockstep (windowed only; the offscreen host always steps this way) steps
