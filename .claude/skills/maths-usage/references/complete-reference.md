@@ -277,14 +277,12 @@ stable, and never add a path that reproduces old-wrong behaviour.
 ## 3. Verify
 
 `tests/Puck.Maths.Tests` is the machine-checked story a `src/Puck.Maths` change
-gets: a four-tier suite of law cases.
+gets: a three-tier suite of law cases.
 
 **Is a contract claim actually tested?** Every case is declared in
 `tests/Puck.Maths.Tests/laws/<family>.json` with the public members it covers
 and the legs it stands on, and `LawRegistry.cs` (with its per-family partials)
-binds each id to the code that runs it. Per-member classification — covered and
-by which case, waived, or uncovered — is queryable in `coverage-manifest.json`
-beside them.
+binds each id to the code that runs it. Member coverage is declared in those rows and waivers live in `Coverage.cs`.
 
 **The quick check: one command.** It is the cheapest way to see a change under
 `src/Puck.Maths` working, whichever wing it touched:
@@ -295,15 +293,9 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 
 (`dotnet test` forwards switches it does not know, `-nodeReuse:false` included,
 to the test host, which exits 5. Build first with `-nodeReuse:false`, then run
-this with `--no-build`.) That is the Default tier, **about half a minute**. It is
-cheap on purpose and it is where the *structural* gates live: the coverage
-ratchet and both leg gates carry the `Default` trait, so this run is the only
-one that checks a new public member is classified, that legs are declared and
-siblings resolve, and the only one that regenerates `coverage-manifest.json`
-and `leg-ledger.md` (into the build output; `puck baselines maths-ledger`
-records them into the checkout, which the manifest and leg checks require after a
-declaration change). Skipping it does not save time; it defers a failure that
-cannot heal itself once the manifest and the surface disagree.
+this with `--no-build`.) That is the Default tier, the ordinary run. It is
+where structural completeness and evidence declarations are checked directly,
+without any recorded artifact.
 
 **The tier ladder.** Higher tiers are explicit, opted into per run, and are *not* to be
 fired on every change. Their cost is the point: they buy breadth you do not need
@@ -311,14 +303,14 @@ in a change loop.
 
 | Tier | Command | Budget | When |
 |---|---|---|---|
-| **Default** | *(a plain run — no filter)* | about half a minute | the quick check for a change |
-| Deep | `--explicit on --filter-trait tier=Deep` | about a minute | optional breadth, worth it for a rounding change |
+| **Default** | *(a plain run — no filter)* | ordinary | the quick check for a change |
+| Deep | `--explicit on --filter-trait tier=Deep` | broader | optional breadth, worth it for a rounding change |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It takes tens of minutes;
 narrow it with `--explicit on --filter-display-name '<law-id>*'` when one law is the question. Run it only
 when the member you touched names it as its gate of record, which
-`coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
+the law declarations and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.
 
 To find the cases that cover a member, search the declarations for its name:
@@ -341,19 +333,15 @@ carries a step budget whose exhaustion is a named failure. Read the exit code
 
 **Land a new public member with its classification.** A law case (a
 `laws/<family>.json` declaration naming the member, bound in `LawRegistry.cs`)
-or a waiver with a reason in `Coverage.WaiverDeclarations`;
-never a hand-edit of `coverage-manifest.json`. Without one the coverage ratchet
-fails on every run and cannot heal itself — mechanism in
-[tests/Puck.Maths.Tests → The ratchet](../../../../tests/Puck.Maths.Tests/README.md#the-ratchet).
+or a waiver with a reason in `Coverage.WaiverDeclarations`.
+`LawCompletenessTests` validates declared references and waiver reasons without
+a recorded baseline; `LawDeclarationTests` holds declaration/binding parity.
 Authoring the case or the waiver itself belongs to
 [`maths-laws`](../../maths-laws/SKILL.md).
 
-**When the documentation and the behaviour disagree, do not edit the generated
-register.** A law that pins behaviour against the member's own XML doc must be
-declared as a structural leg whose citation opens `DOC GAP:`; `tests/Puck.Maths.Tests/leg-ledger.md` is
-derived from those declarations on every run, so a row closes only by correcting
-the doc (or the code) and re-spelling the leg — mechanism in
-[FixedPoint → Verifying changes](../../../../src/Puck.Maths/FixedPoint/README.md#verifying-changes).
+**When documentation and behaviour disagree, correct their owning sources.**
+A structural leg whose citation opens `DOC GAP:` records the precise mismatch
+in its authored law declaration; close it by correcting the doc or code and the leg.
 
 **A changed hash after a deliberate correction is not a failure.** Re-record a
 persisted replay or baseline the correction invalidates when you next run it.

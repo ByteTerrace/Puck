@@ -35,14 +35,4 @@ public interface ICartridgeCompiler : IMachineContentProvider {
     /// <param name="document">The complete cartridge source.</param>
     /// <returns>The ROM and its source/state metadata.</returns>
     CartridgeCompilation Compile(CartridgeDocument document);
-    bool IMachineContentProvider.Recognizes(string contentPath) =>
-        contentPath.EndsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: ".cartridge.json"
-        );
-    PreparedMachineContent IMachineContentProvider.Prepare(ReadOnlyMemory<byte> content) =>
-        CartridgeContentProvider.Prepare(
-            compiler: this,
-            content: content
-        );
 }

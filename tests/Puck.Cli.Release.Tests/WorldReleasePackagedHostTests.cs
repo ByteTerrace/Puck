@@ -84,12 +84,12 @@ public sealed class WorldReleasePackagedHostTests {
                     new WorldMachine(
                         "cgb",
                         "gaming-brick",
-                        JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = "../cartridges/tetromino.cgb.cartridge.json" } })
+                        JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = "../cartridges/cgb/tetromino.cgb.puck" } })
                     ),
                     new WorldMachine(
                         "agb",
                         "advanced-gaming-brick",
-                        JsonSerializer.SerializeToElement(new { schema = "puck.advanced-gaming-brick.config.v1", boot = "fast", content = new { path = "../cartridges/pip.agb.cartridge.json" } })
+                        JsonSerializer.SerializeToElement(new { schema = "puck.advanced-gaming-brick.config.v1", boot = "fast", content = new { path = "../cartridges/agb/pip.agb.puck" } })
                     ),
                 ],
                 ScreensRaw: [Screen(

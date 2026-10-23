@@ -143,18 +143,16 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 the Default tier. A rounding change or a new value
 kernel also earns Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
 takes tens of minutes: run it only when the member's waiver or the coverage
-manifest names it as the gate of record, and narrow it to one law with
+law declaration names it as the gate of record, and narrow it to one law with
 `--explicit on --filter-display-name '<law-id>*'`. No tier measures time;
 `puck bench` does. Report the exact commands you ran and where any failure came
 from.
 
 A new public Maths member lands with its classification (a law case or a
 precise waiver) in the same change, and CI requires 100% line coverage of live
-`src/`, so new code lands with a test that reaches it. Authoring the case, the
-waiver and the generated registers belongs to
-[`maths-laws`](../maths-laws/SKILL.md); never hand-edit the generated
-`coverage-manifest.json`, `leg-ledger.md`, `frontier.json` or `RESULTS.md`,
-which `puck baselines maths-ledger` regenerates.
+`src/`, so new code lands with a test that reaches it. Authoring the case and waiver belongs to
+[`maths-laws`](../maths-laws/SKILL.md). The owner rules out recorded Maths
+registers and coverage ratchets; completeness is checked from the current declarations.
 
 ## Route adjacent work
 

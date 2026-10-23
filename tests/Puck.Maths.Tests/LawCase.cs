@@ -1,9 +1,6 @@
 namespace Puck.Maths.Tests;
 
-/// <summary>One declared law case: a stable id, its tier, the public members it exercises (for the coverage manifest),
-/// the legs it stands on (for the leg ledger), and the action that runs it. Facts are generated from this registry, and
-/// both the coverage manifest and the leg ledger read these same declarations — so both are derived mechanically from
-/// the law instantiations, not by hand.</summary>
+/// <summary>A bound law with its tier, covered members, evidence legs and executable assertion.</summary>
 /// <param name="Id">The stable case id (also the test display name).</param>
 /// <param name="Tier">The execution tier.</param>
 /// <param name="Members">The public members this case covers.</param>

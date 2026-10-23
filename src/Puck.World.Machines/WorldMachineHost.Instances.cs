@@ -39,11 +39,13 @@ public sealed partial class WorldMachineHost {
             MountedContent(lease: lease)
         );
     }
+
     // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
     // authored content file is absent leaves out.
     private static string? MountedContent(MachineLease lease) => lease.Assets.Values.FirstOrDefault(
         predicate: static asset => (asset.Role == MachineFieldRole.ContentPath)
     )?.Path;
+
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(string instance, string output) =>
         ((m_instances.TryGetValue(
@@ -77,6 +79,7 @@ public sealed partial class WorldMachineHost {
         declaration: instance.Declaration,
         folderBoot: instance.FolderBoot
     ))];
+
     // The form of a machine's declaration the world document holds: one running the folder default the machine booted
     // carries its authored content there, so the default's name never enters the document, a capture or a replay.
     private static WorldMachine Documented(WorldMachine declaration, FolderDefaultBoot? folderBoot) => (
@@ -84,6 +87,7 @@ public sealed partial class WorldMachineHost {
             ? (declaration with { Configuration = boot.Authored })
             : declaration
     );
+
     /// <summary>Resolves a prepared content symbol for a named machine without coupling the lookup to a display.</summary>
     public bool TryResolveSymbol(string instance, string symbol, out int address) {
         if (m_instances.TryGetValue(
@@ -860,10 +864,10 @@ public sealed partial class WorldMachineHost {
                     return;
                 }
                 if (!TryReadContent(
-                    path,
-                    documentDirectory,
-                    out var source,
-                    out var fault
+                    content: out var source,
+                    contentPath: path,
+                    documentDirectory: documentDirectory,
+                    fault: out var fault
                 )) {
                     throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
                 }
@@ -878,6 +882,7 @@ public sealed partial class WorldMachineHost {
                     compilation: out content,
                     content: source,
                     contentPath: path,
+                    documentDirectory: documentDirectory,
                     engine: engine,
                     fault: out fault
                 )

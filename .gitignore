@@ -107,3 +107,6 @@ scratch
 worlds/debug/flags/
 # The field slices that go with gallery.slice (world.slice.save): local, read back by agents, never committed.
 worlds/debug/slices/
+
+# Cartridge documents are derived from authored sources.
+/worlds/**/*.cartridge.json

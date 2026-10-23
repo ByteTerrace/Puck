@@ -55,7 +55,8 @@ includes the instance generation and complete binding declaration.
 
 Content providers own format recognition, validation, compilation, and exported
 symbols. The host reads and pins input bytes, asks the selected provider to prepare
-recognized source, and mounts the resulting image. `PreparedMachineAsset` retains
+recognized source with its resolved path for import resolution, and mounts the
+resulting image. `PreparedMachineAsset` retains
 the exact host-read source bytes separately from that executable image;
 `PreparedMachineContent` carries the image, canonical source identity, addresses,
 and any provider-verified format marker independently of cartridge schemas. Provider

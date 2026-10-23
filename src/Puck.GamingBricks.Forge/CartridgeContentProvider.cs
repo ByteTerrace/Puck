@@ -5,8 +5,12 @@ using Puck.Assets.Documents;
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>Adapts cartridge validation and native compilation to the neutral machine-content contract.</summary>
-internal static class CartridgeContentProvider {
-    internal static PreparedMachineContent Prepare(ICartridgeCompiler compiler, ReadOnlyMemory<byte> content) {
+public static class CartridgeContentProvider {
+    /// <summary>Validates JSON and compiles its executable image and exported symbols.</summary>
+    /// <param name="compiler">The native target compiler.</param>
+    /// <param name="content">The canonical cartridge JSON.</param>
+    /// <returns>The executable image and source metadata.</returns>
+    public static PreparedMachineContent Prepare(ICartridgeCompiler compiler, ReadOnlyMemory<byte> content) {
         try {
             var compilation = compiler.Compile(document: CartridgeDocuments.Parse(utf8: content.Span));
             var symbols = new Dictionary<string, MachineContentSymbol>(comparer: StringComparer.Ordinal);

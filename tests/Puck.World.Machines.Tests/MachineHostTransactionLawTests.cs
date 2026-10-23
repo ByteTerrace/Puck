@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text.Json;
-using Puck.GamingBricks.Forge;
 using Puck.World.Server;
 using Xunit;
 
@@ -16,7 +15,7 @@ public sealed class MachineHostTransactionLawTests {
     // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
     /// <summary>The shipped cartridge these laws drive. They assert nothing about which game it is.</summary>
-    private const string CartridgeFile = "hgb-mirror.cgb.cartridge.json";
+    private const string CartridgeFile = "hgb-mirror.cgb.puck";
     private const string CgbEngine = "gaming-brick";
     private const int MachineScreen = 8;
 
@@ -74,7 +73,7 @@ public sealed class MachineHostTransactionLawTests {
         // value the cartridge's own reset code put there — neither of which is a fact about which game is in the
         // cabinet. Spelling the game's own numbers here is what made these laws break every time the cabinet changed.
         var path = CartridgePath(file: CartridgeFile);
-        var declared = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)).Variables;
+        var declared = Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: path).Variables;
 
         Assert.True(
             condition: (declared.Length >= 2),

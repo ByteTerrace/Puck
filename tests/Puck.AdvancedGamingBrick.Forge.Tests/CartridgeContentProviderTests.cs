@@ -8,20 +8,35 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 public sealed class CartridgeContentProviderTests {
     [Fact]
+    public void PreparationResolvesSourceImportsAndRefusesMissingModules() {
+        ICartridgeCompiler compiler = new HgbCartridgeCompiler();
+        var path = RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/tetromino.cgb.puck");
+        var bytes = File.ReadAllBytes(path: path);
+        var prepared = compiler.Prepare(content: bytes, contentPath: path);
+        var expected = compiler.Compile(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: path));
+
+        Assert.Equal(expected.Rom, prepared.Image);
+        Assert.Equal(expected.SourceHash, prepared.SourceHash);
+        var missingPath = Path.Combine(path1: Path.GetTempPath(), path2: Guid.NewGuid().ToString(format: "N"), path3: "source.puck");
+
+        Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: bytes, contentPath: missingPath));
+        Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: Encoding.UTF8.GetBytes(s: "schema:"), contentPath: path));
+    }
+    [Fact]
     public void InvalidParseAndCompileAreRefusedBeforeAProvenanceCarrierIsProduced() {
         ICartridgeCompiler compiler = new HgbCartridgeCompiler();
 
-        var malformed = Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: Encoding.UTF8.GetBytes(s: "{")));
+        var malformed = Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(contentPath: "probe.cartridge.json", content: Encoding.UTF8.GetBytes(s: "{")));
 
         Assert.IsType<JsonException>(@object: malformed.InnerException);
 
-        Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: Encoding.UTF8.GetBytes(s: "{}")));
+        Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(contentPath: "probe.cartridge.json", content: Encoding.UTF8.GetBytes(s: "{}")));
 
         var valid = CartridgeDocuments.Canonicalize(document: CartridgeDocuments.Create(
             target: "cgb",
             title: "VALID"
         )).Bytes;
-        var prepared = compiler.Prepare(content: valid);
+        var prepared = compiler.Prepare(content: valid, contentPath: "probe.cartridge.json");
 
         Assert.Equal(
             CartridgeDocument.SchemaId,
@@ -32,7 +47,7 @@ public sealed class CartridgeContentProviderTests {
             target: "agb",
             title: "WRONGTARGET"
         )).Bytes;
-        var wrongTargetRefusal = Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: wrongTarget));
+        var wrongTargetRefusal = Assert.Throws<MachineContentException>(testCode: () => compiler.Prepare(content: wrongTarget, contentPath: "probe.cartridge.json"));
 
         Assert.Contains(
             "requires target cgb",
@@ -49,7 +64,7 @@ public sealed class CartridgeContentProviderTests {
             title: "PROVENANCE"
         );
         var source = CartridgeDocuments.Canonicalize(document: document).Bytes;
-        var prepared = CartridgeProbe.Compiler(target: target).Prepare(content: source);
+        var prepared = CartridgeProbe.Compiler(target: target).Prepare(content: source, contentPath: "probe.cartridge.json");
         var asset = new PreparedMachineAsset(
             Path: "provenance.cartridge.json",
             Image: prepared.Image,

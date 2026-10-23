@@ -1999,7 +1999,8 @@ machine through its provider operations, from a file in its `contentFolders`.
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
 `screen:<n>`) before the host is touched; selection boots nothing. A content
-path ending in the .cartridge.json suffix names an authored `puck.cartridge.v1`
+path ending in `.puck` names authored cartridge source; its provider resolves
+imports and compiles it. A path ending in the .cartridge.json suffix names a `puck.cartridge.v1`
 document: the host compiles it through the engine's own forge, boots the
 compiled image, and records a `WorldMachineCartridge` (the source's canonical
 hash and the image's hash) on `WorldMachineState.Cartridge` for

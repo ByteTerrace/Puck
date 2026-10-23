@@ -169,11 +169,11 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.
 
-**Source and generated documents.** A committed cartridge source has its
-`.cartridge.json` twin committed beside it and regenerated in the same change
-(`CartridgeRoundTripTests` byte-compares them); a module it imports, under
-`cartridges/shared/`, contributes templates and has no twin. A world source has no committed
-document: the build compiles it. `--world foo.puck` boots straight from source,
+**Source and generated documents.** The owner's ruling treats cartridge JSON
+twins as derived caches, never committed or byte-compared against a saved copy.
+Compile the authored sources when needed; semantic round trips compare fresh
+compilations. Imported modules contribute templates, not standalone documents.
+A world source also has no committed document: the build compiles it. `--world foo.puck` boots straight from source,
 `world.reload` recompiles it, and `world.save` writes edits back through the
 printer (generated rows refuse by name).
 

@@ -7,7 +7,7 @@ namespace Puck.Maths.Tests;
 /// checkpoint/tail-stream tables (<c>Checkpoints</c>, <c>TailOwnerDeltaStream</c>, <c>CumulativeTailCountByBlock</c>,
 /// <c>DivModByBucketCount</c>) so a table-build defect in <see cref="MonotonicPartitioner"/> cannot vouch for itself.
 /// The declarations in <see cref="LawRegistry"/> invoke these methods as laws, so every assertion participates in
-/// both the ordinary test gate and the mechanically generated public-member coverage ledger.
+/// both the ordinary test gate and the structural public-member law-completeness check.
 /// </summary>
 internal static class MonotonicPartitionerClaims {
     // ---- the table-free reference walk, shared by the two exhaustive claims above ----

@@ -1406,27 +1406,12 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-The bare command is the Default tier, which takes about half a minute on an
-idle machine; the tests README owns that figure, and a contended machine
-measures longer. Nothing records it for you. The suite's machine-written
-[`RESULTS.md`](../../../tests/Puck.Maths.Tests/RESULTS.md) deliberately carries
-no duration at all—every figure in it is machine-independent, so it stays
-meaningful across the machines this engine is tested on, and a wall time would
-have been the one line that did not. Time your own run if you need the number,
-on an idle machine, and compare it only against that same machine. Deep is the
-exhaustive tier, and it is the one that has to pass before a rounding change
-lands.
+The bare command runs Default; Deep adds domains and finite carriers Default
+does not reach. Run Deep for a rounding change. No run writes recorded registers.
 
-**Where doc-versus-code divergences are tracked.** They are not tracked by
-hand. A law that pins what a kernel *does* where the member's own XML doc says
-otherwise must be declared as a structural leg whose citation opens `DOC GAP:`, and the ledger derives a
-register from those declarations on every run—a register here being a table
-the test run rebuilds from scratch rather than one anyone edits. That one is
-**Register: behaviour pinned as observed against its own XML doc**, in
-[`tests/Puck.Maths.Tests/leg-ledger.md`](../../../tests/Puck.Maths.Tests/leg-ledger.md).
-A row cannot go stale, and a divergence cannot be closed by editing the
-register: closing one means correcting the doc (or the code) and re-spelling
-the leg, after which the row drops out by itself.
+**Documentation and code disagreements.** A structural law leg with a
+`DOC GAP:` citation names the member's documented claim. Close that mismatch
+by correcting the code or documentation and updating the authored leg.
 
 **What a change here means.** Rule 4 governs: determinism pins the mapping,
 not the values. A deliberate correction to any value path is *expected* to

@@ -268,7 +268,7 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
-    // The hypercomplex bands. Each construction gets its own key so the frontier advances independently and two laws
+    // The hypercomplex bands. Each construction gets its own key for independent seeds, so two laws
     // over the same type never re-sweep one another's ground. Every narrow/wide gate in the family sits at 2¹⁷, 2²⁹,
     // 2³⁰, 2³¹, 2⁴⁰, 2⁴² or 2⁴⁵, and the committed edge set carries raws strictly on both sides of each, so every case
     // below straddles its own gate.
@@ -744,8 +744,6 @@ internal static partial class LawRegistry {
     public static IReadOnlyList<LawCase> All { get; }
     /// <summary>Gets the case lookup by id.</summary>
     public static IReadOnlyDictionary<string, LawCase> ById { get; }
-    /// <summary>Gets the operand domain keys declared by this registry, including domains a filtered run does not consume.</summary>
-    public static IReadOnlySet<string> DomainKeys { get; }
 
     // The registry is built in the static constructor, never a field initializer: initializers run in an unspecified
     // order across this class's partial files, and a binding that captures a partial's Domain field while Build runs
@@ -756,10 +754,6 @@ internal static partial class LawRegistry {
             keySelector: lawCase => lawCase.Id,
             comparer: StringComparer.Ordinal
         );
-        DomainKeys = typeof(LawRegistry).GetFields(BindingFlags.Static | BindingFlags.NonPublic)
-            .Where(field => field.FieldType == typeof(Domain))
-            .Select(field => ((Domain)field.GetValue(null)!).Key)
-            .ToHashSet(StringComparer.Ordinal);
     }
 
     // Relation coefficients as raw Q16 longs.

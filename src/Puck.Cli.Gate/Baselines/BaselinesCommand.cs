@@ -21,7 +21,6 @@ public static class BaselinesCommand {
     /// <summary>Every recorded artifact, in the order <c>--help</c> lists them.</summary>
     public static IReadOnlyList<BaselineArtifact> Artifacts { get; } = [
         new(
-            CheckedFiles: null,
             CommittedDirectory: "tests/Puck.State.Rebuild.Corpus",
             Description: "The author-expression corpus inventory, inventory.md.",
             Inputs: ["worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
@@ -30,22 +29,9 @@ public static class BaselinesCommand {
             RunArguments: CliTestRun.Class(fullName: "Puck.State.Rebuild.Corpus.CorpusInventoryTests"),
             Runs: 1
         ),
-        // The plain run, which leaves the explicit Deep and Exhaustive rows out; frontier.json and RESULTS.md are run
-        // records that move on every green run, so a check holds only the two artifacts the declarations generate.
-        new(
-            CheckedFiles: ["coverage-manifest.json", "leg-ledger.md"],
-            CommittedDirectory: "tests/Puck.Maths.Tests",
-            Description: "The Puck.Maths law ledger: coverage manifest, leg ledger, frontier and RESULTS.md.",
-            Inputs: [],
-            Name: "maths-ledger",
-            Project: "Puck.Maths.Tests",
-            RunArguments: [],
-            Runs: 1
-        ),
         // The wasm harness (engine-wasm.test.cjs) reads the same file to prove the published engine prices the fixture
         // document exactly as the native engine does.
         new(
-            CheckedFiles: null,
             CommittedDirectory: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity",
             Description: "The browser cost-report parity baseline: the presentation dimension the native engine prices for the fixture document, which the wasm harness also reads.",
             Inputs: [],
@@ -205,7 +191,6 @@ public static class BaselinesCommand {
 
         return (check
             ? Check(
-                artifact: artifact,
                 committed: committed,
                 names: names,
                 path: path,
@@ -219,11 +204,10 @@ public static class BaselinesCommand {
             )
         );
     }
-    private static int Check(BaselineArtifact artifact, string committed, IReadOnlyList<string> names, string path, string records) {
+    private static int Check(string committed, IReadOnlyList<string> names, string path, string records) {
         var drift = new List<string>();
-        var compared = names.Where(predicate: name => (artifact.CheckedFiles?.Contains(value: name, comparer: StringComparer.Ordinal) ?? true)).ToArray();
 
-        foreach (var name in compared) {
+        foreach (var name in names) {
             var target = Path.Combine(
                 path1: committed,
                 path2: name
@@ -237,7 +221,7 @@ public static class BaselinesCommand {
         }
 
         if (drift.Count == 0) {
-            Console.Out.WriteLine(value: $"puck {path}: {compared.Length} record(s) match the committed files.");
+            Console.Out.WriteLine(value: $"puck {path}: {names.Count} record(s) match the committed files.");
 
             return CliExit.Success;
         }
@@ -284,7 +268,6 @@ public static class BaselinesCommand {
     }
 }
 /// <summary>One committed baseline <c>puck baselines</c> records.</summary>
-/// <param name="CheckedFiles">The file names <c>--check</c> compares, or <see langword="null"/> for every record.</param>
 /// <param name="CommittedDirectory">The repository-relative directory holding the committed files.</param>
 /// <param name="Description">The subcommand's help text.</param>
 /// <param name="Inputs">Repository-relative globs for data the owning tests read outside their project's reach.</param>
@@ -293,7 +276,6 @@ public static class BaselinesCommand {
 /// <param name="RunArguments">The <see cref="CliTestRun"/> options selecting the tests that write the records.</param>
 /// <param name="Runs">How many runs must write identical records before any is used.</param>
 public sealed record BaselineArtifact(
-    IReadOnlyList<string>? CheckedFiles,
     string CommittedDirectory,
     string Description,
     IReadOnlyList<string> Inputs,

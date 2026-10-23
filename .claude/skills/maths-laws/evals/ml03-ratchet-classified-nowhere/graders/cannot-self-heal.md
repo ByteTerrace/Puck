@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the failure repeats on every run because the regenerator never writes a state for a member the committed manifest does not already mention.
+The response classifies the member in authored law data or a reasoned waiver and does not propose a saved uncovered entry, numeric floor or generated register.

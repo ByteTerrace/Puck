@@ -4,6 +4,16 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Maths law classification
+
+- [ ] Classify the public Maths surface the retired ratchet grandfathered without
+  a law or waiver, including algebra wrappers, coordinates, continued-fraction
+  certificates and research APIs. Bind existing evidence where it reaches the
+  member, give precise category waivers where warranted, and delete unreachable
+  code. Whole-public-surface completeness must use authored declarations, never
+  a saved uncovered set. The current structural checks hold declaration/binding
+  parity, reference resolution and waiver reasons.
+
 ## Input channels
 
 The [input channel decision](../decisions/input-channels.md) owns the model,

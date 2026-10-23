@@ -197,7 +197,7 @@ prune or repack objects another worktree on the machine still reads.
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
 | [`review-passes`](../review-passes/SKILL.md) | An optional review-and-fix pass and verifying its fixes. |
-| [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and registers. |
+| [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and structural completeness. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |
 | [`puck-world`](../puck-world/SKILL.md) | Running `Puck.World`, stdin scripts, replays and `puck test` worlds. |

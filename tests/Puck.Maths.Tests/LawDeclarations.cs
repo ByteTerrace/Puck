@@ -19,7 +19,7 @@ internal sealed record MemberRef(string Type, string Name);
 /// JSON is lossless.
 /// </para>
 /// <para>
-/// A row is materialized directly, so <c>LegLedgerTests.LawLegsAreDeclared</c> checks every invariant on a Default-tier
+/// A row is materialized directly, so <c>LawLegTests.LawLegsAreDeclared</c> checks every invariant on a Default-tier
 /// run: an agreement names what it stands against, a shared-substrate leg names what is shared, a delegation or
 /// shared-exact leg carries a citation, a transcription names its witness, a canary names an absolute sibling, a
 /// doc-gap citation sits on a structural leg.
@@ -68,9 +68,7 @@ internal sealed record LegText(string Kind, string Flavor, string Subject, strin
 /// four hundred character string literals buried among generic combinators are not.
 /// </para>
 /// <para>
-/// <b>These files are AUTHORED, unlike <c>coverage-manifest.json</c>, <c>frontier.json</c> and <c>leg-ledger.md</c>,
-/// which are machine-written and must never be hand-edited.</b> The directory is the tell: authored declarations live
-/// under <c>laws/</c>, generated registers at the project root.
+/// These authored declarations live under <c>laws/</c>; tests read them without writing recorded artifacts.
 /// </para>
 /// </remarks>
 internal static class LawDeclarations {
@@ -85,7 +83,7 @@ internal static class LawDeclarations {
     public static IReadOnlyDictionary<string, LawDeclaration> All => Declarations;
     /// <summary>Gets the directory the authored declaration files live in.</summary>
     public static string Directory => Path.Combine(
-        path1: TestPaths.ProjectDirectory,
+        path1: RepositoryPaths.Resolve(relativePath: "tests/Puck.Maths.Tests"),
         path2: "laws"
     );
 

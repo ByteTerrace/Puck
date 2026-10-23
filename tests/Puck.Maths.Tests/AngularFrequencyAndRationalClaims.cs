@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Maths.Tests;
 
 /// <summary>
-/// Claims for two members the ratchet found classified nowhere: <see cref="FixedQ4816.AngularFrequency"/>, the shared
+/// Claims for two members without earlier law bindings: <see cref="FixedQ4816.AngularFrequency"/>, the shared
 /// <c>ω = 2πf</c> rational every second-order and soft-constraint derivation in the library and in
 /// <c>Puck.Physics</c> now forms from, and <see cref="Rational"/>, the exact-rational primitive those derivations
 /// carry their intermediates in. <see cref="LawRegistry"/> invokes each claim below as a Default-tier law.

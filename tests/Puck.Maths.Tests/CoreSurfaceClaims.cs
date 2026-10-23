@@ -6,7 +6,7 @@ namespace Puck.Maths.Tests;
 /// <summary>
 /// Fast exact and structural claims over the root Core and Sampling surface. The declarations in
 /// <see cref="LawRegistry"/> invoke these methods as Default-tier laws, so every assertion participates in both the
-/// ordinary test gate and the mechanically generated public-member coverage ledger.
+/// ordinary test gate and the structural public-member law-completeness check.
 /// </summary>
 internal static class CoreSurfaceClaims {
     public static string? BinaryIntegerSurface() {
