@@ -56,8 +56,14 @@ function New-PolicyContext {
     elseif ($command -isnot [string]) { return $null }
     $toolName = $Payload['tool_name'] ?? $Payload['toolCall']?['name']
     $role = if ($Tool -eq 'claude' -and [string]::IsNullOrEmpty($Payload['agent_id'])) { 'lead' } else { 'lane' }
-    # Codex and Antigravity run commands in PowerShell on Windows; a Claude tool names its own shell.
-    $dialect = if ($Tool -ne 'claude') { 'auto' } elseif ($toolName -eq 'PowerShell') { 'powershell' } else { 'posix' }
+    # A Claude tool names its own shell, and a Codex exec_command may name one in tool_input.shell. Otherwise the shell
+    # is unknown (PowerShell on Windows by default, but not always), and the command is read both ways.
+    $dialect = if ($Tool -eq 'claude') { ($toolName -eq 'PowerShell') ? 'powershell' : 'posix' } else { 'both' }
+    if ($Tool -ne 'claude' -and $inputData['shell'] -is [string]) {
+        $shell = (Get-PolicyExecutable $inputData['shell']).ToLowerInvariant()
+        if ($shell -in $script:PolicyPosixShells) { $dialect = 'posix' }
+        elseif ($shell -in $script:PolicyPwshShells) { $dialect = 'powershell' }
+    }
     return @{
         Tool    = $Tool
         Role    = $role
@@ -83,6 +89,11 @@ function New-PolicyRoleDecision {
 function Get-PolicyDecisions {
     param([hashtable] $Context, [string[]] $Only)
     $invocations = @(Get-PolicyInvocations $Context.Command $Context.Dialect $Context.Cwd)
+    if ($Context.Dialect -eq 'both' -and $Context.Command -is [string]) {
+        # The stricter of the two readings: every invocation the POSIX reading finds counts too, except its opaque
+        # ones, since a PowerShell variable or assignment reads as a computed command name there.
+        $invocations += @(Get-PolicyInvocations $Context.Command 'posix' $Context.Cwd | Where-Object { -not $_.Opaque })
+    }
     foreach ($name in $script:PolicyChecks.Keys) {
         if ($Only -and $name -notin $Only) { continue }
         foreach ($invocation in $invocations) {
@@ -165,26 +176,36 @@ function Invoke-PolicyGit {
     } finally { $process.Dispose() }
 }
 
-# Splits a git invocation at its verb: @{ Verb; Rest; Cwd (after -C); Globals (to replay on a policy's own read);
-# Config (-c pairs, keys lowercased); Redirected (it names another tree or overrides configuration) }.
+# Splits a git invocation at its verb: @{ Verb; Rest; RestDynamic (per Rest word, known only at run time); Cwd
+# (after -C); Globals (to replay on a policy's own read); Config (-c pairs, keys lowercased); Redirected (it names
+# another tree or overrides configuration); Unresolved (what before the verb, the verb included, is known only at
+# run time, or $null) }.
 function Split-GitInvocation {
     param($Invocation)
     $argv = $Invocation.Argv
-    $git = @{ Verb = $null; Rest = @(); Cwd = $Invocation.Cwd; Globals = [Collections.Generic.List[string]]::new(); Config = @{}; Redirected = $false }
+    $flags = $Invocation.Dynamic
+    $dynamic = { param([int] $k) $null -ne $flags -and $k -lt $flags.Count -and $flags[$k] }
+    $git = @{ Verb = $null; Rest = @(); RestDynamic = @(); Cwd = $Invocation.Cwd; Globals = [Collections.Generic.List[string]]::new(); Config = @{}; Redirected = $false; Unresolved = $null }
     foreach ($key in $Invocation.Env.Keys) { if ($key -in $script:GitRedirectVariables) { $git.Redirected = $true } }
     for ($i = 1; $i -lt $argv.Count; $i++) {
         $t = $argv[$i]
         if (-not $t.StartsWith('-') -or $t -eq '-') {
             $git.Verb = $t
+            if (& $dynamic $i) { $git.Unresolved = 'the git subcommand' }
             $git.Rest = [string[]]@($argv | Select-Object -Skip ($i + 1))
+            $git.RestDynamic = [bool[]]@(for ($k = $i + 1; $k -lt $argv.Count; $k++) { [bool](& $dynamic $k) })
             break
         }
+        if (& $dynamic $i) { $git.Unresolved = 'a git option' }
         $name = $t
         $value = $null
         if ($t -cmatch '^-C(.+)$') { $name = '-C'; $value = $Matches[1] }
         elseif ($t -cmatch '^-c(.+)$') { $name = '-c'; $value = $Matches[1] }
         elseif ($t -match '^(--[a-z-]+)=(.*)$') { $name = $Matches[1]; $value = $Matches[2] }
-        elseif ($t -cin $script:GitSeparateValues -and $i + 1 -lt $argv.Count) { $value = $argv[++$i] }
+        elseif ($t -cin $script:GitSeparateValues -and $i + 1 -lt $argv.Count) {
+            $value = $argv[++$i]
+            if (& $dynamic $i) { $git.Unresolved = "the value of git $t" }
+        }
         if ($name -cin $script:GitRedirects) { $git.Redirected = $true }
         if ($name -ceq '-C') { $git.Cwd = Resolve-PolicyPath $value $git.Cwd }
         elseif ($name -ceq '-c' -and $null -ne $value) {
@@ -209,15 +230,27 @@ function Resolve-GitAlias {
             if ($read.Code -ne 0) { return $Git }
             $alias = $read.Out.Trim()
         }
-        if ($alias.StartsWith('!')) { return @{ Shell = $alias.Substring(1); Rest = $Git.Rest; Cwd = $Git.Cwd } }
+        if ($alias.StartsWith('!')) { return @{ Shell = $alias.Substring(1); Rest = $Git.Rest; RestDynamic = $Git.RestDynamic; Cwd = $Git.Cwd } }
         $words = @(Split-PolicyWords $alias)
         if (-not $words.Count) { return $Git }
         $expanded = $Git.Clone()
         $expanded.Verb = $words[0]
         $expanded.Rest = [string[]](@($words | Select-Object -Skip 1) + @($Git.Rest))
+        $expanded.RestDynamic = [bool[]](@($words | Select-Object -Skip 1 | ForEach-Object { $false }) + @($Git.RestDynamic))
         $Git = $expanded
     }
     return $Git
+}
+
+# True when a word after the verb is known only at run time, so it could be any option or operand. -Options stops
+# at a literal `--`, past which a verb takes no options.
+function Test-GitDynamicRest {
+    param([hashtable] $Git, [switch] $Options)
+    for ($k = 0; $k -lt $Git.Rest.Count; $k++) {
+        if ($Git.RestDynamic[$k]) { return $true }
+        if ($Options -and $Git.Rest[$k] -eq '--') { return $false }
+    }
+    return $false
 }
 
 # True when an option list names one of $Flags as a short option (combined clusters too, up to the first option that

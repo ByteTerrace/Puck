@@ -64,11 +64,12 @@ $null = New-Item -ItemType Directory -Force "$topic/sub", "$topic/.agents", "$sc
 [IO.File]::WriteAllText("$scratch/src/Puck.World/Puck.World.csproj", '<Project />')
 $long = 'echo ' + ('x' * 2100)
 
-# Command, lead verdict, lane verdict, dialect (any, posix or pwsh), working directory.
+# Command, lead verdict, lane verdict, dialect (any, posix, pwsh or pwsh-known), working directory, and the lane verdict
+# for a payload that names no shell when its stricter POSIX reading differs.
 $cases = [Collections.Generic.List[object]]::new()
 function Add-Case {
-    param([string] $Policy, [string] $Command, [string] $Lead, [string] $Lane, [string] $Dialect = 'any', [string] $Cwd = $topic)
-    $cases.Add([pscustomobject]@{ Policy = $Policy; Command = $Command; Lead = $Lead; Lane = $Lane; Dialect = $Dialect; Cwd = $Cwd })
+    param([string] $Policy, [string] $Command, [string] $Lead, [string] $Lane, [string] $Dialect = 'any', [string] $Cwd = $topic, [string] $Unknown = $Lane)
+    $cases.Add([pscustomobject]@{ Policy = $Policy; Command = $Command; Lead = $Lead; Lane = $Lane; Dialect = $Dialect; Cwd = $Cwd; Unknown = $Unknown })
 }
 
 # world-devices
@@ -153,7 +154,8 @@ Add-Case no-coauthor 'git show commit -m "Co-Authored-By: example"' pass pass
 Add-Case no-coauthor 'git commit -F msg.txt' deny deny
 Add-Case no-coauthor 'git -C sub commit -F msg.txt' pass deny
 Add-Case no-coauthor 'cd sub && git commit -F msg.txt' pass pass
-Add-Case no-coauthor 'Set-Location sub; git commit -F msg.txt' pass pass pwsh
+# Read as POSIX, Set-Location is no cd, so git commits from the root, whose msg.txt carries the trailer.
+Add-Case no-coauthor 'Set-Location sub; git commit -F msg.txt' pass pass pwsh $topic deny
 Add-Case no-coauthor 'MSYS_NO_PATHCONV=1 git commit -m "x`nCo-Authored-By: a"' deny deny posix
 Add-Case no-coauthor "git commit -m `"`$(cat <<'EOF'`nfix: don't crash`n`nCo-Authored-By: a`nEOF`n)`"" deny deny posix
 Add-Case no-coauthor "git commit -m `"`$(cat <<'EOF'`nfix: don't crash`nEOF`n)`" && git status" pass pass posix
@@ -311,6 +313,36 @@ Add-Case opaque-command 'echo "git stash" | bash' ask deny posix
 Add-Case opaque-command 'eval "$CMD"' ask deny posix
 Add-Case opaque-command 'eval "git stash list"' pass pass posix
 Add-Case opaque-command '$GIT push' ask deny posix
+# Operands known only at run time: an unresolved git verb, option or destination asks the lead and refuses a lane.
+Add-Case git-safety '$verb = "stash"; git $verb' ask deny pwsh
+Add-Case git-safety 'verb=stash; git $verb' ask deny posix
+Add-Case git-safety 'git push x HEAD:$target' ask deny
+Add-Case git-safety 'git push origin "$(git branch --show-current)"' ask deny posix
+Add-Case git-safety 'git -C $dir push' ask deny
+Add-Case git-safety 'git stash $sub' pass deny
+Add-Case git-safety 'git branch $flag topic' pass deny
+Add-Case git-safety 'git log -n $count' pass pass
+Add-Case git-safety 'gh $group merge 1' ask deny
+Add-Case git-safety 'gh api $endpoint' ask deny
+Add-Case git-safety 'gh pr view $number' pass pass
+# The dialect comes from the tool and its shell; an unknown shell is read both ways and the stricter reading wins.
+Add-Case git-safety 'echo `git stash`' pass deny posix
+Add-Case git-safety 'echo `git stash`' pass pass pwsh-known
+Add-Case git-safety '$env:DOTNET_NOLOGO = 1; git status' pass pass pwsh
+# Attached and = forms of Codex's short options.
+Add-Case codex-launch 'codex exec -punsafe "hi"' ask deny
+Add-Case codex-launch 'codex exec -p=unsafe "hi"' ask deny posix
+Add-Case codex-launch 'codex -punsafe exec "hi"' ask deny
+Add-Case codex-launch 'codex exec --profile=unsafe "hi"' ask deny
+Add-Case codex-launch 'codex exec -sdanger-full-access "hi"' ask deny
+Add-Case codex-launch 'codex exec -s=danger-full-access "hi"' ask deny posix
+Add-Case codex-launch 'codex exec -capproval_policy=never "hi"' ask deny
+Add-Case codex-launch 'codex exec -c=approval_policy=never "hi"' ask deny posix
+Add-Case codex-launch 'codex exec -m gpt-6.1-sol "hi"' pass pass
+# command with a combined option cluster holding v or V only reports how a name resolves.
+Add-Case git-safety 'command -pv git stash' pass pass posix
+Add-Case git-safety 'command -pV git stash' pass pass posix
+Add-Case git-safety 'command -p git stash' pass deny posix
 
 function Get-Verdict {
     param([string] $Reply)
@@ -319,11 +351,14 @@ function Get-Verdict {
     return $parsed['decision'] ?? $parsed['hookSpecificOutput']['permissionDecision']
 }
 
+# Codex and Antigravity payloads that name no shell are read both ways, so they join the posix and pwsh cases.
+$unknownShell = @('Codex', 'CodexNative', 'Antigravity')
 $shapes = @{
-    posix = @('ClaudeLeadBash', 'ClaudeSubagentBash')
-    pwsh  = @('ClaudeLeadPowerShell', 'ClaudeSubagentPowerShell', 'Codex', 'CodexNative', 'Antigravity')
+    posix        = @('ClaudeLeadBash', 'ClaudeSubagentBash', 'CodexBash') + $unknownShell
+    pwsh         = @('ClaudeLeadPowerShell', 'ClaudeSubagentPowerShell', 'CodexPwsh') + $unknownShell
+    'pwsh-known' = @('ClaudeLeadPowerShell', 'ClaudeSubagentPowerShell', 'CodexPwsh')
 }
-$shapes.any = $shapes.posix + $shapes.pwsh
+$shapes.any = @('ClaudeLeadBash', 'ClaudeSubagentBash', 'CodexBash') + $shapes.pwsh
 $count = 0
 $failures = [Collections.Generic.List[string]]::new()
 try {
@@ -338,9 +373,11 @@ try {
                 }
                 'Codex' { $tool = 'codex'; @{ session_id = 's'; turn_id = 't'; hook_event_name = 'PreToolUse'; tool_name = 'Bash'; tool_input = @{ command = $case.Command }; cwd = $case.Cwd } }
                 'CodexNative' { $tool = 'codex'; @{ session_id = 's'; turn_id = 't'; hook_event_name = 'PreToolUse'; tool_name = 'exec_command'; tool_input = @{ cmd = $case.Command; workdir = $case.Cwd }; cwd = $scratch } }
+                'CodexBash' { $tool = 'codex'; @{ session_id = 's'; turn_id = 't'; hook_event_name = 'PreToolUse'; tool_name = 'exec_command'; tool_input = @{ cmd = $case.Command; workdir = $case.Cwd; shell = 'bash' }; cwd = $scratch } }
+                'CodexPwsh' { $tool = 'codex'; @{ session_id = 's'; turn_id = 't'; hook_event_name = 'PreToolUse'; tool_name = 'exec_command'; tool_input = @{ cmd = $case.Command; workdir = $case.Cwd; shell = 'C:/Program Files/PowerShell/7/pwsh.exe' }; cwd = $scratch } }
                 'Antigravity' { $tool = 'agy'; @{ conversationId = 'c'; workspacePaths = @($case.Cwd); toolCall = @{ name = 'run_command'; args = @{ CommandLine = $case.Command } } } }
             }
-            $expected = ($shape -like 'ClaudeLead*') ? $case.Lead : $case.Lane
+            $expected = ($shape -like 'ClaudeLead*') ? $case.Lead : (($shape -in $unknownShell) ? $case.Unknown : $case.Lane)
             $reply = Invoke-AgentPolicy $payload $tool
             $verdict = Get-Verdict $reply
             $count++
@@ -382,6 +419,7 @@ try {
         @{ Name = 'antigravity passing command abstains'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = @{ CommandLine = 'git status' } } }; Expect = $null }
         @{ Name = 'antigravity cwd falls back from .agents'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; toolCall = @{ name = 'run_command'; args = @{ CommandLine = 'git commit -F trailer.txt' } } }; Directory = "$topic/.agents"; Expect = { $_.decision -eq 'deny' } }
         @{ Name = 'shape decides the tool without -Tool'; Script = 'agent-policy.ps1'; Arguments = @(); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = @{ CommandLine = 'git stash' } } }; Expect = { $_.decision -eq 'deny' } }
+        @{ Name = 'codex bash shell reads backticks as a substitution'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'codex'); Payload = @{ turn_id = 't'; tool_name = 'exec_command'; tool_input = @{ cmd = 'echo `git stash`'; shell = 'bash'; workdir = $topic } }; Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
         @{ Name = 'antigravity string args decode'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = '{"CommandLine":"git stash"}' } }; Expect = { $_.decision -eq 'deny' } }
         @{ Name = 'wrapper no-coauthor refuses'; Script = 'no-coauthor.ps1'; Arguments = @(); Payload = (& $claude 'git commit -F trailer.txt'); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
         @{ Name = 'wrapper world-devices runs only its policy'; Script = 'world-devices.ps1'; Arguments = @(); Payload = (& $claude 'git push origin main'); Expect = $null }
@@ -400,7 +438,8 @@ try {
         @{ Name = 'doctrine shows a surface once per session, agent and checkout'; Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = (& $edit "$checkout/docs/other.md"); Expect = $null }
         @{ Name = 'doctrine classifies .codex as agent guidance'; Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = (& $edit "$checkout/.codex/notes.md"); Expect = { $_.hookSpecificOutput.additionalContext -match 'agent guidance' } }
         @{ Name = 'doctrine classifies .agents as agent guidance for another agent'; Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = ((& $edit "$checkout/.agents/notes.md") + @{ agent_id = 'a1' }); Expect = { $_.hookSpecificOutput.additionalContext -match 'agent guidance' } }
-        @{ Name = 'doctrine ignores a file outside any Puck checkout'; Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = (& $edit "$topic/notes.md"); Expect = $null }
+        @{ Name = 'doctrine classifies generated API pages as machine-written'; Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = (& $edit "$checkout/docs/api/api/Puck.Example.md"); Expect = { $_.hookSpecificOutput.additionalContext -match 'machine-written artifact' } }
+        @{ Name = 'doctrine ignores a file outside any Puck checkout';Script = 'prose-doctrine.ps1'; Arguments = @(); Payload = (& $edit "$topic/notes.md"); Expect = $null }
     )
     foreach ($case in $processCases) {
         $directory = $case['Directory'] ?? $topic

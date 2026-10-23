@@ -178,9 +178,9 @@ function Get-PolicyWrappedStart {
     }
     if ($Name -eq 'command') {
         for ($j = 1; $j -lt $Argv.Count; $j++) {
-            # command -v and -V only report how a name resolves; they run nothing.
-            if ($Argv[$j] -cin @('-v', '-V')) { return -1 }
             if ($Argv[$j] -eq '--') { return $j + 1 }
+            # command -v and -V, alone or in a cluster such as -pv, only report how a name resolves; they run nothing.
+            if ($Argv[$j] -cmatch '^-[^-]*[vV]') { return -1 }
             if (-not $Argv[$j].StartsWith('-')) { return $j }
         }
         return $Argv.Count
@@ -619,10 +619,10 @@ function Get-PolicyPwshInvocations {
     }
 }
 
-# Emits every invocation in $Command. Dialect is posix, powershell, or auto (PowerShell's parser first, the POSIX
-# tokenizer for text it cannot parse). An array command is an argument vector that no shell interprets.
+# Emits every invocation in $Command. Dialect posix reads POSIX shell text; any other reads PowerShell, with the
+# POSIX tokenizer for text PowerShell cannot parse. An array command is an argument vector that no shell interprets.
 function Get-PolicyInvocations {
-    param($Command, [string] $Dialect = 'auto', [string] $Cwd = $null, [int] $Depth = 0)
+    param($Command, [string] $Dialect = 'powershell', [string] $Cwd = $null, [int] $Depth = 0)
     if ($Command -is [array]) {
         $argv = [string[]]@($Command)
         if ($argv.Count) { Resolve-PolicyInvocation $argv ([bool[]]@($argv | ForEach-Object { $false })) @{} $Cwd ($argv -join ' ') 'argv' $Depth }

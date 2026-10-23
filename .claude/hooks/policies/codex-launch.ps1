@@ -13,17 +13,19 @@ function Get-CodexPermissionChange {
         $t = $Argv[$j]
         if ($t -eq '--') { break }
         if ($t -in @('--dangerously-bypass-approvals-and-sandbox', '--yolo', '--full-auto')) { return $t }
-        if ($t -cin @('-p', '--profile') -or $t -cmatch '^--profile=') { return '--profile' }
-        if ($t -cin @('-a', '--ask-for-approval') -or $t -cmatch '^--ask-for-approval=') { return '--ask-for-approval' }
-        if ($t -cin @('--add-dir') -or $t -cmatch '^--add-dir=') { return '--add-dir' }
+        # The CLI takes a short option's value attached (-punsafe), after = (-p=unsafe) or as the next word, and a
+        # long option's after = or as the next word.
+        $name = $t
         $value = $null
-        if ($t -cin @('-s', '--sandbox')) { $value = $Argv[++$j] }
-        elseif ($t -cmatch '^(--sandbox=|-s)(.+)$') { $value = $Matches[2] }
-        if ($value -eq 'danger-full-access') { return "--sandbox $value" }
-        $setting = $null
-        if ($t -cin @('-c', '--config')) { $setting = $Argv[++$j] }
-        elseif ($t -cmatch '^(--config=|-c)(.+)$') { $setting = $Matches[2] }
-        if ($setting -and ($setting -split '=', 2)[0].Trim() -match $script:CodexConfigKeys) { return "--config $setting" }
+        if ($t -cmatch '^(-[psca])=?(.+)$') { $name = $Matches[1]; $value = $Matches[2] }
+        elseif ($t -cmatch '^(--[a-z-]+)=(.*)$') { $name = $Matches[1]; $value = $Matches[2] }
+        if ($name -cin @('-p', '--profile')) { return '--profile' }
+        if ($name -cin @('-a', '--ask-for-approval')) { return '--ask-for-approval' }
+        if ($name -cin @('--add-dir')) { return '--add-dir' }
+        if ($name -cnotin @('-s', '--sandbox', '-c', '--config')) { continue }
+        if ($null -eq $value -and $j + 1 -lt $Argv.Count) { $value = $Argv[++$j] }
+        if ($name -cin @('-s', '--sandbox') -and $value -eq 'danger-full-access') { return "--sandbox $value" }
+        if ($name -cin @('-c', '--config') -and $value -and ($value -split '=', 2)[0].Trim() -match $script:CodexConfigKeys) { return "--config $value" }
     }
     return $null
 }

@@ -65,16 +65,27 @@ shows each surface once per session, agent and checkout.
 
 ## What the classifier sees
 
-PowerShell commands go through PowerShell's own parser; POSIX shell text goes
-through a tokenizer that knows quoting, `$(...)` and backticks (in double quotes
-too), heredocs, redirections, `NAME=value` prefixes and `(`, `)`, `{`, `}`
-boundaries. It unwraps `env`, `sudo`, `timeout`, `nice`, `xargs`, `command`
-(not `command -v`), `find -exec`, a lease's `--`, `bash -c`, `pwsh -Command`,
+The dialect comes from the tool: Claude's Bash tool is POSIX and its PowerShell
+tool is PowerShell, and a Codex `exec_command` may name its shell in
+`tool_input.shell`. A Codex or Antigravity command that names no shell is read
+both ways and every invocation either reading finds counts, except the POSIX
+reading's opaque ones, since a PowerShell variable reads there as a computed
+command name. PowerShell commands go through PowerShell's own parser; POSIX shell
+text goes through a tokenizer that knows quoting, `$(...)` and backticks (in
+double quotes too), heredocs, redirections, `NAME=value` prefixes and `(`, `)`,
+`{`, `}` boundaries. It unwraps `env`, `sudo`, `timeout`, `nice`, `xargs`,
+`command` (not `command -v`, `-V` or a cluster such as `-pv`), `find -exec`, a
+lease's `--`, `bash -c`, `pwsh -Command`,
 `cmd /c`, `eval` of literal text, `Invoke-Expression` of a literal and
 `Start-Process`, and follows `cd` and `Set-Location`. Quoted text, heredoc
 bodies and here-strings are data. A computed command name, `-EncodedCommand`,
 `eval` or `Invoke-Expression` of a variable and a shell reading its script from
-stdin are opaque. A script file a command runs is not read. These are guardrails
+stdin are opaque. Each argument also records whether it is known only at run
+time (a variable or a substitution): git-safety asks the lead and refuses a
+lane when such an argument is the git verb, an option before it, a push's
+remote, refspec or option, a `gh` command group or `gh api` option or endpoint,
+or an option of a verb it refuses only for some options. A script file a
+command runs is not read. These are guardrails
 at the tool boundary, not a shell security boundary.
 
 The commit policy reads `-m` and `--trailer` text, `-F` and `-t` files, reused
@@ -88,8 +99,8 @@ From the checkout root:
 
 - `pwsh -NoProfile -File .claude/hooks/tests/command-policies.ps1` runs every
   case in each payload shape its dialect reaches (Claude lead and subagent for
-  Bash and PowerShell, Codex shell and native, Antigravity), with separate lead
-  and lane verdicts, then runs the real scripts as each tool starts them. It
+  Bash and PowerShell, Codex with a bash or pwsh shell, and Codex and
+  Antigravity naming no shell), with separate lead and lane verdicts, then runs the real scripts as each tool starts them. It
   builds scratch repositories under the temp directory and executes no
   candidate command.
 - `pwsh -NoProfile -File .claude/hooks/tests/git-rules-agreement.ps1` checks

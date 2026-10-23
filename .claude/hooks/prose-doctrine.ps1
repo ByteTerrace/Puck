@@ -33,7 +33,6 @@ $documentation = 'docs/development/documentation.md'
 $codeExtensions = @('.hlsl', '.hlsli', '.puck', '.ps1', '.ts')
 $legalNames = @('LICENSE.md', 'THIRD-PARTY-NOTICES.md', 'CLA.md', 'PRIVACY.md')
 $generatedPatterns = @(
-    '^tests/Puck\.Maths\.Tests/(coverage-manifest\.json|leg-ledger\.md|RESULTS\.md|frontier\.json)$'
     '^docs/api/(api|_site)/'
 )
 

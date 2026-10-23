@@ -13,18 +13,25 @@
 # | gc, prune, repack, maintenance, pack-refs, filter-branch,   |             |                                            |
 # | filter-repo, replace, rebase, config writes; git -C, -c,    |             |                                            |
 # | --git-dir, --work-tree and GIT_DIR-style variables          |             |                                            |
+# | A git verb or global option known only at run time, or an   | ask         | deny                                       |
+# | argument of a push or gh call known only at run time        |             |                                            |
+# | Such an argument to a verb refused only for some options    | abstain     | deny                                       |
 #
 # Abstain means the tool's own rules decide: Claude's settings ask rules, Codex's git.rules (which matches the lane
 # column where a prefix rule can say it). A remote partner pushing its own branch from its own session is the prose
 # exception in AGENTS.md; nothing here carves it out.
 
-$script:GitLanePush = 'A lane never pushes: leave the work for the lead, who lands and pushes it (a push to main prompts the owner).'
+# The verbs Get-GitSharedStateReason refuses only for some options or operands.
+$script:GitConditionalVerbs = @('stash', 'branch', 'checkout', 'switch', 'fetch', 'pull', 'worktree', 'tag', 'reflog', 'symbolic-ref', 'remote', 'notes', 'config', 'replace')
+$script:GitLanePush ='A lane never pushes: leave the work for the lead, who lands and pushes it (a push to main prompts the owner).'
 
 # Returns 'main' when a push reaches main, rewrites or deletes remote refs, pushes every branch, or lands somewhere
 # it cannot resolve; otherwise 'branch'.
 function Get-GitPushTarget {
     param([hashtable] $Git)
     $rest = $Git.Rest
+    # An option, remote or refspec known only at run time could name main.
+    if (Test-GitDynamicRest $Git) { return 'main' }
     if (Test-GitOption $rest 'fd' 'o' @('--all', '--branches', '--mirror', '--delete', '--force', '--force-with-lease', '--force-if-includes', '--prune') @('--repo', '--push-option', '--receive-pack', '--exec')) {
         return 'main'
     }
@@ -64,7 +71,10 @@ function Get-GitPushTarget {
 function Get-GhPushTarget {
     param($Invocation)
     $argv = $Invocation.Argv
-    if ($argv.Count -lt 2) { return $null }
+    $flags = [bool[]]@($Invocation.Dynamic)
+    if ($argv.Count -lt 2 -or $flags.Count -ne $argv.Count) { return $null }
+    # A command group or subcommand known only at run time could be a merge.
+    if ($flags[1] -or ($argv.Count -gt 2 -and $flags[2] -and $argv[1] -ne 'api')) { return 'main' }
     $group = $argv[1]
     $verb = ($argv.Count -gt 2) ? $argv[2] : ''
     if (($group -eq 'pr' -and $verb -eq 'merge') -or ($group -eq 'repo' -and $verb -in @('sync', 'delete', 'rename', 'archive')) -or ($group -eq 'workflow' -and $verb -eq 'run')) {
@@ -80,7 +90,12 @@ function Get-GhPushTarget {
     $endpoint = $null
     for ($j = 2; $j -lt $argv.Count; $j++) {
         $t = $argv[$j]
-        if ($t -cin @('-X', '--method')) { $method = $argv[++$j] }
+        # A word known only at run time could be -X POST or a write endpoint; a field's value cannot change the method.
+        if ($flags[$j]) { return 'main' }
+        if ($t -cin @('-X', '--method')) {
+            if (++$j -ge $argv.Count -or $flags[$j]) { return 'main' }
+            $method = $argv[$j]
+        }
         elseif ($t -cmatch '^(-X|--method=)(.+)$') { $method = $Matches[2] }
         elseif ($t -cin @('-f', '-F', '--field', '--raw-field')) { $fields.Add([string]$argv[++$j]) }
         elseif ($t -cmatch '^(-f|-F|--field=|--raw-field=)(.+)$') { $fields.Add($Matches[2]) }
@@ -203,9 +218,12 @@ function Test-GitSafetyPolicy {
     if ($Context.Role -eq 'lane' -and $git.Redirected) {
         return New-PolicyDecision 'deny' 'A lane runs git in its own worktree with its own configuration; -C, -c, --git-dir, --work-tree and GIT_DIR-style variables reach past these rules into another lane''s work.'
     }
+    $unresolved = "git-safety cannot see {0}, which is known only at run time: $($Invocation.Text). Write it out literally."
+    if ($git.Unresolved) { return New-PolicyRoleDecision $Context ($unresolved -f $git.Unresolved) ($unresolved -f $git.Unresolved) }
     $git = Resolve-GitAlias $git
     if ($git.ContainsKey('Shell')) {
         if ($Depth -ge 3) { return New-PolicyRoleDecision $Context 'A git alias nests too deeply to inspect.' 'A git alias nests too deeply to inspect.' }
+        if (Test-GitDynamicRest $git) { return New-PolicyRoleDecision $Context ($unresolved -f 'an argument to a shell alias') ($unresolved -f 'an argument to a shell alias') }
         $words = @($git.Rest | ForEach-Object { "'" + $_.Replace("'", "'\''") + "'" })
         foreach ($inner in Get-PolicyInvocations ((@($git.Shell) + $words) -join ' ') 'posix' $git.Cwd) {
             Test-GitSafetyPolicy $Context $inner ($Depth + 1)
@@ -216,4 +234,8 @@ function Test-GitSafetyPolicy {
     if ($Context.Role -ne 'lane') { return }
     $reason = Get-GitSharedStateReason $git
     if ($reason) { return New-PolicyDecision 'deny' $reason }
+    # A verb whose refusal depends on its options cannot be cleared while one of them is known only at run time.
+    if ($git.Verb -in $script:GitConditionalVerbs -and (Test-GitDynamicRest $git -Options)) {
+        return New-PolicyDecision 'deny' ($unresolved -f "an argument to git $($git.Verb)")
+    }
 }
