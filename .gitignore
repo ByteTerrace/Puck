@@ -84,6 +84,8 @@ forged-avatars/
 bench-reports/
 # Codex's project configuration is shared; anything else a Codex run writes there stays local.
 .codex/*
+/.agents/skills/
+/*-cli/
 !.codex/config.toml
 !.codex/rules/
 !.codex/hooks.json

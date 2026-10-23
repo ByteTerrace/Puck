@@ -69,6 +69,7 @@ public static class PuckRootCommand {
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(composition: Gate),
+            AgentsCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
             AzureCommand.Create(clock: clock),

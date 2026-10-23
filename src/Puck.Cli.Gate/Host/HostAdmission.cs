@@ -10,6 +10,39 @@ namespace Puck.Cli.Host;
 /// also waits while another process runs one, machine-wide, since two at once exhaust memory; the waiting process's own
 /// runs never hold it back.</summary>
 public static class HostAdmission {
+    /// <summary>Holds the shared heavy lease for a suite's admission and entire execution.</summary>
+    /// <param name="repositoryRoot">The checkout whose common Git directory owns the lease.</param>
+    /// <param name="step">The suite's name.</param>
+    /// <param name="clock">The acquisition clock.</param>
+    /// <param name="cancellationToken">Cancels acquisition.</param>
+    /// <returns>The lease to dispose after the suite exits.</returns>
+    public static CliLease AcquireHeavy(string repositoryRoot, string step, TimeProvider clock, CancellationToken cancellationToken = default) {
+        var root = CliLease.RootAsync(cancellationToken: cancellationToken, checkout: repositoryRoot).GetAwaiter().GetResult();
+
+        return CliLease.AcquireAsync(ancestor: IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: step, name: "heavy", root: root, wait: HeavyTimeout).GetAwaiter().GetResult();
+    }
+
+    private static bool IsAncestor(int pid, long ticks) {
+        var child = Environment.ProcessId;
+        var visited = new HashSet<int>();
+
+        try {
+            while (visited.Add(item: child)) {
+                using var childProcess = System.Diagnostics.Process.GetProcessById(processId: child);
+                var parent = HostProbe.ParentId(processId: child);
+
+                if (parent <= 0) { return false; }
+                using var parentProcess = System.Diagnostics.Process.GetProcessById(processId: parent);
+                var started = parentProcess.StartTime.ToUniversalTime();
+
+                if (started > childProcess.StartTime.ToUniversalTime()) { return false; }
+                if (parent == pid) { return (started.Ticks == ticks); }
+                child = parent;
+            }
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)) { }
+        return false;
+    }
+
     /// <summary>How long a step waits before it is refused.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(minutes: 30);
     /// <summary>How long a heavy suite waits before it is refused: another heavy run can take half an hour under load,

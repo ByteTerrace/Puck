@@ -22,27 +22,57 @@ public sealed class CliLease : IDisposable {
     /// <param name="wait">The maximum wait.</param>
     /// <param name="clock">The deadline and stale-age clock.</param>
     /// <param name="cancellationToken">Cancels acquisition.</param>
+    /// <param name="ancestor">Recognizes a live ancestor holder by PID and start ticks, allowing a serialized child lease.</param>
     /// <returns>The held lease.</returns>
     /// <exception cref="ArgumentException">The name, holder or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
-    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default) {
+    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null) {
         if ((name is not ("gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)) {
             throw new ArgumentException(message: "A lease requires gpu or heavy, a single-line holder, and a nonnegative wait.");
         }
         Directory.CreateDirectory(path: root);
         var directory = Path.Combine(path1: root, path2: name);
         var started = clock.GetTimestamp();
+        string? reported = null;
 
         do {
             cancellationToken.ThrowIfCancellationRequested();
+            // An outer `puck lease` still owns the machine lease. Its descendants compete for one
+            // child lease instead of waiting on their parent; siblings never borrow each other's hold.
+            var metadata = ReadHolder(directory: directory);
+
+            if ((metadata is { Length: 4 }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
+                directory = Path.Combine(path1: directory, path2: "child");
+                continue;
+            }
             var lease = TryAcquire(clock: clock, directory: directory, holder: holder);
 
             if (lease is not null) { return lease; }
             var remaining = (wait - clock.GetElapsedTime(startingTimestamp: started));
 
             if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held at {CliPaths.ToDisplay(fullPath: directory)}; use --wait <seconds> to wait."); }
+            var waitingOn = ((metadata is { Length: > 0 }) ? metadata[0] : "another holder");
+
+            if (reported != waitingOn) {
+                Console.Error.WriteLine(value: $"lease: {holder} waiting for {name} lease held by {waitingOn}.");
+                reported = waitingOn;
+            }
             await Task.Delay(delay: ((remaining < TimeSpan.FromMilliseconds(milliseconds: 100)) ? remaining : TimeSpan.FromMilliseconds(milliseconds: 100)), timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } while (true);
+    }
+
+    private static string[]? ReadHolder(string directory) {
+        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (IOException) { return null; }
+    }
+
+    /// <summary>Resolves the shared lease directory through the worktree's common Git directory.</summary>
+    /// <param name="checkout">The working checkout.</param>
+    /// <param name="cancellationToken">Cancels Git discovery.</param>
+    /// <returns>The main checkout's lease directory.</returns>
+    public static async Task<string> RootAsync(string checkout, CancellationToken cancellationToken = default) {
+        var common = (await CliGit.CaptureAsync(arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken: cancellationToken, repository: checkout).ConfigureAwait(continueOnCapturedContext: false)).Trim();
+
+        return Path.Combine(path1: Path.GetDirectoryName(path: common)!, path2: ".claude/leases");
     }
 
     private static CliLease? TryAcquire(string directory, string holder, TimeProvider clock) {

@@ -21,7 +21,7 @@ public sealed record AffectedSuiteResult(int ExitCode, IReadOnlyList<string> Rep
 /// Runs the suites <c>puck affected --run</c> chose: builds them once, in one MSBuild invocation over a solution filter
 /// of exactly those projects, then runs their test hosts side by side, at most <c>--suite-jobs</c> at once, each on the
 /// build that invocation left (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). Heavy suites start
-/// first, and each is admitted by the one machine-wide heavy-suite rule before it runs
+/// first, and each holds the shared heavy lease through admission and execution
 /// (<see cref="AffectedCommand.AdmitHeavySuite"/>, <see cref="HostAdmission"/>): no other heavy run on the machine, and
 /// memory and disk headroom.
 /// </summary>
@@ -205,6 +205,8 @@ public static class AffectedSuites {
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
     // laws out (CliTestRun.CpuSelection). The platform prints each failure with its message and stack.
     private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
+        using var lease = (suite.Heavy ? HostAdmission.AcquireHeavy(repositoryRoot: repositoryRoot, step: suite.Name, clock: TimeProvider.System) : null);
+
         if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite.Name)) {
             return new AffectedSuiteResult(
                 ExitCode: CliExit.Refused,

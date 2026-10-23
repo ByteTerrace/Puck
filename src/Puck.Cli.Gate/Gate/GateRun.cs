@@ -142,7 +142,10 @@ public static class GateRun {
                     Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;
                 }
-                if (step.Heavy && !runner.WaitForCapacity(device: step.Gpu, heavySuite: ((step.Kind == GateStepKind.DeviceSuite) && HostProcesses.IsHeavyTestAssembly(assembly: step.Name)), repositoryRoot: repositoryRoot, step: step.Name)) {
+                // The process runner acquires a heavy suite's lease before sampling its capacity.
+                var leasedSuite = ((step.Kind == GateStepKind.DeviceSuite) && HostProcesses.IsHeavyTestAssembly(assembly: step.Name));
+
+                if (step.Heavy && !leasedSuite && !runner.WaitForCapacity(device: step.Gpu, heavySuite: false, repositoryRoot: repositoryRoot, step: step.Name)) {
                     refused = true;
                     Console.Error.WriteLine(value: $"gate: {step.Name} refused; host capacity did not return.");
                     break;

@@ -1,22 +1,12 @@
 using System.CommandLine;
-using Puck.Cli.Canary;
 
 namespace Puck.Cli.Landing;
 
 /// <summary>
 /// <c>puck landing</c> — refuses a commit that deletes content its author never worked from.
 /// </summary>
-/// <remarks>
-/// <para>A landing is pushed onto a tip that has moved since the author last rebased. Everything that landed in
-/// that window is content the author's tree has never seen, and several ordinary git operations will drop it
-/// SILENTLY — most sharply <c>git reset --soft origin/&lt;branch&gt;</c> before a squash, which re-parents the
-/// author's OWN tree onto a newer tip: the resulting commit descends from that tip while its tree predates it,
-/// which is exactly a revert of everything the tip added.</para>
-/// <para>Nothing else in the repository can see this. A build passes, tests pass, and the batteries pass, because
-/// they measure the behavior they cover and "did I drop somebody else's landing" is not behavior. Ancestry looks
-/// right too — a later <c>git rebase</c> reports "up to date", correctly. The damage exists only in the diff
-/// against the tip being landed on, which is the one thing nobody was running.</para>
-/// </remarks>
+/// <remarks>The check compares deletions against an explicitly supplied authoring base. A merge or squash
+/// can have valid ancestry while dropping content; the diff, not ancestry alone, exposes that loss.</remarks>
 public static class LandingCommand {
     private static string Clip(string text) {
         var trimmed = text.Trim();
@@ -61,33 +51,22 @@ public static class LandingCommand {
 
         Console.Error.WriteLine(value: string.Empty);
         Console.Error.WriteLine(value: $"FAIL: {lines} line(s) exist on the tip, are not deleted by your own change set, and would be lost.");
-        Console.Error.WriteLine(value: "      Rebase onto the tip and re-apply your work, or (if the tree was re-parented) rebuild it:");
-        Console.Error.WriteLine(value: "      base a tree on the tip, apply diff(base..HEAD), and commit that.");
+        Console.Error.WriteLine(value: "      Preserve the authoring base, merge the integration tip, and resolve the lost content.");
+        Console.Error.WriteLine(value: "      For a re-parented tree, reconstruct from the tip and the intended change; inspect every deletion.");
 
         return 1;
     }
     // A base cannot be GUESSED. The obvious automatic answer — merge-base(tip, HEAD) — is worse than none: for the
     // failure this verb exists to catch it returns the tip itself, so the two diffs become identical, every deletion
-    // reads as intended, and the verb blesses the exact bug with a green light on top. The reflog knows the real
-    // answer, so it is offered as a SUGGESTION the human confirms, never as a default the tool assumes.
+    // reads as intended, and the verb blesses the exact bug with a green light on top. The caller must preserve
+    // the authoring base or establish it from branch history and reflog; this verb never guesses it.
     private static int RefuseMissingBase(string tip) {
         Console.Error.WriteLine(value: "ERROR: --base is required.");
         Console.Error.WriteLine(value: string.Empty);
-        Console.Error.WriteLine(value: "  The base is the commit your work was AUTHORED FROM — for rebased work the ORIGINAL base,");
-        Console.Error.WriteLine(value: "  never the new parent a rebase gave you (that pairing is vacuous and is refused).");
-        Console.Error.WriteLine(value: "  It is NOT derivable: merge-base(tip, HEAD) returns the tip for a re-parented tree, which");
-        Console.Error.WriteLine(value: "  makes every deletion look intended and hides precisely the failure this verb catches.");
-        Console.Error.WriteLine(value: string.Empty);
-
-        if (LandingReflog.TrySuggestBase(
-            suggestion: out var suggestion,
-            when: out var when
-        )) {
-            Console.Error.WriteLine(value: $"  Your reflog's most recent rebase base is {suggestion} ({when}).");
-            Console.Error.WriteLine(value: $"  If that is the tree you worked from:  puck landing --against {tip[..12]} --base {suggestion}");
-        } else {
-            Console.Error.WriteLine(value: "  No rebase entry was found in this branch's reflog; supply the base yourself.");
-        }
+        Console.Error.WriteLine(value: "  --base is the commit your work was AUTHORED FROM. Preserve it across integration merges.");
+        Console.Error.WriteLine(value: "  Do not substitute the new parent of a reconstructed or squashed tree.");
+        Console.Error.WriteLine(value: "  merge-base(tip, HEAD) cannot recover the authoring base of a re-parented tree.");
+        Console.Error.WriteLine(value: $"  Inspect branch history and reflog, then run puck landing --against {tip[..12]} --base <authoring-base>.");
 
         return 2;
     }
@@ -102,7 +81,7 @@ public static class LandingCommand {
 
         Console.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
         Console.WriteLine(value: $"landing: {lines} deleted line(s) across {files} file(s) — every one accounted for by this landing's own change set.");
-        Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
+        Console.WriteLine(value: $"landing: clean given authoring base {authoringBase[..12]}.");
     }
     private static int Run(string against, string? baseRef) {
         if (!CliGit.TryResolveCommit(
@@ -129,16 +108,7 @@ public static class LandingCommand {
             return 2;
         }
 
-        // base == tip is VACUOUS BY ARITHMETIC, not merely unhelpful: the two deletion sets are computed from the
-        // same range, so their difference is empty and the verdict is an unconditional PASS that measured nothing.
-        // It is also the easiest mistake to make, because a rebase moves your parent TO the tip — so "the commit I
-        // rebased onto" and "the commit I am landing onto" become the same hash exactly when the check matters most
-        // (post-rebase, looking for work a conflict resolution dropped). Refused rather than documented: a vacuous
-        // pass is worse than no check, since it reports success.
-        //
-        // DO NOT OVERCLAIM THIS EITHER. It does not catch the re-parenting shape this verb was written for — there
-        // the base is a genuine distinct ancestor, so the pairing is unequal and this refusal never fires. It closes
-        // one arithmetic hole; the required-and-refused base design is what closes the other.
+        // Equal endpoints compare the same deletion set and would measure nothing.
         if (string.Equals(
             a: authoringBase,
             b: tip,
@@ -149,8 +119,8 @@ public static class LandingCommand {
             Console.Error.WriteLine(value: "  That comparison is vacuous: both deletion sets come from the same range, so their");
             Console.Error.WriteLine(value: "  difference is empty and the result would be an unconditional PASS measuring nothing.");
             Console.Error.WriteLine(value: string.Empty);
-            Console.Error.WriteLine(value: "  --base is the commit your work was AUTHORED FROM, which after a rebase is NOT your new");
-            Console.Error.WriteLine(value: "  parent — the rebase moved that to the tip. Use the ORIGINAL base you branched from.");
+            Console.Error.WriteLine(value: "  --base is the commit your work was AUTHORED FROM. Preserve it across integration merges;");
+            Console.Error.WriteLine(value: "  a new parent after reconstruction or squash does not establish that authoring base.");
             Console.Error.WriteLine(value: "  If the tip genuinely has not moved since you branched, there is nothing to check:");
             Console.Error.WriteLine(value: "  no landing arrived that your work could drop.");
 
@@ -208,34 +178,16 @@ public static class LandingCommand {
             tip: tip
         );
 
-        // HEAD-BINDING HOLE, deliberately not solved here: this source integration cannot prove the invoked puck
-        // assembly was built from the checkout's HEAD. A stale published puck.exe can retain the old git-only
-        // landing command and never enter this code, so external enforcement must bind the executable to HEAD.
-        // Recording that limit is in scope; adding a second bootstrap/update mechanism is not.
-        var canaryExit = CanaryCommand.RunAutomatic();
-
-        if (canaryExit == 0) {
-            Console.WriteLine(value: $"PASS: landing accepted — git-loss check and automatic canaries passed given base {authoringBase[..12]}.");
-            Console.WriteLine(value: "      The git component proves the landing only relative to what you say you built on.");
-
-            return 0;
-        }
-        if (canaryExit == 1) {
-            Console.Error.WriteLine(value: "FAIL: landing rejected by the automatic canary component after the git-loss check passed.");
-
-            return 1;
-        }
-
-        Console.Error.WriteLine(value: "ERROR: landing refused by the automatic canary component after the git-loss check passed.");
-
-        return 2;
+        Console.WriteLine(value: $"PASS: landing accepted — every deletion accounted for given base {authoringBase[..12]}.");
+        Console.WriteLine(value: "      This proves the landing only relative to what you say you built on.");
+        return 0;
     }
 
     public static Command Create() {
         var againstOption = new Option<string>(name: "--against") { Description = "The commit you are landing ONTO (e.g. origin/features/x).", Required = true };
-        // Optional at the parser, refused with a reflog suggestion at the verb: the refusal needs the resolved tip
+        // Optional at the parser, refused with authoring-base guidance at the verb: the refusal needs the resolved tip
         // to print a runnable command, which only exists after --against resolves.
-        var baseOption = new Option<string>(name: "--base") { Description = "The commit your work was AUTHORED FROM. For rebased work this is the ORIGINAL base, never the new parent: a rebase moves your parent to the tip, so passing the parent makes --base and --against equal and the check vacuous. That pairing is refused." };
+        var baseOption = new Option<string>(name: "--base") { Description = "The commit your work was AUTHORED FROM, preserved across integration merges. A new parent after squash or reconstruction is not that base. Equal --base and --against are refused." };
         var command = new Command(
             description: "Refuse a commit that drops someone else's landing.",
             name: "landing"
@@ -248,20 +200,18 @@ public static class LandingCommand {
             in the first and not the second arrived on the tip while you were working and would be
             silently lost.
 
-            There is no ignore list and no override, deliberately: deleting someone's landing ON
-            PURPOSE means having rebased onto it, which puts it in --base, which accounts for the
-            deletion automatically. Intent is derived, never declared.
+            Preserve the actual authoring base across merges; never substitute a moved remote tip.
+            Merge the integration tip and inspect every deletion. If the tree was re-parented,
+            reconstruct the intended change from its original base before landing it.
 
             --base is required. It cannot be guessed: merge-base(tip, HEAD) returns the tip itself
             for a re-parented tree, which would make every deletion look intended. A --base equal
             to --against, or one HEAD does not descend from, is refused for the same reason: both
             would report a PASS that measured nothing.
 
-            After every git check passes, runs the nonempty automatic canary set. There is no skip
-            flag.
+            This command reads Git state only; it builds nothing and boots no World.
 
-            Exit codes: 0 both components passed; 1 unaccounted deletions or an observed canary
-            failure; 2 a usage, manifest, build, or canary infrastructure refusal.
+            Exit codes: 0 deletions accounted for; 1 unaccounted deletions; 2 invalid input or Git refusal.
             """);
 
         command.SetAction(action: parseResult => Run(

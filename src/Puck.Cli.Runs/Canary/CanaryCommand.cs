@@ -210,22 +210,6 @@ public static partial class CanaryCommand {
         );
     }
 
-    // The selection the landing gate runs: no ids, no filter, no --all — the automatic set alone.
-    internal static int RunAutomatic() =>
-        Run(
-            all: false,
-            backends: WorldOffscreenLeg.Backends,
-            capability: null,
-            debugLayers: [],
-            ids: [],
-            capacity: CanaryCapacity.Default,
-            keepTranscripts: false,
-            list: false,
-            merge: false,
-            plan: false,
-            worldArtifact: null
-        );
-
     private static bool IsKnownCapability(string capability) => (
         (capability is "automatic" or "headless" or "windowed" or "offscreen" or "gpu" or "audio-output")
         || (capability.StartsWith(
@@ -291,6 +275,7 @@ public static partial class CanaryCommand {
             manifests: selected,
             namedWorldArtifact: (worldArtifact is not null)
         );
+
         if (plan) {
             PrintPlan(plan: costs);
         }
