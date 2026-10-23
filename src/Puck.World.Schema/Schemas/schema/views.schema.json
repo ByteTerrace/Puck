@@ -242,7 +242,7 @@
               null
             ],
             "default": null,
-            "title": "WorldHudFrameFit"
+            "title": "SourceFit"
           }
         },
         "required": [

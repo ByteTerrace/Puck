@@ -15,7 +15,7 @@ laws of the canary, determinism-attestation and release-profile classes) live in
 and a camera in a wall or behind a pole named. `MotionLawTests`, `MotionCollectorLawTests` and `MotionCommandLawTests` hold `puck motion`'s CPU parts: the scenario
 file's strict parse and the shipped file's validity, the plan's ticks and the order of its lines, the sheet layout, the
 transcript parsers, what the collector makes of a World's lines (each failure named) and the manifest and reproduce
-reports. The verb's World run is GPU-only (`build/CoverageGpuOnly.txt`).
+reports. The verb's World run needs a GPU (`build/CoverageHardwareOnly.txt`).
 
 `WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact over small git checkouts of their own,
 with a counting builder in place of `dotnet build`. Two resolutions of an unchanged tree build once, and concurrent

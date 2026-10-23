@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Puck.Hosting;
+using Puck.Commands;
 using Puck.Overlays;
 
 using Xunit;

@@ -7062,15 +7062,6 @@
       ],
       "title": "WorldFrameSource"
     },
-    "WorldHudFrameFit": {
-      "description": "How a Frame element maps its sampled frame\u0027s aspect ratio onto its own rect \u2014 the same uv-mapping choice a screen material or a UI image element makes.",
-      "enum": [
-        "Cover",
-        "Contain",
-        "Stretch"
-      ],
-      "title": "WorldHudFrameFit"
-    },
     "WorldFrameSourceNonNullable": {
       "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Producer, View and Probe \u2014 carrying its own JsonPolymorphicAttribute over the same three discriminators (producer/view/probe) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal, machine, text or none source no probe kernel can sample.",
       "type": "object",
@@ -7166,9 +7157,14 @@
           "default": null
         },
         "fit": {
-          "$ref": "#/$defs/WorldHudFrameFit",
           "description": "A Frame element\u0027s aspect-fit policy. Ignored for every other kind. Omitted from the wire at its default (Cover).",
-          "default": "Cover"
+          "enum": [
+            "Cover",
+            "Contain",
+            "Stretch"
+          ],
+          "default": "Cover",
+          "title": "SourceFit"
         },
         "mirror": {
           "description": "Whether a Frame element flips its sampled frame horizontally \u2014 a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its default (false).",

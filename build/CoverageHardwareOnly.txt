@@ -22,7 +22,7 @@ src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.
 # covers its formatting.
 src/Puck.DirectX/DirectXRemovalReport.Device.
 # The Win32 window's pointer-lock seam: hiding, capturing and moving the session's real cursor, which only a
-# foreground window under a real mouse reaches. Win32PointerLockLawTests covers every decision and coordinate it uses,
+# foreground window under a real mouse reaches. Win32PointerLockLawTests covers eligibility and the held client point,
 # and Win32PointerTests a background window's refusal to lock.
 src/Puck.Platform.Windows/Win32NativeWindow.PointerLock.
 # Direct3D 12's counted indirect draw: the recorder's ExecuteIndirect on a live command list and the pipeline layout's

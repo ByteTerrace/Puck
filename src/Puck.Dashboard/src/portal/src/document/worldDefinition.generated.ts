@@ -2300,6 +2300,8 @@ export type SortKey = {
 
 export type SourceDestination = "Presentation" | "Simulation" | "Passthrough";
 
+export type SourceFit = "Cover" | "Contain" | "Stretch";
+
 /**
  * A StateRow's continuous accumulation trait: the row's stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock — anything that should move on its own between observations.
  */
@@ -6071,7 +6073,7 @@ export type WorldHudElement = {
   /**
    * A Frame element's aspect-fit policy. Ignored for every other kind. Omitted from the wire at its default (Cover).
    */
-  fit?: WorldHudFrameFit;
+  fit?: SourceFit;
   /**
    * Whether a Frame element flips its sampled frame horizontally — a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its default (false).
    */
@@ -6114,11 +6116,6 @@ export type WorldHudFrameCandidate = {
    */
   when?: OverlayPredicateNullable | null;
 };
-
-/**
- * How a Frame element maps its sampled frame's aspect ratio onto its own rect — the same uv-mapping choice a screen material or a UI image element makes.
- */
-export type WorldHudFrameFit = "Cover" | "Contain" | "Stretch";
 
 export type WorldHudLayer = "Under" | "Over" | "Replace";
 
@@ -12904,7 +12901,7 @@ export type WorldViewGraph = {
   /**
    * How a layout slot showing the instance fits its image: Stretch fills the slot whatever the two aspect ratios, and Contain shows the whole image at its own aspect ratio, centred, with letterbox bars where it does not reach the slot's edges, which a pointer passes through to the game. A window capture's aspect ratio is the captured window's, whatever its profile extent. A pane is never cropped, so Cover is refused. null stretches.
    */
-  fit?: WorldHudFrameFit | null;
+  fit?: SourceFit | null;
 };
 
 export type WorldViewGraphBudget = {

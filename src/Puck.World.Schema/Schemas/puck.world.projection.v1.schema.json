@@ -27384,7 +27384,7 @@
                   null
                 ],
                 "default": null,
-                "title": "WorldHudFrameFit"
+                "title": "SourceFit"
               }
             },
             "required": [
@@ -29684,7 +29684,7 @@
                         "Stretch"
                       ],
                       "default": "Cover",
-                      "title": "WorldHudFrameFit"
+                      "title": "SourceFit"
                     },
                     "mirror": {
                       "description": "Whether a Frame element flips its sampled frame horizontally \u2014 a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its default (false).",
