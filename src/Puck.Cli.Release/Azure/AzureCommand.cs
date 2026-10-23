@@ -390,7 +390,9 @@ public static partial class AzureCommand {
                 )
             );
         }
-        foreach (var file in new[] { "host.json", "worker.config.json", "functions.metadata", "Puck.Azure.Functions.dll" }) {
+        // Azure.Functions.Sdk generates the worker's metadata provider into the assembly. Its worker.config.json
+        // enables worker indexing; functions.metadata belonged to the retired Microsoft.Azure.Functions.Worker.Sdk.
+        foreach (var file in new[] { "host.json", "worker.config.json", "Puck.Azure.Functions.dll" }) {
             if (!File.Exists(path: Path.Combine(
                 path1: output,
                 path2: "functions",

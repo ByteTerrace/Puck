@@ -595,7 +595,7 @@ public static partial class AzureCommand {
             "1654:1654",
             "/fixture"
         );
-        var root = $"/fixture/store/{Owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/puck/authority/root";
+        var root = $"/fixture/store/{Owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/{HostedWorldName}/authority/root";
         var previous = "";
 
         for (var boot = 1; (boot <= 2); boot++) {
@@ -672,7 +672,7 @@ public static partial class AzureCommand {
                 if (
                     (checkpoint.Length == 0) ||
                     (checkpoint == previous)
-                ) { throw new InvalidOperationException(message: $"Silo boot {boot} did not activate and checkpoint Puck."); }
+                ) { throw new InvalidOperationException(message: $"Silo boot {boot} did not activate and checkpoint '{HostedWorldName}'."); }
                 if (!ready) { throw new InvalidOperationException(message: $"Silo boot {boot} checkpointed but did not become ready: {healthReason}"); }
                 using var liveness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/livez");
 
