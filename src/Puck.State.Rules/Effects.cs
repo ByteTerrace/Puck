@@ -367,7 +367,7 @@ public sealed class TransformStateEffect : RuleEffect {
         Arena = arena;
         FromRow = fromRow;
         KeyRef = keyRef;
-        Price = cost;
+        m_kernelCost = cost;
         ToRow = toRow;
         Transform = transform;
         m_reads = reads;
@@ -382,7 +382,9 @@ public sealed class TransformStateEffect : RuleEffect {
     /// <see langword="null"/>.</summary>
     public CompiledCellRef? KeyRef { get; }
     /// <summary>Gets the conservative work units one firing costs.</summary>
-    public RuleWork Price { get; }
+    public RuleWork Price => m_kernelCost + DisclosureCost;
+    private readonly RuleWork m_kernelCost;
+    internal RuleWork DisclosureCost { get; set; } = RuleWork.Zero;
     /// <summary>Gets the live row a transfer's destination resolves through, or <see langword="null"/>.</summary>
     public LiveRow? ToRow { get; }
     /// <summary>Gets the authored transform.</summary>
@@ -403,8 +405,8 @@ public sealed class TransformStateEffect : RuleEffect {
             into: into,
             reference: KeyRef
         );
-        FromRow?.CollectIndexReads(into: into);
-        ToRow?.CollectIndexReads(into: into);
+        FromRow?.CollectReads(into: into);
+        ToRow?.CollectReads(into: into);
     }
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) {
@@ -412,10 +414,10 @@ public sealed class TransformStateEffect : RuleEffect {
 
         // A live end writes whichever entry its index selects: every entry, conservatively.
         if (FromRow is { } fromRow) {
-            fromRow.CollectReads(into: into);
+            fromRow.CollectRows(into: into, isSet: true);
         }
         if (ToRow is { } toRow) {
-            toRow.CollectReads(into: into);
+            toRow.CollectRows(into: into, isSet: true);
         }
         foreach (var ordinal in m_writes) {
             into.Add(item: new CellAccess(

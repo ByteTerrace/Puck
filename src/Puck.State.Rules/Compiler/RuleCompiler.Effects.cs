@@ -283,6 +283,7 @@ public static partial class RuleCompiler {
             } catch (RuleException error) { throw error.Within(segment: $"{member}[{index}]"); }
         }
 
+        RequireTransformControlAudience(effects: compiled, controls: [], context: context, ruleName: ruleName);
         return compiled;
     }
 

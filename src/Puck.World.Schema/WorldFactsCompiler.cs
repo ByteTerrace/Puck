@@ -7,6 +7,7 @@ using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
 using IRuleEffect = Puck.State.Rules.IRuleEffect;
 using OperandSite = Puck.State.Rules.OperandSite;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
+using RuleDataflow = Puck.State.Rules.RuleDataflow;
 
 namespace Puck.World;
 
@@ -95,6 +96,23 @@ public static partial class WorldFactsCompiler {
                     context: context,
                     rule: rule
                 );
+
+                if (decision is not null) {
+                    var controls = new List<CellAccess>();
+                    RuleDataflow.CollectGate(gate: compiled.Gate, into: controls);
+                    RuleDataflow.CollectGate(gate: decision.Interrupt ?? [], into: controls);
+                    if (compiled.ForEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: compiled.ForEachOrdinal, Key: default)); }
+                    if (compiled.PoolForEach is { } pool) { controls.Add(item: new CellAccess(RowOrdinal: pool.DomainRowOrdinal, Key: default)); }
+                    foreach (var option in decision.Options) {
+                        RuleDataflow.CollectGate(gate: option.Gate, into: controls);
+                        RuleDataflow.CollectExpression(tokens: option.Score, into: controls);
+                    }
+                    RuleCompiler.RequireTransformControlAudience(effects: compiled.Effects, controls: controls, context: context, ruleName: rule.Name);
+                    RuleCompiler.RequireTransformControlAudience(effects: decision.OnNoChoice, controls: controls, context: context, ruleName: rule.Name);
+                    foreach (var option in decision.Options) {
+                        RuleCompiler.RequireTransformControlAudience(effects: option.Effects, controls: controls, context: context, ruleName: rule.Name);
+                    }
+                }
 
                 return new CompiledWorldFactsRule(
                     decision: decision,

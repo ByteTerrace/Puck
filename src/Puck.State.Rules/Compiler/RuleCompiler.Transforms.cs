@@ -47,24 +47,17 @@ public static partial class RuleCompiler {
     // A transform writes what it read into rows other readers see: a sort's order spells its keys, a mean its members, an
     // arrangement its rank. So no row it writes may be seen by a reader some row it reads withholds from, judged over
     // the declared row and cell policies (StateVisibility.Encloses). A transform never declassifies; a rule that means
-    // to show a hidden value writes it through its own setState. A subject the context declares no row for (a pool, a
-    // live zone selection) states no policy here.
-    private static void RequireEnclosedAudience(StateTransform transform, string ruleName, RuleCompileContext context) {
-        var subjects = transform.Subjects();
-
-        foreach (var written in subjects) {
-            if (
-                (written.Access != StateAccess.Write) ||
-                (context.FindRow(name: written.Name) is not { } target)
-            ) {
+    // to show a hidden value writes it through its own setState. Resolved dependencies include live keys, zone
+    // selectors, declared sets and writes that also read. Current cell and containing-zone restrictions are checked
+    // again by the arena before the kernel runs.
+    private static void RequireEnclosedAudience(IReadOnlyList<int> reads, IReadOnlyList<int> writes, string ruleName, RuleCompileContext context) {
+        foreach (var written in writes) {
+            if (context.FindRowAt(rowOrdinal: written) is not { } target) {
                 continue;
             }
 
-            foreach (var read in subjects) {
-                if (
-                    (read.Access != StateAccess.Read) ||
-                    (context.FindRow(name: read.Name) is not { } source)
-                ) {
+            foreach (var read in reads) {
+                if (context.FindRowAt(rowOrdinal: read) is not { } source) {
                     continue;
                 }
 
@@ -109,6 +102,25 @@ public static partial class RuleCompiler {
         transform: transform
     );
     private static IRuleEffect ResolveStateTransform(StateTransform transform, string ruleName, RuleCompileContext context, out ArenaTransform? resolved) {
+        var effect = ResolveStateTransformCore(transform: transform, ruleName: ruleName, context: context, resolved: out resolved);
+        if (transform is StateTransform.Observe) { return effect; }
+        var readAccesses = new List<CellAccess>();
+        var writeAccesses = new List<CellAccess>();
+        effect.CollectReads(into: readAccesses);
+        effect.CollectWrites(into: writeAccesses);
+        var reads = readAccesses.Select(static access => access.RowOrdinal).Distinct().ToList();
+        var writes = writeAccesses.Select(static access => access.RowOrdinal).Distinct().ToList();
+        if (resolved is not null) {
+            resolved.DisclosureReads = reads.ToArray();
+            ArenaTransforms.CollectAccesses(transform: resolved, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
+        }
+        RequireEnclosedAudience(reads: reads, writes: writes, ruleName: ruleName, context: context);
+        var disclosureCost = DisclosureCost(reads: reads, writes: writes, context: context);
+        if (effect is TransformStateEffect scalar) { scalar.DisclosureCost = disclosureCost; }
+        if (effect is VectorEffect vector) { vector.DisclosureCost = disclosureCost; }
+        return effect;
+    }
+    private static IRuleEffect ResolveStateTransformCore(StateTransform transform, string ruleName, RuleCompileContext context, out ArenaTransform? resolved) {
         RuleException Invalid(string message) => new(
             detail: message,
             refusal: RuleRefusal.EffectKindInadmissible,
@@ -127,12 +139,6 @@ public static partial class RuleCompiler {
         var sourceCost = RuleWork.Zero;
 
         resolved = null;
-        RequireEnclosedAudience(
-            context: context,
-            ruleName: ruleName,
-            transform: transform
-        );
-
         switch (transform) {
             case StateTransform.Mix mix:
                 return ResolveVectorMixTransform(
