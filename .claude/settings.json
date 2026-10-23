@@ -128,7 +128,8 @@
       "Bash(codex *default_permissions*)",
       "Bash(codex *permissions.*)",
       "Bash(codex *approvals_reviewer*)",
-      "Bash(codex * -p *)",
+      "Bash(codex * -p*)",
+      "Bash(codex -p*)",
       "Bash(codex *--profile*)",
       "PowerShell(codex *--dangerously-bypass-approvals-and-sandbox*)",
       "PowerShell(codex *danger-full-access*)",
@@ -138,7 +139,8 @@
       "PowerShell(codex *default_permissions*)",
       "PowerShell(codex *permissions.*)",
       "PowerShell(codex *approvals_reviewer*)",
-      "PowerShell(codex * -p *)",
+      "PowerShell(codex * -p*)",
+      "PowerShell(codex -p*)",
       "PowerShell(codex *--profile*)"
     ]
   },

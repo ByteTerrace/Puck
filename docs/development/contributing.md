@@ -556,8 +556,9 @@ For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 line coverage CI counts (about half a minute on the reference machine);
 Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
 is selected by its `tier` trait. Pass `-nodeReuse:false` to the build and the
-restore only: `dotnet test` forwards a switch it does not know to the xUnit v3
-test host, which exits 5.
+restore only: `dotnet test` forwards a switch it does not know to the test
+host, which rejects it ([verification](../../.claude/skills/verification/SKILL.md)
+records the observed failure).
 
 ```powershell
 dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false
