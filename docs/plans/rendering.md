@@ -7469,12 +7469,26 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    to the far cascade's texels (12 cm at the `high` tier), so a walking camera
    moves it every frame or two: the cache pays only with a coarser snap and a
    sphere grown by it, a resolution trade that is a look decision.
-3. **Levels of detail from the bake.** A second contour of each static group at
-   a coarser spacing, chosen per draw by its projected size, and planar-face
-   merging of the contour (a wall's coplanar quads into the polygon they tile)
-   cut the triangle count at its source. The bake's contour, store and
-   identity belong to the bake lane; the selector is a draw-time choice
-   beside P20-1's box.
+3. **Levels of detail from the bake.** Two steps cut the triangle count at its
+   source.
+   - *Step 1:* a lossless merge of each contour's coplanar, same-material,
+     same-member triangles into the polygons they tile. It keeps every vertex
+     shared with an unmerged neighbour, so no T-junction opens a crack.
+   - *Step 2:* two coarser levels derived from that mesh by quadric edge
+     collapse, each recording its exact error, with creases and material edges
+     simplifying last. This is a simplification of the one contour, not a
+     second mesher.
+
+   The selection rules are the owner's
+   ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)):
+   - a view takes the coarsest level whose error projects to at most one
+     display pixel, and switches back above 1.1 pixels;
+   - a shadow cascade takes the coarsest level within one of its texels;
+   - the irradiance trace reads the merged level.
+
+   Chunking a union larger than one chunk follows once Step 1's savings are
+   measured. The bake's contour, store and identity belong to the bake lane;
+   the selector is a draw-time choice beside P20-1's box.
 4. **Residency.** Today every mesh of a world is resident, the debug world's
    at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
    distance rings with hysteresis (resident within R + h of any view's camera,
@@ -7503,9 +7517,11 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
   placements assigned by containment) would let the CPU skip the hidden halls
   before any GPU work and drive residency (item 4), at the cost of every world
   writing and keeping them.
-- *What may pop.* Distance residency (item 4) and levels of detail (item 3)
-  each trade memory or triangles against a visible change at a boundary
-  (a group loading, a coarser contour). P20-1 changes no pixel.
+- *What may pop.* Decided for levels of detail (item 3): the owner's
+  one-display-pixel rule, with hysteresis
+  ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+  Distance residency (item 4) is still open: it trades memory against a group
+  reloading from the store at a boundary. P20-1 changes no pixel.
 - *Point-light range.* Decided by the lead on the owner's delegation: a range
   derived from each light's intensity, where its light falls below 1/256 of
   display white at the world's darkest exposure (item 5).
