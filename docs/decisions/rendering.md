@@ -241,18 +241,23 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
-**The frame-rate bar is the slowest frame at high quality.** On the RTX 2060,
-the lowest-powered desktop the programme targets, a shipped world at the shipped
-`world.quality high` preset (high shadows from two shadowed lights, ambient
-occlusion, temporal reconstruction, high indirect lighting, native render
-scale) holds a steady
-60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds a
-rock-steady 60 FPS at the highest quality settings (the owner's ruling). The Steam Deck's minimum
-is a rock-steady 45 FPS, every frame under 22.2 ms (the owner's ruling). That
-holds at whatever settings the engine chooses for the Deck from its measured
-capabilities ([each machine runs to its own
-strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), and the
-Deck spends any headroom above it on quality. An average hides the
+**The frame-rate bar is the slowest frame at the highest quality.** Until
+initial development is done, every machine runs the highest quality settings,
+and lower qualities wait (the owner's ruling). Today those settings are the
+`world.quality high` preset: high shadows from two shadowed lights, ambient
+occlusion, temporal reconstruction, high indirect lighting and native render
+scale. The bars, each the slowest frame and not the average:
+
+- the RTX 2060, the lowest-powered desktop the programme targets: a steady
+  60 FPS, every frame under 16.7 ms;
+- the RTX 4070: a rock-steady 60 FPS (the owner's ruling);
+- the Steam Deck: a rock-steady 45 FPS minimum, every frame under 22.2 ms (the
+  owner's ruling).
+
+Each machine still meets its bar with its own strengths
+([each machine runs to its own
+strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), never by
+dropping below the highest quality. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
 fast, and a lower tier is never the fix for a missed bar. Counted work still

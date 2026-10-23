@@ -101,7 +101,11 @@ reads include:
 For example, a unified-memory APU such as the Steam Deck's writes GPU tables in
 place where a discrete GPU stages them, and spends its four CPU cores sparingly
 on presentation work. A discrete GPU on a high-refresh variable-refresh
-display spends its headroom on quality and frame rate.
+display spends its headroom on frame rate.
+
+Until initial development is done, no adaptation lowers quality. Every machine
+runs the highest quality settings, and the adaptations above are how it reaches
+its frame-rate bar there (the owner's ruling).
 
 Every adaptation stays visible and switchable, so its effect can be measured
 and compared on each machine. The rendering decisions say what each lever does
