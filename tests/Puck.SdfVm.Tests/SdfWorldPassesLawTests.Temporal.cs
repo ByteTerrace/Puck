@@ -579,9 +579,11 @@ public sealed partial class SdfWorldPassesLawTests {
                 packages: packages, pipelines: pipelines.Pipelines, refusal: out var refusal,
                 root: "world", runtime: out var runtime, set: set), userMessage: refusal?.Message);
             Runtime = runtime!;
-            m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            // A paced display shows each frame for one refresh of a fixed signal at its rate.
+            m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0,
+                FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
-                StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz);
+                StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
             TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&

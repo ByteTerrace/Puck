@@ -1,10 +1,12 @@
 using System.Numerics;
+using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade's depth and fit for up to the frames
-// a 30 Hz refresh spans, so the shadow-far pass stands between refreshes whatever else of the frame renders, and every
+// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade's depth and fit while a refresh at
+// least 30 times a second of presentation time allows (SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
+// refreshes whatever else of the frame renders, and every
 // pass of the view reads that depth through the camera it was drawn from. A hold ends early when the fit it stands for
 // no longer covers what the view shows: the light, the cascade's extent or texels change, the camera cuts, turns or
 // moves past the tiers' tolerances, or a capture converges.
@@ -43,12 +45,14 @@ public sealed partial class SdfWorldPasses {
         var fresh = cascades[1];
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
         var camera = snapshot.Camera;
-        var interval = SdfUpdateRateTiers.Divisor(displayHertz: m_context.DisplayHertz, hertz: SdfUpdateRateTiers.ShadowFarHertz);
+        var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0);
+        // Every frame since the refresh decided, so the time since it is this view's presentation time.
+        var continuous = (entry.FarDecided == (m_frame - 1));
+        var elapsed = (continuous ? (entry.FarElapsedSeconds + m_context.FrameDeltaSeconds) : 0d);
         var held = (
-            ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0) &&
-            (interval > 1) &&
-            (entry.FarDecided == (m_frame - 1)) &&
-            ((m_frame - entry.FarRefreshFrame) < interval) &&
+            rated &&
+            continuous &&
+            SdfUpdateRateTiers.Holds(elapsedSeconds: elapsed, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz, rate: PresentationRate.Of(context: in m_context)) &&
             (entry.FarTexels == cascades.Texels) &&
             (entry.FarCamera.Forward == fresh.Forward) &&
             (entry.FarCamera.HalfHeight == fresh.HalfHeight) &&
@@ -62,11 +66,16 @@ public sealed partial class SdfWorldPasses {
         entry.FarDecided = m_frame;
         entry.FarHeld = held;
         if (held) {
+            entry.FarElapsedSeconds = elapsed;
             frame.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
 
             return;
         }
+        if (rated && continuous) {
+            frame.RateIntervals?.Record(hertz: SdfUpdateRateTiers.ShadowFarHertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
+        }
 
+        entry.FarElapsedSeconds = 0d;
         entry.FarCamera = fresh;
         entry.FarTexels = cascades.Texels;
         entry.FarEye = camera.Position;
@@ -102,6 +111,8 @@ public sealed partial class SdfWorldPasses {
         public Vector3 FarForward { get; set; }
         public long FarCut { get; set; }
         public long FarDecided { get; set; } = -1;
+        // The presentation time from the frame that last refreshed the far cascade to the latest frame that decided it.
+        public double FarElapsedSeconds { get; set; }
         public bool FarHeld { get; set; }
         public long FarRefreshFrame { get; set; } = -1;
         public ulong? FarSignature { get; set; }

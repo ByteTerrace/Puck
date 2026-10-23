@@ -107,6 +107,16 @@ public static class PresentPacingPolicy {
         ? (range.MaximumHertz ?? timing.Signal.Hertz)
         : null;
 
+    /// <summary>Returns the rate presented frames land on a whole number of steps of under a decision, which a rated
+    /// update's period rounds to (<c>FrameContext.GridHertz</c>): the active signal's refresh rate when the swap chain
+    /// paces presents at the signal, or zero on a verified variable-refresh display, whose frames show as they arrive,
+    /// and when the signal is unknown.</summary>
+    /// <param name="timing">The display timing snapshot the decision was resolved from.</param>
+    /// <param name="decision">The decision.</param>
+    /// <returns>The grid's rate, in hertz, or zero for none.</returns>
+    public static double GridHertz(DisplayTimingSnapshot timing, PresentPacingDecision decision) => ((timing.Signal.IsKnown && !decision.TimerBoundsSwapChain)
+        ? timing.Signal.Hertz
+        : 0d);
     /// <summary>Resolves an effective present-rate target.</summary>
     /// <param name="timing">The current display timing snapshot.</param>
     /// <param name="requestedHertz">A positive explicit target, or zero for display-aware automatic pacing.</param>

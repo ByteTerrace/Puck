@@ -121,6 +121,16 @@ public sealed class PresentPacingPolicyLawTests {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => PresentPacingPolicy.Resolve(requestedHertz: double.NaN, timing: FixedSixty));
     }
 
+    // Frames land on whole refreshes of a fixed signal, and whenever they arrive on a verified variable-refresh display
+    // or one whose signal is unknown.
+    [Fact]
+    public void FramesLandOnTheSignalsGridOnlyWhereTheSwapChainPacesThem() {
+        Assert.Equal(expected: 60d, actual: PresentPacingPolicy.GridHertz(decision: PresentPacingPolicy.Resolve(requestedHertz: 0.0, timing: FixedSixty), timing: FixedSixty));
+        Assert.Equal(expected: 60d, actual: PresentPacingPolicy.GridHertz(decision: PresentPacingPolicy.Resolve(requestedHertz: 30.0, timing: FixedSixty), timing: FixedSixty));
+        Assert.Equal(expected: 0d, actual: PresentPacingPolicy.GridHertz(decision: PresentPacingPolicy.Resolve(requestedHertz: 0.0, timing: VariableSixty), timing: VariableSixty));
+        Assert.Equal(expected: 0d, actual: PresentPacingPolicy.GridHertz(decision: PresentPacingPolicy.Resolve(requestedHertz: 0.0, timing: DisplayTimingSnapshot.Unknown), timing: DisplayTimingSnapshot.Unknown));
+    }
+
     [Fact]
     public void ADecisionConvertsItsTargetToATimerPeriod() {
         const long Frequency = 10_000_000L;

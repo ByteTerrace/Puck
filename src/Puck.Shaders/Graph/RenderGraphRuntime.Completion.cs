@@ -36,6 +36,25 @@ public sealed partial class RenderGraphRuntime {
     /// changes; with the reason, naming the instance and its state, when it is not rendered.</summary>
     public FrameRender Render { get; private set; } = FrameRender.Waiting(reason: "the runtime has produced no frame");
 
+    // The names of the instances whose latest render did not show its frame, the frame's Stale list.
+    private readonly List<string> m_staleNames = [];
+
+    // The frame the scheduler reads with every instance whose latest render did not show its frame named stale, so a
+    // floor refresh never holds it (RenderGraphFrame.Stale): a view waiting on its bake renders again on a frame that
+    // presents no new time, as lockstep's held tick does, instead of holding the incomplete render that holds the tick.
+    private RenderGraphFrame WithStale(in RenderGraphFrame frame) {
+        m_staleNames.Clear();
+
+        for (var index = 0; (index < m_stale.Length); index++) {
+            if (m_stale[index] is not null) {
+                m_staleNames.Add(item: m_set.Instances[index].Name);
+            }
+        }
+
+        return ((m_staleNames.Count == 0)
+            ? frame
+            : (frame with { Stale = m_staleNames }));
+    }
     // Sizes the per-instance standing to a set of instances, every one current until it renders.
     private void ResetStale(int count) {
         m_stale = new string?[count];

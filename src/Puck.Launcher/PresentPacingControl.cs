@@ -73,6 +73,17 @@ public sealed class PresentPacingControl {
     public static ulong FrameDeltaOf(bool tickLocked, bool simulates, ulong steppedTicks, ulong wallTicks) => ((tickLocked && simulates)
         ? steppedTicks
         : wallTicks);
+    /// <summary>Returns the rate a frame's presentation time lands on a whole number of steps of: under lockstep the
+    /// simulation's tick rate, since a frame spans whole steps, and the display's grid otherwise.</summary>
+    /// <param name="tickLocked">Whether the frame presents in lockstep.</param>
+    /// <param name="simulates">Whether the host steps a simulation.</param>
+    /// <param name="stepTicks">The fixed step, in engine ticks.</param>
+    /// <param name="displayGridHertz">The display's grid (<see cref="PresentPacingPolicy.GridHertz"/>), or zero for
+    /// none.</param>
+    /// <returns>The frame context's grid, in hertz, or zero for none.</returns>
+    public static double GridOf(bool tickLocked, bool simulates, ulong stepTicks, double displayGridHertz) => ((tickLocked && simulates && (stepTicks > 0UL))
+        ? (((double)Puck.Maths.FixedTickConversion.TicksPerSecond) / stepTicks)
+        : displayGridHertz);
 
     /// <summary>Retargets the present rate. A no-op (no version bump) when the value is unchanged.</summary>
     /// <param name="targetHertz">The new target in Hz, or 0 for automatic display pacing.</param>

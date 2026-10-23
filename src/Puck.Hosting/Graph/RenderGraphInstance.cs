@@ -3,19 +3,22 @@ using Puck.Commands;
 
 namespace Puck.Hosting;
 
-/// <summary>How often a render-graph instance refreshes: every <see cref="Divisor"/>-th presented frame, or at most
-/// <see cref="Hertz"/> times a second. Exactly one of the two is positive.</summary>
-/// <param name="Divisor">The instance renders at most once every this many presented frames, or 0 when
-/// <see cref="Hertz"/> states the rate.</param>
-/// <param name="Hertz">The most renders a second, or 0 when <see cref="Divisor"/> states the rate.</param>
-public readonly record struct RenderGraphRefresh(int Divisor, int Hertz) {
+/// <summary>How often a render-graph instance refreshes: every <see cref="Divisor"/>-th presented frame, at most
+/// <see cref="Hertz"/> times a second (a cap counted in presented frames), or at least <see cref="Floor"/> times a second
+/// (a floor held by presentation time, <see cref="PresentationRate.Holds"/>). Exactly one of the three is positive.</summary>
+/// <param name="Divisor">The instance renders at most once every this many presented frames, or 0 when another member
+/// states the rate.</param>
+/// <param name="Hertz">The most renders a second, or 0 when another member states the rate.</param>
+/// <param name="Floor">The fewest renders a second, or 0 when another member states the rate.</param>
+public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Floor = 0) {
     /// <summary>Gets the refresh that renders on every frame something visible reads the instance.</summary>
     public static RenderGraphRefresh EveryFrame => Every(divisor: 1);
-    /// <summary>Gets whether exactly one of <see cref="Divisor"/> and <see cref="Hertz"/> is positive and the other is
-    /// zero.</summary>
+    /// <summary>Gets whether exactly one of <see cref="Divisor"/>, <see cref="Hertz"/> and <see cref="Floor"/> is positive
+    /// and the others are zero.</summary>
     public bool IsValid => (
-        ((Divisor > 0) && (Hertz == 0)) ||
-        ((Divisor == 0) && (Hertz > 0))
+        ((Divisor > 0) && (Hertz == 0) && (Floor == 0)) ||
+        ((Divisor == 0) && (Hertz > 0) && (Floor == 0)) ||
+        ((Divisor == 0) && (Hertz == 0) && (Floor > 0))
     );
 
     /// <summary>Creates a refresh that renders at most once every <paramref name="divisor"/> presented frames.</summary>
@@ -26,33 +29,59 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz) {
         Hertz: 0
     );
     /// <summary>Creates a refresh that renders at most <paramref name="hertz"/> times a second.</summary>
-    /// <param name="hertz">The rate, at least one.</param>
+    /// <param name="hertz">The cap, at least one.</param>
     /// <returns>The refresh.</returns>
-    public static RenderGraphRefresh At(int hertz) => new(
+    public static RenderGraphRefresh AtMost(int hertz) => new(
         Divisor: 0,
         Hertz: hertz
     );
-    /// <summary>Resolves the refresh to a frame divisor against the display's refresh rate. A rate becomes the smallest
-    /// divisor that never renders faster than the rate asks, and a display whose rate is unknown (zero or negative)
-    /// renders a rate-refreshed instance on every frame.</summary>
-    /// <param name="displayHertz">The presented frames a second.</param>
+    /// <summary>Creates a refresh that renders at least <paramref name="hertz"/> times a second of presentation time and
+    /// holds its latest render between.</summary>
+    /// <param name="hertz">The floor, at least one.</param>
+    /// <returns>The refresh.</returns>
+    public static RenderGraphRefresh AtLeast(int hertz) => new(
+        Divisor: 0,
+        Floor: hertz,
+        Hertz: 0
+    );
+    /// <summary>Resolves a divisor or a cap to a frame divisor against the display's refresh rate
+    /// (<see cref="PresentationRate.FramesAtMost"/>); a floor, which presentation time paces rather than frames, resolves
+    /// to one.</summary>
+    /// <param name="displayHertz">The presented frames a second, or zero or less when unknown.</param>
     /// <returns>The divisor, at least one.</returns>
     /// <exception cref="InvalidOperationException">The refresh is not <see cref="IsValid"/>.</exception>
     public int ResolveDivisor(int displayHertz) {
         if (!IsValid) {
-            throw new InvalidOperationException(message: $"Refresh divisor {Divisor} and hertz {Hertz} must name exactly one positive rate.");
+            throw new InvalidOperationException(message: $"Refresh divisor {Divisor}, hertz {Hertz} and floor {Floor} must name exactly one positive rate.");
         }
-        if (Hertz == 0) {
+        if (Divisor > 0) {
             return Divisor;
         }
-        if (displayHertz <= 0) {
-            return 1;
+
+        return ((Hertz > 0)
+            ? new PresentationRate(DisplayHertz: Math.Max(val1: 0, val2: displayHertz), GridHertz: 0d).FramesAtMost(hertz: Hertz)
+            : 1);
+    }
+    /// <summary>Returns whether the refresh holds an instance's latest render through this frame: a divisor or a cap while
+    /// fewer presented frames than its divisor have passed since that render, a floor while
+    /// <see cref="PresentationRate.Holds"/> does. An instance that has never rendered is never held.</summary>
+    /// <param name="rate">The frame's presentation rate.</param>
+    /// <param name="frames">The presented frames since the instance last rendered, or a negative number when it never
+    /// has.</param>
+    /// <param name="elapsedSeconds">The presentation time since the instance last rendered.</param>
+    /// <param name="frameSeconds">The latest frame's span.</param>
+    /// <returns><see langword="true"/> when the refresh holds the instance this frame.</returns>
+    /// <exception cref="InvalidOperationException">The refresh is not <see cref="IsValid"/>.</exception>
+    public bool Holds(PresentationRate rate, long frames, double elapsedSeconds, double frameSeconds) {
+        var divisor = ResolveDivisor(displayHertz: rate.DisplayHertz);
+
+        if (frames < 0) {
+            return false;
         }
 
-        return Math.Max(
-            val1: 1,
-            val2: ((int)((((long)displayHertz) + (Hertz - 1)) / Hertz))
-        );
+        return ((Floor > 0)
+            ? rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: Floor)
+            : (frames < divisor));
     }
 }
 /// <summary>One instance's read of another instance's output: an image the consumer shows through a footprint, or a

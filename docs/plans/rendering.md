@@ -7379,14 +7379,19 @@ draws the lobby through the counted indirect draw within one code of
 `frustum`.
 
 **P20-3, landed: update what is far or small on screen less often.** Work that
-changes every frame updates at 30 or 15 Hz where it is far or small on screen
-(the owner's request), presentation only, each lever switching only where a
-held update jumps by at most two pixels on screen for the speed it is sized for
-(`SdfUpdateRateTiers`; [decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+changes every frame updates at least 30 or 15 times a second where it is far or
+small on screen (the owner's request), presentation only, each lever switching
+only where a held update jumps by at most two pixels on screen for the speed it
+is sized for (`SdfUpdateRateTiers`; [decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+Each tier is a floor held by presentation time (`PresentationRate.Holds`), so a
+variable-refresh display or a missed frame never lowers the rate below it; on
+a fixed signal the period is the most whole refreshes that keep the tier.
 `world.rates [status|on|off|<lever> on|off]` switches each lever
-(`SdfUpdateRates`) and `world.counters sdf.rates` counts what each held.
+(`SdfUpdateRates`) and prints each lever's longest interval between updates at
+each tier against the tier's period; `world.counters sdf.rates` counts what
+each held.
 
-- *The far cascade* stands between 30 Hz refreshes: a view holds the cascade's
+- *The far cascade* stands between refreshes at least 30 times a second: a view holds the cascade's
   depth and fit (`SdfWorldPasses.Rates`), every pass reads the depth through
   the camera it was drawn from, and the `shadow-far` pass's signature is the
   one its refresh recorded, so the per-pass cadence stands it whatever forces
@@ -7395,21 +7400,24 @@ held update jumps by at most two pixels on screen for the speed it is sized for
   walking speed. A light turn, a texel or extent change, a cut, a camera turn
   past half a degree or a move past half a metre, or a converging capture
   refreshes at once.
-- *Nested portal and session views* render at 30 Hz at or below 120 display
-  pixels high and 15 Hz at or below 60: each footprint carries a refresh
-  (`RenderGraphFootprint.Refresh`), which the scheduler honours as it does a
+- *Nested portal and session views* render at least 30 times a second at or
+  below 120 display pixels high and 15 at or below 60: each footprint carries a
+  floor refresh (`RenderGraphFootprint.Refresh`, `RenderGraphRefresh.AtLeast`),
+  which the scheduler honours as it does a
   root's, the most frequent demand winning, from the glass's coverage of its
   consumer times the consumer's share of the display
   (`WorldViewGraphHost.Rates`). Resolution already follows coverage, one texel
   for each pixel the glass covers, so no lower resolution is taken.
-- *Screens' source uploads* run at 30 Hz once a screen stands at or below its
-  image's height on the display and 15 Hz at or below half of it, through the
+- *Screens' source uploads* run at least 30 times a second once a screen stands
+  at or below its image's height on the display and 15 at or below half of it,
+  through the
   same footprint refresh; a session showing the source bounds it by its own
   image, and the sky environment's reads of the screens take their views'
   refresh. The machine behind the screen runs at its own rate. The desktop pane
   is the viewer's direct view and is not rated.
-- *Bodies* evaluate their pose (drivers, effectors, part followers) at 30 Hz at
-  or below 30 pixels per metre and 15 Hz at or below 15 in every view that may
+- *Bodies* evaluate their pose (drivers, effectors, part followers) at least 30
+  times a second at or below 30 pixels per metre and 15 at or below 15 in every
+  view that may
   see them, unseen counting as none; the root follows the body every frame and
   the other slots ride it rigidly between packs, and the next full pack
   advances by every second the holds carried past (`WorldStampPool.Rates`).
@@ -7446,6 +7454,31 @@ every frame with no alternating pattern; the Moth walking 59 m away changes
 settled captures of the hall with the levers on and off differ only along
 geometry edges, the temporal jitter's, not at any window or screen.
 
+The tiers above were first frame divisors of the pacing target, which let the
+real rate fall with the frame rate: on the RTX 4070's FreeSync display (48 to
+165 Hz) paced automatically at 162 Hz while a composed window presents 60
+frames a second, a five-frame 30 Hz hold is 12 Hz and an eleven-frame 15 Hz
+hold 5.5 Hz. Held by presentation time, `world.rates` reads, with
+`world.cadence off`, as each lever's longest interval over the last one to two
+seconds against periods of 33.3 and 66.7 ms:
+
+| Pacing, frames | View | Bodies 15 Hz | Views 30 / 15 Hz | Screens 30 / 15 Hz | Far cascade 30 Hz |
+|---|---|---:|---:|---:|---:|
+| 60 Hz target, 60 fps | Lobby | — | 33.4 / 66.7 | — / 66.7 | 33.4 |
+| 60 Hz target, 60 fps | Spawn, a body 15 m off | 67.4 | — | — / 66.7 | 35.8 |
+| 162 Hz target, 60 fps | Lobby | 66.7 | 33.5 / 66.8 | — / 66.8 | 33.5 |
+| 162 Hz target, 60 fps | Outdoors, facing the hall | — | 33.5 / 66.7 | 33.5 / 66.7 | 33.5 |
+| Lockstep, 30 Hz ticks | Lobby | — | 33.3 / 66.7 | — / 66.7 | 33.3 |
+
+At a steady 60 Hz the far cascade renders and holds alternately as the
+two-frame divisor did (302 renders, 299 holds over 300 ticks). Under lockstep
+the period is whole ticks, so the 30 Hz tier updates every tick of a 30 Hz
+simulation and the 15 Hz tier every second one on any display. A reading past
+its period by more than the millisecond's slack is a frame that came later
+than the one before it: on a loaded machine whose frames alternated 4 and 23
+ms of work, single readings reached 39.3 ms at the 30 Hz tier and 76.7 ms at
+the 15 Hz tier while the steady ones stayed within the period.
+
 **Design for what follows.** Presentation only: nothing here reaches
 simulation state, and a world that declares nothing keeps P20-1's cull.
 
@@ -7469,12 +7502,26 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    to the far cascade's texels (12 cm at the `high` tier), so a walking camera
    moves it every frame or two: the cache pays only with a coarser snap and a
    sphere grown by it, a resolution trade that is a look decision.
-3. **Levels of detail from the bake.** A second contour of each static group at
-   a coarser spacing, chosen per draw by its projected size, and planar-face
-   merging of the contour (a wall's coplanar quads into the polygon they tile)
-   cut the triangle count at its source. The bake's contour, store and
-   identity belong to the bake lane; the selector is a draw-time choice
-   beside P20-1's box.
+3. **Levels of detail from the bake.** Two steps cut the triangle count at its
+   source.
+   - *Step 1:* a lossless merge of each contour's coplanar, same-material,
+     same-member triangles into the polygons they tile. It keeps every vertex
+     shared with an unmerged neighbour, so no T-junction opens a crack.
+   - *Step 2:* two coarser levels derived from that mesh by quadric edge
+     collapse, each recording its exact error, with creases and material edges
+     simplifying last. This is a simplification of the one contour, not a
+     second mesher.
+
+   The selection rules are the owner's
+   ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)):
+   - a view takes the coarsest level whose error projects to at most one
+     display pixel, and switches back above 1.1 pixels;
+   - a shadow cascade takes the coarsest level within one of its texels;
+   - the irradiance trace reads the merged level.
+
+   Chunking a union larger than one chunk follows once Step 1's savings are
+   measured. The bake's contour, store and identity belong to the bake lane;
+   the selector is a draw-time choice beside P20-1's box.
 4. **Residency.** Today every mesh of a world is resident, the debug world's
    at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
    distance rings with hysteresis (resident within R + h of any view's camera,
@@ -7503,9 +7550,11 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
   placements assigned by containment) would let the CPU skip the hidden halls
   before any GPU work and drive residency (item 4), at the cost of every world
   writing and keeping them.
-- *What may pop.* Distance residency (item 4) and levels of detail (item 3)
-  each trade memory or triangles against a visible change at a boundary
-  (a group loading, a coarser contour). P20-1 changes no pixel.
+- *What may pop.* Decided for levels of detail (item 3): the owner's
+  one-display-pixel rule, with hysteresis
+  ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+  Distance residency (item 4) is still open: it trades memory against a group
+  reloading from the store at a boundary. P20-1 changes no pixel.
 - *Point-light range.* Decided by the lead on the owner's delegation: a range
   derived from each light's intensity, where its light falls below 1/256 of
   display white at the world's darkest exposure (item 5).
