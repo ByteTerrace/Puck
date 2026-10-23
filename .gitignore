@@ -85,6 +85,7 @@ bench-reports/
 # Codex's project configuration is shared; anything else a Codex run writes there stays local.
 .codex/*
 !.codex/config.toml
+!.codex/rules/
 .tmp
 docs/.obsidian
 # Shader compiler outputs and local freshness records; CI packages the bytecode.

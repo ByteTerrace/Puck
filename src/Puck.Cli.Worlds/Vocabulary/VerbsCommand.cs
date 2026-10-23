@@ -39,7 +39,7 @@ public static class VerbsCommand {
             ))];
     }
     // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.
-    private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless) {
+    private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless, string? cacheDirectory) {
         var shape = (headless ? "headless" : "windowed");
         var process = CliProcess.RunCaptured(
             arguments: [
@@ -49,6 +49,7 @@ public static class VerbsCommand {
                 "--headless", (headless ? "true" : "false"),
                 "--exit-after-seconds", "60",
                 "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
+                .. (cacheDirectory is null ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
             ],
             fileName: "dotnet",
             input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}",
@@ -64,7 +65,7 @@ public static class VerbsCommand {
 
         return verbs;
     }
-    private static int Run(bool check, bool headlessOnly, string? worldArtifact) {
+    private static int Run(bool check, bool headlessOnly, string? worldArtifact, string? cacheDirectory) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -74,8 +75,8 @@ public static class VerbsCommand {
         try {
             if (!WorldArtifactBuild.TryResolveNamed(
                 named: worldArtifact,
-                path: out var world,
-                lease: out var lease,
+                path: out var artifact,
+                lease: out var world,
                 error: out var error,
                 logDirectory: runDirectory,
                 repositoryRoot: repositoryRoot,
@@ -91,7 +92,7 @@ public static class VerbsCommand {
 
             using (lease) {
                 foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
-                    if (Boot(artifact: world, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
+                    if (Boot(artifact: artifact, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory, cacheDirectory: cacheDirectory) is not { } shape) {
                         return 1;
                     }
 
@@ -131,22 +132,22 @@ public static class VerbsCommand {
     }
 
     public static Command Create() {
+        var worldArtifact = new Option<string?>(name: "--world-artifact") { Description = "Use this already-built Puck.World.dll instead of building the checkout." };
+        var cacheDirectory = new Option<string?>(name: "--cache-dir") { Description = "The device-cache root for both World boots; absent uses the per-user store." };
         var check = CliOptions.Check(description: "Boot, regenerate in memory and compare against src/Puck.World.Vocabulary/Assets/puck.console.verbs.json; write nothing, and exit 1 naming the first differing line.");
         var headlessOnly = new Option<bool>(name: "--headless-only") {
             Description = "Boot headless alone (no GPU) and keep every catalogued verb the headless World does not register.",
         };
-        var worldArtifact = new Option<string?>(name: "--world-artifact") {
-            Description = "Boot this already-built Puck.World.dll; the caller is responsible for building this checkout successfully first.",
-        };
         var command = new Command(
             description: "Generate or check the console verb catalog authored commands are validated against.",
             name: Verb
-        ) { check, headlessOnly, worldArtifact };
+        ) { check, headlessOnly, worldArtifact, cacheDirectory };
 
-        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: check), headlessOnly: parseResult.GetValue(option: headlessOnly), worldArtifact: parseResult.GetValue(option: worldArtifact)));
+        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: check), headlessOnly: parseResult.GetValue(option: headlessOnly), worldArtifact: parseResult.GetValue(option: worldArtifact), cacheDirectory: parseResult.GetValue(option: cacheDirectory)));
 
         return command.Detail(detail: """
-            Builds this checkout's Puck.World (Release), boots it over worlds/debug headless and
+            Builds this checkout's Puck.World (Release), or uses --world-artifact <Puck.World.dll>,
+            boots it over worlds/debug headless and
             then windowed (a GPU leg), and reads each boot's world.affordances manifest: every
             registered verb with its bindability and audience. The union of the engine's verbs,
             never the world's authored commands, is written as the catalog Puck.World.Vocabulary
@@ -158,6 +159,7 @@ public static class VerbsCommand {
             renaming or changing the bindability or audience of a console verb.
 
             Written to: src/Puck.World.Vocabulary/Assets/puck.console.verbs.json.
+            --cache-dir names the device-cache root both boots use instead of the per-user store.
             """);
     }
 }

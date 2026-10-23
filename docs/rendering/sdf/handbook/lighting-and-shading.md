@@ -405,6 +405,72 @@ its face, never behind it.
 
 ## Shading switches
 
+### Cel shading
+
+`world.toon on|off|toggle` selects a presentation-only cel response. With no
+argument it echoes the choice. It uses the same render-section grant and
+session-lever delivery as `world.ao`, and contributes no simulation state.
+It starts off unless `render.toon.enabled` is true. Until the live lever is
+used, reload follows the document default; afterwards the session choice
+applies to the host, routed worlds and nested views, with each world's own
+tuning. `world.save` folds the live choice into the render settings.
+
+```text
+render {
+  toon {
+    enabled: false
+    threshold: 0.45
+    softness: 0.08
+    shadowTint [0.38, 0.48, 0.65]
+    outlineWidth: 1.5
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [0.08, 0.10, 0.16]
+    specularSize: 0.025
+    exposure: 0.5
+    shoulder: 0.65
+  }
+}
+```
+
+The views pass bands each directional light's diffuse cosine and filtered
+shadow visibility together. Point lights retain their range, cone and probe
+visibility, with a banded diffuse cosine. A short soft terminator joins the
+two tones; `threshold` places it and `softness` is its full cosine width.
+Indirect light and sky ambient take the cooler linear RGB `shadowTint`,
+with AO still affecting indirect light. This does not add unoccluded sunlight
+inside a shadowed room. Specular lobes become bounded patches: `specularSize`
+is one minus their half-vector cosine, with a narrow soft edge. Metals keep
+their painted colour; continuous environment lobes and rim enrichment are
+omitted in this mode.
+
+Outlines compare the depth and normals of eight neighbouring visibility
+records, on the foreground side of silhouettes and at sharp creases. The
+tangent-plane depth comparison leaves sloping planes clear. `outlineWidth`
+is the close radius in output pixels, scaled to the current render grid;
+`outlineDistance` is the distance in metres at which it halves. Fractional
+radii interpolate two rings, avoiding integer-width jumps. `outlineNormal`
+is the crease cosine threshold; `outlineTint` multiplies reflected colour.
+The ink is part of the lit surface before temporal reprojection and
+atmosphere, so existing motion, disocclusion and history clipping apply.
+
+`exposure` is reflected-light compensation in stops. `shoulder` compresses
+the exposed RGB peak with one common multiplier, retaining paint chroma
+before the world's authored tonemap. Emission is added after both this
+compression and ink. Bound displays and portal pictures bypass the cel
+response, and sky stays in its existing pass. A portal's destination shades
+its own surfaces once; the consuming view does not posterise the picture.
+
+There is no additional dispatch, image or history allocation: the work is
+in `sdf.world$views` and reported with that pass's counters. An outlined
+opaque hit reads at most eight neighbouring depths and normals at a radius
+of one render pixel or less, sixteen above it. Width zero skips these reads;
+mode off skips the cel response and all outline reads. The pass-block
+parameters participate in the lighting cadence signature, so live edits
+request fresh shading and temporal samples without rebuilding geometry.
+
+### Lighting levers
+
 Several shading terms are exposed as **live levers**—runtime settings a user
 flips in `Puck.World` to isolate a term's cost or restyle the frame with no
 restart. They ride reserved lanes in a per-frame parameter row, so an unset

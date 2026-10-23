@@ -113,12 +113,30 @@ Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 The `.claude/leases/` directory is git-ignored, so the lead creates it once per
-checkout (`mkdir -p`). A Codex lane's sandbox writes only its worktree plus the
-writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
-path per machine), and never `.git`: a Codex lane runs in a worktree under
-`.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
-its changes uncommitted, and the lead commits them
-([`review-passes`](../review-passes/SKILL.md#before-launching)). A resumed
+checkout (`mkdir -p`). Launch a Codex lane with `codex exec --cd <worktree> -m <model> -c
+model_reasoning_effort='"<effort>"' "$(cat <brief>)"` in the background, its
+output to a lane-named log: `.codex/config.toml`'s `puck` permission profile
+then applies, with `approvals_reviewer = "auto_review"` (Codex's counterpart
+of auto mode) and `.codex/rules/git.rules`. A sandbox-denied `git commit`
+escalates and the reviewer approves it, so the lane commits on its own
+branch; every `git push` is forbidden before review, so its work lands through
+the lead. The Codex companion's `task` forces `--sandbox workspace-write`,
+which overrides the profile: a lane launched through it cannot commit, and the
+lead commits its uncommitted changes
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Network
+stays off inside the sandbox with no denial to escalate, so restore a
+worktree before its lane starts. The profile also makes `.claude/leases/`
+writable (an absolute path per machine).
+
+An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
+its worktree, without `--mode`: headless `-p` judges the `--mode auto` flag
+before it signs in and refuses it ("rollout flag off"), while the user-level
+`agentMode: "auto"` applies once it has, on a personal Google account. Its
+rights come from the user-level `~/.gemini/antigravity-cli/settings.json`
+(allow, ask and deny; Antigravity reads no project permission file), its skills
+and `puck` MCP server from the committed `.agents/`. Commands run in its
+terminal sandbox: commits succeed there, the network does not, and a command
+on the ask list (a push to `main`) is refused headless, since it cannot prompt. A resumed
 Codex session keeps the sandbox it was launched with, so after a sandbox change
 relaunch the lane fresh with a continuation brief rather than `--resume-last`.
 Codex's approval review may refuse a chained `mkdir … && run; rm …` line, so a
@@ -296,6 +314,23 @@ could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
+
+Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
+on the owner's Google AI Ultra plan; an Antigravity lane launches as above). Its published results
+put it level with Astra overall (Artificial Analysis Intelligence Index about
+53) and ahead on repository issue fixing (DeepSWE), app and UI generation and
+security remediation (CWE-bench), behind Opus and Astra on long terminal-driven
+and long-horizon work (Terminal-bench, FrontierSWE), with a 1M-token context
+and about twice Astra's output per task; most figures are vendor-reported.
+Route it accordingly:
+
+| Give Argon | Keep from Argon |
+|---|---|
+| Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
+| Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
+| Whole-area analysis that needs a large context | Anything that must push, or run an ask-listed git command headless |
+| Portal, dashboard and other TypeScript/UI work | |
+| Research synthesis | |
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden

@@ -408,6 +408,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   residue. Binding compilation must receive the routed channel shapes.
   [Input channels](../../../docs/decisions/input-channels.md) owns this model
   and the remaining authoritative-mode, release and timed-history steps.
+  Switching modes releases by default; declared same-meaning holds and toggles
+  may continue, while changed meanings and transition edges never cross the
+  epoch barrier.
 - A kit whose collider differs from the body's last one (a kit `select` by a
   body register: the suit, noclip) steps the body to the nearest pose up its
   axis or along world X or Z where the new volume is not embedded

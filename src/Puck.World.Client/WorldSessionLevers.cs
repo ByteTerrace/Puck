@@ -50,6 +50,8 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
+    /// <summary>The presentation-only cel-shading choice (<c>world.toon</c>).</summary>
+    public const string Toon = "toon";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -120,6 +122,7 @@ public static partial class WorldSessionLevers {
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
+        sink.Register(name: Toon, setter: lever => settings.Toon = Flag(lever: lever));
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
                 Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");

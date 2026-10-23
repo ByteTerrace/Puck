@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/83689f23c78e362b4b35068021e1e8b0a8c2d3543414b69ee70d77aab1f2c7b3). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/1c2049260546cd4ffce150a4d3ff66a3e5285fd9f33ef06214a05ecbcd8286da). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -201,21 +201,26 @@ struct SdfResolvePass {
     [[vk::offset(736)]] float skyPeakLuminance;
     [[vk::offset(740)]] float tanHalfFieldOfView;
     [[vk::offset(744)]] uint temporal;
-    [[vk::offset(748)]] float upscaleSharpness;
-    [[vk::offset(752)]] uint viewBase;
-    [[vk::offset(756)]] uint _pad756;
-    [[vk::offset(760)]] uint _pad760;
-    [[vk::offset(764)]] uint _pad764;
-    [[vk::offset(768)]] float3 viewForward;
+    [[vk::offset(748)]] uint _pad748;
+    [[vk::offset(752)]] float4 toonBands;
+    [[vk::offset(768)]] float3 toonInk;
     [[vk::offset(780)]] uint _pad780;
-    [[vk::offset(784)]] float3 viewPosition;
-    [[vk::offset(796)]] uint _pad796;
-    [[vk::offset(800)]] float3 viewRight;
-    [[vk::offset(812)]] uint _pad812;
-    [[vk::offset(816)]] float3 viewUp;
-    [[vk::offset(828)]] uint viewportCount;
-    [[vk::offset(832)]] uint workCounterRow;
-    [[vk::offset(836)]] uint workCounterRowDetail;
+    [[vk::offset(784)]] float4 toonOutline;
+    [[vk::offset(800)]] float4 toonShadow;
+    [[vk::offset(816)]] float upscaleSharpness;
+    [[vk::offset(820)]] uint viewBase;
+    [[vk::offset(824)]] uint _pad824;
+    [[vk::offset(828)]] uint _pad828;
+    [[vk::offset(832)]] float3 viewForward;
+    [[vk::offset(844)]] uint _pad844;
+    [[vk::offset(848)]] float3 viewPosition;
+    [[vk::offset(860)]] uint _pad860;
+    [[vk::offset(864)]] float3 viewRight;
+    [[vk::offset(876)]] uint _pad876;
+    [[vk::offset(880)]] float3 viewUp;
+    [[vk::offset(892)]] uint viewportCount;
+    [[vk::offset(896)]] uint workCounterRow;
+    [[vk::offset(900)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa8A2B3C24 : register(b0, space3);
 #define passGroup passGroupIsa8A2B3C24

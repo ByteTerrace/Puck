@@ -312,6 +312,20 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
+            name: "world.toon",
+            description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Two diffuse bands, tinted shadows, shaped highlights and depth/normal outlines; render.toon tunes the look on reload. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (args.Count != 1) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
+                var on = args.Is(0, "toggle") ? !settings.Toon : ParseOnOff(args[0]);
+                if (on is not { } resolved) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Toon,
+                    a: resolved ? 1d : 0d, formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "world.cadence",
             description: "Toggles the unchanged-frame cadence gate live (no rebuild): world.cadence [on|off|status]. On, a frame whose render inputs match the previous one re-composites the retained image (pixel-identical); off renders every frame, so world.counters gpu measures a still scene. Ships ON.",
             handler: (context, args) => {

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Puck.World.Authoring;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 using Puck.Text;
 
 namespace Puck.World.Client;
@@ -17,6 +18,30 @@ namespace Puck.World.Client;
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
 /// font catalog. They count against <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
 public static class WorldPlacementStamper {
+    /// <summary>Retains the static placements the contact evaluator can read. An unsupported placement excludes only
+    /// itself, so a render-only fold cannot disable surface probes throughout the world.</summary>
+    /// <param name="definition">The world supplying prototypes and placement frames.</param>
+    /// <param name="placements">The candidate placements.</param>
+    /// <param name="excluded">Receives each excluded placement and its evaluator refusal, when supplied.</param>
+    /// <returns>The placements admitted by the same emission and evaluator used by the composed query field.</returns>
+    public static IReadOnlyList<WorldPlacement> Queryable(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, Action<WorldPlacement, string>? excluded = null) {
+        var usable = new List<WorldPlacement>();
+
+        foreach (var placement in placements) {
+            try {
+                var builder = new SdfProgramBuilder();
+
+                EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
+                _ = new SdfFieldEvaluator(program: builder.Build());
+                usable.Add(item: placement);
+            } catch (ArgumentException exception) {
+                excluded?.Invoke(placement, exception.Message.ReplaceLineEndings(replacementText: " "));
+            }
+        }
+
+        return usable;
+    }
+
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
     private const float PlacementBoundMargin = 0.4f;
@@ -272,6 +297,7 @@ public static class WorldPlacementStamper {
         ),
         key: mesh
     );
+
     // The triangles in their authored winding, then each again with its last two vertices swapped.
     private static uint[] TwoSided(IReadOnlyList<uint> indices) {
         var doubled = new uint[(indices.Count * 2)];
@@ -281,13 +307,12 @@ public static class WorldPlacementStamper {
             doubled[(index + 1)] = indices[(index + 1)];
             doubled[(index + 2)] = indices[(index + 2)];
             doubled[(indices.Count + index)] = indices[index];
-            doubled[(indices.Count + index + 1)] = indices[(index + 2)];
-            doubled[(indices.Count + index + 2)] = indices[(index + 1)];
+            doubled[((indices.Count + index) + 1)] = indices[(index + 2)];
+            doubled[((indices.Count + index) + 2)] = indices[(index + 1)];
         }
 
         return doubled;
     }
-
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
@@ -404,7 +429,6 @@ public static class WorldPlacementStamper {
             visitor: ref visitor
         );
     }
-
     // The masks a creation with glass shapes emits through: the opaque emission's hidden shapes (the isolation's and
     // every glass shape) and the glass emission's (everything but the isolation's visible glass shapes). Both null for a
     // creation with no visible glass shape, which emits as it stands.
@@ -844,6 +868,7 @@ public static class WorldPlacementStamper {
             _ = builder.EndInstance();
         }
     }
+
     // Registers the palette of a responding row's authored creation and of each response entry's, in that order.
     private static void RegisterAlternatives(SdfProgramBuilder builder, WorldBakedColors colors, IReadOnlyList<WorldPrototype> creations, WorldPlacement placement, WorldStaticPalettes registered, IReadOnlyList<WorldPlacementResponse> responses) {
         for (var index = -1; (index < responses.Count); index++) {
@@ -854,6 +879,7 @@ public static class WorldPlacementStamper {
             }
         }
     }
+
     /// <summary>Emits every STATIC placement (animated rows skip — the animator owns them). Palettes register once per
     /// distinct untinted creation; a tinted stamp (selection amber / change shimmer) registers its own lerped palette
     /// (act-scale rare, never steady-state).</summary>

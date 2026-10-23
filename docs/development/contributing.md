@@ -812,6 +812,10 @@ unverified when no device run exists.
   Git metadata for its fallback worktree. Report these as setup blocks, with
   no GPU or red-law verdict, and run them in an environment with those writes
   available; changing `LOCALAPPDATA` does not override Windows known folders.
+- If a sandboxed C# build reports CS0016 access denied for an output inside its
+  writable worktree, retry with `-p:UseSharedCompilation=false`. This runs the
+  compiler inside that build's sandbox instead of using a shared compiler server;
+  deleting the output alone does not resolve a server running with different access.
 - Git Bash's `kill` and `pkill` do not reach native Windows processes, even
   when they report success. Stop a process with PowerShell
   `Stop-Process -Id <pid>` and confirm it is gone. Never search from `/` in Git

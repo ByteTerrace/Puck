@@ -53,8 +53,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_serverRevision;
     // The static-scene query field, rebuilt by WorldFramePresenter whenever the composed program changes and parked
     // here so every presentation consumer reads ONE evaluator: the chase camera's clearance sweep and the stamp
-    // pool's limb probes ask the same geometry the same way. Null before the first composed program, and for a world
-    // whose program carries render-only warps no fixed-point query can interpret.
+    // pool's limb probes ask the same geometry the same way. Unsupported placements are excluded individually;
+    // null means no program has been composed yet, or the remaining combined field could not be built.
     private SdfFieldEvaluator? m_staticField;
     private WorldTargetRegisterTable m_targets;
     private ulong m_tick;

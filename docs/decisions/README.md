@@ -13,7 +13,7 @@ contracts belong in the subsystem guides; proposed changes belong in
   modules, records, pools, and tests as worlds, the costing model, and the
   acceptance games.
 - [Input channels](input-channels.md): typed packed input, shared action names,
-  authoritative modes and slot allocation, release on switching, timed input
+  authoritative modes and slot allocation, authored switch continuity, timed input
   history, and the live-document migration.
 - [Runtime and delivery](runtime-and-delivery.md): products and their
   manifests, the ROM ledger, compiled worlds, release pairs, the runtime's

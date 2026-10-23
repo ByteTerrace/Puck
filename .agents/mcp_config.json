@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "puck": {
+      "command": "pwsh",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/puck-mcp.ps1"],
+      "timeoutSeconds": -1
+    }
+  }
+}

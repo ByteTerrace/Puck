@@ -146,6 +146,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tonemap. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
+/// <param name="Toon">Optional cel shading and its tuning. Absent is off.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -169,7 +170,8 @@ public sealed record WorldRenderDefaults(
     WorldSkyTier SkyQuality = WorldSkyTier.High,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
     float SkyFieldScale = 1f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderToon? Toon = null
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
     /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view

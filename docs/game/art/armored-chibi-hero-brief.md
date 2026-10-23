@@ -183,7 +183,7 @@ Apply the palette, face, three identifying features, and restrained specular/emi
 
 Use existing material controls first. If the image still needs help, identify the precise defect with an A/B capture: washed-out plate boundaries, unstable highlights, or loss of shape in shade. Add only the reusable control that fixes that defect.
 
-Potential additions include a soft toon ramp, bounded rim contribution, or material-selectable highlight shaping. They are alternatives to evaluate, not a mandatory shopping list. Avoid hard lighting thresholds that crawl during rotation. A rim must not draw through occluders or brighten every dark edge. Full HDR, bloom, global outlines, and a new PBR stack are separate work unless evidence makes a small part essential.
+The optional `world.toon` mode supplies a soft cel ramp, bounded highlight patches and depth/normal outlines; `render.toon` tunes it independently of the default look ([cel shading](../../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)). Judge the suited and out-of-suit Moth in motion as well as in stills: lighting thresholds must not crawl during rotation, and outlines must not trail. A rim must not draw through occluders or brighten every dark edge. Bloom and a different material stack remain separate work.
 
 **Exit:** armor, undersuit, face, and equipment lights remain visibly different under neutral, warm, cool, and shadowed conditions. Bright light does not clip away the character's color hierarchy. Any shared shader change has a no-change/default control on existing content.
 
