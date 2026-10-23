@@ -130,6 +130,13 @@ review and trust each current definition and re-review changed definitions.
 Hooks cover supported activated tool paths, not every possible execution path.
 See [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
 
+Every tool resolves its hooks from the worktree it runs in, so a branch older than
+the current `.claude/hooks/` has none, and Codex runs a command whose hook fails.
+Before handing an old branch to any lane, the lead merges the integration tip into
+it, leaving any conflicts for the lane to resolve. A worktree another agent
+created can deny a Codex lane its `.git/worktrees/<name>` writes; give the lane a
+worktree the lead creates.
+
 Before launching Codex in a main checkout or fresh worktree, build/copy its CLI
 as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
 describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
