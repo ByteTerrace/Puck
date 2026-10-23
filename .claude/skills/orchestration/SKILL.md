@@ -133,8 +133,9 @@ See [machine setup](../../../docs/development/contributing.md#setting-up-a-machi
 Before launching Codex in a main checkout or fresh worktree, build/copy its CLI
 as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
 describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
-`codex exec --cd <worktree> -m <model> -c model_reasoning_effort='"<effort>"' "$(cat <brief>)"`.
-Keep the output in a lane-named log. A resumed Codex session retains its launch
+`codex exec --cd <worktree> -m <model> -c model_reasoning_effort='"<effort>"' "$(cat <brief>)" < /dev/null`.
+Without the `< /dev/null`, a background launch can stop at "Reading additional input from stdin..." and never
+start. Keep the output in a lane-named log. A resumed Codex session retains its launch
 sandbox; after changing permissions, start a fresh continuation instead of
 `--resume-last`. Companion restrictions are specific to `task`, not native exec.
 
