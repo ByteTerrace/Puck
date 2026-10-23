@@ -1,4 +1,8 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "autoMemoryEnabled": false,
   "enabledMcpjsonServers": [
     "puck"
@@ -7,7 +11,8 @@
     "codex@openai-codex": true
   },
   "env": {
-    "MCP_TIMEOUT": "600000"
+    "MCP_TIMEOUT": "600000",
+    "MSBUILDDISABLENODEREUSE": "1"
   },
   "extraKnownMarketplaces": {
     "openai-codex": {
@@ -30,39 +35,20 @@
               "-ExecutionPolicy",
               "Bypass",
               "-File",
-              "${CLAUDE_PROJECT_DIR}/.claude/hooks/world-devices.ps1"
-            ],
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.claude/hooks/no-node-reuse.ps1"
-            ],
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.claude/hooks/no-coauthor.ps1"
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/agent-policy.ps1",
+              "-Tool",
+              "claude"
             ],
             "timeout": 30
           }
         ]
       },
       {
+        "matcher": "Bash",
         "hooks": [
           {
+            "type": "command",
+            "command": "pwsh",
             "args": [
               "-NoProfile",
               "-ExecutionPolicy",
@@ -70,16 +56,16 @@
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/bash-transport.ps1"
             ],
-            "command": "pwsh",
-            "timeout": 30,
-            "type": "command"
+            "timeout": 30
           }
-        ],
-        "matcher": "Bash"
+        ]
       },
       {
+        "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
+            "type": "command",
+            "command": "pwsh",
             "args": [
               "-NoProfile",
               "-ExecutionPolicy",
@@ -87,18 +73,18 @@
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"
             ],
-            "command": "pwsh",
-            "timeout": 30,
-            "type": "command"
+            "timeout": 30
           }
-        ],
-        "matcher": "Edit|Write|NotebookEdit"
+        ]
       }
     ],
     "SessionStart": [
       {
+        "matcher": "compact",
         "hooks": [
           {
+            "type": "command",
+            "command": "pwsh",
             "args": [
               "-NoProfile",
               "-ExecutionPolicy",
@@ -106,12 +92,9 @@
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"
             ],
-            "command": "pwsh",
-            "timeout": 30,
-            "type": "command"
+            "timeout": 30
           }
-        ],
-        "matcher": "compact"
+        ]
       }
     ]
   },
@@ -120,10 +103,8 @@
     "allow": [
       "Read(/.codex/**)",
       "Edit(/.codex/**)",
-      "Write(/.codex/**)",
       "Read(/.agents/**)",
       "Edit(/.agents/**)",
-      "Write(/.agents/**)",
       "Bash(codex exec *)"
     ],
     "ask": [
@@ -135,11 +116,30 @@
       "Bash(git push * -f*)",
       "Bash(git push *--delete*)",
       "Bash(git push *--mirror*)",
-      "PowerShell(git push *main*)",
       "PowerShell(git push *--force*)",
       "PowerShell(git push * -f*)",
       "PowerShell(git push *--delete*)",
-      "PowerShell(git push *--mirror*)"
+      "PowerShell(git push *--mirror*)",
+      "Bash(codex *--dangerously-bypass-approvals-and-sandbox*)",
+      "Bash(codex *danger-full-access*)",
+      "Bash(codex *--full-auto*)",
+      "Bash(codex *approval_policy*)",
+      "Bash(codex *sandbox_mode*)",
+      "Bash(codex *default_permissions*)",
+      "Bash(codex *permissions.*)",
+      "Bash(codex *approvals_reviewer*)",
+      "Bash(codex * -p *)",
+      "Bash(codex *--profile*)",
+      "PowerShell(codex *--dangerously-bypass-approvals-and-sandbox*)",
+      "PowerShell(codex *danger-full-access*)",
+      "PowerShell(codex *--full-auto*)",
+      "PowerShell(codex *approval_policy*)",
+      "PowerShell(codex *sandbox_mode*)",
+      "PowerShell(codex *default_permissions*)",
+      "PowerShell(codex *permissions.*)",
+      "PowerShell(codex *approvals_reviewer*)",
+      "PowerShell(codex * -p *)",
+      "PowerShell(codex *--profile*)"
     ]
   },
   "worktree": {
