@@ -14,8 +14,8 @@ public readonly record struct FrameRateSummary(float AverageFps, float WorstFps,
 }
 /// <summary>
 /// The world's frame-rate witness: a ring of the most recent frame deltas, sampled by
-/// <c>WorldFramePresenter.CaptureFrame</c> and read by the <c>world.fps</c> verb (the project's 120 FPS desktop
-/// contract, observed over the pipe).
+/// <c>WorldFramePresenter.CaptureFrame</c> and read by the <c>world.fps</c> verb, whose slowest frame reads the
+/// frame-rate bar over the pipe.
 /// </summary>
 /// <remarks>
 /// Sampling and reading both run on the launcher pump thread, so no synchronization guards the queue. The window ends

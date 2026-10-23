@@ -246,8 +246,8 @@ the lowest-powered desktop the programme targets, a shipped world at the shipped
 `world.quality high` preset (high shadows from two shadowed lights, ambient
 occlusion, temporal reconstruction, high indirect lighting, native render
 scale) holds a steady
-60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds the same
-quality at a steady 120 FPS, every frame under 8.3 ms. The Steam Deck's minimum
+60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds a
+rock-steady 60 FPS at the highest quality settings (the owner's ruling). The Steam Deck's minimum
 is a rock-steady 45 FPS, every frame under 22.2 ms (the owner's ruling). That
 holds at whatever settings the engine chooses for the Deck from its measured
 capabilities ([each machine runs to its own
