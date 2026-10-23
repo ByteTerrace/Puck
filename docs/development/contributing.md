@@ -1110,3 +1110,13 @@ The rules for coding agents live in one file, the root
 [`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.
+
+## InternalsVisibleTo is forbidden
+
+No assembly grants another its internals, test assemblies included. If another
+project or a test needs a member, make the member public. A grant hands a whole
+assembly's internals to a friend, invisibly at every call site; widen the member
+instead. If a member looks wrong to make public, that is evidence about the
+design: say so. The build refuses both forms, the `[assembly:
+InternalsVisibleTo]` attribute and the csproj `<InternalsVisibleTo>` item, with
+IVT001 (`Puck.Analyzers`).

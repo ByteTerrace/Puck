@@ -20,3 +20,28 @@ The [reference game](game/README.md) has its own design and artwork; it is not
 required reading for using the engine libraries.
 
 📚 [Repository overview](../README.md) · 🛠️ [Writing documentation](development/documentation.md) · 🎨 [Branding](../branding/README.md)
+
+## Orientation
+
+| Doc | Answers |
+|---|---|
+| [docs/project-map.md](../docs/project-map.md) | What each `Puck.*` project is for and how they layer. Its layering block is generated (`puck architecture --map`) and checked (`--check`); never hand-edit it. |
+| [docs/development/contributing.md](../docs/development/contributing.md) | How to find code and verify a change, hardware and toolchain cautions, conventions. Read it before touching GPU or emulator code. |
+| [docs/overview.md](../docs/overview.md), [docs/architecture/README.md](../docs/architecture/README.md) | What the engine does and how its runtime boundaries fit together. |
+| [docs/architecture/worlds.md](../docs/architecture/worlds.md), [src/Puck.World.Server/README.md](../src/Puck.World.Server/README.md) | How worlds are represented and run: documents, authoritative simulation, the server. |
+| [docs/plans/README.md](../docs/plans/README.md) | Proposed engineering work, including [runtime and delivery](../docs/plans/runtime-and-delivery.md) and [machines and cartridges](../docs/plans/machines-and-cartridges.md). |
+| [docs/game/README.md](../docs/game/README.md), [src/Puck.World/README.md](../src/Puck.World/README.md) | The reference game's design and play programme, and the World's current commands. Read them only for game work. The debug world is the one live world; the game's other worlds are quarantined under `experimental/` (see [the reference tree](../experimental/README.md)). |
+| [docs/decisions/engine-design.md](../docs/decisions/engine-design.md) | Settled engine design decisions, including [configuration and sessions](../docs/decisions/engine-design.md#configuration-and-operations-remain-discoverable). |
+| [docs/reference/input.md](../docs/reference/input.md) | Controller input (`src/Puck.Input`): architecture, feature matrix, hardware status. |
+| [docs/development/documentation.md](../docs/development/documentation.md) | Prose, titles, filenames, README ownership, navigation, the XML documentation register, and how to evaluate an agent skill. |
+
+Docs state current behavior, limitations and open work in the present tense.
+They name no dates, no commit SHAs and no versions of outside tools, unless the
+version itself adds something (a pin the build enforces, a minimum a feature
+needs); verification evidence goes in the commit message. Update incoming links and routing, agent routing included, in the
+change that moves a document.
+
+
+## Area skills
+
+Load the skill owning the work under `.claude/skills/`: `puck-world`, `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`, `gaming-bricks`, `rom-forge`, `dotnet-performance`, `symbol-analysis`, `content-search`, `boy-scout`, `verification`, `review-passes`, or `orchestration`. Each maps its code, contracts and execution, and routes adjacent work.

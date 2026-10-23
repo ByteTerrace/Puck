@@ -35,6 +35,9 @@ overrides this skill and is written into it in that session.
 
 ## Before launching
 
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+
+
 - Run the pass in a worktree of the author's own working branch, at the lane's
   head: the author's worktree when it is clean, or one detached at that head,
   since git checks a branch out in one worktree only. Create and push no branch

@@ -20,6 +20,47 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/world-devices.ps1"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/no-node-reuse.ps1"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/no-coauthor.ps1"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "args": [
