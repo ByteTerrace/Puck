@@ -368,7 +368,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
     }
     [Fact]
     public void ADivisorIsHonouredAndConsumersReadTheLatestCompletedOutput() {
-        foreach (var refresh in ((RenderGraphRefresh[])[RenderGraphRefresh.Every(divisor: 3), RenderGraphRefresh.At(hertz: 20)])) {
+        foreach (var refresh in ((RenderGraphRefresh[])[RenderGraphRefresh.Every(divisor: 3), RenderGraphRefresh.AtMost(hertz: 20)])) {
             var set = Set(
                 Instance(
                     name: "security",

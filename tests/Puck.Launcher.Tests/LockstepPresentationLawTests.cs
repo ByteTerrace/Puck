@@ -20,5 +20,9 @@ public sealed class LockstepPresentationLawTests {
         Assert.Equal(expected: 0UL, actual: PresentPacingControl.FrameDeltaOf(simulates: true, steppedTicks: 0UL, tickLocked: true, wallTicks: 840UL));
         Assert.Equal(expected: 840UL, actual: PresentPacingControl.FrameDeltaOf(simulates: false, steppedTicks: 0UL, tickLocked: true, wallTicks: 840UL));
         Assert.Equal(expected: 840UL, actual: PresentPacingControl.FrameDeltaOf(simulates: true, steppedTicks: 1680UL, tickLocked: false, wallTicks: 840UL));
+        // A lockstep frame lands on whole ticks, so a rated update's period rounds to the tick rate whatever the display.
+        Assert.Equal(expected: 60d, actual: PresentPacingControl.GridOf(displayGridHertz: 144d, simulates: true, stepTicks: 840UL, tickLocked: true));
+        Assert.Equal(expected: 144d, actual: PresentPacingControl.GridOf(displayGridHertz: 144d, simulates: true, stepTicks: 840UL, tickLocked: false));
+        Assert.Equal(expected: 0d, actual: PresentPacingControl.GridOf(displayGridHertz: 0d, simulates: false, stepTicks: 840UL, tickLocked: true));
     }
 }

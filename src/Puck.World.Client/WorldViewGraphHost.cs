@@ -620,10 +620,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
     /// <param name="sharpens">Whether a temporally resolved view sharpens at its rect's own extent.</param>
-    /// <param name="displayHertz">The display's presented frames a second, or zero when unknown, which the
-    /// <c>world.rates</c> levers count a rated footprint's refresh in.</param>
-    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false, int displayHertz = 0) {
-        m_displayHertz = displayHertz;
+    /// <param name="rate">The frame's presentation rate; the <c>world.rates</c> levers rate footprints only on a host paced
+    /// to a display.</param>
+    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false, PresentationRate rate = default) {
+        m_presentationRate = rate;
+        MeasureRatedRenders();
         Reconcile(
             sharpens: sharpens,
             tonemap: tonemap,
@@ -1568,7 +1569,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     m_portalExtents[footprint.Producer] = held;
                     m_footprints.Add(item: (footprint with {
                         Height = held.Height,
-                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height),
+                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer),
                         Width = held.Width,
                     }));
 

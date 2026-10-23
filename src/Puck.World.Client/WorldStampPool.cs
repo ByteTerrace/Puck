@@ -207,6 +207,8 @@ public sealed partial class WorldStampPool {
         // frame owes that pack whatever wakes the registration.
         public float RateSeconds;
         public bool RateOwed;
+        // The slowest tier the body was rated at since its last full pack, the tier its next interval is recorded under.
+        public int RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;

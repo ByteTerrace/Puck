@@ -217,6 +217,9 @@ public sealed record SdfFrame(
     /// <summary>The counters the frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), or
     /// <see langword="null"/> to count nothing.</summary>
     public WorkCounterSet? RateCounts { get; init; }
+    /// <summary>The window the frame's rated work records its intervals between updates into
+    /// (<see cref="SdfUpdateRateIntervals"/>), or <see langword="null"/> to record nothing.</summary>
+    public SdfUpdateRateIntervals? RateIntervals { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
     /// passes and re-composites from the retained views output — pixel-identical to a

@@ -21,6 +21,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     private readonly List<RenderGraphRoot> m_roots = [];
 
     private long m_frame;
+    // The presentation clock a floor refresh is held by: every produced frame's presented interval, summed.
+    private ulong m_presentedTicks;
     private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphRuntimeNode"/> class.</summary>
@@ -110,6 +112,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
             }
         }
 
+        m_presentedTicks += context.FrameDeltaTicks;
+
         var surface = Runtime.ProduceFrame(
             context: in context,
             frame: new RenderGraphFrame(
@@ -123,7 +127,11 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 Tick: ((context.StepTicks == 0UL)
                     ? 0L
                     : ((long)(context.ElapsedTicks / context.StepTicks)))
-            )
+            ) {
+                FrameTicks = context.FrameDeltaTicks,
+                GridHertz = context.GridHertz,
+                PresentedTicks = m_presentedTicks,
+            }
         );
 
         if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
