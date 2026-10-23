@@ -68,6 +68,16 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool SamplesReads => true;
 
     /// <inheritdoc/>
+    public string? WaitingOf(string instance) {
+        lock (m_gate) {
+            return ((m_entries.TryGetValue(key: instance, value: out var entry) &&
+                (entry.Residency is { Frame.TickLocked: true } residency) && residency.MeshPathBake.Pending)
+                ? $"residency '{residency.Name}' is completing its meshes"
+                : null);
+        }
+    }
+
+    /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
     /// its tables' build or its views kernel, refused by name, which only a change to what they are built from
     /// retries.</remarks>

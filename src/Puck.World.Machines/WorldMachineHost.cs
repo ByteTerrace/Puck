@@ -23,6 +23,11 @@ namespace Puck.World.Server;
 /// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
 public sealed partial class WorldMachineHost : IWorldMachineHost {
+    /// <summary>Gets the host's optional completion policy, read at each step. When true, each machine finishes the
+    /// tick through its synchronous advance path before presentation can read its video; otherwise queued machines
+    /// submit asynchronously. This changes completion timing, never the tick budget or input.</summary>
+    public Func<bool>? SynchronousSteps { get; init; }
+
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 
     /// <summary>Gets this host's immutable registration catalog.</summary>

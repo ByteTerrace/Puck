@@ -224,7 +224,7 @@ public sealed class WorldScreenBinderLawTests {
         var absentMonitor = WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CaptureId, settings: new WorldCaptureSettings(MonitorIndex: 3, Profile: WorldFeedProfile.Default));
         WorldFrameSource[] captures = [window, absentWindow, monitor, absentMonitor];
 
-        // A platform with no capture opens nothing, and no camera either.
+        // Live open commands still refuse, but declared sources retain a feed so the capture gate can fill them.
         using (var unsupported = new BinderScene(options: new BinderOptions(CamerasSupported: false, CapturesSupported: false))) {
             Assert.Equal(
                 actual: unsupported.Binder.TryCamera(index: BinderScene.None, seat: 1, sensor: WorldCameraSensor.Color),
@@ -235,6 +235,11 @@ public sealed class WorldScreenBinderLawTests {
 
             foreach (var capture in captures) {
                 unsupported.Binder.DeclareFrameSource(seat: 1, source: capture);
+                var producer = unsupported.Binder.Producers.Producers.Single(predicate: static item => (item.Id == WorldImageProducerSettings.CaptureId));
+
+                Assert.True(condition: producer.TryOpen(source: Assert.IsType<WorldScreenSource.Producer>(@object: capture), feed: out var feed, fault: out _));
+                using var opened = Assert.IsAssignableFrom<IWorldImportFeed>(@object: feed);
+                Assert.True(condition: new WorldCaptureGate(alwaysFills: false, captureArmed: static () => false).FillsFeed(feed: opened));
             }
         }
 

@@ -50,6 +50,14 @@ change.
 
 ## Contracts that bite
 
+- **Lockstep presentation completes machine steps.** The World selects
+  `IMachineRuntime.Advance` through `WorldMachineHost.SynchronousSteps` while
+  `world.lockstep` is on. Ordinary presentation keeps asynchronous `Submit`.
+  A source upload's publication number identifies the upload, not the native
+  frame its worker finished: compare `WriteFrame`'s version and bytes when
+  diagnosing screen or screen-light repeatability. Adding a GPU fence wait can
+  hide a late worker frame without fixing its completion boundary.
+
 Each is detailed in [references/hardware-and-oracles.md](references/hardware-and-oracles.md).
 
 - **STOP and EI are oracle conflicts, not bugs.** `ExecuteStop` (`Sm83.Decode.cs`)

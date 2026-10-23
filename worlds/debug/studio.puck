@@ -334,13 +334,13 @@ template studioPrototypes() {
       // The floor sits above the debug ground; the platform's top is at 0.3 m.
       shape Box "floor" {
         id: 0
-        position [0, -0.09, 0]
-        scale [24, 0.1, 24]
+        position [0, -0.09, 4]
+        scale [24, 0.1, 28]
         material: 0
       }
       shape Box "back" {
         id: 1
-        position [0, 6, 24]
+        position [0, 6, 32]
         scale [24.2, 6, 0.2]
         material: 0
       }
@@ -352,14 +352,14 @@ template studioPrototypes() {
       }
       shape Box "left" {
         id: 3
-        position [24, 6, 0]
-        scale [0.2, 6, 24]
+        position [24, 6, 4]
+        scale [0.2, 6, 28]
         material: 0
       }
       shape Box "right" {
         id: 4
-        position [-24, 6, 0]
-        scale [0.2, 6, 24]
+        position [-24, 6, 4]
+        scale [0.2, 6, 28]
         material: 0
       }
       shape Cylinder "platform" {

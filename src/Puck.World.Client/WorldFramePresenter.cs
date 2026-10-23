@@ -1513,6 +1513,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
     // Whether presentation runs in lockstep with the ticks.
     private bool TickLocked => (HistoryFree?.Invoke() ?? false);
+    bool ISdfFrameDresser.TickLocked => TickLocked;
     /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
     /// draws the previous frame's visible set, while the frame is held for a settled capture.</summary>
     /// <param name="cull">The session's cull level.</param>

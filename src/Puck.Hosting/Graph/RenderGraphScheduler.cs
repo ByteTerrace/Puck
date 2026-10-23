@@ -752,7 +752,9 @@ public static class RenderGraphScheduler {
                     consumerDemanded[entry.Producer] = true;                    work.ShownDivisor[entry.Producer] = ((work.ShownDivisor[entry.Producer] == 0)
                         ? entry.Divisor
                         : Math.Min(val1: work.ShownDivisor[entry.Producer], val2: entry.Divisor));
-                    if (entry.Kind == ShaderPipelineResourceKind.Buffer) {
+                    // A source supplies its own extent. A buffer consumer has no pixel footprint to multiply,
+                    // but still demands the source image it reads, including its unfinished first conversion.
+                    if ((entry.Kind == ShaderPipelineResourceKind.Buffer) || set.Instances[entry.Producer].IsSource) {
                         demanded[entry.Producer] = true;
 
                         continue;

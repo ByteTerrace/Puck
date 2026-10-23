@@ -447,7 +447,7 @@ public sealed partial class WorldMachineHost {
                     port.SetState(state: in input);
                 }
             }
-            if (runtime is IQueuedMachineRuntime queued) {
+            if ((runtime is IQueuedMachineRuntime queued) && !(SynchronousSteps?.Invoke() ?? false)) {
                 var submitted = queued.Submit(deltaTicks: stepTicks);
 
                 if (
@@ -460,7 +460,7 @@ public sealed partial class WorldMachineHost {
                     AnyEverPumped = true;
                 }
             } else if (runtime.Advance(deltaTicks: stepTicks)) {
-                lease.CompletedSteps++;
+                if (runtime is not IQueuedMachineRuntime) { lease.CompletedSteps++; }
                 AnyEverPumped = true;
             }
         }

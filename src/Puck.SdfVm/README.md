@@ -362,7 +362,9 @@ portal crossing's two program rebuilds leave the crossing frame. The build also
 measures the words its program differs in from the one held (`SdfProgramDelta`),
 which the adopting frame carries so its upload copies only them, and the
 adopting frame repacks the transform table but owes only the rows the repack
-changed. A converging capture waits for the build instead. Its table persists across
+changed. A converging capture or tick-locked dresser waits for the build instead,
+so replacement geometry reaches exposure and lighting on the same tick in each
+run. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.
@@ -487,7 +489,11 @@ cannot show them.
 A settled capture freezes its dependency closure even when it requests no
 additional convergence samples. While it converges, each frozen residency hands its frame
 source the held frame (`ISdfFrameSource.PresentHeldFrame`), so the World still
-places its views and keeps them scheduled. The runtime waits for the required source's
+places its views and keeps them scheduled. It freezes the authored frame, then
+dresses it with any meshes that finish while it waits. Under lockstep, the
+package reports its meshes as pending until they reach that dressed frame;
+recording and readbacks continue, but the host holds the tick and exposure
+adapts only when the complete geometry supplies its meter. The runtime waits for the required source's
 completed view fence before forwarding the capture or counting samples.
 Retained source and temporal-history taint remain independent of newer clean
 graph inputs.

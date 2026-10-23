@@ -6,9 +6,8 @@ public sealed partial class WorldScreenBinder {
     // Standalone capture producer sources declared through DeclareFrameSource, keyed by the source record itself
     // (a producer source is equal to another naming the same id and settings — a camera, a view and a probe already
     // have a stable identity elsewhere: EnsureCameraFeed keys by sensor, RegisterCameraView by camera name,
-    // GetOrAddProbeFeed by probe id; a capture carries no such name, so the record is its own key). Populated only on success — a source the platform cannot ever open (no window-capture support at
-    // all) records no entry and is retried the next time DeclareFrameSource sees it (cheap: HUD structure rebuilds run
-    // at most once per definition revision plus once per edited identity).
+    // GetOrAddProbeFeed by probe id; a capture carries no such name, so the record is its own key). A valid declaration
+    // retains a feed even when platform capture is unavailable, so its capture fill remains renderable.
     private readonly Dictionary<WorldFrameSource, CaptureFeed> m_frameCaptures = new();
     // HUD frame sources are generation-owned. Exact (source, enclosing-seat) references preserve the seat fallback
     // identity, while resource-specific release below folds aliases that resolve the same capture, camera, or view.

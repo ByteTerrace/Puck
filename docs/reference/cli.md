@@ -2139,15 +2139,15 @@ error or a file that is not a readable report.
 
 `puck motion` is the one command for judging how the Moth moves. It boots the
 debug world's real `Puck.World` (windowed, always with `--devices none`, with a
-state directory of its own that the run removes), waits for the bakes, turns
-`world.lockstep` on, selects the scenario file's layout (the debug world's
+state directory of its own that the run removes), turns `world.lockstep` on
+before waiting for the bakes, selects the scenario file's layout (the debug world's
 `motion` layout in `studio.puck`: four cameras riding body 0, `profile`,
 `front`, `feet` and a world-axes `turn` camera), and runs each scenario from a
 reset body on exact ticks with `world.at` and settled `world.screenshot … slots`
 stills. Every scenario runs in the avatar studio, a neutral grey room with
 judging aids ([the studio](#the-studio)). It is GPU work: take the GPU lease and
 run nothing else on the GPU beside it. One World runs every selected scenario;
-the default set runs in about three minutes.
+allow for a cold mesh bake as well as captures and contact-sheet generation.
 
 ```text
 puck motion                                 # every scenario of worlds/debug/motion.scenarios.json
@@ -2155,6 +2155,7 @@ puck motion --scenario walk-stop            # one (repeat or list several)
 puck motion --list                          # names, forms, still counts and notes; boots nothing
 puck motion --reproduce                     # everything twice in fresh Worlds, compared per still
 puck motion --output <dir>                  # keep the output somewhere named
+puck motion --reproduce --cache-dir <dir>   # share a writable device cache across the fresh Worlds
 ```
 
 Without `--output` the run writes to a kept run directory under the temporary
@@ -2162,6 +2163,13 @@ root, which a run six hours later removes, and prints it; pass `--output` for a 
 and one start tick, the first multiple of 300 past the tick the World was ready
 at, never from how long the World took to boot, so two Worlds pin every step
 and still to the same ticks.
+
+`--cache-dir` forwards the World's device-cache root, shared by both runs;
+their state directories remain separate. In a sandbox, name a writable lane
+directory so a refused write to the per-user cache does not make every boot
+cold. `--timeout` is the minute budget for the **whole** run, both Worlds under
+`--reproduce`, excluding a build; its default is 25. Choose it within the GPU
+lease's budget and leave time for the comparison.
 
 Per scenario the output directory holds `<name>/raw/t<offset>-<camera>.png`, one
 PNG per camera per still, named by the still's tick offset; `<name>/sheet.png`,
@@ -2182,17 +2190,19 @@ transcripts are `stdout.log` and `stderr.log`.
 
 ### The studio
 
-The scenarios run in `worlds/debug/studio.puck`'s avatar studio, a 48 m square
-room centred at 48, -48 with a 12 m wall, an open sky, a floor top at 0.01 and
-a 3 m radius, 0.3 m tall platform in the middle, so nothing of the debug world is
-in frame. Its aids are authored in `studio.puck` (`studioAidPrototypes`):
+The scenarios run in `worlds/debug/studio.puck`'s avatar studio, a 48 by 56 m
+room spanning x 24 to 72 and z -80 to -24, with a 12 m wall, an open sky, a
+floor top at 0.01 and a 3 m radius, 0.3 m tall platform at 48, -48, so nothing
+of the debug world is in frame. The far end provides run-out and camera
+clearance at the kits' 5 m/s walk and 10 m/s run. Its aids are authored in
+`studio.puck` (`studioAidPrototypes`):
 
 | Aid | Where (world) | What it shows in a still |
 |---|---|---|
 | Metric floor grid | the lane at x 29.5 to 34.5, z -51 to -27 (poses start at 32, -26.5, walking toward -Z) | 1 m lines (dark), 0.25 m lines (light) and a wide orange line every 5 m, so stride length, stopping distance and a foot's slide read against the floor |
 | Height poles | x 35, z -48, -43, -38, -33, -28 | a red tick every 0.5 m and a yellow one every metre up to 3 m, behind the body in the `profile` camera: a jump's apex, the flight climb and the hip's bob |
 | Contact course | x 60, z -33 to -69 | a 0.15 m and a 0.30 m step, a 15 degree and a 30 degree ramp (up and down), and a stair of six 0.17 m risers with 0.3 m treads, a landing and the stair down: planted-foot judgement on edges, slopes and risers |
-| Platform | the room's centre | the 0.3 m step-up and step-down onto a round edge |
+| Platform | x 48, z -48 | the 0.3 m step-up and step-down onto a round edge |
 
 The course scenarios set `"layout": "motion-course"`, which swaps the `front`
 camera (5.2 m ahead of her, so inside the ramps she walks toward) for `rear`,
@@ -2290,8 +2300,8 @@ ticks (`run-a` and `run-b`, each with its own sheets and manifest), prints one
 line per still and writes `reproduce.json`:
 
 ```text
-scenario   t+  tick  pose  hash  px differ  max   mean
-walk-start  0   495  same  same          0    0  0.000
+scenario   t+  tick  pose  hash  px differ  max   mean  verdict
+walk-start  0   495  same  same          0    0  0.000  PASS
 ```
 
 `pose` compares the tick-free pose hash, which proves the motion itself
@@ -2299,13 +2309,29 @@ repeated; `hash` compares the capture-scope hash, which folds the tick and
 clocks and so agrees across fresh Worlds pinned to the same absolute ticks.
 `px differ`, `max` and `mean` are the pixels that differ between the two runs'
 camera files, summed over the cameras, the largest channel difference and the
-mean channel difference. A pose hash that differs fails the run (exit 1);
-pixel differences are reported and never fail it, since silhouette edges in
-mid-motion stills are not yet byte-identical
-([tick-exact capture](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture)).
+mean channel difference. Both hashes must match. The pixel bound is **at most
+20 changed pixels summed over all camera files of one still, with at most one
+level of difference in any RGBA channel**. This admits only the parked
+per-render residue; there is no percentage tolerance or mean-error allowance.
+A missing image, a size mismatch, a hash mismatch or pixels beyond either bound
+fails the run (exit 1). The table prints `PASS` or `FAIL` per still;
+`reproduce.json` records both bounds and each still's `pixelsWithinBound` and
+`reproduced` verdicts alongside the measurements. A passing pose hash alone
+does not establish that the contact sheets repeat.
+
+The full Direct3D 12 comparison passes all 34 scenarios and 538 stills: both
+hashes agree throughout, 484 stills are pixel-identical, and the remaining 54
+differ on at most nine pixels by one level. Lockstep completes program and mesh
+changes, irradiance and hosted machine steps before their frames are read;
+machine source publication numbers alone cannot establish equal video pixels.
+The small remaining residue stays an [open item](../plans/open-items.md#standalone).
+Investigate any failed still by scenario, tick and camera before judging its animation; the
+[tick-exact procedure](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture)
+describes the measurement sequence. Do not increase the bound to admit those
+differences.
 
 Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a
-blocked camera, a body in the wrong form or a pose hash that differs, 2 a refusal
+blocked camera, a body in the wrong form or a failed reproduction, 2 a refusal
 (a scenario file that does not parse, a build, or a World that did not complete).
 
 ---

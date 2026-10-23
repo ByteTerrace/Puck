@@ -269,6 +269,11 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     string? RefusalOf(string instance) => null;
+    /// <summary>Returns why the instance's rendered image is still incomplete, or null when it shows this frame's
+    /// content. Recording continues while waiting, so GPU work and readbacks needed to complete it can progress.</summary>
+    /// <param name="instance">The instance whose recording just submitted.</param>
+    /// <returns>The pending work, or null.</returns>
+    string? WaitingOf(string instance) => null;
     /// <summary>Names the retained package state the instance consumes that contains unfilled external pixels, or
     /// returns <see langword="null"/> when none does. This joins the current graph inputs' taint; replacing those inputs
     /// cannot relabel an older retained result. The name reaches a waiting capture's reason, so it says which state holds

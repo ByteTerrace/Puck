@@ -57,6 +57,9 @@ public static class MotionRun {
         if (request.Backend is { } backend) {
             arguments.AddRange(collection: ["--backend", backend]);
         }
+        if (request.CacheDirectory is { } cacheDirectory) {
+            arguments.AddRange(collection: ["--cache-dir", cacheDirectory]);
+        }
 
         using var process = MotionWorldProcess.Start(
             arguments: arguments,
@@ -67,12 +70,12 @@ public static class MotionRun {
 
         progress.WriteLine(value: $"motion: World pid {process.ProcessId.ToString(provider: CultureInfo.InvariantCulture)} booting {request.World}");
 
-        // The bake wait, lockstep and a read of the tick go in one breath: each line runs after the one before it, so the
-        // tick read is the tick lockstep took over at.
+        // Lock before the first bake frame: otherwise its wall-clock animation and exposure survive into the pinned
+        // run. Each line runs after the one before it, so the tick read follows the locked bake wait.
         var mark = process.LineCount;
 
-        _ = process.Send(line: $"world.wait bakes {((int)BakeDeadline.TotalSeconds).ToString(provider: CultureInfo.InvariantCulture)}");
         _ = process.Send(line: "world.lockstep on");
+        _ = process.Send(line: $"world.wait bakes {((int)BakeDeadline.TotalSeconds).ToString(provider: CultureInfo.InvariantCulture)}");
         _ = process.Send(line: "world.at");
 
         var readBack = process.WaitFor(accept: static line => ((line.Stream == CliProcessOutputStream.Stdout) && MotionTranscript.TryParseReadBack(line: line.Text, tick: out _)), from: mark, timeout: (BakeDeadline + TimeSpan.FromSeconds(value: 60)));

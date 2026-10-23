@@ -387,6 +387,32 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 ## Seeing a change
 
+- A lockstep frame waits for its composition's program build and its mesh bake.
+  A completed mesh is still pending until `Dress` includes it: a load can finish
+  between dressing and preparation, and testing only the worker would certify
+  the partial mesh list. `IRenderGraphPackageFactory.WaitingOf` keeps a rendered
+  package incomplete while its bake passes and readbacks continue. The host
+  holds that tick; exposure adapts once the complete frame supplies its meter.
+  A capture freezes the authored frame, then dresses newly completed meshes.
+- Lockstep irradiance waits for both the current static scene's build and its
+  probe trace (`SdfMeshIrradiance.Stage`). Waiting only for the trace can render
+  no volume on the first frame, or the preceding scene on a replacement frame.
+  The CPU irradiance law compares the first staging of each against a completed
+  trace; looping staging calls until a write appears would hide that defect.
+- An image source owns its extent even when a buffer graph consumes it. Propagate
+  its demand without multiplying by the buffer consumer's zero pixel footprint
+  (`RenderGraphScheduler`), or a cold conversion can finish building and never
+  install. A package whose last frame is incomplete cannot stand unchanged
+  (`RenderGraphRuntime.WithUnchanged`): its pending sources still need renders.
+  A retained "building" reason alone does not prove a worker is still building;
+  inspect the live schedule and completed build as well.
+- Screen-light reproduction must compare source bytes, not just graph publication
+  numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
+  video read takes its latest completed native frame. Equal publications can
+  therefore feed different images to `ScreenEmission`. Lockstep uses the existing
+  synchronous machine advance before rendering. A fence wait, readback or GPU
+  validation can mask this worker race by changing pacing; diagnose the CPU
+  video bytes and native frame version before changing GPU barriers.
 - Build: `dotnet build src/Puck.SdfVm -c Release -nodeReuse:false` runs DXC
   (needs `dxc` on `PATH`). A Windows build of one project builds DXIL only, and
   a World run of it refuses `--backend vulkan`; run Vulkan from a solution

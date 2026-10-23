@@ -207,6 +207,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads { get; } = samples;
 
         public bool Takes { get; set; }
+        public bool Unchanged { get; set; }
+        public string? Waiting { get; set; }
+        public string? WaitingOf(string instance) => Waiting;
+        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => Unchanged;
 
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);

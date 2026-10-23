@@ -107,6 +107,7 @@ public static partial class TestCommand {
                 arguments: [
                     artifact,
                     "--world", world,
+                    .. WorldDevices.NoneArguments,
                     "--headless", "true",
                     "--unpaced", "true",
                     "--exit-after-seconds", ((int)Math.Ceiling(a: LegCeiling(

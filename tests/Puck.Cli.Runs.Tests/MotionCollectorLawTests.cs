@@ -148,6 +148,10 @@ public sealed class MotionCollectorLawTests : IDisposable {
         using var report = JsonDocument.Parse(json: File.ReadAllText(path: reproduce));
 
         Assert.Equal(expected: 16L, actual: report.RootElement.GetProperty(propertyName: "stills")[0].GetProperty(propertyName: "differingPixels").GetInt64());
+        Assert.Equal(expected: 20, actual: report.RootElement.GetProperty(propertyName: "maximumDifferingPixelsPerStill").GetInt32());
+        Assert.Equal(expected: 1, actual: report.RootElement.GetProperty(propertyName: "maximumChannelDifference").GetInt32());
+        Assert.False(condition: report.RootElement.GetProperty(propertyName: "stills")[0].GetProperty(propertyName: "pixelsWithinBound").GetBoolean());
+        Assert.False(condition: report.RootElement.GetProperty(propertyName: "stills")[0].GetProperty(propertyName: "reproduced").GetBoolean());
 
         // A still the second run lacks compares as unequal in everything.
         var lacking = MotionReport.Compare(first: first, second: MotionCollector.Collect(bootTick: 0UL, cellWidth: 16, columns: 4, directory: otherRoot, lines: [], notes: [], plan: otherPlan, seconds: 0d));

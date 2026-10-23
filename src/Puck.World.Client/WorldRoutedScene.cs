@@ -81,6 +81,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public WorldAuthorityEndpoint Endpoint { get; }
     /// <summary>Gets the frame source a residency renders the scene through.</summary>
     public SdfCompositionFrameSource FrameSource { get; }
+    /// <inheritdoc/>
+    public bool TickLocked => (m_hostFrame()?.TickLocked ?? false);
     /// <summary>Gets how many seat views the presenter latched into the scene this frame.</summary>
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>

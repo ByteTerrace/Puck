@@ -45,4 +45,7 @@ public sealed record MotionRunResult(string Error, ulong? TooLateStart, ulong Bo
 /// <param name="Columns">The most frames in a band of a contact sheet.</param>
 /// <param name="CellWidth">The width of each frame of a contact sheet, in pixels.</param>
 /// <param name="Deadline">The clock the whole run must finish before.</param>
-public sealed record MotionRunRequest(string Artifact, string WorkingDirectory, string World, string Directory, string StateDirectory, MotionScenarioSet Set, IReadOnlyList<MotionScenario> Selected, ulong? StartTick, string? Backend, int Columns, int CellWidth, TimeSpan Deadline);
+public sealed record MotionRunRequest(string Artifact, string WorkingDirectory, string World, string Directory, string StateDirectory, MotionScenarioSet Set, IReadOnlyList<MotionScenario> Selected, ulong? StartTick, string? Backend, int Columns, int CellWidth, TimeSpan Deadline) {
+    /// <summary>Gets the optional device-cache root, shared across fresh Worlds while their state stays separate.</summary>
+    public string? CacheDirectory { get; init; }
+}

@@ -16,15 +16,24 @@ public sealed record MotionCameraDifference(string Camera, MotionPixelDifference
 /// <param name="HashEqual">Whether both runs stamped the same capture hash.</param>
 /// <param name="Cameras">The pixel comparison of each camera's file.</param>
 public sealed record MotionReproduceRow(string Scenario, int Offset, ulong Tick, bool PoseEqual, bool HashEqual, IReadOnlyList<MotionCameraDifference> Cameras) {
+    /// <summary>Gets whether every camera was compared and the still stays within the parked per-render residue.</summary>
+    public bool PixelsWithinBound => ((Cameras.Count != 0) && (Count is <= MotionReport.MaximumResiduePixels) && (Max is <= MotionReport.MaximumResidueLevel));
+    /// <summary>Gets whether both state hashes match and the pixels stay within the residue bound.</summary>
+    public bool Reproduced => (PoseEqual && HashEqual && PixelsWithinBound);
     /// <summary>Gets the pixels that differ, summed over every camera, or <see langword="null"/> when a camera could not be compared.</summary>
-    public long? Count => (Cameras.Any(predicate: static camera => (camera.Difference is null)) ? null : Cameras.Sum(selector: static camera => camera.Difference!.Count));
+    public long? Count => (((Cameras.Count == 0) || Cameras.Any(predicate: static camera => (camera.Difference is null))) ? null : Cameras.Sum(selector: static camera => camera.Difference!.Count));
     /// <summary>Gets the largest channel difference over every camera, or <see langword="null"/> when a camera could not be compared.</summary>
-    public int? Max => (Cameras.Any(predicate: static camera => (camera.Difference is null)) ? null : Cameras.Max(selector: static camera => camera.Difference!.Max));
+    public int? Max => (((Cameras.Count == 0) || Cameras.Any(predicate: static camera => (camera.Difference is null))) ? null : Cameras.Max(selector: static camera => camera.Difference!.Max));
     /// <summary>Gets the mean channel difference averaged over the cameras, or <see langword="null"/> when a camera could not be compared.</summary>
-    public double? Mean => (Cameras.Any(predicate: static camera => (camera.Difference is null)) ? null : Cameras.Average(selector: static camera => camera.Difference!.Mean));
+    public double? Mean => (((Cameras.Count == 0) || Cameras.Any(predicate: static camera => (camera.Difference is null))) ? null : Cameras.Average(selector: static camera => camera.Difference!.Mean));
 }
 /// <summary>Compares two runs of one plan, still by still, and writes the manifests.</summary>
 public static class MotionReport {
+    /// <summary>The most changed pixels admitted per still, summed over all camera files, for the parked per-render residue.</summary>
+    public const int MaximumResiduePixels = 20;
+    /// <summary>The largest absolute channel difference admitted for the parked per-render residue.</summary>
+    public const int MaximumResidueLevel = 1;
+
     private static readonly JsonSerializerOptions Options = new() {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
@@ -79,20 +88,20 @@ public static class MotionReport {
         var text = new StringBuilder();
         var width = Math.Max(val1: 8, val2: ((rows.Count == 0) ? 8 : rows.Max(selector: static row => row.Scenario.Length)));
 
-        _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{"scenario".PadRight(totalWidth: width)} {"t+",5} {"tick",7}  {"pose",-5} {"hash",-5} {"px differ",10} {"max",4} {"mean",7}"));
+        _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{"scenario".PadRight(totalWidth: width)} {"t+",5} {"tick",7}  {"pose",-5} {"hash",-5} {"px differ",10} {"max",4} {"mean",7}  verdict"));
 
         foreach (var row in rows) {
             var count = ((row.Count is { } differing) ? differing.ToString(provider: CultureInfo.InvariantCulture) : "n/a");
             var max = ((row.Max is { } largest) ? largest.ToString(provider: CultureInfo.InvariantCulture) : "n/a");
             var mean = ((row.Mean is { } average) ? average.ToString(format: "0.000", provider: CultureInfo.InvariantCulture) : "n/a");
 
-            _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{row.Scenario.PadRight(totalWidth: width)} {row.Offset,5} {row.Tick,7}  {(row.PoseEqual ? "same" : "DIFF"),-5} {(row.HashEqual ? "same" : "diff"),-5} {count,10} {max,4} {mean,7}"));
+            _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{row.Scenario.PadRight(totalWidth: width)} {row.Offset,5} {row.Tick,7}  {(row.PoseEqual ? "same" : "DIFF"),-5} {(row.HashEqual ? "same" : "DIFF"),-5} {count,10} {max,4} {mean,7}  {(row.Reproduced ? "PASS" : "FAIL")}"));
         }
 
         var poseMismatches = rows.Count(predicate: static row => !row.PoseEqual);
         var identical = rows.Count(predicate: static row => (row.Count == 0));
 
-        _ = text.Append(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rows.Count} still(s): {(rows.Count - poseMismatches)} with equal pose hashes, {poseMismatches} without; {identical} pixel-identical, {(rows.Count - identical)} not (pixel differences are reported, not judged)."));
+        _ = text.Append(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rows.Count} still(s): {(rows.Count - poseMismatches)} with equal pose hashes, {poseMismatches} without; {identical} pixel-identical, {(rows.Count - identical)} not; {rows.Count(predicate: static row => row.Reproduced)} reproduced, {rows.Count(predicate: static row => !row.Reproduced)} failed. Pixel bound: at most {MaximumResiduePixels} changed pixels across all cameras per still, at most {MaximumResidueLevel} channel level."));
 
         return text.ToString();
     }
@@ -153,12 +162,16 @@ public static class MotionReport {
             schema = "puck.motion.reproduce.v1",
             first,
             second,
+            maximumDifferingPixelsPerStill = MaximumResiduePixels,
+            maximumChannelDifference = MaximumResidueLevel,
             stills = rows.Select(selector: static row => new {
                 scenario = row.Scenario,
                 offset = row.Offset,
                 tick = row.Tick,
                 poseEqual = row.PoseEqual,
                 hashEqual = row.HashEqual,
+                pixelsWithinBound = row.PixelsWithinBound,
+                reproduced = row.Reproduced,
                 differingPixels = row.Count,
                 maxDifference = row.Max,
                 meanDifference = row.Mean,

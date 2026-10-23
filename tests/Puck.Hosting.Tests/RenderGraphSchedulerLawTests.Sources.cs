@@ -43,6 +43,24 @@ public sealed partial class RenderGraphSchedulerLawTests {
     );
 
     [Fact]
+    public void ABufferConsumerDemandsASourcesOwnExtent() {
+        var set = Set(
+            RenderGraphInstance.Source(name: "camera", producer: "camera"),
+            Bricks(reads: [new RenderGraphRead(Producer: "camera")]),
+            Instance(name: "main", reads: [BufferRead(producer: "bricks")])
+        );
+        var schedules = Run(count: 2, set: set, frame: index => SourceFrame(
+            index: index,
+            footprints: [Shows(consumer: "bricks", producer: "camera")],
+            sources: [Declared(instance: "camera", cadence: ImageSourceCadence.Static)]
+        ));
+
+        Assert.Equal(expected: 1, actual: RenderCount(name: "camera", schedules: schedules, set: set));
+        var camera = Row(name: "camera", schedule: schedules[0], set: set);
+        Assert.Equal(expected: (CameraWidth, CameraHeight), actual: (camera.Width, camera.Height));
+        Assert.Equal(expected: set.IndexOf(name: "camera"), actual: schedules[0].Renders[0]);
+    }
+    [Fact]
     public void TwoScreensOnOneCameraPublishItOnceAFrameCounted() {
         var set = Set(
             RenderGraphInstance.Source(

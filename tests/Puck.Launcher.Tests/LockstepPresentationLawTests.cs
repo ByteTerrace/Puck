@@ -14,8 +14,6 @@ public sealed class LockstepPresentationLawTests {
         pacing.SetTickLocked(locked: true);
         Assert.True(condition: pacing.TickLocked);
 
-        Assert.Equal(expected: 1680UL, actual: PresentPacingControl.FrameClampOf(maxFrameTicks: 12600UL, stepTicks: 1680UL, tickLocked: true));
-        Assert.Equal(expected: 12600UL, actual: PresentPacingControl.FrameClampOf(maxFrameTicks: 12600UL, stepTicks: 1680UL, tickLocked: false));
         Assert.Equal(expected: 0UL, actual: PresentPacingControl.AccumulatorOf(accumulatorTicks: 900UL, tickLocked: true));
         Assert.Equal(expected: 900UL, actual: PresentPacingControl.AccumulatorOf(accumulatorTicks: 900UL, tickLocked: false));
         Assert.Equal(expected: 1680UL, actual: PresentPacingControl.FrameDeltaOf(simulates: true, steppedTicks: 1680UL, tickLocked: true, wallTicks: 840UL));

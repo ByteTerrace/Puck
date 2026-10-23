@@ -178,12 +178,27 @@ public sealed class SdfMeshIrradiance {
 
         if ((tier == SdfIndirectTier.Off) || (frame.Views.Count == 0)) { return default; }
 
+        // A lockstep frame must trace its own scene, not whichever asynchronous build happened to land first.
+        // Wait outside the gate: the builder takes it to publish. A build already in flight may belong to an older
+        // frame, so resolve again after it lands until this frame's static draws are the installed scene.
+        if (frame.TickLocked && !bakePending) {
+            while (true) {
+                Task? build;
+
+                lock (m_gate) {
+                    build = RefreshScene(frame: frame);
+                }
+                if (build is null) { break; }
+                build.GetAwaiter().GetResult();
+            }
+        }
+
         var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces);
         bool drain;
 
         lock (m_gate) {
             m_wrote = false;
-            if (!bakePending) { RefreshScene(frame: frame); }
+            if (!bakePending) { _ = RefreshScene(frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             m_camera = frame.Views[0].Camera.Position;
 
@@ -339,7 +354,8 @@ public sealed class SdfMeshIrradiance {
 
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
     // to it builds; the old scene traces until the new one lands.
-    private void RefreshScene(SdfFrame frame) {
+    // Returns the build to wait for before this frame can use its scene, or null when it is already installed.
+    private Task? RefreshScene(SdfFrame frame) {
         var key = 17;
         var draws = 0;
 
@@ -348,8 +364,11 @@ public sealed class SdfMeshIrradiance {
             key = HashCode.Combine(value1: key, value2: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: draw.Mesh), value3: draw.ObjectToWorld, value4: draw.Material);
             draws++;
         }
-        if ((key == m_sceneKey) || (key == m_buildingKey) || (draws == 0)) { return; }
-        if (m_build is { IsCompleted: false }) { return; }
+        // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
+        // the scene while this frame traces it. The lockstep caller resolves this frame again after it lands.
+        if (m_build is { IsCompleted: false }) { return m_build; }
+        if ((key == m_sceneKey) || (draws == 0)) { return null; }
+        if (key == m_buildingKey) { return m_build; }
 
         var snapshot = frame.MeshDraws.ToArray();
         var previous = m_scene;
@@ -377,6 +396,7 @@ public sealed class SdfMeshIrradiance {
             }
             Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
         });
+        return m_build;
     }
     // Captures the lighting the probes trace under, and restarts the trace when it changes: the directional lights and
     // the static point and spot lights, whole, so a fixture switched off retraces the bounce it cast.

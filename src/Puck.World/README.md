@@ -1625,7 +1625,10 @@ armed, an external source resolves to its capture fill, so a capture of the
 display shows the fill in its pane, never the window. An external source whose
 feed has no image of its own shows its fill too, armed or not: a window
 minimized since its capture opened (it delivers no compositor frame), a camera
-still opening, a probe before its first frame, or a window that is gone. The
+still opening, a probe before its first frame, or a window that is gone. A
+declared desktop capture retains its feed even when the platform offers no
+capture service, so it also shows its fill; a live command to open an
+unavailable target still refuses. The
 source then answers as its fill does, so it never holds the frame, readiness
 (`world.wait ready`) or a capture of the display, and `screen.state` names the
 feed's fault followed by `it shows its capture fill`. A window minimized after
@@ -2639,7 +2642,9 @@ match: `world.lockstep on` has the windowed host step at most once a frame,
 present the completed tick and advance presentation animation by the ticks
 completed since the last captured frame, as the offscreen host does
 (`PresentPacingControl.TickLocked`, `WorldFramePresenter.HistoryFree`), so gait
-and followers advance with the ticks rather than wall time; a frame held for a
+and followers advance with the ticks rather than wall time. Hosted machines
+finish each tick synchronously before their video is read, keeping screen
+images and the light they emit independent of worker completion timing; a frame held for a
 settled capture also culls by box and rates no work; and `view.reseed <body>`
 (`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
 followers as for a new occupant, which a `body.pose` teleport deliberately does

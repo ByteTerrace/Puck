@@ -236,10 +236,11 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
-    /// (<see cref="Probe"/>) still samples.</summary>
+    /// (<see cref="Probe"/>) still samples, or a landed mesh has not reached the dressed frame yet.</summary>
     public bool Pending {
         get {
             lock (m_gate) {
+                if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
                 if (m_slice is not null) { return true; }
                 foreach (var group in m_groups) {
                     if (!group.Done) { return true; }

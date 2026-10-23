@@ -120,7 +120,8 @@ public sealed partial class RenderGraphRuntime {
         return selected;
     }
     // The frame the scheduler reads: the frame as given, with the instances whose packages saw nothing change since their
-    // latest render declared unchanged beside any the host declares.
+    // latest completed render declared unchanged beside any the host declares. A frame waiting on a source still
+    // demands that source even when its package's local content did not change.
     private RenderGraphFrame WithUnchanged(in RenderGraphFrame frame, in FrameContext context) {
         m_unchanged.Clear();
 
@@ -132,6 +133,7 @@ public sealed partial class RenderGraphRuntime {
             if (
                 (index != captured) &&
                 !IsConverging(index: index) &&
+                (m_stale[index] is null) &&
                 (m_sources[index] is null) &&
                 InputsUnchanged(index: index) &&
                 (m_graphs[index] is { } graph) &&

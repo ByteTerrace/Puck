@@ -9,6 +9,9 @@ namespace Puck.SdfVm;
 /// do with what geometry exists and everything to do with how this frame presents it. Composition owns the emitter
 /// list (content); a host implements this to own presentation, without needing to know how the program was built.</summary>
 public interface ISdfFrameDresser {
+    /// <summary>Gets whether this frame belongs to a tick-locked presentation, whose content builds finish before the
+    /// frame reads them. Ordinary presentation may keep its previous program while a replacement builds.</summary>
+    bool TickLocked => false;
     /// <summary>Builds this frame's <see cref="SdfFrame"/> from the composed program/transforms.</summary>
     /// <param name="program">This frame's program (freshly rebuilt this call, or the same instance as last call when
     /// the composed content revision hasn't changed — compare by reference against a previous frame's
@@ -139,7 +142,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
     /// content moved emits the program, and every frame until the build finishes renders the program held before it, with
     /// its transforms, mesh draws and dress live; the first frame after the build finishes adopts it. A converging capture
-    /// (<see cref="BeginConvergence"/>) waits for the build instead. <see langword="false"/>, the default, builds every
+    /// (<see cref="BeginConvergence"/>) or tick-locked dresser waits for the build instead. <see langword="false"/>, the default, builds every
     /// program in the frame that finds the content moved.</summary>
     public bool BuildsInBackground { get; init; }
     /// <summary>Gets whether a background build is in flight (<see cref="BuildsInBackground"/>).</summary>
@@ -152,6 +155,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public SdfProgram? Program => m_program;
 
     private bool Converging => (m_convergence is { Completion.IsCompleted: false });
+    private bool WaitsForBuild => (Converging || m_dresser.TickLocked);
 
     /// <inheritdoc/>
     /// <remarks>Until the request completes, a frame adopts a background build in flight, waiting for it, and builds a
@@ -282,12 +286,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     }
     // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
     private static SdfProgram Build(SdfProgramBuilder builder) => builder.Build();
-    // Adopts the program a background build finished, or waits for it while a capture converges, so a converging frame
+    // Adopts the program a background build finished, or waits for it in a converging or tick-locked frame, so that frame
     // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
     // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
     // throws here and leaves the built record describing the program still held, so the next frame emits again.
     private bool AdoptBuild(ref bool moved) {
-        if ((m_building is not { } building) || (!building.IsCompleted && !Converging)) {
+        if ((m_building is not { } building) || (!building.IsCompleted && !WaitsForBuild)) {
             return false;
         }
 
@@ -560,7 +564,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 length: m_buildingRevisions.Length
             );
 
-            if ((m_program is null) || !BuildsInBackground || Converging) {
+            if ((m_program is null) || !BuildsInBackground || WaitsForBuild) {
                 m_program = Build(builder: builder);
                 m_programDelta = null;
                 Array.Copy(

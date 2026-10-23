@@ -97,9 +97,8 @@ public sealed class SdfMeshIrradianceLawTests {
         return sum;
     }
 
-    /// <summary>A lockstep frame waits for the window's trace: the first one staged once the scene is built writes the
-    /// whole traced window at once, the same probes the asynchronous trace lands over many frames, and leaves nothing
-    /// owed.</summary>
+    /// <summary>A lockstep frame waits for its scene and window's trace, including a cold scene and a replacement:
+    /// each writes the same probes the asynchronous trace lands over many frames, in one staging.</summary>
     [Fact]
     public void ALockstepFrameRendersTheWindowTracedToTheEnd() {
         var (_, landed) = Trace(frame: Frame(), volume: new SdfMeshIrradiance());
@@ -107,21 +106,27 @@ public sealed class SdfMeshIrradianceLawTests {
         var frame = (Frame() with { TickLocked = true });
         var writes = 0;
         var words = Array.Empty<uint>();
-        var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
-
-        do {
-            _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
-                writes++;
-                words = memory.ToArray();
-            });
-            Thread.Sleep(millisecondsTimeout: 20);
-        } while ((writes == 0) && (DateTime.UtcNow < deadline));
+        _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
+            writes++;
+            words = memory.ToArray();
+        });
 
         Assert.Equal(expected: 1, actual: writes);
         Assert.Equal(expected: landed, actual: words);
 
         _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => writes++);
         Assert.Equal(expected: 1, actual: writes);
+
+        var changed = frame with { MeshDraws = [frame.MeshDraws[0], frame.MeshDraws[2]] };
+        var (_, replacement) = Trace(frame: changed with { TickLocked = false }, volume: new SdfMeshIrradiance());
+
+        _ = locked.Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => {
+            writes++;
+            words = memory.ToArray();
+        });
+        Assert.Equal(expected: 2, actual: writes);
+        Assert.Equal(expected: replacement, actual: words);
+        Assert.NotEqual(expected: landed, actual: words);
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>

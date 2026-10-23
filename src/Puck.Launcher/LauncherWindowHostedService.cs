@@ -385,6 +385,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     return FixedTickConversion.PerRate(ratePerSecond: pumpRatePerSecond);
                 }
 
+                var holdingTick = false;
                 while (
                     window.IsOpen &&
                     !stoppingToken.IsCancellationRequested
@@ -588,16 +589,25 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var deltaTicks = clock.Sample();
                     // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
                     var stepTicks = ResolveStepTicks(simulation: m_simulation);
-                    // Lockstep presentation (PresentPacingControl.TickLocked): a frame steps at most once, by clamping
-                    // the interval to one step, and presents exactly the time it stepped.
+                    // Lockstep uses the same one-step clock as offscreen presentation. A wall-time accumulator also
+                    // produces extra zero-step frames, making presentation reseeds depend on display timing.
                     var tickLocked = m_presentPacing.TickLocked;
 
                     if (pump is { } activePump) {
-                        fixedSteps += ((ulong)activePump.Advance(
-                            deltaTicks: deltaTicks,
-                            maxFrameTicks: PresentPacingControl.FrameClampOf(maxFrameTicks: maxFrameTicks, stepTicks: stepTicks, tickLocked: tickLocked),
-                            stepTicks: stepTicks
-                        ));
+                        if (tickLocked) {
+                            if (holdingTick) {
+                                activePump.Hold(intervalTicks: deltaTicks);
+                            } else if (activePump.TryStep(intervalTicks: deltaTicks, stepTicks: stepTicks)) {
+                                fixedSteps++;
+                            }
+                        } else {
+                            holdingTick = false;
+                            fixedSteps += ((ulong)activePump.Advance(
+                                deltaTicks: deltaTicks,
+                                maxFrameTicks: maxFrameTicks,
+                                stepTicks: stepTicks
+                            ));
+                        }
                     }
 
                     // Simulation-routed console handlers run while snapshots are applied above. Flush their real
@@ -664,8 +674,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 TargetHeight: height,
                                 TargetWidth: width
                             );
-                            // A windowed display presents whatever the root has, rendered for this frame or not.
-                            var surface = m_root.ProduceFrame(context: in frameContext).Surface;
+                            // A locked tick owes a rendered frame before the next tick may advance.
+                            var produced = m_root.ProduceFrame(context: in frameContext);
+                            var surface = produced.Surface;
+                            holdingTick = (tickLocked && OffscreenTickHostedService.HoldsTick(hasSimulation: (pump is not null), completion: produced.Render.Completion));
 
                             m_timeline.Mark(phase: HostFramePhase.Produce);
 
@@ -686,6 +698,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         m_gpuCapture?.EndFrame();
                         deviceLoss.NoteFrameProduced();
                     } catch (DeviceLostException deviceLost) {
+                        holdingTick = (tickLocked && (pump is not null));
                         if (!deviceLoss.TryRecover(
                             deviceLost: deviceLost,
                             rebuild: ((m_presenter is IDeviceLostRecoverable recoverable)

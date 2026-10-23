@@ -412,7 +412,7 @@ public static class WorldBootComposition {
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             narrationHub: sp.GetRequiredService<WorldOutputHub>(),
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
-        ));
+        ) { SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true) });
         // WorldServer's own constructor asks the container for IWorldMachineHost (its parameter type — Server
         // carries no reference to the concrete host); this shares the SAME peer singleton the line above registers,
         // never a second instance.
@@ -428,7 +428,7 @@ public static class WorldBootComposition {
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             narrationHub: narrationHub,
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
-        ));
+        ) { SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true) });
 
         // Where every presentation reports a bound value it clamps into its field's domain; WorldPostBuildWiring routes
         // the reports to the host's diagnostic fan-out.

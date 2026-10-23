@@ -40,8 +40,9 @@ public sealed class PresentPacingControl {
     public uint Version => Volatile.Read(location: ref m_version);
 
     /// <summary>Gets whether the window pump runs presentation in lockstep with the simulation: at most one fixed step
-    /// a presented frame, and each frame's presentation interval exactly the simulation time it advanced (a step, or
-    /// nothing) with no interpolation between ticks, as the offscreen host runs. The World's frame source also presents
+    /// a presented frame, independent of its wall interval, holding a tick until its frame renders. Each frame's
+    /// presentation interval is exactly the simulation time it advanced (a step, or nothing) with no interpolation
+    /// between ticks, as the offscreen host runs. The World's frame source also presents
     /// the completed tick, advances its animation by the ticks completed and marks its frames
     /// (<c>SdfFrame.TickLocked</c>) so the renderer traces indirect light and adapts exposure by them too, while it holds
     /// (<c>WorldFramePresenter.HistoryFree</c>), so a capture of a tick shows the same image whatever the display's rate
@@ -54,15 +55,6 @@ public sealed class PresentPacingControl {
     /// <param name="locked">Whether presentation runs in lockstep with the simulation.</param>
     public void SetTickLocked(bool locked) => Volatile.Write(location: ref m_tickLocked, value: locked);
 
-    /// <summary>Returns the longest host interval, in engine ticks, a frame's fixed-step advance takes: one step under
-    /// lockstep, so a frame steps at most once, and the host's runaway clamp otherwise.</summary>
-    /// <param name="tickLocked">Whether the frame presents in lockstep (<see cref="TickLocked"/>, read once a frame).</param>
-    /// <param name="maxFrameTicks">The host's runaway-frame clamp, in engine ticks.</param>
-    /// <param name="stepTicks">The fixed step, in engine ticks.</param>
-    /// <returns>The clamp the frame's advance takes.</returns>
-    public static ulong FrameClampOf(bool tickLocked, ulong maxFrameTicks, ulong stepTicks) => (tickLocked
-        ? stepTicks
-        : maxFrameTicks);
     /// <summary>Returns the interpolation numerator a frame presents with: none under lockstep, which presents the
     /// completed tick, and the pump's unconsumed remainder otherwise.</summary>
     /// <param name="tickLocked">Whether the frame presents in lockstep.</param>

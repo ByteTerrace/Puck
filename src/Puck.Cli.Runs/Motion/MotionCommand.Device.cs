@@ -7,7 +7,7 @@ public static partial class MotionCommand {
     private const string ManifestFileName = "manifest.json";
 
     // Everything that boots a World: the build, the run or the two runs of --reproduce, and the report of each.
-    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, string? backend, int columns, int cellWidth, int timeoutMinutes) {
+    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, string? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
         _ = Directory.CreateDirectory(path: directory);
 
         var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
@@ -45,7 +45,7 @@ public static partial class MotionCommand {
             StateDirectory: Path.Combine(path1: runDirectory, path2: "state"),
             WorkingDirectory: repositoryRoot,
             World: world
-        );
+        ) { CacheDirectory = cacheDirectory };
 
         var worldDisplay = CliPaths.ToDisplay(fullPath: world, relativeTo: repositoryRoot);
         var scenariosDisplay = CliPaths.ToDisplay(fullPath: scenarioFile, relativeTo: repositoryRoot);
@@ -102,8 +102,8 @@ public static partial class MotionCommand {
         Console.Out.WriteLine(value: MotionReport.FormatTable(rows: rows));
         Console.Out.WriteLine(value: $"{Verb}: reproduce {CliPaths.ToDisplay(fullPath: Path.Combine(path1: directory, path2: "reproduce.json"))}");
 
-        if (rows.Any(predicate: static row => !row.PoseEqual)) {
-            Console.Out.WriteLine(value: $"{Verb}: pose hashes differ between the two runs: a bug in the motion, not in the stills.");
+        if ((rows.Count == 0) || rows.Any(predicate: static row => !row.Reproduced)) {
+            Console.Out.WriteLine(value: $"{Verb}: reproduction failed: every still must have matching pose and capture hashes and comparable camera images within the pixel bound.");
 
             return CliExit.Failed;
         }

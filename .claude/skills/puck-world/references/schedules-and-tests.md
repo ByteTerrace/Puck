@@ -18,7 +18,18 @@ World of its own, runs the scenarios of `worlds/debug/motion.scenarios.json`
 (walk, run, stops, turns, jumps, flight, suited and out of the suit) on exact
 ticks and writes the stills, labelled contact sheets and a manifest of tick,
 capture hash and pose hash per still; `--reproduce` runs it twice and compares
-([the verb](../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+([the verb](../../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+The owner's ruling is that this must be a reliable toolset for motion judgement.
+`--reproduce` fails unless both hashes match and the pixel differences stay
+within the parked residue: at most 20 changed pixels across all camera files
+of each still, each channel differing by at most one level. Missing files and
+size mismatches fail too. Read the per-still verdict in the table and
+`reproduce.json`; equal simulation hashes alone do not make a sheet repeatable.
+In a sandbox, pass `--cache-dir <lane directory>` when the per-user device
+cache is not writable. Both fresh Worlds share that derived cache while their
+state stays separate. `--timeout` budgets the whole pair, including cold
+baking and sheet generation, not each World; keep it inside the GPU lease's
+limit. A timeout has no reproduction verdict.
 Reach for the steps below only for a capture the scenario file cannot express,
 or against a World you are already running.
 
@@ -30,14 +41,29 @@ call instead.
 1. Boot your own World (`--devices none --control --state-dir <lane dir>`), or
    use the live one when the brief allows mutations, and turn `world.lockstep
    on` as early as you can (a piped script's first line runs before tick 1).
-   Lockstep (windowed only; the offscreen host always steps this way) steps at
-   most once a frame, presents the completed tick rather than an interpolation
+   Lockstep (windowed only; the offscreen host always steps this way) steps
+   once per frame unless a capture or unfinished render holds the tick, independent
+   of the wall interval. It presents the completed tick rather than an interpolation
    (as a frame held for a capture always does), and advances presentation
    animation by the ticks completed since the last captured frame
    (`WorldFramePresenter.HistoryFree`), so a frame the render graph skips drops
-   no time. Its frames (`SdfFrame.TickLocked`) also make the residency finish
-   tracing the irradiance volume's window before rendering, rather than taking
-   whatever probes the asynchronous trace has landed (the window follows the
+   no time. Do not implement lockstep by clamping a wall-time accumulator: its
+   extra zero-step frames can seed `view.reseed` before the next tick in one run
+   and after it in another. The window uses `FixedStepPump.TryStep` and the same
+   unfinished-frame hold as the offscreen host. Enable it before the bake wait,
+   as `puck motion` does, so boot animation and exposure use that clock too.
+   Lockstep also advances each hosted machine synchronously through its existing
+   `IMachineRuntime.Advance` boundary. An asynchronous `Submit` followed by a
+   video read can upload the previous native frame at the same simulation tick;
+   source publication numbers alone do not identify the uploaded pixels.
+   Composition waits for the tick's program build. A mesh load or bake keeps the
+   rendered package incomplete until the dressed frame includes its result;
+   recording continues to progress that work while the tick holds. Exposure
+   adapts only after the complete geometry supplies its meter, so the first
+   frames after a form change cannot inherit asynchronous arrival timing.
+   Its frames (`SdfFrame.TickLocked`) also make the residency finish
+   building the irradiance scene and tracing its volume's window before rendering, rather than taking
+   whichever scene and probes the asynchronous work has landed (the window follows the
    first view's camera, so it moves as a camera riding a body does), and adapt
    exposure over the frame's own presentation time. An ordinary settled still
    under lockstep converges over one fresh jitter period
@@ -84,16 +110,40 @@ What repeats, and what to compare:
 
 | Compare | Tick lists | `hash` (capture scope) | `pose` hash (every body) | Slot PNGs |
 |---|---|---|---|---|
-| Same script in fresh lockstep Worlds, same absolute `start`, the first or a later script of the run | identical | identical | identical | byte-identical in most stills; the rest within 1 level on at most 20 of 1.15 M pixels (four fresh Worlds, sixteen stills each across two scripts, the turn and the stop included). The same 1-level flips appear between repeated stills of one paused tick in one World, so they come from a render, not from history |
+| Full default motion plan in two fresh lockstep Worlds, same absolute ticks, Direct3D 12 | identical | identical | identical | 34 scenarios / 538 stills pass: 484 pixel-identical; the other 54 differ by one level on at most nine pixels summed across the cameras. The enforced ceiling remains 20 pixels / one level; the remaining tiny source is not yet isolated |
 | Same script twice in one World (another `start`) | identical offsets | differs: it folds the tick and the world's clocks | identical | differs where state the world advances on its own is at another tick, as the differing capture hash says (likely rule deadlines such as the Moth's blink, animated screens and sky content; not isolated): up to ~170 levels on silhouettes, ~16 across animated regions |
 | Without `world.lockstep on` | as above | as above | as above | not comparable: gait phase, exposure adaptation and frame-history work follow wall-clock frames, so up to every pixel differs |
 
-So a repeat is proven by the tick list and the hashes per still, and two
-fresh-World stills of one tick compare equal byte for byte, or within 1 level
-on a few dozen pixels (the residue above, open in the plans); anything more is
-a determinism defect in presentation, so read its differences (changed-pixel
-count, largest difference, where they sit) and report it. To
-repeat in one World, the world's own state must also be at the same tick; it
+Run the full scenario set after any fix: a passing isolated script does not
+qualify the bench's form and layout transitions. The
+[open item](../../../../docs/plans/open-items.md#standalone) records the remaining
+per-render residue and any full-bench failure beyond its bound.
+The tick list and both hashes are necessary; repeatability additionally requires
+every still to pass the pixel bound. Anything beyond it is a presentation
+defect, even when all hashes agree. To isolate one:
+
+1. Keep the failed full run's `reproduce.json`, logs and raw camera files.
+   Find the first differing tick and camera, and inspect where its changed
+   pixels sit. Compare the raw images, not the scaled contact sheets.
+2. Run the failing scenario alone with `--scenario <name> --reproduce`.
+   If it only fails after earlier scenarios, retain that prefix and narrow
+   it; an isolated scenario changes both its history and absolute tick.
+3. Narrow the capture offsets around the first divergence in a lane-named
+   scenario file (`--scenarios <file>`). Keep the same start tick and preceding
+   commands when comparing a pair. Use pinned `world.debug-view` captures to
+   separate depth/geometry, normals, AO/shadows and lighting differences.
+4. Instrument the presentation state those passes read at the first differing
+   tick: packed transforms, camera and cut, frame time, bake replacements,
+   irradiance and exposure. For screen lighting, compare the machine video bytes
+   and native frame version before upload, then the GPU screen-emission table:
+   identical graph publication numbers can hide different worker frames. A
+   GPU fence wait or readback can mask that CPU race by giving the worker time
+   to finish; it does not establish a GPU ordering defect. Fix the source where it lives and rerun the
+   original full `--reproduce`. A suspect is not a cause until measurement
+   ties its differing state to the pixels. Record any irreducible cause and
+   its measured bound in the open item before changing the admitted bound.
+
+To repeat in one World, the world's own state must also be at the same tick; it
 rarely is, so compare repeats across fresh Worlds.
 
 ## Captures

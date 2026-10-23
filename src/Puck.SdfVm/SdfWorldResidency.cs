@@ -500,7 +500,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The bake takes its batch before the upload, which carries the batch's surface points.
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
-        Exposures.Stage(frame: m_frame!, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame!));
+        // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
+        if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
+            Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+        }
         tables.ViewExposures = Exposures;
 
         tables.UpdateTablesSignature();
@@ -736,36 +739,37 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         var converging = HoldsFrame;
+        SdfFrame frame;
 
         if (converging && (m_frozenFrame is { } frozen)) {
-            m_frame = frozen with { ProgramChanged = false };
-            m_pendingFrame = null;
+            frame = frozen with { ProgramChanged = false };
             m_frameSource.PresentHeldFrame();
-            return;
-        }
-        if (!converging) {
-            m_frozenFrame = null;
-        }
+        } else {
+            if (!converging) {
+                m_frozenFrame = null;
+            }
 
-        if (m_tables is { } tables) {
-            m_frameSource.AdvanceBricks(bakes: tables);
-        }
+            if (m_tables is { } tables) {
+                m_frameSource.AdvanceBricks(bakes: tables);
+            }
 
-        var frame = m_frameSource.CaptureFrame(
-            width: m_width,
-            height: m_height,
-            deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
-            interpolationAlpha: ((float)context.InterpolationAlpha)
-        );
+            frame = m_frameSource.CaptureFrame(
+                width: m_width,
+                height: m_height,
+                deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
+                interpolationAlpha: ((float)context.InterpolationAlpha)
+            );
+            if (converging) {
+                // Freeze the authored frame, while derived meshes can still finish under the capture's hold.
+                m_frozenFrame = frame;
+            }
+        }
 
         // Every view draws the program's baked meshes.
         frame = MeshPathBake.Dress(frame: frame);
 
         m_frame = frame;
         m_pendingFrame = null;
-        if (converging) {
-            m_frozenFrame = frame;
-        }
         m_programPending |= frame.ProgramChanged;
 
         var glass = 0;

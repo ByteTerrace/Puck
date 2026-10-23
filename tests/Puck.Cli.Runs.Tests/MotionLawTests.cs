@@ -290,4 +290,36 @@ public sealed class MotionLawTests {
         Assert.Contains(actualString: table, expectedSubstring: "2 still(s): 1 with equal pose hashes, 1 without; 1 pixel-identical, 1 not");
         Assert.Null(@object: new MotionReproduceRow(Scenario: "x", Offset: 0, Tick: 1UL, PoseEqual: true, HashEqual: true, Cameras: [new MotionCameraDifference(Camera: "a", Difference: null)]).Count);
     }
+
+    [Theory]
+    [InlineData(0, 0, 0, true, true, true)]
+    [InlineData(10, 10, 1, true, true, true)]
+    [InlineData(10, 11, 1, true, true, false)]
+    [InlineData(0, 1, 2, true, true, false)]
+    [InlineData(0, 0, 0, false, true, false)]
+    [InlineData(0, 0, 0, true, false, false)]
+    public void ReproductionRequiresBothHashesAndBoundsTheResidueAcrossAllCameras(int first, int second, int max, bool pose, bool hash, bool passes) {
+        var row = new MotionReproduceRow(Scenario: "walk", Offset: 0, Tick: 100UL, PoseEqual: pose, HashEqual: hash, Cameras: [
+            new MotionCameraDifference(Camera: "a", Difference: new MotionPixelDifference(Count: first, Max: max, Mean: 0d)),
+            new MotionCameraDifference(Camera: "b", Difference: new MotionPixelDifference(Count: second, Max: max, Mean: 0d)),
+        ]);
+
+        Assert.Equal(expected: passes, actual: row.Reproduced);
+        Assert.Contains(expectedSubstring: (passes ? "PASS" : "FAIL"), actualString: MotionReport.FormatTable(rows: [row]));
+    }
+
+    [Fact]
+    public void AnUncomparedCameraOrNoCamerasCannotReproduce() {
+        var absent = new MotionReproduceRow(Scenario: "walk", Offset: 0, Tick: 100UL, PoseEqual: true, HashEqual: true, Cameras: []);
+        var missing = absent with { Cameras = [new MotionCameraDifference(Camera: "a", Difference: null)] };
+
+        foreach (var row in new[] { absent, missing }) {
+            Assert.False(condition: row.PixelsWithinBound);
+            Assert.False(condition: row.Reproduced);
+            Assert.Null(@object: row.Count);
+            Assert.Null(@object: row.Max);
+            Assert.Null(@object: row.Mean);
+            Assert.Contains(expectedSubstring: "FAIL", actualString: MotionReport.FormatTable(rows: [row]));
+        }
+    }
 }
