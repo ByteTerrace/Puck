@@ -80,6 +80,37 @@ Passing a comparison does not establish correctness without an independently
 meaningful expected result. Audio mixes in fixed point for reproducible results; that mixing contract is
 separate from presentation devices and their availability.
 
+## Each machine runs to its own strengths
+
+Presentation uses what the machine it runs on is good at (the owner's ruling).
+A Steam Deck and a desktop with a discrete GPU each get the choices that suit
+them, not one compromise both put up with. The simulation does not adapt:
+the same document and input give the same state on every machine (above).
+
+The engine chooses from measured capabilities, never from a list of device
+names, so a machine it has never seen gets the right choices too. The facts it
+reads include:
+
+- the GPU's memory: unified with the host or discrete, and how much the host
+  can write directly (`GpuMemoryProfile`);
+- the display's pixel count, refresh rate and variable-refresh range (the
+  present pacing policy);
+- the CPU's core count and instruction set;
+- measured frame time, which dynamic resolution already follows.
+
+For example, a unified-memory APU such as the Steam Deck's writes GPU tables in
+place where a discrete GPU stages them, and spends its four CPU cores sparingly
+on presentation work. A discrete GPU on a high-refresh variable-refresh
+display spends its headroom on frame rate.
+
+Until initial development is done, no adaptation lowers quality. Every machine
+runs the highest quality settings, and the adaptations above are how it reaches
+its frame-rate bar there (the owner's ruling).
+
+Every adaptation stays visible and switchable, so its effect can be measured
+and compared on each machine. The rendering decisions say what each lever does
+([rendering](rendering.md)).
+
 ## Producers compose through explicit contracts
 
 A screen consumes an image supplied by a producer. The renderer need not know

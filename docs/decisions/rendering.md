@@ -76,6 +76,22 @@ distance at which the switch is barely perceptible (the owner's ruling). The
 switch distance is derived from the change's size on screen at the view's
 resolution, not fixed in metres.
 
+The owner's rulings for levels of detail:
+
+- A coarser level of a baked mesh is drawn where its recorded geometric error
+  projects to at most one display pixel. A view switches back to the finer
+  level only above 1.1 pixels, so a level does not flicker at the boundary. A
+  shadow cascade takes the coarsest level whose error is within one of its
+  texels.
+- The first level is lossless: coplanar lattice quads merged into the polygons
+  they tile, changing no pixel.
+- The irradiance trace reads that merged mesh, which never changes with the
+  camera.
+- A static union larger than one chunk (the hall) is split into chunks only once
+  the merge's savings are measured.
+- On-screen sizes for levels of detail and update rates are measured in display
+  pixels, after upscaling, never in render-grid pixels.
+
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
@@ -246,13 +262,23 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
-**The frame-rate bar is the slowest frame at high quality.** On the RTX 2060,
-the lowest-powered desktop the programme targets, a shipped world at the shipped
-`world.quality high` preset (high shadows from two shadowed lights, ambient
-occlusion, temporal reconstruction, high indirect lighting, native render
-scale) holds a steady
-60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds the same
-quality at a steady 120 FPS, every frame under 8.3 ms. An average hides the
+**The frame-rate bar is the slowest frame at the highest quality.** Until
+initial development is done, every machine runs the highest quality settings,
+and lower qualities wait (the owner's ruling). Today those settings are the
+`world.quality high` preset: high shadows from two shadowed lights, ambient
+occlusion, temporal reconstruction, high indirect lighting and native render
+scale. The bars, each the slowest frame and not the average:
+
+- the RTX 2060, the lowest-powered desktop the programme targets: a steady
+  60 FPS, every frame under 16.7 ms;
+- the RTX 4070: a rock-steady 60 FPS (the owner's ruling);
+- the Steam Deck: a rock-steady 45 FPS minimum, every frame under 22.2 ms (the
+  owner's ruling).
+
+Each machine still meets its bar with its own strengths
+([each machine runs to its own
+strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), never by
+dropping below the highest quality. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
 fast, and a lower tier is never the fix for a missed bar. Counted work still
