@@ -85,9 +85,11 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
 
         _ = Directory.CreateDirectory(path: worlds);
         _ = Directory.CreateDirectory(path: cartridges);
-        File.Copy(
-            destFileName: Path.Combine(path1: cartridges, path2: Path.GetFileName(path: ContentPath)),
-            sourceFileName: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/hgb-mirror.cgb.cartridge.json")
+        // The authored source is the truth and its compiled twin is never committed, so the image's cartridge is
+        // compiled from the source here.
+        File.WriteAllBytes(
+            bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/hgb-mirror.cgb.puck"))).Bytes,
+            path: Path.Combine(path1: cartridges, path2: Path.GetFileName(path: ContentPath))
         );
         File.WriteAllBytes(keyFile, key.ExportPkcs8PrivateKey());
 
