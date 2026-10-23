@@ -130,9 +130,10 @@ public static class ReleaseCanonicalizer {
             return;
         }
 
-        if (!IsPortablePath(value: file.Path, allowDirectories: true)) {
+        if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
+            file.Path.Equals(value: "state-generation", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             errors.Add(item: new(
-                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, and no device names or alternate streams.",
+                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' name, and no device names or alternate streams.",
                 Path: $"{path}.path"
             ));
         } else if (

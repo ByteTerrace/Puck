@@ -303,4 +303,14 @@ public sealed class ReleaseManifestTests {
     [InlineData(" stable")]
     public void Validate_RefusesNonPortableChannel(string channel) =>
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => error.Path == "channel");
+
+    [Fact]
+    public void Validate_RefusesReservedStateGenerationPayloadFile() {
+        var document = ValidDocument();
+        document = document with {
+            Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = "state-generation" }] }],
+        };
+
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => error.Path == "payloads[0].files[0].path");
+    }
 }
