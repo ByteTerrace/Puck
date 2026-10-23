@@ -126,7 +126,17 @@ lead commits its uncommitted changes
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Network
 stays off inside the sandbox with no denial to escalate, so restore a
 worktree before its lane starts. The profile also makes `.claude/leases/`
-writable (an absolute path per machine). A resumed
+writable (an absolute path per machine).
+
+An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
+its worktree, without `--mode`: headless `-p` judges the `--mode auto` flag
+before it signs in and refuses it ("rollout flag off"), while the user-level
+`agentMode: "auto"` applies once it has, on a personal Google account. Its
+rights come from the user-level `~/.gemini/antigravity-cli/settings.json`
+(allow, ask and deny; Antigravity reads no project permission file), its skills
+and `puck` MCP server from the committed `.agents/`. Commands run in its
+terminal sandbox: commits succeed there, the network does not, and a command
+on the ask list (a push to `main`) is refused headless, since it cannot prompt. A resumed
 Codex session keeps the sandbox it was launched with, so after a sandbox change
 relaunch the lane fresh with a continuation brief rather than `--resume-last`.
 Codex's approval review may refuse a chained `mkdir … && run; rm …` line, so a
