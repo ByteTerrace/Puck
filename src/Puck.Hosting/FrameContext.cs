@@ -24,6 +24,9 @@ namespace Puck.Hosting;
 /// <param name="TargetHeight">The pixel height the parent is asking this node to fill.</param>
 /// <param name="DisplayHertz">The presented frames a second the host paces the display at, or zero when it is unknown
 /// or unbounded, such as offscreen. Presentation only: a render graph counts a rate source's cadence in these frames.</param>
+/// <param name="GridHertz">The rate presented frames land on a whole number of steps of, which a rated update's period
+/// rounds to (<see cref="PresentationRate"/>): a fixed display signal's refresh rate, or the simulation's tick rate under
+/// lockstep; zero when frames land at any time, as on a variable-refresh display, or when the display is unknown.</param>
 public readonly record struct FrameContext(
     IHostContext Host,
     ulong ElapsedTicks,
@@ -33,7 +36,8 @@ public readonly record struct FrameContext(
     ulong StepTicks,
     uint TargetWidth,
     uint TargetHeight,
-    int DisplayHertz = 0
+    int DisplayHertz = 0,
+    double GridHertz = 0d
 ) {
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>

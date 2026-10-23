@@ -2,6 +2,7 @@ using System.Numerics;
 
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
@@ -19,6 +20,8 @@ namespace Puck.World.Client.Tests;
 public sealed class WorldStampPoolRateLawTests {
     private const float Frame = (1f / 60f);
     private const float Step = 0.05f;
+    // A 60 Hz display on a fixed signal.
+    private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
 
     private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(bool rootDynamics = false) {
         var creation = CreationFixtures.Prototype(id: "walker", document: new CreationDocument(
@@ -114,8 +117,9 @@ public sealed class WorldStampPoolRateLawTests {
     public void ABodySmallOnScreenPosesAtFifteenHertzWhileItsRootFollowsEveryFrame() {
         var (client, pool, transforms) = Stage();
         var counts = SdfUpdateRateCounts.Counters();
+        var intervals = new SdfUpdateRateIntervals();
 
-        pool.RateBy(counts: counts, height: 900U, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
 
         var phases = new List<float>();
         var offsets = new List<Vector3>();
@@ -132,6 +136,9 @@ public sealed class WorldStampPoolRateLawTests {
         Assert.Equal(expected: 6L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesHeld));
         Assert.Equal(expected: phases[0], actual: phases[3]);
         Assert.Equal(expected: (phases[0] + (4f * Frame)), actual: phases[4], tolerance: 1e-4f);
+        // Each full pack after the first closes an interval of four frames, recorded under the 15 Hz tier.
+        Assert.Equal(expected: (4d / 60d), actual: (intervals.Longest(hertz: 15, lever: SdfUpdateRates.Bodies) ?? 0d), tolerance: 1e-6d);
+        Assert.Null(@object: intervals.Longest(hertz: 30, lever: SdfUpdateRates.Bodies));
 
         for (var frame = 1; (frame < roots.Count); frame++) {
             // The root follows the body every frame; the head rides it rigidly.
@@ -145,8 +152,9 @@ public sealed class WorldStampPoolRateLawTests {
     public void AHeldBodyWhoseRootFollowsADynamicsRowStepsItsRootEveryFrame() {
         var (client, pool, transforms) = Stage(rootDynamics: true);
         var counts = SdfUpdateRateCounts.Counters();
+        var intervals = new SdfUpdateRateIntervals();
 
-        pool.RateBy(counts: counts, height: 900U, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
 
         var roots = new List<Vector3>();
         var offsets = new List<Vector3>();
@@ -172,11 +180,12 @@ public sealed class WorldStampPoolRateLawTests {
     public void ABodyNoViewSeesPosesAtTheLeastRateAndOneAViewStandsInsidePosesEveryFrame(bool inside) {
         var (client, pool, transforms) = Stage();
         var counts = SdfUpdateRateCounts.Counters();
+        var intervals = new SdfUpdateRateIntervals();
         var camera = (inside
             ? CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: 0f), target: new Vector3(x: 0f, y: 0.5f, z: 1f), viewportHeight: 900f, viewportWidth: 1280f)
             : CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: -3f), target: new Vector3(x: 0f, y: 0.5f, z: -6f), viewportHeight: 900f, viewportWidth: 1280f));
 
-        pool.RateBy(counts: counts, height: 900U, rates: SdfUpdateRates.All, views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
 
         for (var tick = 1UL; (tick <= 6UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
@@ -194,8 +203,9 @@ public sealed class WorldStampPoolRateLawTests {
         foreach (var (rates, distance) in new[] { (SdfUpdateRates.All, 3f), (SdfUpdateRates.None, 500f) }) {
             var (client, pool, transforms) = Stage();
             var counts = SdfUpdateRateCounts.Counters();
+            var intervals = new SdfUpdateRateIntervals();
 
-            pool.RateBy(counts: counts, height: 900U, rates: rates, views: ViewFrom(distance: distance));
+            pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: rates, views: ViewFrom(distance: distance));
 
             for (var tick = 1UL; (tick <= 6UL); tick++) {
                 _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
@@ -216,10 +226,10 @@ public sealed class WorldStampPoolRateLawTests {
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.ScreenHertz(share: 1.1d));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.ScreenHertz(share: 1d));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.ScreenHertz(share: 0.5d));
-        Assert.Equal(expected: 2, actual: SdfUpdateRateTiers.Divisor(displayHertz: 60, hertz: 30));
-        Assert.Equal(expected: 4, actual: SdfUpdateRateTiers.Divisor(displayHertz: 60, hertz: 15));
-        Assert.Equal(expected: 1, actual: SdfUpdateRateTiers.Divisor(displayHertz: 32, hertz: 30));
-        Assert.Equal(expected: 1, actual: SdfUpdateRateTiers.Divisor(displayHertz: 0, hertz: 15));
-        Assert.Equal(expected: 1, actual: SdfUpdateRateTiers.Divisor(displayHertz: 144, hertz: 60));
+        // The every-frame tier never holds, and nothing holds on a host not paced to a display or past its period.
+        Assert.False(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: 0d, frameSeconds: (1d / 144d), hertz: 60, rate: new PresentationRate(DisplayHertz: 144, GridHertz: 144d)));
+        Assert.False(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: Frame, frameSeconds: Frame, hertz: 15, rate: default));
+        Assert.False(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: (1d / 32d), frameSeconds: (1d / 32d), hertz: 30, rate: new PresentationRate(DisplayHertz: 32, GridHertz: 32d)));
+        Assert.True(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: Frame, frameSeconds: Frame, hertz: 30, rate: Paced60));
     }
 }

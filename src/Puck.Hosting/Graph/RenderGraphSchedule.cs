@@ -42,6 +42,8 @@ public enum RenderGraphInstanceStatus : byte {
 /// <param name="PassPixels">Its price this frame: passes times pixels when it renders, otherwise zero.</param>
 /// <param name="LatestFrame">The frame its latest completed output belongs to once this frame's renders complete, or -1
 /// when it has never rendered.</param>
+/// <param name="Held">Whether its own refresh was due but the roots and footprints demanding it held its latest render
+/// through this frame, so its consumers show that render again by design.</param>
 public readonly record struct RenderGraphInstanceSchedule(
     string Instance,
     RenderGraphInstanceStatus Status,
@@ -51,7 +53,8 @@ public readonly record struct RenderGraphInstanceSchedule(
     int Divisor,
     int Passes,
     long PassPixels,
-    long LatestFrame
+    long LatestFrame,
+    bool Held = false
 );
 /// <summary>Which frame of a producer's output one consumer reads this frame.</summary>
 /// <param name="Consumer">The instance reading.</param>
@@ -70,6 +73,7 @@ public sealed class RenderGraphHistory {
         Frame = -1;
         Height = new double[count];
         Latest = new long[count];
+        Presented = new ulong[count];
         Ticks = new long[count];
         Width = new double[count];
 
@@ -86,6 +90,7 @@ public sealed class RenderGraphHistory {
 
     internal double[] Height { get; }
     internal long[] Latest { get; }
+    internal ulong[] Presented { get; }
     internal long[] Ticks { get; }
     internal double[] Width { get; }
 
@@ -134,6 +139,7 @@ public sealed class RenderGraphHistory {
 
             carried.Height[index] = previous.Height[old];
             carried.Latest[index] = previous.Latest[old];
+            carried.Presented[index] = previous.Presented[old];
             carried.Ticks[index] = previous.Ticks[old];
             carried.Width[index] = previous.Width[old];
         }
@@ -144,6 +150,11 @@ public sealed class RenderGraphHistory {
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The frame, or -1 when it has never rendered.</returns>
     public long LatestFrame(int index) => Latest[index];
+    /// <summary>Returns the presentation time of the frame an instance last rendered
+    /// (<see cref="RenderGraphFrame.PresentedTicks"/>).</summary>
+    /// <param name="index">The instance's index in its set.</param>
+    /// <returns>The engine ticks, or zero when it has never rendered.</returns>
+    public ulong LatestPresented(int index) => Presented[index];
     /// <summary>Returns the simulation tick of the frame an instance last rendered.</summary>
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The tick, or zero when it has never rendered.</returns>
@@ -167,6 +178,7 @@ public sealed class RenderGraphHistory {
         }
 
         Latest[index] = previous.Latest[index];
+        Presented[index] = previous.Presented[index];
         Ticks[index] = previous.Ticks[index];
         Width[index] = previous.Width[index];
         Height[index] = previous.Height[index];
@@ -177,6 +189,7 @@ public sealed class RenderGraphHistory {
     /// <param name="index">The instance's index in its set.</param>
     public void Forget(int index) {
         Latest[index] = -1L;
+        Presented[index] = 0UL;
         Ticks[index] = 0L;
         Width[index] = 0d;
         Height[index] = 0d;
@@ -230,6 +243,9 @@ public sealed class RenderGraphSchedule {
     public RenderGraphHistory Next { get; }
     /// <summary>Gets the frame's total price: every render's passes times pixels.</summary>
     public long PassPixels { get; private set; }
+    /// <summary>Gets the scheduled frame's presentation time (<see cref="RenderGraphFrame.PresentedTicks"/>), in engine
+    /// ticks.</summary>
+    public ulong PresentedTicks { get; private set; }
     /// <summary>Gets the reads of every rendering consumer this frame: each producer it shows, then each buffer it
     /// reads.</summary>
     public IReadOnlyList<RenderGraphReadSchedule> Reads { get; }
@@ -244,9 +260,10 @@ public sealed class RenderGraphSchedule {
     internal List<int> RenderRows => m_renders;
     internal RenderGraphScheduler.Scratch Work { get; }
 
-    internal void Publish(long frame, long passPixels) {
+    internal void Publish(long frame, long passPixels, ulong presentedTicks) {
         Frame = frame;
         PassPixels = passPixels;
+        PresentedTicks = presentedTicks;
         Next.Frame = frame;
     }
 }

@@ -33,8 +33,16 @@ public sealed class WorldRatesLeverLawTests {
 
         settings.RateCounts.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
         Assert.Equal(
-            expected: "[world.rates: bodies=on views=on screens=on shadow-far=on bodies.posed=0 bodies.held=0 views.rated=0 screens.rated=0 shadow-far.rendered=0 shadow-far.held=1]",
+            expected: "[world.rates: bodies=on views=on screens=on shadow-far=on bodies.posed=0 bodies.held=0 views.rated=0 screens.rated=0 shadow-far.rendered=0 shadow-far.held=1 display=0hz grid=none period-ms: 30hz=33.3 15hz=66.7 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=- screens.30hz=- screens.15hz=- shadow-far.30hz=-]",
             actual: registry.Submit(line: "world.rates").Output
+        );
+
+        // On a 144 Hz signal a tier's period is whole refreshes, and each lever prints the longest interval it achieved.
+        settings.RateIntervals.Advance(frameSeconds: (1d / 144d), rate: new Puck.Hosting.PresentationRate(DisplayHertz: 144, GridHertz: 144d));
+        settings.RateIntervals.Record(hertz: 15, lever: SdfUpdateRates.Views, seconds: (9d / 144d));
+        Assert.EndsWith(
+            expectedEndString: " display=144hz grid=144hz period-ms: 30hz=27.8 15hz=62.5 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=62.5 screens.30hz=- screens.15hz=- shadow-far.30hz=-]",
+            actualString: registry.Submit(line: "world.rates").Output
         );
 
         settings.UpdateRates = SdfUpdateRates.Views;

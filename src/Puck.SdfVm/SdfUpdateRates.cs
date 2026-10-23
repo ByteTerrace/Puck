@@ -1,26 +1,31 @@
 using Puck.Abstractions.Counting;
+using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
 /// <summary>
 /// Which presentation work updates less often when it is far or small on screen (<c>world.rates</c>,
 /// <see cref="SdfFrame.UpdateRates"/>). Each lever rates work by its projected size at the resolution it is shown at and
-/// switches only where the drop is barely perceptible (<see cref="SdfUpdateRateTiers"/>). Presentation only: the
-/// simulation ticks every body and runs every machine at its own rate whatever the levers say.
+/// switches only where the drop is barely perceptible (<see cref="SdfUpdateRateTiers"/>). A tier is a floor: rated work
+/// updates at least that many times a second of presentation time, held between by <see cref="PresentationRate.Holds"/>,
+/// whatever the display's rate or the frames' pace. Presentation only: the simulation ticks every body and runs every
+/// machine at its own rate whatever the levers say.
 /// </summary>
 [Flags]
 public enum SdfUpdateRates : byte {
     /// <summary>Every lever off: everything updates every frame.</summary>
     None = 0,
-    /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at 30 or 15 Hz as its
-    /// pixels per metre fall, its root still followed every frame.</summary>
+    /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30 or 15 times
+    /// a second as its pixels per metre fall, its root still followed every frame.</summary>
     Bodies = 1,
-    /// <summary>A nested portal or session view at 30 or 15 Hz as the share of the display it covers shrinks.</summary>
+    /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
+    /// shrinks.</summary>
     Views = 2,
-    /// <summary>An in-world screen's source image upload at 30 or 15 Hz once it is shown below its native size; the
-    /// machine behind it still runs at full rate.</summary>
+    /// <summary>An in-world screen's source image upload at least 30 or 15 times a second once it is shown below its
+    /// native size; the machine behind it still runs at full rate.</summary>
     Screens = 4,
-    /// <summary>The key light's far shadow cascade refreshed at 30 Hz, its fit held between refreshes.</summary>
+    /// <summary>The key light's far shadow cascade refreshed at least 30 times a second, its fit held between
+    /// refreshes.</summary>
     ShadowFar = 8,
     /// <summary>Every lever on, the default.</summary>
     All = (((Bodies | Views) | Screens) | ShadowFar),
@@ -89,14 +94,110 @@ public static class SdfUpdateRateTiers {
     public static int ScreenHertz(double share) => ((share > ScreenHalfRateShare)
         ? 60
         : ((share > ScreenQuarterRateShare) ? 30 : 15));
-    /// <summary>Returns how many presented frames a rate holds an update for at a display's rate.</summary>
-    /// <param name="hertz">The rate, 60 or below meaning a reduced one only below 60.</param>
-    /// <param name="displayHertz">The display's presented frames a second, or zero when unknown, which updates every
-    /// frame.</param>
-    /// <returns>The frame divisor, at least one.</returns>
-    public static int Divisor(int hertz, int displayHertz) => (((hertz >= 60) || (displayHertz <= 0))
-        ? 1
-        : Math.Max(val1: 1, val2: ((displayHertz + (hertz / 2)) / hertz)));
+    /// <summary>The tier that means every frame: content at it is not rated.</summary>
+    public const int EveryFrameHertz = 60;
+
+    /// <summary>Returns whether a rated item holds its latest update through this frame: its tier is below every frame
+    /// and the floor at its tier still holds (<see cref="PresentationRate.Holds"/>), so it updates at least
+    /// <paramref name="hertz"/> times a second of presentation time whatever the frames' pace.</summary>
+    /// <param name="rate">The frame's presentation rate.</param>
+    /// <param name="hertz">The item's tier: 60 for every frame, 30 or 15.</param>
+    /// <param name="elapsedSeconds">The presentation time from the frame the item last updated on to this frame.</param>
+    /// <param name="frameSeconds">The latest frame's span.</param>
+    /// <returns><see langword="true"/> when the item holds this frame.</returns>
+    public static bool Holds(PresentationRate rate, int hertz, double elapsedSeconds, double frameSeconds) => (
+        (hertz < EveryFrameHertz) &&
+        rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: hertz)
+    );
+}
+/// <summary>
+/// The longest interval between updates each <see cref="SdfUpdateRates"/> lever achieved at each reduced tier over a
+/// recent window of presentation time, which <c>world.rates</c> prints against the tier's period
+/// (<see cref="PresentationRate.PeriodSeconds"/>). Counting held frames cannot show a rate on a display whose frames
+/// come unevenly; the interval can. An interval counts only where the item updated or was held on every frame between
+/// its two updates, so a view out of sight or a frame that rendered nothing is not read as a slow rate. Any thread
+/// records and reads; presentation only.
+/// </summary>
+public sealed class SdfUpdateRateIntervals {
+    /// <summary>The presentation time each half of the window spans, in seconds: a reading covers between one and two of
+    /// them.</summary>
+    public const double HalfWindowSeconds = 1d;
+    /// <summary>The reduced tiers an interval is recorded under, in hertz.</summary>
+    public static readonly int[] Tiers = [30, 15];
+    /// <summary>The levers an interval is recorded for, in report order.</summary>
+    public static readonly SdfUpdateRates[] Levers = [SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens, SdfUpdateRates.ShadowFar];
+
+    private readonly Lock m_gate = new();
+    private readonly double[] m_current = new double[(Levers.Length * Tiers.Length)];
+    private readonly double[] m_previous = new double[(Levers.Length * Tiers.Length)];
+    private double m_elapsed;
+    private PresentationRate m_rate;
+
+    /// <summary>Gets the presentation rate of the latest frame the window advanced over, which a tier's period is read
+    /// against.</summary>
+    public PresentationRate Rate {
+        get {
+            lock (m_gate) {
+                return m_rate;
+            }
+        }
+    }
+
+    // The slot of a lever and tier, or -1 for a lever or tier no interval is recorded under.
+    private static int SlotOf(SdfUpdateRates lever, int hertz) {
+        var leverIndex = Array.IndexOf(array: Levers, value: lever);
+        var tierIndex = Array.IndexOf(array: Tiers, value: hertz);
+
+        return (((leverIndex < 0) || (tierIndex < 0)) ? -1 : ((leverIndex * Tiers.Length) + tierIndex));
+    }
+    /// <summary>Advances the window by one presented frame.</summary>
+    /// <param name="rate">The frame's presentation rate.</param>
+    /// <param name="frameSeconds">The frame's span, in seconds of presentation time.</param>
+    public void Advance(PresentationRate rate, double frameSeconds) {
+        lock (m_gate) {
+            m_rate = rate;
+            m_elapsed += Math.Max(val1: 0d, val2: frameSeconds);
+
+            if (m_elapsed >= HalfWindowSeconds) {
+                m_elapsed = 0d;
+                Array.Copy(sourceArray: m_current, destinationArray: m_previous, length: m_current.Length);
+                Array.Clear(array: m_current);
+            }
+        }
+    }
+    /// <summary>Records one interval between an item's updates under its lever and the slowest tier it was rated at over
+    /// the interval; a lever or tier outside <see cref="Levers"/> and <see cref="Tiers"/> records nothing.</summary>
+    /// <param name="lever">The lever that rated the item.</param>
+    /// <param name="hertz">The slowest tier the item was rated at between its two updates.</param>
+    /// <param name="seconds">The presentation time between the two updates.</param>
+    public void Record(SdfUpdateRates lever, int hertz, double seconds) {
+        var slot = SlotOf(hertz: hertz, lever: lever);
+
+        if (slot < 0) {
+            return;
+        }
+
+        lock (m_gate) {
+            m_current[slot] = Math.Max(val1: m_current[slot], val2: seconds);
+        }
+    }
+    /// <summary>Returns the longest interval recorded under a lever and tier over the window.</summary>
+    /// <param name="lever">The lever.</param>
+    /// <param name="hertz">The tier.</param>
+    /// <returns>The interval, in seconds, or <see langword="null"/> when none was recorded.</returns>
+    public double? Longest(SdfUpdateRates lever, int hertz) {
+        var slot = SlotOf(hertz: hertz, lever: lever);
+
+        if (slot < 0) {
+            return null;
+        }
+
+        lock (m_gate) {
+            var longest = Math.Max(val1: m_current[slot], val2: m_previous[slot]);
+
+            return ((longest > 0d) ? longest : null);
+        }
+    }
 }
 /// <summary>
 /// The <c>world.rates</c> counters (<see cref="SdfUpdateRates"/>): how often each rated piece of work updated and how

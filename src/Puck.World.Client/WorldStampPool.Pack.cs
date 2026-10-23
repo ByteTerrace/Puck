@@ -222,6 +222,7 @@ public sealed partial class WorldStampPool {
                     }
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
+                        RecordPose(deltaSeconds: deltaSeconds, live: live);
                     }
                     live.RateSeconds = 0f;
                     live.RateOwed = false;

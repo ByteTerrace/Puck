@@ -1244,10 +1244,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var prior = m_history;
         var sourced = WithSourceStates(frame: in frame);
         var rerendered = WithRerenders(frame: in sourced);
-        var scheduled = WithUnchanged(
+        var unchanged = WithUnchanged(
             context: in context,
             frame: in rerendered
         );
+        var scheduled = WithStale(frame: in unchanged);
 
         RenderGraphScheduler.Schedule(
             frame: scheduled with { Costs = this },

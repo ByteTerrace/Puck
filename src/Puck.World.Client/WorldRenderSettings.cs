@@ -85,6 +85,9 @@ public sealed partial class WorldRenderSettings {
     /// <summary>Gets the counters every frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), which
     /// <c>world.counters sdf.rates</c> reads.</summary>
     public Puck.Abstractions.Counting.WorkCounterSet RateCounts { get; } = SdfUpdateRateCounts.Counters();
+    /// <summary>Gets the window every frame's rated work records its achieved intervals between updates into
+    /// (<see cref="SdfUpdateRateIntervals"/>), which <c>world.rates</c> prints against each tier's period.</summary>
+    public SdfUpdateRateIntervals RateIntervals { get; } = new();
     /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
     /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
     /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a
