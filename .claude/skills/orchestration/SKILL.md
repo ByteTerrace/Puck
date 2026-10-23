@@ -316,7 +316,7 @@ open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
 Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
-on the owner's Google AI Ultra plan; launched as below). Its published results
+on the owner's Google AI Ultra plan; an Antigravity lane launches as above). Its published results
 put it level with Astra overall (Artificial Analysis Intelligence Index about
 53) and ahead on repository issue fixing (DeepSWE), app and UI generation and
 security remediation (CWE-bench), behind Opus and Astra on long terminal-driven
