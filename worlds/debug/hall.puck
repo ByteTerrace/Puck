@@ -85,9 +85,8 @@ let fallSlab = [
 let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6, 30.6]]
 
 // The ceiling light strips under a ceiling at `top`: one over each viewing aisle and two over the landing, 6 cm deep and
-// sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own: a group of thin strips
-// alone narrows its bake box to the strips its coarse samples land near and drops the rest (mesh-bake.md), while the
-// slab holds the box open over all of them.
+// sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own, so a level's lit and dark
+// looks stay one geometry (the strips' slot alone differs) and the slab's bake keeps its trim at the slab's detail.
 template hallStrips(top, aisles) {
   for z in aisles {
     hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
