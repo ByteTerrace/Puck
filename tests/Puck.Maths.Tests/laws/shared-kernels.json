@@ -177,27 +177,6 @@
     ]
   },
   {
-    "Id": "scalar.float-projection-through-double",
-    "Tier": "Default",
-    "Members": [
-      {
-        "Type": "Puck.Maths.FixedQ4816",
-        "Name": "op_Explicit"
-      }
-    ],
-    "Legs": [
-      {
-        "Kind": "SharedSubstrate",
-        "Flavor": "Transcription",
-        "Subject": "the explicit float conversion at the swept raws, both carrier extremes, zero, the units and the 2^24 seam",
-        "Against": "(float)(double)value spelled inline, bit for bit",
-        "Shared": "the conversion IS that expression; this leg pins the carriage and nothing about the double projection itself",
-        "Citation": "the double projection's rounding is pinned at scalar.double-projection-vs-oracle; below 2^24 raw the float is additionally checked to be the exact quotient raw/65536f",
-        "Absolute": ""
-      }
-    ]
-  },
-  {
     "Id": "vector.plane-doors-and-clamp",
     "Tier": "Default",
     "Members": [
@@ -225,7 +204,7 @@
         "Subject": "FixedVector2.FromVector2 and ToVector2 at the swept pair, lane by lane",
         "Against": "FixedQ4816.FromDouble and the explicit float conversion, lane by lane",
         "Shared": "the doors are those two scalar members applied per lane; the leg pins lane order and carriage only",
-        "Citation": "FromDouble's rounding is pinned at scalar.grid-and-construction and the float projection at scalar.float-projection-through-double",
+        "Citation": "FromDouble's rounding is pinned at scalar.grid-and-construction and the float projection at scalar.explicit-single-rounding",
         "Absolute": ""
       },
       {

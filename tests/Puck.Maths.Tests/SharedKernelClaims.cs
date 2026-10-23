@@ -237,28 +237,6 @@ internal static class SharedKernelClaims {
 
         return null;
     }
-    /// <summary>The explicit float conversion is the double conversion narrowed: bit-identical to (float)(double)x
-    /// at every swept raw, and exact below 2^24 raw.</summary>
-    /// <param name="left">The raw in its first lane.</param>
-    /// <param name="right">A second raw in its first lane.</param>
-    public static string? FloatProjectionThroughDouble(long[] left, long[] right) {
-        foreach (var raw in (ReadOnlySpan<long>)[left[0], right[0], 0L, 1L, -1L, 65536L, (1L << 24), ((1L << 24) + 1L), long.MaxValue, long.MinValue]) {
-            var value = Raw(value: raw);
-            var actual = BitConverter.SingleToUInt32Bits(value: ((float)value));
-            var expected = BitConverter.SingleToUInt32Bits(value: ((float)((double)value)));
-
-            if (actual != expected) { return $"(float) of raw {raw} is 0x{actual:X8}, not the narrowed double 0x{expected:X8}"; }
-
-            if ((raw > -(1L << 24)) && (raw < (1L << 24))) {
-                var exact = BitConverter.SingleToUInt32Bits(value: (((float)raw) / 65536f));
-
-                if (actual != exact) { return $"(float) of raw {raw} is not the exact quotient"; }
-            }
-        }
-
-        return null;
-    }
-
     // ---- FixedVector2 and FixedVector3: the doors, the directed rescale and the exact predicates ----
 
     /// <summary>FromVector2 is FromDouble lane by lane and ToVector2 the float projection lane by lane; ClampLength and

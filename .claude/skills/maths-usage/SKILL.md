@@ -95,6 +95,13 @@ maps each question to its wing and README section.
   and presentation out (`ToVector3`, `ToQuaternion`,
   `FixedPosition.ToRenderRelative`) are the two boundaries; presentation seams
   are one-way, and nothing they return flows back into state.
+- **Outbound precision needs an exact oracle.** The `FixedQ4816` float cast rounds
+  its raw directly to single precision before exact binary scaling; routing it
+  through double can manufacture a tie. The decimal-backed `Half` conversion
+  is correctly rounded at the current Q16/Q32 scales, pinned at every Half
+  midpoint by `scalar.half-midpoints-vs-exact-oracle`; do not assume that proof covers
+  a future finer carrier. Generic `FixedQ3232`/`UFixedQ4816` peers round to the
+  target grid before applying checked, saturating or width-truncating policy.
 - **Gate `PDEP`/`PEXT` on `BitManipulation.HasFastParallelBits`**, never
   `Bmi2.IsSupported`: AMD before Zen 3 (the Steam Deck's Zen 2 included) and
   Hygon's licensed Zen 1 run them in microcode at up to hundreds of cycles.

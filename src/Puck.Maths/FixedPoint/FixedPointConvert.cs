@@ -99,7 +99,7 @@ public static class FixedPointConvert {
     /// <summary>Scales a <see cref="decimal"/> to a fixed-point raw at an arbitrary fraction bit count, exactly and
     /// without a range clamp, using <see cref="BigInteger"/> for the wide intermediate.</summary>
     /// <param name="value">The value to scale.</param>
-    /// <param name="fractionBitCount">The target carrier's fraction bit count. Unlike <see cref="ScaleDecimal"/>,
+    /// <param name="fractionBitCount">The target carrier's non-negative fraction bit count. Unlike <see cref="ScaleDecimal"/>,
     /// there is no upper bound on this parameter: the worst case (a scale-zero, ninety-six-bit mantissa scaled by a
     /// forty-eight-bit shift) needs up to a hundred and forty-four bits, past what <see cref="UInt128"/> can hold
     /// exactly, so this overload trades <see cref="UInt128"/>'s allocation-free width for
@@ -108,6 +108,7 @@ public static class FixedPointConvert {
     /// exactly this same algorithm at that narrower width.</param>
     /// <returns>One ties-to-even rounding of <c>value·2^fractionBitCount</c>, exactly — <see cref="BigInteger"/>
     /// carries the full width, so nothing here can wrap the way a fixed-width intermediate would.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionBitCount"/> is negative.</exception>
     /// <remarks>This is the decimal boundary for a carrier whose fraction bit count exceeds
     /// <see cref="ScaleDecimal"/>'s thirty-one-bit cap — <see cref="FixedQ3232"/> (thirty-two) today: past that cap <see cref="ScaleDecimal"/>'s <see cref="UInt128"/>
     /// intermediate is not wide enough to stay exact, and reusing it anyway would silently wrap instead of throwing
@@ -600,13 +601,11 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerFromChecked<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
             var other = Unsafe.As<TOther, UFixedQ4816>(source: ref value);
+            var widened = ((Int128)other.Value) << (fractionBitCount - UFixedQ4816.FractionBitCount);
 
-            result = FromRaw<TSelf>(raw: checked((long)other.Value));
+            result = FromRaw<TSelf>(raw: checked((long)widened));
 
             return true;
         }
@@ -637,15 +636,13 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerFromSaturating<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
             var other = Unsafe.As<TOther, UFixedQ4816>(source: ref value);
+            var widened = ((Int128)other.Value) << (fractionBitCount - UFixedQ4816.FractionBitCount);
 
-            result = FromRaw<TSelf>(raw: ((other.Value > long.MaxValue)
+            result = FromRaw<TSelf>(raw: ((widened > long.MaxValue)
                 ? long.MaxValue
-                : ((long)other.Value)));
+                : ((long)widened)));
 
             return true;
         }
@@ -673,13 +670,11 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerFromTruncating<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
             var other = Unsafe.As<TOther, UFixedQ4816>(source: ref value);
+            var widened = ((Int128)other.Value) << (fractionBitCount - UFixedQ4816.FractionBitCount);
 
-            result = FromRaw<TSelf>(raw: unchecked((long)other.Value));
+            result = FromRaw<TSelf>(raw: unchecked((long)widened));
 
             return true;
         }
@@ -703,11 +698,8 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerToChecked<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
-            var converted = new UFixedQ4816(Value: checked((ulong)Raw(value: value)));
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
+            var converted = new UFixedQ4816(Value: checked((ulong)RawAtQ4816(value: value, fractionBitCount: fractionBitCount)));
 
             result = Unsafe.As<UFixedQ4816, TOther>(source: ref converted);
 
@@ -723,11 +715,8 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerToSaturating<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
-            var raw = Raw(value: value);
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
+            var raw = RawAtQ4816(value: value, fractionBitCount: fractionBitCount);
             var converted = new UFixedQ4816(Value: ((raw < 0L)
                 ? 0UL
                 : ((ulong)raw)));
@@ -746,11 +735,8 @@ public static class FixedPointConvert {
     private static bool TryConvertPeerToTruncating<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct
         where TOther : INumberBase<TOther> {
-        if (
-            (typeof(TSelf) == typeof(FixedQ4816)) &&
-            (typeof(TOther) == typeof(UFixedQ4816))
-        ) {
-            var converted = new UFixedQ4816(Value: unchecked((ulong)Raw(value: value)));
+        if (typeof(TOther) == typeof(UFixedQ4816)) {
+            var converted = new UFixedQ4816(Value: unchecked((ulong)RawAtQ4816(value: value, fractionBitCount: fractionBitCount)));
 
             result = Unsafe.As<UFixedQ4816, TOther>(source: ref converted);
 
@@ -775,24 +761,23 @@ public static class FixedPointConvert {
             return false;
         }
 
-        var shift = (fractionBitCount - FixedQ4816.FractionBitCount);
-        var sign = (Raw(value: value) >> 63);
-        var magnitude = unchecked((ulong)((Raw(value: value) ^ sign) - sign));
-        var truncated = (magnitude >> shift);
-        var remainder = magnitude & ((1UL << shift) - 1UL);
-        var rounded = FixedPointRounding.RoundToNearestTiesToEven(
-            distanceToTruncated: remainder,
-            distanceToNext: (1UL << (shift - 1)),
-            truncated: truncated
-        );
-        var narrowedRaw = unchecked((long)rounded);
-        var converted = FixedQ4816.FromRawBits(value: ((sign != 0L)
-            ? unchecked(-narrowedRaw)
-            : narrowedRaw));
+        var converted = FixedQ4816.FromRawBits(value: RawAtQ4816(value: value, fractionBitCount: fractionBitCount));
 
         result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
 
         return true;
+    }
+    // Both signed and unsigned Q16 targets share the existing one-round narrowing. Apply the target's range
+    // policy only afterwards, so a negative sub-half-raw value correctly rounds to a representable zero.
+    private static long RawAtQ4816<TSelf>(TSelf value, int fractionBitCount) where TSelf : struct {
+        var raw = Raw(value: value);
+        var shift = fractionBitCount - FixedQ4816.FractionBitCount;
+        return shift == 0 ? raw : SignedFixedPointArithmetic.NarrowToFixedQ4816(
+            value: raw,
+            narrowShift: shift,
+            narrowBitMask: (1UL << shift) - 1UL,
+            narrowHalf: 1UL << (shift - 1)
+        );
     }
     // The integer lanes of the checked and saturating faces: a known BCL integer reaches the raw by one Int128 widening
     // and one shift, never through decimal. The shift is exact whenever the source fits below the raw's integer bits,
