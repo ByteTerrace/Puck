@@ -107,6 +107,7 @@ public sealed class StateCatalog {
     private readonly CellKey[] m_poolKeys;
     private readonly CellKey[] m_ringKeys;
     private readonly int[] m_poolSlotsByKeyOrdinal;
+    private readonly IReadOnlyList<int>[] m_containingZones;
 
     private StateCatalog(
         object identity,
@@ -142,6 +143,20 @@ public sealed class StateCatalog {
         m_readOnlyFamilies = Array.AsReadOnly(array: families);
         m_rowEnums = rowEnums;
         m_rows = Array.AsReadOnly(array: rows);
+        var zonesByDomain = new Dictionary<CellName, List<int>>();
+        for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
+            if (rows[ordinal].EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) {
+                if (!zonesByDomain.TryGetValue(key: zone.Row, value: out var zones)) {
+                    zones = [];
+                    zonesByDomain.Add(key: zone.Row, value: zones);
+                }
+                zones.Add(item: ordinal);
+            }
+        }
+        var frozenZones = zonesByDomain.ToDictionary(keySelector: static pair => pair.Key,
+            elementSelector: static pair => (IReadOnlyList<int>)Array.AsReadOnly(array: pair.Value.ToArray()));
+        m_containingZones = rows.Select(row => frozenZones.GetValueOrDefault(
+            key: row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row : row.Name) ?? []).ToArray();
         m_pools = Array.AsReadOnly(array: pools);
         m_poolsByName = pools.ToDictionary(keySelector: static pool => pool.Name.Value, comparer: StringComparer.Ordinal);
         m_poolRows = ((pools.Length == 0) ? [] : new bool[rows.Length]);
@@ -175,6 +190,10 @@ public sealed class StateCatalog {
     public IReadOnlyList<RowFamily> Families => m_readOnlyFamilies;
     /// <summary>Gets the complete document lane, including catalog-generated pool storage rows.</summary>
     public IReadOnlyList<StateRow> Rows => m_rows;
+    /// <summary>Gets the ordered-zone ordinals whose membership can restrict cells of the supplied row.</summary>
+    /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
+    /// <returns>The zones over the row's token domain, or an empty list.</returns>
+    public IReadOnlyList<int> ContainingZones(int rowOrdinal) => (uint)rowOrdinal < (uint)m_containingZones.Length ? m_containingZones[rowOrdinal] : [];
     /// <summary>Gets the compiled pools in declaration order.</summary>
     public IReadOnlyList<StatePoolDescriptor> Pools => m_pools;
     /// <summary>Gets the compiled key symbols. Runtime names are owned by <see cref="StateArena.Keys"/>.</summary>

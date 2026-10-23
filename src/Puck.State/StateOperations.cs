@@ -70,6 +70,9 @@ public abstract record StateTransform {
     /// listed once, as written. A host holding a per-row authority over the store checks each one before the
     /// operation composes: an edit grant and a declared phase guard or rule-written verdict over the rows it writes, an
     /// observe grant over the rows it reads.
+    /// <para>This is an authority description, not a disclosure dependency list. Rows both read and written still
+    /// influence their result; the rule compiler resolves those inputs, dynamic selectors and control flow for
+    /// audience checks, and the arena checks current cell and containing-zone restrictions before applying them.</para>
     /// <para>Every arm states its own subjects, so no arm compiles without them: an operation addressing a row it
     /// did not list here would compose past every per-row check its host makes.</para></summary>
     /// <returns>The addressed names and their access, writes first, each in the operation's own order.</returns>

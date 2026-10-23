@@ -401,10 +401,19 @@ Each audience comes from the declarations alone
 restricted row never encloses a public one. A restricted row encloses a
 restricted audience when it lists every reader the audience lists and the
 audience admits no live reader row other than its own `readersFrom`. The
-reads are the rows `StateTransform.Subjects` lists as read. A dynamic key and a
-live zone end aren't subjects, so the check doesn't cover them. `observe` reads
-its knowledge row's declared source and mask, which aren't subjects either,
-because refreshing what a side has seen is what the knowledge row declares.
+reads come from the resolved operation, including dynamic keys, live zone
+selectors, declared sets, and rows that are both read and written. Gates,
+branch conditions, iteration membership and decision scores that decide whether
+a transform runs are dependencies too. The check conservatively covers every
+row a live selector can choose and every cell of a read row.
+
+Before applying a transform, the arena checks the same dependencies against
+current cell visibility and the restrictions of every ordered zone containing
+each token. A restriction acquired after compilation therefore cannot leak
+through a later sort, selection or board write. Refusal happens before kernel
+writes, and a refused rule firing rewinds its earlier effects as well. Private
+transforms remain valid when every source encloses the destination audience.
+`observe` retains the deliberate projection its knowledge row declares.
 
 A rule compiles its transforms through this check, so an authored rule is
 refused at validation. A submitted transform goes through the same resolution,
@@ -415,7 +424,10 @@ whether the written row's audience may.
 A transform never declassifies a value. When a game means to show a hidden
 value, a rule writes it through its own `setState`. Word spy is an example: its
 `nearest` picks the clue word into a row only the spymasters read, and the rule
-that announces the clue's number copies the word into the public row.
+that announces the clue's number copies the word into the public row. Moving
+membership from a private zone to a public zone is also disclosure: compute the
+result within the private audience and publish the intended result through an
+explicit rule write, rather than using a transform to widen its audience.
 
 ## Dynamic keys in transforms
 
@@ -438,9 +450,10 @@ takes a literal only. Live zone ends (`$zones[…]` for a transfer's `from` and
 
 ## Refusals
 
-A scalar transform refuses with a `TransformRefusal`, tagged under the
-`state.transform` refusal catalog. Each group of members belongs to one
-transform:
+A scalar kernel refuses with a `TransformRefusal`, tagged under the
+`state.transform` refusal catalog. The shared admission check can first refuse
+`RuleRefusal.TransformWidensAudience` when current visibility restricts a read.
+Each group of kernel refusals belongs to one transform:
 
 | Transform | Refusals |
 |---|---|

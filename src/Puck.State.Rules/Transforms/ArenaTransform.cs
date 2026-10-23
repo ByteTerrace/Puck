@@ -22,6 +22,9 @@ public readonly record struct ArenaMixTerm(VectorSource Source, int Weight);
 public abstract record ArenaTransform {
     private protected ArenaTransform() { }
 
+    // Resolved selector and declared-set dependencies survive live binding substitution.
+    internal IReadOnlyList<int> DisclosureReads { get; set; } = [];
+
     /// <summary>Reorders an ordered zone into the arrangement at a Lehmer rank read from an integer cell.</summary>
     /// <param name="RowOrdinal">The ordered zone's catalog ordinal.</param>
     /// <param name="DomainRowOrdinal">The zone's token-domain row's catalog ordinal.</param>

@@ -188,7 +188,7 @@ public static partial class WorldFactsCompiler {
                 subject: "interaction"
             );
 
-            return new CompiledWorldFactsRule(
+            var compiled = new CompiledWorldFactsRule(
                 decision: null,
                 interaction: new CompiledInteraction(
                     CoOccurrence: row.CoOccurrence,
@@ -216,6 +216,10 @@ public static partial class WorldFactsCompiler {
                     Needs: context.Needs.Build()
                 )
             );
+            var controls = new List<CellAccess>();
+            (compiled with { Effects = [] }).CollectReads(into: controls);
+            RuleCompiler.RequireTransformControlAudience(effects: effects, controls: controls, context: context, ruleName: name);
+            return compiled;
         } finally {
             context.ClearScope();
         }

@@ -7,6 +7,8 @@ public readonly record struct MixTermFact(CompiledVector Source, int Weight);
 /// <summary>The shared shape of the four vector effects: one destination cell addressed by ordinal and interned
 /// key, and the dimensions its space declares.</summary>
 public abstract class VectorEffect : RuleEffect, IStateAddressedEffect {
+    internal IReadOnlyList<int> DisclosureControls { get; set; } = [];
+    internal RuleWork DisclosureCost { get; set; } = RuleWork.Zero;
     /// <summary>Initializes the effect.</summary>
     /// <param name="rowOrdinal">The destination row's catalog ordinal.</param>
     /// <param name="key">The destination cell key, or the invalid default.</param>
@@ -103,7 +105,7 @@ public sealed class VectorMixEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)m_terms.Length) * Dimensions));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)m_terms.Length) * Dimensions)) + DisclosureCost;
 }
 /// <summary>Writes the mean of a keyed vector table's admitted rows into a vector cell.</summary>
 public sealed class VectorMeanEffect : VectorEffect {
@@ -152,7 +154,7 @@ public sealed class VectorMeanEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * Dimensions));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * Dimensions)) + DisclosureCost;
 }
 /// <summary>Ranks a keyed vector table against a query and writes the nearest keys or scores.</summary>
 public sealed class VectorNearestEffect : VectorEffect {
@@ -238,7 +240,7 @@ public sealed class VectorNearestEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * (Dimensions + 1)));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * (Dimensions + 1))) + DisclosureCost;
 }
 /// <summary>Stores a vector into a keyed table unless a near duplicate is already there.</summary>
 public sealed class VectorRememberEffect : VectorEffect {
@@ -283,5 +285,5 @@ public sealed class VectorRememberEffect : VectorEffect {
         ));
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)Capacity) * (Dimensions + 1)));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)Capacity) * (Dimensions + 1))) + DisclosureCost;
 }
