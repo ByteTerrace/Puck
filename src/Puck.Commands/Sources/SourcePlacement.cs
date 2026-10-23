@@ -46,16 +46,18 @@ public enum SourceUvLayout : byte {
     /// <summary>The image reflected about the face's other diagonal: <c>(x, y) = (1 − v, 1 − u)</c>.</summary>
     Transverse = 7,
 }
-/// <summary>How a crop whose aspect ratio differs from its face's is fitted to it.</summary>
+/// <summary>How an image whose aspect ratio differs from the rectangle or face it is shown on is fitted to it: a
+/// source mapping's crop on a screen or pane, a <c>views.graphs</c> row's pane, and a HUD frame element's sampled
+/// frame. The values are the overlay kernel's packed frame fit (<c>overlay-unified.frag.hlsl</c>).</summary>
 public enum SourceFit : byte {
-    /// <summary>The crop is stretched over the whole face, whatever the two aspect ratios.</summary>
-    Stretch = 0,
-    /// <summary>The whole crop is shown at its own aspect ratio, centred, with bars where it does not reach the face's
+    /// <summary>The image fills the whole face at its own aspect ratio, centred, and the part past the face's edges is
+    /// not shown.</summary>
+    Cover = 0,
+    /// <summary>The whole image is shown at its own aspect ratio, centred, with bars where it does not reach the face's
     /// edges; a point on a bar maps to no source pixel.</summary>
     Contain = 1,
-    /// <summary>The crop fills the whole face at its own aspect ratio, centred, and the part past the face's edges is
-    /// not shown.</summary>
-    Cover = 2,
+    /// <summary>The image is stretched over the whole face, whatever the two aspect ratios.</summary>
+    Stretch = 2,
 }
 /// <summary>An integer rectangle of source pixels, origin top-left and <c>y</c> downward.</summary>
 /// <param name="X">The left edge, in pixels.</param>

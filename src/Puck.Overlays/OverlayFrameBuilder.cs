@@ -447,7 +447,7 @@ public sealed class OverlayFrameBuilder {
     /// <paramref name="slotB"/> alone, 1 shows <paramref name="slot"/> alone). Ignored when <paramref name="slotB"/>
     /// is -1.</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
+    public void WriteFrame(float x, float y, float w, float h, int slot, Puck.Commands.SourceFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
         if (!TryTakeElement()) {
             return;
         }

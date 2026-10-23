@@ -7,18 +7,19 @@ namespace Puck.Cli.Automation;
 /// Merges the Cobertura reports of every test run into one line-coverage verdict over the live <c>src/</c> tree. A line
 /// is covered when any run hit it. A source file is named by its repository-relative path whatever root the build that
 /// produced the report spelled (a local checkout, or <c>/_/</c> under a CI build's path mapping). Lines under a prefix of
-/// the GPU-only list (<c>build/CoverageGpuOnly.txt</c>) are left out: the runners measuring coverage have no GPU, and the
-/// list is the one place that says which code only a GPU reaches.
+/// the hardware-only list (<c>build/CoverageHardwareOnly.txt</c>) are left out: the runners measuring coverage have no
+/// GPU and no real mouse or foreground window, and the list is the one place that says which code only that hardware
+/// reaches.
 /// </summary>
 public static class CoverageReport {
-    /// <summary>The repository-relative path of the GPU-only list.</summary>
-    public const string GpuOnlyList = "build/CoverageGpuOnly.txt";
+    /// <summary>The repository-relative path of the hardware-only list.</summary>
+    public const string HardwareOnlyList = "build/CoverageHardwareOnly.txt";
 
-    /// <summary>Reads the GPU-only list: one repository-relative file or directory prefix per line, with <c>#</c>
+    /// <summary>Reads the hardware-only list: one repository-relative file or directory prefix per line, with <c>#</c>
     /// starting a comment.</summary>
     /// <param name="text">The list's text.</param>
     /// <returns>The prefixes, with forward slashes.</returns>
-    public static IReadOnlyList<string> ParseGpuOnly(string text) => [.. text
+    public static IReadOnlyList<string> ParseHardwareOnly(string text) => [.. text
         .Split(separator: '\n')
         .Select(selector: static line => {
             var comment = line.IndexOf(value: '#');
@@ -125,12 +126,12 @@ public static class CoverageReport {
     /// grouped into ranges by file, and every live project directory no run loaded a line of.</summary>
     /// <param name="files">The merged coverage (<see cref="Merge"/>).</param>
     /// <param name="projects">The live <c>src/</c> project directories, repository-relative.</param>
-    /// <param name="gpuOnly">The GPU-only prefixes (<see cref="ParseGpuOnly"/>).</param>
+    /// <param name="hardwareOnly">The hardware-only prefixes (<see cref="ParseHardwareOnly"/>).</param>
     /// <param name="writer">The report's destination.</param>
-    /// <returns><see langword="true"/> when every measured line outside the GPU-only list is covered and every project
+    /// <returns><see langword="true"/> when every measured line outside the hardware-only list is covered and every project
     /// outside it was loaded.</returns>
-    public static bool Judge(SortedDictionary<string, SortedDictionary<int, bool>> files, IEnumerable<string> projects, IReadOnlyList<string> gpuOnly, TextWriter writer) {
-        bool Excluded(string path) => gpuOnly.Any(predicate: prefix => path.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix));
+    public static bool Judge(SortedDictionary<string, SortedDictionary<int, bool>> files, IEnumerable<string> projects, IReadOnlyList<string> hardwareOnly, TextWriter writer) {
+        bool Excluded(string path) => hardwareOnly.Any(predicate: prefix => path.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix));
         var measured = 0;
         var covered = 0;
         var uncovered = new StringBuilder();
@@ -163,7 +164,7 @@ public static class CoverageReport {
             .ToArray();
         var rate = ((measured == 0) ? 0d : ((100d * covered) / measured));
 
-        writer.WriteLine(value: $"Line coverage: {covered} of {measured} measured lines ({rate:F2}%), GPU-only prefixes left out: {gpuOnly.Count}.");
+        writer.WriteLine(value: $"Line coverage: {covered} of {measured} measured lines ({rate:F2}%), hardware-only prefixes left out: {hardwareOnly.Count}.");
         if (uncoveredFiles != 0) {
             writer.WriteLine(value: $"{uncoveredFiles} files hold uncovered lines:");
             writer.Write(value: uncovered.ToString());

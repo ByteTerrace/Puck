@@ -457,7 +457,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 b: instance,
                 comparisonType: StringComparison.Ordinal
             )) {
-                return ((row.Fit == WorldHudFrameFit.Contain)
+                return ((row.Fit == SourceFit.Contain)
                     ? SourceFit.Contain
                     : SourceFit.Stretch);
             }

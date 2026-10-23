@@ -164,7 +164,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
         builder.BeginChannel(channel: OverlayChannel.Hud);
         builder.WriteFrame(
             alpha: 1f,
-            fit: OverlayHudFrameFit.Contain,
+            fit: SourceFit.Contain,
             h: Height,
             mirror: true,
             mix: 0.25f,
@@ -194,7 +194,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
         builder.BeginChannel(channel: OverlayChannel.Hud);
         builder.WriteFrame(
             alpha: 1f,
-            fit: OverlayHudFrameFit.Cover,
+            fit: SourceFit.Cover,
             h: Height,
             mirror: false,
             mix: 0.25f,

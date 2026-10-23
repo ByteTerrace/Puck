@@ -7,7 +7,7 @@ namespace Puck.Cli.Release.Tests.Automation;
 /// <summary>
 /// <c>puck artifacts coverage</c> merges every shard's Cobertura reports: a line is covered when any run hit it, a file
 /// is named by its <c>src/</c> path whatever root the build spelled, generated sources and files outside <c>src/</c> are
-/// left out, and the verdict fails on an uncovered line or an unloaded project outside the GPU-only list.
+/// left out, and the verdict fails on an uncovered line or an unloaded project outside the hardware-only list.
 /// </summary>
 public sealed class CoverageReportLawTests {
     private static string Report(TemporaryDirectory directory, string name, string fileName, params (int Number, int Hits)[] lines) =>
@@ -32,7 +32,7 @@ public sealed class CoverageReportLawTests {
         Assert.Equal(expected: [true, true, false, false, false], actual: files["src/Puck.A/A.cs"].Values);
         using var writer = new StringWriter();
 
-        Assert.False(condition: CoverageReport.Judge(files: files, gpuOnly: [], projects: ["src/Puck.A", "src/Puck.B/"], writer: writer));
+        Assert.False(condition: CoverageReport.Judge(files: files, hardwareOnly: [], projects: ["src/Puck.A", "src/Puck.B/"], writer: writer));
         Assert.Contains(expectedSubstring: "2 of 5 measured lines (40.00%)", actualString: writer.ToString());
         Assert.Contains(expectedSubstring: "src/Puck.A/A.cs: 3 of 5 lines uncovered: 3-4 6", actualString: writer.ToString());
         Assert.Contains(expectedSubstring: "  src/Puck.B/", actualString: writer.ToString());
@@ -53,18 +53,18 @@ public sealed class CoverageReportLawTests {
         Assert.Equal(expected: [true, true, true], actual: merged["src/Puck.A/A.cs"].Values);
     }
     [Fact]
-    public void TheGpuOnlyListLeavesItsLinesAndProjectsOut() {
+    public void TheHardwareOnlyListLeavesItsLinesAndProjectsOut() {
         using var directory = new TemporaryDirectory();
         var files = CoverageReport.Merge(reports: [
             Report(directory: directory, fileName: "src/Puck.A/A.cs", lines: [(1, 1)], name: "0.cobertura.xml"),
             Report(directory: directory, fileName: "/_/src/Puck.A/Gpu/B.cs", lines: [(1, 0)], name: "1.cobertura.xml"),
         ]);
-        var gpuOnly = CoverageReport.ParseGpuOnly(text: "# GPU only\r\nsrc/Puck.A/Gpu/ # the device path\n\nsrc\\Puck.B/\n");
+        var hardwareOnly = CoverageReport.ParseHardwareOnly(text: "# GPU only\r\nsrc/Puck.A/Gpu/ # the device path\n\nsrc\\Puck.B/\n");
         using var writer = new StringWriter();
 
-        Assert.Equal(expected: ["src/Puck.A/Gpu/", "src/Puck.B/"], actual: gpuOnly);
-        Assert.True(condition: CoverageReport.Judge(files: files, gpuOnly: gpuOnly, projects: ["src/Puck.A/", "src/Puck.B/"], writer: writer));
-        Assert.Equal(expected: $"Line coverage: 1 of 1 measured lines (100.00%), GPU-only prefixes left out: 2.{Environment.NewLine}", actual: writer.ToString());
+        Assert.Equal(expected: ["src/Puck.A/Gpu/", "src/Puck.B/"], actual: hardwareOnly);
+        Assert.True(condition: CoverageReport.Judge(files: files, hardwareOnly: hardwareOnly, projects: ["src/Puck.A/", "src/Puck.B/"], writer: writer));
+        Assert.Equal(expected: $"Line coverage: 1 of 1 measured lines (100.00%), hardware-only prefixes left out: 2.{Environment.NewLine}", actual: writer.ToString());
         Assert.Null(@object: CoverageReport.SourcePath(fileName: "lib/Puck.C/C.cs"));
     }
 }

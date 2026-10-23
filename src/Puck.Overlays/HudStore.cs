@@ -32,18 +32,6 @@ public enum OverlayHudElementKind : byte {
     /// names, drawn through <see cref="OverlayFrameSlots"/>.</summary>
     Frame,
 }
-/// <summary>How a sampled <see cref="OverlayHudElementKind.Frame"/> element's content maps onto its element rect —
-/// the presentation-side twin of the document's <c>WorldHudFrameFit</c>.</summary>
-public enum OverlayHudFrameFit : byte {
-    /// <summary>Fills the rect, cropping the source's longer axis.</summary>
-    Cover,
-
-    /// <summary>Fits entirely inside the rect, letterboxing the source's shorter axis.</summary>
-    Contain,
-
-    /// <summary>Maps the source directly onto the rect, ignoring its aspect.</summary>
-    Stretch,
-}
 /// <summary>A normalized rect (origin top-left, Y down) in the same two coordinate spaces
 /// <c>Puck.World.WorldHudRect</c> uses: a panel's rect is screen space, an element's rect is its owning panel's local
 /// space.</summary>
@@ -103,7 +91,7 @@ public readonly record struct OverlayHudElement(
     string? Binding,
     ReadOnlyMemory<OverlayHudTemplateSegment> Template = default,
     int FrameSource = -1,
-    OverlayHudFrameFit Fit = OverlayHudFrameFit.Cover,
+    Puck.Commands.SourceFit Fit = Puck.Commands.SourceFit.Cover,
     bool Mirror = false,
     float Radius = 0f,
     float Opacity = 1f,

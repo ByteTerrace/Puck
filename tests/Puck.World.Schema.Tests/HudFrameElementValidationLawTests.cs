@@ -68,7 +68,7 @@ public sealed class HudFrameElementValidationLawTests {
             radius: 12f,
             opacity: 0.75f
         ) with {
-            Fit = WorldHudFrameFit.Contain,
+            Fit = Puck.Commands.SourceFit.Contain,
         };
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(
@@ -85,7 +85,7 @@ public sealed class HudFrameElementValidationLawTests {
             actual: roundTripped.Kind
         );
         Assert.Equal(
-            expected: WorldHudFrameFit.Contain,
+            expected: Puck.Commands.SourceFit.Contain,
             actual: roundTripped.Fit
         );
         Assert.True(condition: roundTripped.Mirror);

@@ -41,8 +41,9 @@ agent works in that mode by default, without asking:
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Code no test and no live world reaches is deleted, not tested.
   CI checks the 100% on every push to `main` (`puck artifacts coverage`, the
-  `coverage` job in `azure.yml`, outside what deploy waits for); code only a
-  GPU reaches is left out through one list, `build/CoverageGpuOnly.txt`.
+  `coverage` job in `azure.yml`, outside what deploy waits for); code only
+  real hardware reaches (a GPU, or a session's real mouse and foreground
+  window) is left out through one list, `build/CoverageHardwareOnly.txt`.
 - The owner's velocity rulings:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.

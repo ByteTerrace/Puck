@@ -46,7 +46,7 @@ namespace Puck.World;
 /// lock guards this state.</para>
 /// <para>The binder's device work, what needs a GPU device or its shared resources, the frame presenter, the render
 /// graph's running instances, or a camera or capture handing over frames, lives in the <c>WorldScreenBinder.Device.*</c>
-/// files, which <c>build/CoverageGpuOnly.txt</c> leaves out of the CPU suites' line coverage; every other line is reached
+/// files, which <c>build/CoverageHardwareOnly.txt</c> leaves out of the CPU suites' line coverage; every other line is reached
 /// by a CPU test.</para>
 /// </remarks>
 public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {

@@ -388,7 +388,7 @@ public static class ArtifactsCommand {
             .ToArray();
 
         if (reports.Length == 0) { throw new InvalidDataException(message: $"No coverage reports under {results}."); }
-        var gpuOnly = CoverageReport.ParseGpuOnly(text: File.ReadAllText(path: Path.Combine(path1: root, path2: CoverageReport.GpuOnlyList)));
+        var hardwareOnly = CoverageReport.ParseHardwareOnly(text: File.ReadAllText(path: Path.Combine(path1: root, path2: CoverageReport.HardwareOnlyList)));
         var projects = System.Xml.Linq.XDocument.Load(uri: Path.Combine(path1: root, path2: "Puck.slnx"))
             .Descendants(name: "Project")
             .Select(selector: static project => ((string?)project.Attribute(name: "Path") ?? ""))
@@ -398,7 +398,7 @@ public static class ArtifactsCommand {
 
         Console.WriteLine(value: $"Merged {reports.Length} coverage reports.");
         using var report = new StringWriter();
-        var complete = CoverageReport.Judge(files: files, gpuOnly: gpuOnly, projects: projects, writer: report);
+        var complete = CoverageReport.Judge(files: files, hardwareOnly: hardwareOnly, projects: projects, writer: report);
 
         File.WriteAllText(path: Path.Combine(path1: directory, path2: "coverage.txt"), contents: report.ToString());
         Console.Write(value: report.ToString());
@@ -453,7 +453,7 @@ public static class ArtifactsCommand {
         );
         var resultsOption = new Option<string>(name: "--results") { DefaultValueFactory = static _ => "artifacts/test-results", Description = "The directory holding every shard's Cobertura reports." };
         var coverage = new Command(
-            description: "Merge the test runs' coverage reports; fail unless every live line outside the GPU-only list is covered.",
+            description: "Merge the test runs' coverage reports; fail unless every live line outside the hardware-only list is covered.",
             name: "coverage"
         ) { resultsOption };
         var command = new Command(

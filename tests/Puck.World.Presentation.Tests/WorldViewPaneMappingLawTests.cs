@@ -225,7 +225,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     public void AContainedPaneIsDrawnAtItsSourcesAspectAndMapsInItsPixels() {
         m_document = (Views with {
             Graphs = [new WorldViewGraph(
-                Fit: WorldHudFrameFit.Contain,
+                Fit: Puck.Commands.SourceFit.Contain,
                 Name: Pane,
                 Package: RenderGraphPackageCatalog.SdfWorld
             )],

@@ -177,7 +177,7 @@ the composition root.
 a path), never by concatenation.
 
 **The screen binder's device work lives in `WorldScreenBinder.Device.*`**, the
-prefix `build/CoverageGpuOnly.txt` lists: what needs a GPU device or its shared
+prefix `build/CoverageHardwareOnly.txt` lists: what needs a GPU device or its shared
 resources, the frame presenter, the render graph's running instances, or a
 camera or capture handing over frames. `WorldScreenBinderLawTests` reaches every
 line of the other binder files on the CPU, so a binder member that needs no

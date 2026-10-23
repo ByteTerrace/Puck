@@ -39,8 +39,10 @@ two runs agree.
 CI checks 100% line coverage of live `src/` from the CPU suites on every push
 to `main` (`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside
 what deploy waits for). New code lands with a test that reaches it, and code
-nothing reaches is deleted, not tested. Code only a GPU reaches goes in
-`build/CoverageGpuOnly.txt`, the one exclusion list. To see a suite's coverage
+nothing reaches is deleted, not tested. Code only real hardware reaches (a GPU,
+or a session's real mouse and foreground window) goes, as a thin seam of
+hardware calls whose decisions are tested apart, in
+`build/CoverageHardwareOnly.txt`, the one exclusion list. To see a suite's coverage
 locally, run it as
 `dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
 and merge with `puck artifacts coverage --results <dir>`. A line counts where a

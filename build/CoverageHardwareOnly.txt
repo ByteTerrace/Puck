@@ -1,8 +1,9 @@
-# The one list of live code that only a hardware GPU reaches. CI's test runners have no GPU, so `puck artifacts coverage`
-# leaves every line under these repository-relative prefixes out of the 100% line-coverage requirement, and a project
-# directory listed here may go unloaded. A prefix earns its place only when every line under it runs on a device alone:
-# code that a CPU test can reach is tested or deleted instead. The GPU-trait test classes
-# ([Trait("Category", "Gpu")]) are the evidence for what is listed here.
+# The one list of live code that only real hardware reaches: a GPU device, or a session's real mouse and foreground
+# window. CI's test runners have neither, so `puck artifacts coverage` leaves every line under these repository-relative
+# prefixes out of the 100% line-coverage requirement, and a project directory listed here may go unloaded. A prefix
+# earns its place only when every line under it runs on that hardware alone: code that a CPU test can reach is tested or
+# deleted instead, so a listed seam holds the hardware calls and nothing they decide. The GPU-trait test classes
+# ([Trait("Category", "Gpu")]) are the evidence for the GPU entries.
 # The screen binder's device work: what needs a GPU device or its shared resources, the frame presenter, the render
 # graph's running instances, or a camera or capture handing over frames. WorldScreenBinderLawTests covers the rest.
 src/Puck.World/WorldScreenBinder.Device.
@@ -17,3 +18,7 @@ src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.
 # A removed Direct3D 12 device's DRED record, read only from a device that was removed; DirectXRemovalReportLawTests
 # covers its formatting.
 src/Puck.DirectX/DirectXRemovalReport.Device.
+# The Win32 window's pointer-lock seam: hiding, confining, capturing and moving the session's real cursor, which only a
+# foreground window under a real mouse reaches. Win32PointerLockLawTests covers every decision and coordinate it uses,
+# and Win32PointerTests a background window's refusal to lock.
+src/Puck.Platform.Windows/Win32NativeWindow.PointerLock.

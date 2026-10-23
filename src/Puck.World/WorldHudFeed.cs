@@ -62,7 +62,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 Binding: element.Binding,
                 Template: BuildTemplate(template: element.Template),
                 FrameSource: -1,
-                Fit: ToFit(fit: element.Fit),
+                Fit: element.Fit,
                 Mirror: element.Mirror,
                 Radius: element.Radius,
                 Opacity: element.Opacity
@@ -313,12 +313,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         WorldHudLayer.Over => OverlayHudBand.Over,
         WorldHudLayer.Replace => OverlayHudBand.Replace,
         _ => OverlayHudBand.Under,
-    };
-    private static OverlayHudFrameFit ToFit(WorldHudFrameFit fit) => fit switch {
-        WorldHudFrameFit.Cover => OverlayHudFrameFit.Cover,
-        WorldHudFrameFit.Contain => OverlayHudFrameFit.Contain,
-        WorldHudFrameFit.Stretch => OverlayHudFrameFit.Stretch,
-        _ => OverlayHudFrameFit.Cover,
     };
     private static OverlayHudElementKind ToKind(WorldHudElementKind kind) => kind switch {
         WorldHudElementKind.Rect => OverlayHudElementKind.Rect,

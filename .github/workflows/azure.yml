@@ -45,8 +45,8 @@ jobs:
     with:
       prebuilt: true
   # Outside deploy's needs: it reports on every push to main and holds no deploy while the suite climbs to 100%.
-  # Every shard writes a Cobertura report per assembly; the union must cover every live line outside the GPU-only list
-  # (build/CoverageGpuOnly.txt), and every live project must be loaded by some run.
+  # Every shard writes a Cobertura report per assembly; the union must cover every live line outside the hardware-only
+  # list (build/CoverageHardwareOnly.txt), and every live project must be loaded by some run.
   coverage:
     if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     name: Check line coverage

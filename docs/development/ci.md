@@ -122,8 +122,9 @@ run hit it) and fails unless every line of live `src/` code is covered and every
 live project was loaded by some run. The suite's target is the smallest set of
 tests that reaches that, plus the owner's keep-list of invariant tests coverage
 cannot see ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). The runners have no
-GPU, so code only a device reaches is left out through one list,
-`build/CoverageGpuOnly.txt`, and nowhere else. The job writes the full list of
+GPU and no real mouse or foreground window, so code only that hardware reaches
+is left out through one list, `build/CoverageHardwareOnly.txt`, and nowhere
+else. The job writes the full list of
 uncovered lines to `coverage.txt` in the results directory. Deploy does not wait
 on it, so a red coverage check never holds a release.
 Every assembly must discover tests; hardware-dependent cases may still skip.
