@@ -39,17 +39,8 @@ internal static class Frontier {
     /// run persisted nothing, because it consumed no domain or because a law failed.</returns>
     public static IReadOnlyList<(string Key, int Block, long Index)>? AdvanceAndPersist(bool lawsPassed) {
         lock (Gate) {
-            if (
-                ConsumedKeys.IsEmpty ||
-                !lawsPassed
-            ) {
+            if (!Advance(State, ConsumedKeys.Keys.ToHashSet(StringComparer.Ordinal), lawsPassed)) {
                 return null;
-            }
-
-            foreach (var entry in State.Domains) {
-                if (ConsumedKeys.ContainsKey(key: entry.Key)) {
-                    ++entry.Index;
-                }
             }
 
             State.Domains.Sort(comparison: static (left, right) => string.CompareOrdinal(
@@ -64,6 +55,16 @@ internal static class Frontier {
 
             return [.. State.Domains.Select(selector: static entry => (entry.Key, entry.Block, entry.Index))];
         }
+    }
+    // Kept separate from persistence so a law can exercise stale input and filtered/failed runs without advancing
+    // the running suite's shared frontier or writing an artifact.
+    public static bool Advance(Model state, IReadOnlySet<string> consumedKeys, bool lawsPassed) {
+        if (consumedKeys.Count == 0 || !lawsPassed) { return false; }
+        state.Domains.RemoveAll(entry => !LawRegistry.DomainKeys.Contains(entry.Key));
+        foreach (var entry in state.Domains) {
+            if (consumedKeys.Contains(entry.Key)) { ++entry.Index; }
+        }
+        return true;
     }
     /// <summary>Records that <paramref name="key"/> was consumed this run and returns its current block window.</summary>
     /// <param name="key">The domain key.</param>

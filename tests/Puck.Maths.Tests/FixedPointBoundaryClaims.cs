@@ -4,7 +4,7 @@ using Xunit;
 namespace Puck.Maths.Tests;
 
 internal static class FixedPointBoundaryClaims {
-    private static readonly int[] InvalidInverseShifts = [-1, -2, -31, int.MinValue, int.MaxValue];
+    private static readonly int[] InvalidInverseShifts = [-1, -2, -31, int.MinValue, 128, int.MaxValue];
     private static readonly int[] NegativeShifts = [-1, int.MinValue];
     private static readonly BigInteger[] RationalNumerators = [BigInteger.Zero, BigInteger.One, -BigInteger.One];
     private static readonly decimal[] Decimals = [0m, 1m, -1m, decimal.MaxValue];
@@ -15,8 +15,10 @@ internal static class FixedPointBoundaryClaims {
     private static readonly int[] Scales = [16, 32];
     private static readonly long[] CarrierEnds = [long.MinValue, long.MaxValue];
     private static readonly ulong[] UnsignedPeers = [0, 1, 65535, 65536, (1UL << 47) - 1, 1UL << 47, 1UL << 63, ulong.MaxValue];
-    private static readonly long[] SignedPeers = [long.MinValue, -98305, -98304, -98303, -32769, -32768, -1,
-        0, 1, 32767, 32768, 32769, 98303, 98304, 98305, long.MaxValue];
+    private static readonly long[] SignedPeers = [long.MinValue, long.MinValue + 32767, long.MinValue + 32768,
+        long.MinValue + 32769, -98305, -98304, -98303, -32769, -32768, -1,
+        0, 1, 32767, 32768, 32769, 98303, 98304, 98305,
+        long.MaxValue - 32768, long.MaxValue - 32767, long.MaxValue - 32766, long.MaxValue];
 
     private static class ConvertTo<T> where T : INumberBase<T> {
         public static T Checked<TSource>(TSource value) where TSource : INumberBase<TSource> => T.CreateChecked(value);
@@ -32,6 +34,7 @@ internal static class FixedPointBoundaryClaims {
                 out a, out b, out var c, out d, out var e, out var f));
             Assert.Equal((0L, 0L, 0L, 0L, 0L, 0L), (a, b, c, d, e, f));
         }
+
         Assert.True(FixedSymmetricSolve.TryInvertSymmetric2(1, 0, 1, 0, out var x, out _, out _));
         Assert.Equal(1L, x);
         return null;
@@ -45,6 +48,35 @@ internal static class FixedPointBoundaryClaims {
                     () => FixedPointRounding.RoundRational(numerator, BigInteger.One, shift));
             }
         }
+        return null;
+    }
+
+    public static string? SolveShiftsRefuse() {
+        foreach (var shift in NegativeShifts) {
+            Assert.False(FixedSymmetricSolve.TrySolveSymmetric2(1, 0, 1, 1, 1, shift, out var x, out var y));
+            Assert.Equal((0L, 0L), (x, y));
+            Assert.False(FixedSymmetricSolve.TrySolveSymmetric3(1, 0, 0, 1, 0, 1, 1, 1, 1, shift,
+                out x, out y, out var z));
+            Assert.Equal((0L, 0L, 0L), (x, y, z));
+        }
+
+        return null;
+    }
+
+    public static string? FrontierDropsRetiredDomains() {
+        var model = new Frontier.Model { Domains = [
+            new() { Key = "scalar", Block = 512, Index = 3 },
+            new() { Key = "angle-wrap", Block = 512, Index = 7 },
+            new() { Key = "float-projection", Block = 512, Index = 4 }
+        ] };
+        var consumed = new HashSet<string>(StringComparer.Ordinal) { "scalar" };
+        Assert.False(Frontier.Advance(model, consumed, false));
+        Assert.False(Frontier.Advance(model, new HashSet<string>(StringComparer.Ordinal), true));
+        Assert.Equal(3, model.Domains.Count);
+        Assert.Equal(3, model.Domains[0].Index);
+        Assert.True(Frontier.Advance(model, consumed, true));
+        Assert.Equal(["scalar", "angle-wrap"], model.Domains.Select(entry => entry.Key));
+        Assert.Equal([4L, 7L], model.Domains.Select(entry => entry.Index));
         return null;
     }
 
@@ -67,21 +99,73 @@ internal static class FixedPointBoundaryClaims {
                 foreach (var delta in Deltas) {
                     foreach (var sign in Signs) {
                         var raw = (midpoint + delta) * sign;
-                        var value = FixedQ4816.FromRawBits(raw);
-                        var expected = Oracles.NearestBinaryPresentationBits(raw, 16, 23, 8);
-                        EqualBits(expected, BitConverter.SingleToUInt32Bits((float)value), raw, "float explicit");
-                        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateChecked(value)), raw, "float checked");
-                        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateSaturating(value)), raw, "float saturating");
-                        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateTruncating(value)), raw, "float truncating");
+                        AssertSingleConversions(raw);
                     }
                 }
+
             }
         }
+
         foreach (var raw in SingleEdges) {
-            Assert.Equal(Oracles.NearestBinaryPresentationBits(raw, 16, 23, 8),
-                BitConverter.SingleToUInt32Bits((float)FixedQ4816.FromRawBits(raw)));
+            AssertSingleConversions(raw);
         }
+
         return null;
+    }
+
+    private static void AssertSingleConversions(long raw) {
+        var value = FixedQ4816.FromRawBits(raw);
+        var expected = Oracles.NearestBinaryPresentationBits(raw, 16, 23, 8);
+        EqualBits(expected, BitConverter.SingleToUInt32Bits((float)value), raw, "float explicit");
+        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateChecked(value)), raw, "float checked");
+        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateSaturating(value)), raw, "float saturating");
+        EqualBits(expected, BitConverter.SingleToUInt32Bits(float.CreateTruncating(value)), raw, "float truncating");
+    }
+
+    public static string? DirectPeerHooksMatchExactScaling() {
+        foreach (var raw in SignedPeers) {
+            var source = FixedQ3232.FromRawBits(raw);
+            var rounded = Oracles.RoundRationalTiesToEven(raw, BigInteger.One << 16);
+            CheckDirectHooks<FixedQ3232, UFixedQ4816>(source, rounded, true, static value => value.Value);
+            CheckDirectHooks<FixedQ3232, FixedQ4816>(source, rounded, false, static value => value.Value);
+        }
+
+        foreach (var raw in UnsignedPeers) {
+            CheckDirectHooks<UFixedQ4816, FixedQ3232>(UFixedQ4816.FromRawBits(raw), (BigInteger)raw << 16,
+                false, static value => value.Value);
+        }
+
+        foreach (var raw in SingleEdges) {
+            CheckDirectHooks<FixedQ4816, FixedQ3232>(FixedQ4816.FromRawBits(raw), (BigInteger)raw << 16,
+                false, static value => value.Value);
+        }
+
+        return null;
+    }
+
+    private static void CheckDirectHooks<TSource, TTarget>(TSource source, BigInteger exact, bool unsigned,
+        Func<TTarget, BigInteger> raw) where TSource : struct, INumberBase<TSource> where TTarget : struct, INumberBase<TTarget> {
+        var minimum = unsigned ? BigInteger.Zero : long.MinValue;
+        var maximum = unsigned ? (BigInteger)ulong.MaxValue : long.MaxValue;
+        var saturated = BigInteger.Clamp(exact, minimum, maximum);
+        var truncated = unsigned ? (BigInteger)Oracles.WrapToUnsignedRaw(exact) : Oracles.WrapToRaw(exact);
+        Assert.True(IDirectNumberConversions<TTarget>.FromSaturating(source, out var from));
+        Assert.True(IDirectNumberConversions<TSource>.ToSaturating(source, out TTarget to));
+        Assert.Equal(saturated, raw(from));
+        Assert.Equal(saturated, raw(to));
+        Assert.True(IDirectNumberConversions<TTarget>.FromTruncating(source, out from));
+        Assert.True(IDirectNumberConversions<TSource>.ToTruncating(source, out to));
+        Assert.Equal(truncated, raw(from));
+        Assert.Equal(truncated, raw(to));
+        if (exact < minimum || exact > maximum) {
+            Assert.Throws<OverflowException>(() => IDirectNumberConversions<TTarget>.FromChecked(source, out _));
+            Assert.Throws<OverflowException>(() => IDirectNumberConversions<TSource>.ToChecked(source, out TTarget _));
+        } else {
+            Assert.True(IDirectNumberConversions<TTarget>.FromChecked(source, out from));
+            Assert.True(IDirectNumberConversions<TSource>.ToChecked(source, out to));
+            Assert.Equal(exact, raw(from));
+            Assert.Equal(exact, raw(to));
+        }
     }
 
     public static string? HalfRoundsOnce() {
@@ -101,12 +185,15 @@ internal static class FixedPointBoundaryClaims {
                         CheckHalfRaw(-(center + delta), scale);
                     }
                 }
+
             }
         }
+
         foreach (var raw in CarrierEnds) {
             CheckHalfRaw(raw, 16);
             CheckHalfRaw(raw, 32);
         }
+
         CheckHalf(UFixedQ4816.MaxValue, ulong.MaxValue, 16);
         return null;
     }

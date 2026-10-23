@@ -66,7 +66,9 @@ decision here.
    hand-revert files in a shared tree.
 
 Deleting a law removes its JSON row, its binding and any oracle only it used,
-then regenerates the registers.
+then regenerates the registers. The frontier writer drops keys whose Domain
+fields no longer exist in LawRegistry; active domains a filtered run skips
+keep their counters.
 
 ## Run a tier
 
