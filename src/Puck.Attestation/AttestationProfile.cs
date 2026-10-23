@@ -356,7 +356,7 @@ public sealed class AttestationProfile {
 
         // Binding targets and the terminal claim payload are profile-checked inside the verifier's
         // authenticated path, on the payloads it already decoded.
-        return AttestationVerifier.VerifyChain(
+        return AttestationVerifier.VerifyChainCore(
             chain: chain,
             claim: claim,
             codec: codec,

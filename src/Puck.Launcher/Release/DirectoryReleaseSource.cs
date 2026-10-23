@@ -14,8 +14,9 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
     private readonly string m_root = Path.GetFullPath(path: root);
 
     /// <inheritdoc/>
-    public async Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken) {
+    public async Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, long length, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: destination);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
 
         var objectPath = ContentAddressedStore.ObjectPath(
             pin: pin,
@@ -28,15 +29,19 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
 
         await using var source = File.OpenRead(path: objectPath);
 
-        await source.CopyToAsync(
-            cancellationToken: cancellationToken,
-            destination: destination
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        if (source.Length != length) {
+            return false;
+        }
 
-        return true;
+        return await ReleaseSourceReader.CopyBoundedAsync(
+            cancellationToken: cancellationToken,
+            source: source,
+            destination: destination,
+            maximumBytes: length
+        ).ConfigureAwait(continueOnCapturedContext: false) == length;
     }
     /// <inheritdoc/>
-    public Task<ReleaseSourceResult> TryGetLatestManifestAsync(string channel, CancellationToken cancellationToken) {
+    public async Task<ReleaseSourceResult> TryGetLatestManifestAsync(string channel, CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: channel);
 
         var manifestPath = Path.Combine(
@@ -46,19 +51,26 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
         );
 
         if (!File.Exists(path: manifestPath)) {
-            return Task.FromResult(result: new ReleaseSourceResult(
+            return new ReleaseSourceResult(
                 Found: false,
                 ManifestBytes: [],
                 RefusalReason: $"no manifest at '{manifestPath}'"
-            ));
+            );
         }
 
-        var bytes = File.ReadAllBytes(path: manifestPath);
+        await using var source = File.OpenRead(path: manifestPath);
+        using var buffer = new MemoryStream();
 
-        return Task.FromResult(result: new ReleaseSourceResult(
+        if ((source.Length > ReleaseSourceReader.MaximumManifestBytes) ||
+            (await ReleaseSourceReader.CopyBoundedAsync(source: source, destination: buffer,
+                maximumBytes: ReleaseSourceReader.MaximumManifestBytes, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false) is null)) {
+            return new ReleaseSourceResult(Found: false, ManifestBytes: [], RefusalReason: "release manifest exceeds the byte limit");
+        }
+
+        return new ReleaseSourceResult(
             Found: true,
-            ManifestBytes: bytes,
+            ManifestBytes: buffer.ToArray(),
             RefusalReason: null
-        ));
+        );
     }
 }

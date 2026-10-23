@@ -10,14 +10,14 @@ namespace Puck.Scripting;
 /// Loads and compiles addon modules the way <c>ShaderModuleLoader</c> loads shaders: read bytes through an
 /// <see cref="IAssetSource"/>, identify the format by its leading magic (a <c>\0asm</c> binary vs. WAT text),
 /// compile to a <see cref="Wasmtime.Module"/>, and cache the compiled module in a content-addressed LRU keyed
-/// by <see cref="AssetContentHash"/> so two documents naming the same bytes compile once.
+/// by the full <see cref="ContentPin"/> so two documents naming the same bytes compile once.
 /// </summary>
 public sealed class WasmModuleLoader {
     private const int DefaultMaxCachedModules = 64;
 
     private readonly IAssetSource m_assetSource;
     private readonly ScriptingEngine m_engine;
-    private readonly ContentAddressedLruCache<CompiledModule> m_moduleCache;
+    private readonly ContentAddressedLruCache<ContentPin, CompiledModule> m_moduleCache;
 
     /// <summary>Initializes a loader over the given engine and asset source with a default cache capacity.</summary>
     /// <param name="engine">The engine compiled modules bind to.</param>
@@ -49,7 +49,9 @@ public sealed class WasmModuleLoader {
 
         m_assetSource = assetSource;
         m_engine = engine;
-        m_moduleCache = new ContentAddressedLruCache<CompiledModule>(capacity: maxCachedModules);
+        // No eviction disposal: active instances retain their module independently of this cache. Wasmtime's
+        // module handle is reclaimed only after neither a live instance nor the cache references it.
+        m_moduleCache = new ContentAddressedLruCache<ContentPin, CompiledModule>(capacity: maxCachedModules);
     }
 
     // A compiled module beside the memories its binary declares, cached together under the bytes' content hash.
@@ -58,10 +60,14 @@ public sealed class WasmModuleLoader {
     // Reads the binary's declarations before Wasmtime sees it, so a malformed memory section is refused here by name
     // and a memory past the store's ceiling is known without instantiating anything. WAT text is converted to its
     // binary first, which parses but neither compiles nor instantiates.
-    private CompiledModule Compile(ReadOnlyMemory<byte> content, string name) {
+    private CompiledModule Compile(ReadOnlyMemory<byte> content, string name, ContentPin hash) {
         var binary = (content.Span.StartsWith(value: WasmBinaryFormat.WasmMagic)
             ? content.ToArray()
             : Module.ConvertText(wat: Encoding.UTF8.GetString(bytes: content.Span)));
+
+        if (binary.Length > AddonModuleLimits.BinaryBytes) {
+            throw new InvalidDataException(message: $"The addon module {name} exceeds the {AddonModuleLimits.BinaryBytes}-byte binary limit.");
+        }
 
         if (!WasmModuleDeclarations.TryRead(
             declarations: out var declarations,
@@ -69,6 +75,26 @@ public sealed class WasmModuleLoader {
             module: binary
         )) {
             throw new InvalidDataException(message: $"The addon module {name} is malformed: {error}.");
+        }
+
+        if (declarations.Imports.Count != 0) {
+            var import = declarations.Imports[0];
+            throw new InvalidDataException(message: $"The addon module {name} declares import '{import.Module}::{import.Name}'; addons may import nothing.");
+        }
+
+        if (declarations.Memories.Count > AddonModuleLimits.Memories) {
+            throw new AddonModuleLoadException(AddonFaultKind.MemoryLimit, hash,
+                $"MemoryLimit — the module declares {declarations.Memories.Count} memories; at most {AddonModuleLimits.Memories} is admitted, exported or not");
+        }
+        foreach (var memory in declarations.Memories) {
+            if (memory.MinimumBytes > AddonModuleLimits.MemoryBytes) {
+                throw new AddonModuleLoadException(AddonFaultKind.MemoryLimit, hash,
+                    $"MemoryLimit — memory declares {memory.MinimumPages} pages of 2^{memory.PageSizeLog2} bytes, past the {AddonModuleLimits.MemoryBytes}-byte ceiling");
+            }
+        }
+        if (declarations.Tables.Count > AddonModuleLimits.Tables ||
+            declarations.Tables.Any(table => table.MinimumElements > AddonModuleLimits.TableElements)) {
+            throw new InvalidDataException(message: $"The addon module {name} exceeds the table limit: at most {AddonModuleLimits.Tables} table of {AddonModuleLimits.TableElements} elements, exported or not.");
         }
 
         return new CompiledModule(
@@ -83,13 +109,16 @@ public sealed class WasmModuleLoader {
 
     /// <summary>Reads, compiles (or returns a cached), and identifies the addon module at <paramref name="path"/>.</summary>
     /// <param name="path">The module path (a <c>.wasm</c> binary or a <c>.wat</c> text module).</param>
+    /// <param name="expectedHash">The optional document hash checked against source bytes before conversion,
+    /// compilation, or cache lookup. Only a full canonical SHA-256 pin is admitted.</param>
     /// <returns>The compiled module and its content identity.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <exception cref="FileNotFoundException">No module exists at <paramref name="path"/>.</exception>
     /// <exception cref="InvalidDataException">The module is empty, or its binary is malformed in a section the host reads
-    /// before compiling (its imports, memories or exports); the message names the section and entry.</exception>
+    /// before compiling (its imports, memories, tables or exports), or exceeds a source/binary/table limit.</exception>
+    /// <exception cref="AddonModuleLoadException">The source hash or declared memory resources are refused before compilation.</exception>
     /// <exception cref="Wasmtime.WasmtimeException">The bytes are not valid wasm/WAT.</exception>
-    public ScriptingModuleInfo Load(string path) {
+    public ScriptingModuleInfo Load(string path, string? expectedHash = null) {
         if (string.IsNullOrWhiteSpace(value: path)) {
             throw new ArgumentException(
                 message: "Addon module path must be provided.",
@@ -106,20 +135,31 @@ public sealed class WasmModuleLoader {
             );
         }
 
-        var content = m_assetSource.Read(path: fullPath);
+        var content = m_assetSource.Read(path: fullPath, maximumBytes: AddonModuleLimits.SourceBytes);
         var byteLength = content.Length;
+
+        // Also check the return value, so an incorrect custom source cannot pass oversized bytes to native code.
+        if (byteLength > AddonModuleLimits.SourceBytes) {
+            throw new InvalidDataException(message: $"The addon module {fullPath} exceeds the {AddonModuleLimits.SourceBytes}-byte source limit.");
+        }
 
         if (byteLength == 0) {
             throw new InvalidDataException(message: $"The addon module file is empty: {fullPath}");
         }
 
-        var contentHash = AssetContentHash.Compute(content: content.Span);
+        var contentHash = ContentPin.Compute(content: content.Span);
+
+        if (expectedHash is not null && !string.Equals(contentHash.ToString(), expectedHash, StringComparison.Ordinal)) {
+            throw new AddonModuleLoadException(AddonFaultKind.HashMismatch, contentHash,
+                $"HashMismatch — content {contentHash} does not match the declared moduleHash pin {expectedHash}");
+        }
         var moduleName = Path.GetFileNameWithoutExtension(path: fullPath);
         var compiled = m_moduleCache.GetOrAdd(
             hash: contentHash,
             valueFactory: () => Compile(
                 content: content,
-                name: moduleName
+                name: moduleName,
+                hash: contentHash
             )
         );
 

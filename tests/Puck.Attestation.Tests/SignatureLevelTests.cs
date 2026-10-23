@@ -139,7 +139,7 @@ public sealed class SignatureLevelTests {
         );
 
         AssertRefused(
-            reasonMustContain: "signature does not verify",
+            reasonMustContain: "exactly 64",
             result: result
         );
     }
@@ -156,7 +156,7 @@ public sealed class SignatureLevelTests {
         );
 
         AssertRefused(
-            reasonMustContain: "signature does not verify",
+            reasonMustContain: "exactly 64",
             result: result
         );
     }
@@ -173,7 +173,7 @@ public sealed class SignatureLevelTests {
         );
 
         AssertRefused(
-            reasonMustContain: "signature does not verify",
+            reasonMustContain: "exactly 64",
             result: result
         );
     }

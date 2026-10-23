@@ -77,6 +77,10 @@ public static partial class ArenaTransforms {
             return false;
         }
 
+        var reads = new List<CellAccess>();
+        effect.CollectReads(into: reads);
+        transform.DisclosureReads = reads.Select(static access => access.RowOrdinal)
+            .Concat((effect as VectorEffect)?.DisclosureControls ?? []).Distinct().ToArray();
         return true;
     }
 

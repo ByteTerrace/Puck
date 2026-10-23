@@ -218,7 +218,7 @@ public sealed class HistoryRefusalLawTests {
 
         harness.Steps(count: 10);
         harness.Submit(mutation: new WorldMutation.UpsertAddon(
-            Addon: new WorldAddonRow(Enabled: true, Fuel: 1000UL, Hash: "sha256-64/0000000000000000", ModulePath: "absent.wasm", Name: "guest"),
+            Addon: new WorldAddonRow(Enabled: true, Fuel: 1000UL, Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000", ModulePath: "absent.wasm", Name: "guest"),
             Principal: Principal.Console
         ));
 

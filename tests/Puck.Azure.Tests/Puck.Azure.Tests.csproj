@@ -8,5 +8,6 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.Azure/Puck.Azure.csproj" />
+        <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
     </ItemGroup>
 </Project>

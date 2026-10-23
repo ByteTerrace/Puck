@@ -224,7 +224,7 @@ internal static partial class Fixtures {
             new(
             Name: "probe",
             ModulePath: "probe.wasm",
-            Hash: "sha256-64/0123456789abcdef",
+            Hash: "sha256/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             Fuel: 1_000_000UL,
             Enabled: false
         ),

@@ -23,6 +23,10 @@ public static partial class ArenaTransforms {
 
         moved = false;
 
+        if (!TryEncloseAudience(arena: context.Arena, transform: transform, binding: in binding, refusal: out refusal)) {
+            return false;
+        }
+
         return (transform switch {
             ArenaTransform.Arrange arrange => TryArrange(
             arrange: arrange,

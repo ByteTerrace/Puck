@@ -7,6 +7,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Attestation;
 using Puck.Azure.Functions.Middleware;
 using Puck.Azure.Functions.Services;
 using Puck.Storage;
@@ -97,11 +98,10 @@ public sealed class AttestKeys(
                 value: segments[1..5]
             ); // "keys/{type}/fingerprints/sha256:{fp}"
             var publicKeyBlobClient = containerClient.GetBlobClient(blobName: blobItem.Name);
-            var publicKeyPem = Encoding.UTF8.GetString(bytes: (await publicKeyBlobClient
-                .DownloadContentAsync(cancellationToken: cancellationToken))
-                .Value
-                .Content
-                .ToArray());
+            var publicKeyPem = Encoding.UTF8.GetString(bytes: await ReadKeyMaterialAsync(
+                blob: publicKeyBlobClient,
+                maximumBytes: 4096,
+                cancellationToken: cancellationToken));
             var pemFields = PemEncoding.Find(pemData: publicKeyPem);
             var publicKey = new byte[pemFields.DecodedDataLength];
 
@@ -112,20 +112,25 @@ public sealed class AttestKeys(
             );
 
             var bindingBlobClient = containerClient.GetBlobClient(blobName: $"private/{keyPath}/binding.cbor");
+            var request = new MintSubjectKeyBindingRequest {
+                KeyType = keyType,
+                PublicKey = publicKey,
+                SubjectId = userObjectId,
+            };
             BindingResult result;
             bool reattested;
 
             try {
-                var existingBinding = (await bindingBlobClient
-                    .DownloadContentAsync(cancellationToken: cancellationToken))
-                    .Value
-                    .Content
-                    .ToArray();
+                var existingBinding = await ReadKeyMaterialAsync(
+                    blob: bindingBlobClient,
+                    maximumBytes: AttestationResourceLimits.AttestationBytes,
+                    cancellationToken: cancellationToken);
 
                 result = await bindingService.ReattestAsync(
                     cancellationToken: cancellationToken,
                     existingBinding: existingBinding,
-                    now: now
+                    now: now,
+                    request: request
                 );
                 reattested = true;
             } catch (RequestFailedException e)
@@ -133,11 +138,7 @@ public sealed class AttestKeys(
                 result = await bindingService.MintSubjectKeyBindingAsync(
                     cancellationToken: cancellationToken,
                     now: now,
-                    request: new() {
-                        KeyType = keyType,
-                        PublicKey = publicKey,
-                        SubjectId = userObjectId,
-                    }
+                    request: request
                 );
                 reattested = false;
             }
@@ -165,6 +166,28 @@ public sealed class AttestKeys(
         return new OkObjectResult(value: new {
             Attestations = attestations,
         });
+    }
+
+    /// <summary>Reads caller-owned key material without buffering an arbitrarily large storage blob.</summary>
+    /// <param name="blob">The selected key or binding blob in the authenticated caller's storage.</param>
+    /// <param name="maximumBytes">The representation's byte limit, at most the attestation wire limit.</param>
+    /// <param name="cancellationToken">The request lifetime.</param>
+    /// <returns>The complete bounded content; an oversized blob is refused before parsing.</returns>
+    public static async Task<byte[]> ReadKeyMaterialAsync(BlobClient blob, int maximumBytes, CancellationToken cancellationToken) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumBytes, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumBytes, AttestationResourceLimits.AttestationBytes);
+        var response = await blob.DownloadStreamingAsync(
+            options: new BlobDownloadOptions { Range = new HttpRange(offset: 0, length: maximumBytes + 1) },
+            cancellationToken: cancellationToken);
+        using var rawResponse = response.GetRawResponse();
+        await using var content = response.Value.Content;
+        var buffer = new byte[maximumBytes + 1];
+        var length = await content.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
+
+        if (length > maximumBytes) {
+            throw new InvalidDataException(message: "Stored key material exceeds its byte limit.");
+        }
+        return buffer[..length];
     }
 }
 

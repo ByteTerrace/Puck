@@ -17,6 +17,15 @@ namespace Puck.World.Presentation.Tests;
 
 /// <summary>Adversarial laws for the authority boundary and source-scoped transfer escrow.</summary>
 public sealed partial class FederationTransferLawTests {
+    private static byte[] BoundClientProof(IAuthenticator security, PeerTestClient client, ReadOnlySpan<byte> serverChallenge, out byte[] clientChallenge) {
+        clientChallenge = security.NewChallenge();
+        return security.Prove(challenge: WorldFederationCodec.BindProofChallenge(
+            challenge: serverChallenge,
+            counterChallenge: clientChallenge,
+            clientKeyHash: client.KeyHash,
+            serverKeyHash: client.GetStream().Link.RemoteId.KeyHash,
+            serverProof: false));
+    }
     private static WorldMobilityIdentity Mobility(int index, ulong epoch = 0) =>
         new(
             DepartedFrom: new WorldEntityAddress(
@@ -910,12 +919,12 @@ public sealed partial class FederationTransferLawTests {
             ct: testToken,
             stream: stream
         );
-        var proof = security.Prove(challenge: challenge.Body.Span);
+        var proof = BoundClientProof(security: security, client: client, serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
 
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof),
+            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
             ct: testToken
         );
         Assert.Equal(
@@ -1119,7 +1128,7 @@ public sealed partial class FederationTransferLawTests {
             actual: challenge.Body.Length
         );
 
-        var proof = security.Prove(challenge: challenge.Body.Span);
+        var proof = BoundClientProof(security: security, client: client, serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
 
         Assert.NotEqual(
             expected: 32,
@@ -1128,7 +1137,7 @@ public sealed partial class FederationTransferLawTests {
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof),
+            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
             ct: testToken
         );
         var accepted = await RequireFrameAsync(
@@ -1186,15 +1195,13 @@ public sealed partial class FederationTransferLawTests {
             stream: stream
         );
         // Y signs the proof — never X's own key — so the connection can only ever be recorded as "authority-y".
-        var proof = oracleY.Sign(
-            challenge: challenge.Body.Span,
-            cancellationToken: CancellationToken.None
-        );
+        var proof = BoundClientProof(security: Authenticator(trustEntries: () => [], oracle: oracleY), client: client,
+            serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
 
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof),
+            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
             ct: testToken
         );
         Assert.Equal(
@@ -1273,6 +1280,7 @@ public sealed partial class FederationTransferLawTests {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         byte[] capturedProof;
+        byte[] capturedChallenge;
 
         using (var first = new PeerTestClient()) {
             await first.ConnectAsync(
@@ -1292,11 +1300,11 @@ public sealed partial class FederationTransferLawTests {
                 stream: stream
             );
 
-            capturedProof = security.Prove(challenge: challenge.Body.Span);
+            capturedProof = BoundClientProof(security: security, client: first, serverChallenge: challenge.Body.Span, clientChallenge: out capturedChallenge);
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
-                body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof),
+                body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof, challenge: capturedChallenge),
                 ct: testToken
             );
             Assert.Equal(
@@ -1329,7 +1337,7 @@ public sealed partial class FederationTransferLawTests {
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
-                body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof),
+                body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof, challenge: capturedChallenge),
                 ct: testToken
             );
             var refusal = await RequireFrameAsync(
@@ -1393,7 +1401,7 @@ public sealed partial class FederationTransferLawTests {
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
-                body: WorldFederationCodec.EncodeAuthentication(proof: new byte[64]),
+                body: WorldFederationCodec.EncodeAuthentication(proof: new byte[64], challenge: security.NewChallenge()),
                 ct: testToken
             );
             var refusal = await RequireFrameAsync(
@@ -1429,12 +1437,12 @@ public sealed partial class FederationTransferLawTests {
                 ct: testToken,
                 stream: stream
             );
-            var proof = security.Prove(challenge: challenge.Body.Span);
+            var proof = BoundClientProof(security: security, client: authenticated, serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
 
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
-                body: WorldFederationCodec.EncodeAuthentication(proof: proof),
+                body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
                 ct: testToken
             );
             var accepted = await RequireFrameAsync(

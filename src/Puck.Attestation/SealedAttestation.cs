@@ -16,8 +16,10 @@ namespace Puck.Attestation;
 /// <remarks>
 /// <para><b>Sealed attestation is deliberately unauthenticated as to sender.</b> The agreement is
 /// ephemeral-static: a fresh sender keypair per seal against the recipient's long-lived sealing key. That
-/// buys confidentiality and forward secrecy on the sender's side, and buys nothing about who sealed it —
-/// anyone holding the recipient's public sealing key can produce a payload that unseals cleanly. A sealed
+/// gives each payload a fresh agreement key, but compromise of the recipient's long-lived private key
+/// permits decryption of recorded payloads: their ephemeral public keys travel with them. It also says
+/// nothing about who sealed it — anyone holding the recipient's public sealing key can produce a payload
+/// that unseals cleanly. A sealed
 /// payload therefore proves only "someone sealed this for you"; when the recipient needs to know who,
 /// the sealed payload travels as the payload of an ordinary signed attestation, and the signature is what
 /// names the sender.</para>

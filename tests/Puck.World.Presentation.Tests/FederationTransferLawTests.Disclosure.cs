@@ -107,8 +107,9 @@ public sealed partial class FederationTransferLawTests {
             stream: stream
         );
 
+        var proof = BoundClientProof(security: security, client: client, serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
         await WorldFederationCodec.WriteRequestAsync(
-            body: WorldFederationCodec.EncodeAuthentication(proof: security.Prove(challenge: challenge.Body.Span)),
+            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
             ct: ct,
             kind: WorldFederationRequest.Authenticate,
             stream: stream

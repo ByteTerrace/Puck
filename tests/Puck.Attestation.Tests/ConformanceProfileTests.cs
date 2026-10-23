@@ -7,6 +7,45 @@ namespace Puck.Attestation.Tests;
 public sealed class ConformanceProfileTests {
     private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
 
+    [InlineData(AttestationResourceLimits.PayloadBytes, true)]
+    [InlineData(AttestationResourceLimits.PayloadBytes + 1, false)]
+    [Theory]
+    public void VerifierEntryPoint_EnforcesTheSelectedProfilesPayloadCeiling(int payloadLength, bool accepted) {
+        var codec = new CborAttestationCodec();
+        var keys = MintDomainKeys(subject: "user:profile");
+        var trust = BuildDirectTrustList(keys: keys, reach: DefaultReach);
+        var claim = AttestationSigner.SignClaim(
+            codec: codec,
+            domain: keys.Domain,
+            subject: keys.Subject,
+            signerKey: keys.SubjectSigningKey,
+            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            claimBytes: new byte[payloadLength]
+        );
+
+        var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
+            codec: codec,
+            claim: claim,
+            chain: null,
+            trustList: trust,
+            now: Now,
+            expectedPurpose: "profile.test",
+            expectedAudience: "world:profile"
+        );
+
+        if (accepted) {
+            AssertAccepted(result: result);
+        } else {
+            AssertRefused(result: result, reasonMustContain: "payload");
+        }
+    }
+
     [Fact]
     public void AttestationCeiling_IsEnforcedBeforeCborParsing() {
         var cbor = new CborAttestationCodec();

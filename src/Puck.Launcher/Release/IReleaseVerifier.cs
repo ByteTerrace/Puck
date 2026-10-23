@@ -23,6 +23,14 @@ public sealed record ReleaseVerifyOutcome(bool Accepted, string? RefusalReason) 
 /// version strictly exceeds what is already installed.
 /// </summary>
 public interface IReleaseVerifier {
+    /// <summary>Verifies and durably reserves the exact manifest for an install intent. Unlike ordinary
+    /// verification, this can resume its own reservation, but cannot resume another manifest or an older mark.
+    /// Call only while holding the install-root writer lease and after persisting the verified intent.</summary>
+    /// <param name="manifest">The signed manifest pinned by the local intent.</param>
+    /// <param name="verifiedAt">The instant at which this local intent was originally authorized. Recovery
+    /// checks the currently configured trust policy at that instant; expiry does not cancel already-authorized work.</param>
+    /// <param name="installedVersion">The running version when the intent was authorized.</param>
+    ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion);
     /// <summary>Verifies <paramref name="manifest"/>. The replay-refusal check (does this sequence already fall at
     /// or below the stored mark) always runs regardless of <paramref name="advanceSequence"/> — a manifest is never
     /// accepted twice under the same sequence merely because an earlier call declined to commit it. Only the

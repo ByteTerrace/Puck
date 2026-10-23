@@ -48,14 +48,16 @@ public sealed class UpdateServiceTests : IDisposable {
         Version: version
     );
 
-    [Fact]
-    public async Task CheckAsync_ReportsAvailable_ForAVerifiedNewerManifestInsideRollout() {
+    [Theory]
+    [InlineData("stable", UpdateCheckOutcome.Available)]
+    [InlineData("beta", UpdateCheckOutcome.Refused)]
+    public async Task CheckAsync_BindsVerifiedManifestToTheRequestedChannel(string channel, UpdateCheckOutcome expected) {
         var fixture = new ReleaseChainFixture();
         var signed = fixture.Sign(
             document: UnsignedDocument(
                 rolloutPercent: 100,
                 version: "1.0.1"
-            ),
+            ) with { Channel = channel },
             notAfter: (ReleaseChainFixture.Epoch + 3600),
             notBefore: ReleaseChainFixture.Epoch,
             sequence: 1
@@ -99,9 +101,14 @@ public sealed class UpdateServiceTests : IDisposable {
         );
 
         Assert.Equal(
-            expected: UpdateCheckOutcome.Available,
+            expected: expected,
             actual: result.Outcome
         );
+        if (expected == UpdateCheckOutcome.Refused) {
+            Assert.Null(@object: result.Manifest);
+            Assert.Contains(expectedSubstring: "channel", actualString: result.Detail);
+            return;
+        }
         Assert.NotNull(@object: result.Manifest);
         Assert.Equal(
             expected: "1.0.1",

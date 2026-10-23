@@ -40,6 +40,8 @@ internal sealed class PeerTestClient : IDisposable {
 
     private PeerStream? m_stream;
 
+    public string KeyHash => m_network.Peer.Id.KeyHash;
+
     public ValueTask CompleteWritesAsync(CancellationToken ct) => GetStream().CompleteWritesAsync(ct: ct);
     public async Task ConnectAsync(IPAddress address, int port, CancellationToken cancellationToken) =>
         m_stream = ((PeerStream)await m_network.ConnectAsync(

@@ -225,7 +225,8 @@ public sealed class AtlasPackingTests {
             b: m_path,
             comparisonType: StringComparison.Ordinal
         );
-        public ReadOnlyMemory<byte> Read(string path) => bytes;
+        public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) =>
+            bytes.Length <= maximumBytes ? bytes : throw new InvalidDataException("Source exceeds limit.");
     }
     private sealed class CountingGenerator : IFontAtlasGenerator {
         public int Count { get; private set; }

@@ -55,34 +55,15 @@ public sealed class AddonHost : IDisposable {
     public IReadOnlyList<AddonInstance> Instances => m_instances;
 
     private static string DescribeInstance(AddonInstance addon) {
-        var petname = ContentPetname.From(hashHex: addon.Hash.Hex);
+        var identity = addon.Hash is { } hash
+            ? $"{ContentPetname.From(hashHex: hash.Hex)}  {hash}"
+            : $"{addon.Name}  hash unavailable";
 
-        return $"{petname}  {addon.Hash}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
+        return $"{identity}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
     }
     private AddonInstance Load(in AddonDescriptor descriptor) {
         try {
-            var info = m_loader.Load(path: descriptor.ModulePath);
-
-            // Enforced exactly as Reload enforces it: a declared moduleHash pin is a boot-time integrity check,
-            // not decoration. A mismatch must produce a sticky, attributed load fault naming both hashes — the
-            // addon must never instantiate on unpinned content.
-            if (
-                (descriptor.ModuleHash is { } pin) &&
-                !string.Equals(
-                a: info.ContentHash.ToString(),
-                b: pin,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return new AddonInstance(
-                    descriptor: in descriptor,
-                    fault: new AddonFault(
-                        Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}",
-                        Kind: AddonFaultKind.HashMismatch
-                    ),
-                    hash: info.ContentHash
-                );
-            }
+            var info = m_loader.Load(path: descriptor.ModulePath, expectedHash: descriptor.ModuleHash);
 
             return new AddonInstance(
                 channelResolver: m_channelResolver,
@@ -90,6 +71,9 @@ public sealed class AddonHost : IDisposable {
                 engine: m_engine,
                 moduleInfo: info
             );
+        } catch (AddonModuleLoadException error) {
+            return new AddonInstance(descriptor: in descriptor, hash: error.Hash,
+                fault: new AddonFault(Kind: error.Kind, Detail: $"addon {descriptor.Name}: {error.Message}"));
         } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException or UnauthorizedAccessException or IOException)) {
             // A locked file, a permissions denial, or a transient disk error is an ordinary environment failure a
             // module read can hit — a sticky load fault, never a tick-thread exception.

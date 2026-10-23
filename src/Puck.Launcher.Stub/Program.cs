@@ -8,6 +8,14 @@ var installRoot = AppContext.BaseDirectory.TrimEnd(
     Path.DirectorySeparatorChar,
     Path.AltDirectorySeparatorChar
 );
+FileStream updateLease;
+try {
+    updateLease = StubInstall.AcquireUpdateLease(installRoot: installRoot);
+} catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+    Console.Error.WriteLine(value: $"[stub: install is busy or unavailable — {exception.Message}]");
+    return 2;
+}
+using var leaseLifetime = updateLease;
 StubConfiguration configuration;
 try {
     configuration = StubConfigurationFile.Load(installRoot: installRoot);
@@ -52,11 +60,12 @@ var launchVersion = current;
 switch (decision) {
     case StubAction.RevertToLastGood:
         Console.Error.WriteLine(value: $"[stub: version {current} reached {attempts}/{configuration.MaxAttempts} attempts — reverting to last-good {lastGood}]");
-        StubInstall.WritePointerAtomic(
-            fileName: StubInstall.CurrentFileName,
-            installRoot: installRoot,
-            value: lastGood!
-        );
+        try {
+            StubInstall.RevertToLastGood(installRoot: installRoot, failedVersion: current, lastGoodVersion: lastGood!);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) {
+            Console.Error.WriteLine(value: $"[stub: could not cancel pending install and roll back — {exception.Message}]");
+            return 2;
+        }
         launchVersion = lastGood!;
 
         break;
@@ -81,6 +90,9 @@ if (!File.Exists(path: executablePath)) {
 
     return 2;
 }
+// Selection and any rollback used the pointer read under this lease. Release before child startup: the child
+// owns update commands, and retaining the lease until it exits would prevent every self-update.
+updateLease.Dispose();
 var startInfo = new ProcessStartInfo {
     FileName = executablePath,
     UseShellExecute = false,

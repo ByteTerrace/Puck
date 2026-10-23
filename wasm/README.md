@@ -151,7 +151,7 @@ The command builds every committed guest. Each crate that has committed modules 
 paths its module is written to and, for a variant other than the crate's default, its `features`.
 `puck wasm build` reads those entries through `cargo metadata`, runs `cargo build --release
 --package <crate> [--no-default-features --features <variant>]` from `wasm/` once per entry, writes
-the module to each path the entry names, and prints each module's `sha256-64/{16 hex}` content hash.
+the module to each path the entry names, and prints each module's `sha256/{64 lowercase hex}` content pin.
 `.cargo/config.toml` already pins the default target, so no `--target` flag is needed. The verb
 refuses before building when a tracked `.wasm` under `wasm/` or `src/` is no entry's output, so a new
 committed guest needs its entry first. Plain `cargo build --release` from `wasm/` builds every
@@ -237,23 +237,23 @@ Point a `puck.world.definition.v1` document's `addons` entry at the built `.wasm
     {
       "name": "ghost",
       "modulePath": "Assets/addons/my-addon.wasm",
-      "hash": "sha256-64/5675e893a0057f18",
+      "hash": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
       "fuel": 100000,
       "enabled": true,
-      "lane": "Simulation",
       "requests": [
-        { "capability": "Drive", "subject": { "kind": "Body", "index": 1 } }
+        { "capability": "Drive", "subject": "body:1" }
       ]
     }
   ]
 }
 ```
 
-`WorldAddonRuntime` mounts every declared row at server construction (see
-`src/Puck.World.Schema/WorldDefinition.cs`'s `WorldAddonRow`). `modulePath` is resolved the same way a cartridge's `romPath` is—a plain path
-read through the host's asset source. `hash` pins the module's content hash; a Simulation-lane row
-without a pin is refused, because the pin has to cover everything the mount consumes. `lane` decides
-where untrusted code runs and has no default: an omitted lane is a document error, never a guess.
+Replace the example's all-zero hash with the full pin printed by `puck wasm build` for your module.
+
+`WorldAddonRuntime` mounts the document's enabled addon rows through the
+[prepare/commit transaction](../src/Puck.World.Addons/README.md). `modulePath` resolves beside the
+document that authors the row and is read through the host's asset source. Every row requires a
+full content pin, which covers all the module bytes consumed by mounting.
 
 `requests` is what the addon **asks** its principal to be granted. The host settles it against the
 world's grant table and prints, at mount, exactly which pairs it honors and which it withholds—
@@ -261,8 +261,8 @@ deny by default, regardless of what a row declares. What survives that settlemen
 the guest as a `GrantedBody` disclosure on its first tick.
 
 A malformed or missing module never crashes the run: the host logs a loud, attributed message and
-the addon loads in a **faulted** state (skipped every tick) until an operator runs the
-`addon enable <name>` console verb, which re-instantiates the module fresh.
+the addon loads in a **faulted** state (skipped every tick). A structural addon-row change, including
+a revision change, prepares a fresh instance; resubmitting the same row preserves the fault.
 
 ---
 

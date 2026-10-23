@@ -49,7 +49,7 @@ public sealed class ReplayAddonHostAttachLawTests {
             Addon: new WorldAddonRow(
                 Name: "probe",
                 ModulePath: "nonexistent.wasm",
-                Hash: "sha256-64/deadbeefdeadbeef",
+                Hash: "sha256/deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
                 Fuel: 1000UL,
                 Enabled: true
             ),

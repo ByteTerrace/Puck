@@ -1343,7 +1343,7 @@
     {
       "name": "channelwalk",
       "modulePath": "../dist/channelwalk.wasm",
-      "hash": "sha256-64/1296f0043f725d6c",
+      "hash": "sha256/6c5d723f04f096128f5905d31276933e788fc8750c6c90c12760d6eb19f68fff",
       "fuel": 100000,
       "enabled": true,
       "requests": [
@@ -1356,14 +1356,14 @@
     {
       "name": "channelwalk-bound64",
       "modulePath": "../dist/channelwalk-bound64.wasm",
-      "hash": "sha256-64/0822acbfa71faf2e",
+      "hash": "sha256/2eaf1fa7bfac2208c8c3aa40bc3d115302ad94a85f2269e33a20e0b46721bf7e",
       "fuel": 100000,
       "enabled": true
     },
     {
       "name": "channelwalk-bound65",
       "modulePath": "../dist/channelwalk-bound65.wasm",
-      "hash": "sha256-64/ab4167f99e854566",
+      "hash": "sha256/6645859ef96741ab133fcf7b0aa0644edcb9ee93e6bf71c5286964e665952fd2",
       "fuel": 100000,
       "enabled": true
     }

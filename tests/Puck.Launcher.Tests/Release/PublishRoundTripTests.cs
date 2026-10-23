@@ -96,6 +96,7 @@ public sealed class PublishRoundTripTests : IDisposable {
         var found = await source.TryGetFileAsync(
             cancellationToken: TestContext.Current.CancellationToken,
             destination: destination,
+            length: fileBytes.Length,
             pin: hash
         );
 

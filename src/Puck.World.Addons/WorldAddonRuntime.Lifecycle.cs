@@ -535,7 +535,7 @@ public sealed partial class WorldAddonRuntime {
                         mounted.Add(item: existing);
                         receipts.Add(item: new WorldAddonReceipt(
                             Name: existing.Instance.Name,
-                            Hash: existing.Instance.Hash.ToString(),
+                            Hash: existing.Instance.Hash!.Value.ToString(),
                             Fuel: ((ulong)existing.Instance.FuelPerTick)
                         ));
                         if (!TryDescriptorFor(descriptor: out var reusedDescriptor, documentDirectory: candidate.DocumentDirectory, reason: out reason, row: row)) {
@@ -648,7 +648,7 @@ public sealed partial class WorldAddonRuntime {
                 // instance is what prepared under it.
                 receipts.Add(item: new WorldAddonReceipt(
                     Name: instance.Name,
-                    Hash: instance.Hash.ToString(),
+                    Hash: instance.Hash!.Value.ToString(),
                     Fuel: ((ulong)instance.FuelPerTick)
                 ));
                 hostByName[instance.Name] = instance;

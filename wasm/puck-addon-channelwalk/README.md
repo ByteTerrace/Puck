@@ -25,10 +25,10 @@ below).
 
 ## Learning a module's content hash
 
-`puck wasm build` prints each module's `sha256-64/{hex}` hash; paste it into the row's `hash` field. A module
+`puck wasm build` prints each module's `sha256/{64 lowercase hex}` pin; paste it into the row's `hash` field. A module
 built some other way has its hash learned by mounting it with a deliberately wrong `hash` in the world document,
 booting, and reading the computed value off the `HashMismatch` line
-(`content sha256-64/{hex} does not match the declared moduleHash pin sha256-64/{pin}`).
+(`content sha256/{hex} does not match the declared moduleHash pin sha256/{pin}`).
 `worlds/channel-walk-world.json`'s three addon rows are pinned to the hashes of the committed `dist/` builds;
 re-pin all three whenever the build rewrites them.
 

@@ -1144,10 +1144,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
     /// is thrown as this same exception and recorded, so every later gate closes on it without another
     /// socket.</exception>
     public async Task AuthenticateAsync(Stream stream, CancellationToken ct) {
-        if (
-            (m_security is IRemoteIdentityVerifier verifier) &&
-            ((stream is not Puck.Networking.Peers.PeerStream peer) || !verifier.AcceptsRemoteIdentity(keyHash: peer.Link.RemoteId.KeyHash))
-        ) {
+        if (stream is not Puck.Networking.Peers.PeerStream peer) {
+            throw new IOException(message: "Federation authentication requires a certificate-bound peer stream.");
+        }
+        var pinnedTransport = (m_security is IRemoteIdentityVerifier { HasRemoteIdentityPin: true });
+        if (pinnedTransport && !((IRemoteIdentityVerifier)m_security).AcceptsRemoteIdentity(keyHash: peer.Link.RemoteId.KeyHash)) {
             throw new IOException(message: "The remote transport identity does not match this connection's credential policy.");
         }
         if (LacksSigningIdentity()) {
@@ -1170,10 +1171,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             ));
         }
 
+        var clientChallenge = m_security.NewChallenge();
         byte[] proof;
 
         try {
-            proof = m_security.Prove(challenge: challenge.Body.Span);
+            proof = m_security.Prove(challenge: WorldFederationCodec.BindProofChallenge(
+                challenge: challenge.Body.Span,
+                counterChallenge: clientChallenge,
+                clientKeyHash: m_network.Peer.Id.KeyHash,
+                serverKeyHash: peer.Link.RemoteId.KeyHash,
+                serverProof: false));
         } catch (InvalidOperationException) {
             // The authenticator holds nothing to sign with (WorldAttestedAuthenticator built with trust entries and
             // no oracle). That is as final as an unconfigured run, so it is recorded for LacksSigningIdentity and
@@ -1190,7 +1197,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof),
+            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
         var verdict = await WorldFederationCodec.ReadResponseAsync(
@@ -1210,9 +1217,25 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         if (!WorldFederationCodec.TryDecodeAuthorityIdentity(
             verdict.Body.Span,
             out var peerAuthority,
+            out var serverProof,
             out var identityFailure
         )) {
             throw new IOException(message: $"federation authentication — invalid destination identity ({identityFailure})");
+        }
+        if (!pinnedTransport && (
+            !m_security.TryVerify(
+                challenge: WorldFederationCodec.BindProofChallenge(
+                    challenge: clientChallenge,
+                    counterChallenge: challenge.Body.Span,
+                    clientKeyHash: m_network.Peer.Id.KeyHash,
+                    serverKeyHash: peer.Link.RemoteId.KeyHash,
+                    serverProof: true,
+                    authority: peerAuthority),
+                proof: serverProof,
+                sourceAuthority: out var verifiedAuthority) ||
+            !string.Equals(a: verifiedAuthority, b: peerAuthority, comparisonType: StringComparison.Ordinal)
+        )) {
+            throw new IOException(message: "federation authentication — destination did not prove its authority on this transport");
         }
         // Routed observations use their transaction authority's authenticated entry connection too, so private
         // onward world names never become socket endpoints or weaken the original peer namespace pin.

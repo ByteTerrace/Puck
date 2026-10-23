@@ -602,11 +602,26 @@ table `WorldAddonChannelResolver` is constructed over.
 
 ## Loading, ticking, faulting
 
-`WasmModuleLoader.Load` mirrors `ShaderModuleLoader`: read bytes through the `IAssetSource`, treat a
-leading `\0asm` as binary wasm else convert the WAT text to binary with `Module.ConvertText`, compute
-the `AssetContentHash`, read the binary's declarations (`WasmModuleDeclarations`), and cache the
-compiled `Module` beside its memory declarations in a content-addressed LRU so two documents naming
-the same bytes compile once.
+`WasmModuleLoader.Load` reads through the bounded `IAssetSource.Read` contract. Source bytes are
+limited to 16 MiB before WAT conversion or binary compilation. The filesystem source checks the
+length on its open handle before allocating and detects growth during the read. A custom source
+must enforce the same bound while reading; the loader also checks the returned length.
+
+The document's hash pin is checked against those source bytes before conversion, compilation, or
+cache lookup. Both the authored integrity pin and compiler cache use the full SHA-256 `ContentPin`,
+written `sha256/` followed by 64 lowercase hexadecimal digits. Equal short hashes cannot authorize
+or substitute compiled modules. Eviction
+removes the cache's reference, without disposing a module still referenced by a live guest.
+The authoring compiler's `hash: "auto"` requires the module file to exist: it pins those bytes and
+refuses a missing module rather than hashing its pathname.
+
+A leading `\0asm` identifies binary wasm; otherwise `Module.ConvertText` converts WAT to binary.
+The binary also has a 16 MiB ceiling. Before native compilation, `WasmModuleDeclarations` reads
+imports, memories and tables: imports, extra memories/tables and oversized minima are refused.
+The ABI uses one 32-bit memory and at most one ordinary reference table. Explicit table
+initializers are not admitted by the declaration reader. The engine disables multi-memory,
+memory64, GC heaps and typed function references. These are source and guest-resource limits,
+not a proven CPU deadline or workspace bound for the native WAT converter or compiler.
 
 `AddonInstance` never allocates per tick and never desyncs. It zeroes the output ring, writes the
 input batch, sets the per-tick fuel budget, calls `puck_on_tick` once with the batch length, derives
@@ -620,21 +635,21 @@ deliberately carries no span.
   under `FuelPerTick` (default `1_000_000`); exhaustion traps `OutOfFuel` at a codegen-deterministic
   point.
 - **Faults are sticky, terminal, deterministic state.** A trap or a protocol violation drives the
-  addon into `Faulted` and it is **skipped every subsequent tick**—no mid-tick retry—until an
-  explicit `Enable()` **disposes and re-instantiates a fresh `Store`** from the cached module, a
-  clean reset to the module's defined initial state.
+  addon into `Faulted` and it is **skipped every subsequent tick**—no mid-tick retry—until a
+  structural row change prepares a fresh instance and store. That resets the module to its
+  defined initial state; resubmitting the same row preserves the fault.
 - **One `Store`/`Instance` per addon, single sim-tick thread only** (Wasmtime store thread affinity,
   issue #331). `GC.KeepAlive(store)` follows every guest invoke (wasmtime-dotnet finalizer-hazard
   discipline).
-- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling of 256 pages for each
-  linear memory, plus a load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A guest
-  that declares any memory past the ceiling, exported or not, is refused as `MemoryLimit` before a
-  store exists. The loader reads every defined and imported memory's limits from the binary
-  (`WasmModuleDeclarations` in `Puck.Assets`; WAT is converted to its binary first) before Wasmtime
-  compiles it, so a guest declaring four gibibytes allocates none of them. A malformed import,
-  memory or export section is refused by the loader with the section and entry named, and the
-  host reports it as `BadExport`. A `memory.grow` past the ceiling returns -1 to the guest, which
-  faults only if the guest traps on it.
+- **Store resources:** `AddonModuleLimits` admits one instance, one linear memory of at most
+  256 standard pages (16 MiB), and at most one table of 65,536 elements. `Store.SetLimits`
+  independently enforces resource counts and growth. Hidden resources count too, so adding
+  unexported memories or tables cannot multiply the allowance. Oversized memory minima and extra
+  memories are `MemoryLimit` refusals before native compilation. Table/source/binary limit
+  violations and malformed declaration sections are named `BadExport` load refusals. A
+  `memory.grow` or `table.grow` beyond its ceiling returns -1; the guest faults only if it traps
+  on that result. Fuel separately bounds guest execution. These per-guest bounds do not establish
+  a whole-process budget across worlds, active guests and retained compiled modules.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
@@ -644,7 +659,7 @@ deliberately carries no span.
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
-| `MemoryLimit` | One of the guest's memories, exported or not, declares more than the 256-page ceiling, read from the binary and refused before instantiation. |
+| `MemoryLimit` | The guest declares additional memories or a memory minimum beyond 256 standard pages, refused before compilation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
@@ -654,7 +669,7 @@ addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 ```
 
 `AddonHost.Describe()` narrates each addon with a `ContentPetname`
-(`Willow-Lantern-Nine  sha256-64/…  fuel 1000000  ENABLED`).
+(`Willow-Lantern-Nine  sha256/…  fuel 1000000  ENABLED`).
 
 **Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
 misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`

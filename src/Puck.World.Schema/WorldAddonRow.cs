@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <param name="Name">The addon's identifying name — unique within the definition; used by console verbs and logging.</param>
 /// <param name="ModulePath">The WASM module file path, resolved beside the document that authors the row
 /// (<see cref="WorldDocumentPaths"/>); existence and hash verification are the run path's job.</param>
-/// <param name="Hash">The content-address integrity pin (<c>sha256-64/{16 hex}</c>). required — a guest whose module
+/// <param name="Hash">The full content integrity pin (<c>sha256/{64 lowercase hex}</c>). Required — a guest whose module
 /// is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a
 /// security one.</param>
 /// <param name="Fuel">The per-tick fuel budget before a deterministic halt.</param>

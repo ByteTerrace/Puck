@@ -154,7 +154,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x314445464B435550UL; // "PUCKFED1"
+    public const ulong WireKey = 0x324445464B435550UL; // "PUCKFED2"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -355,8 +355,14 @@ public static partial class WorldFederationCodec {
     /// namespace — the door derives that from the verified proof itself (<see cref="WorldAttestedAuthenticator"/>),
     /// never from anything the wire asserts.</summary>
     /// <param name="proof">The challenge proof.</param>
+    /// <param name="challenge">The client's fresh nonce for the reciprocal destination proof.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeAuthentication(ReadOnlySpan<byte> proof) => proof.ToArray();
+    public static byte[] EncodeAuthentication(ReadOnlySpan<byte> proof, ReadOnlySpan<byte> challenge) {
+        var writer = new WireWriter();
+        writer.WriteBlock(value: challenge);
+        writer.WriteBlock(value: proof);
+        return writer.ToArray();
+    }
     /// <summary>Encodes a cohort commit.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
     /// <param name="transferId">The transfer id.</param>
@@ -870,7 +876,7 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.Observe => 0,
         WorldFederationRequest.IntentStream => 0,
         WorldFederationRequest.IntentStreamHandoff => 0,
-        WorldFederationRequest.Authenticate => MaxProofBytes,
+        WorldFederationRequest.Authenticate => (MaxProofBytes + MaxChallengeBytes + (2 * sizeof(int))),
         WorldFederationRequest.Abort => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
@@ -889,9 +895,9 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Prototype => WireLimits.MaxDocumentBytes,
         WorldFederationResponse.Ack => 0,
         WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
-        WorldFederationResponse.Authenticated => (sizeof(int) + WireLimits.MaxStringBytes),
+        WorldFederationResponse.Authenticated => ((2 * sizeof(int)) + WireLimits.MaxStringBytes + MaxProofBytes),
         WorldFederationResponse.Status => sizeof(byte),
-        WorldFederationResponse.Challenge => MaxProofBytes,
+        WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
         WorldFederationResponse.Snapshot => ((4 * 1024) * 1024),
@@ -958,27 +964,21 @@ public static partial class WorldFederationCodec {
 
     /// <summary>Decodes an authentication leaf. The proof's own shape is <see cref="Puck.Networking.IAuthenticator.TryVerify"/>'s
     /// call to make, never this decode's — a fixed length here would bind the wire to one authenticator scheme.
-    /// Carries no source-authority field: the leaf IS the proof, and the identity it establishes comes back only
+    /// Carries no source-authority field: the identity the proof establishes comes back only
     /// from a successful verify, never from a claimed label alongside it.</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="proof">The presented proof.</param>
+    /// <param name="challenge">The client's fresh nonce for the reciprocal destination proof.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeAuthentication(ReadOnlySpan<byte> body, out byte[] proof, out WireFailure failure) {
-        if (body.Length > MaxProofBytes) {
-            proof = [];
-            failure = new WireFailure(
-                Detail: $"authentication proof is {body.Length} bytes; cap is {MaxProofBytes}",
-                Refusal: WireRefusal.PayloadTooLarge
-            );
-
-            return false;
+    public static bool TryDecodeAuthentication(ReadOnlySpan<byte> body, out byte[] proof, out byte[] challenge, out WireFailure failure) {
+        var reader = new WireReader(bytes: body);
+        challenge = reader.ReadBlock(field: "client challenge", maxBytes: MaxChallengeBytes);
+        proof = reader.ReadBlock(field: "client proof", maxBytes: MaxProofBytes);
+        if (challenge.Length == 0) {
+            reader.Fail(detail: "client challenge is empty", refusal: WireRefusal.PayloadMalformed);
         }
-
-        proof = body.ToArray();
-        failure = default;
-
-        return true;
+        return reader.TryFinish(failure: out failure);
     }
     /// <summary>Decodes a cohort commit.</summary>
     /// <param name="body">The leaf bytes.</param>

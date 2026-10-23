@@ -84,6 +84,12 @@ public static partial class RuleCompiler {
                 poolBindingSlot = poolBinding.Slot;
             }
 
+            var controls = new List<CellAccess>();
+            RuleDataflow.CollectGate(gate: gate, into: controls);
+            if (forEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: forEachOrdinal, Key: default)); }
+            if (poolForEach is not null) { controls.Add(item: new CellAccess(RowOrdinal: poolForEach.DomainRowOrdinal, Key: default)); }
+            RequireTransformControlAudience(effects: effects, controls: controls, context: context, ruleName: rule.Name);
+
             RuleDataflow.CollectGateFacts(
                 gate: gate,
                 into: context.Needs

@@ -1633,7 +1633,7 @@ and a document authoring arrivals alone still admits no connecting peer.
 The same listener routes a second dialect off the first eight bytes:
 `WorldFederationCodec.WireKey` opens an authority-to-authority connection
 instead of a player connection. That connection is a persistent authenticated
-lane—challenge/proof once (`Puck.Networking.IAuthenticator`), then framed requests
+lane—reciprocal challenge/proof once (`Puck.Networking.IAuthenticator`), then framed requests
 in order, request-then-response, until `Observe` or `IntentStream` takes it
 over and streams on it. The frame grammar, the bounded reader/writer, and the
 refusal vocabulary are the shared ones in
@@ -1642,6 +1642,31 @@ wire dialect: every leaf is Try-shaped and bounded before it allocates, and
 every refusal frame's text opens with a `WorldFederationRefusal` name.
 `WorldPeerHost.FederationRefusals` counts those names, so a refusal is read back
 by name rather than by sentence.
+
+The federation handshake authenticates the destination before a client sends
+operations. `Challenge` carries the server's fresh nonce. `Authenticate` carries
+the client's fresh nonce and its proof; `Authenticated` carries the destination
+namespace and its reciprocal proof. Both proofs bind the two nonces, the ordered
+client and server transport-key fingerprints, and their direction. The server's
+proof also binds the advertised namespace, which must equal its verified claim
+subject. A copied proof cannot cross to another transport, another direction, or
+another destination namespace. An expected namespace retained in recovery is
+checked again after proof verification.
+
+`WorldFederationCodec.BindProofChallenge` derives the authenticator's challenge
+with HKDF-SHA256, preserving the nonce's length. The input is the verifier's
+nonce; the context contains the protocol label, direction, client fingerprint,
+server fingerprint, destination namespace (empty for the client proof), and the
+prover's nonce, encoded with the bounded wire writer. Production nonces are
+32 random bytes; each decoded nonce has a 256-byte ceiling, and both peers enforce
+the authenticator's exact `ChallengeBytes` width before proving it.
+
+An Entra client authenticates its destination through its explicitly configured
+transport-key pin before presenting its bearer credential. That pin can replace
+the reciprocal attestation proof for this client. A verifier-only Entra server
+has no remote pin; its outbound federation still requires the ordinary
+destination proof. A server without a signing oracle can admit a pinned client,
+but cannot authenticate itself to an unpinned one.
 
 Two ingress disciplines meet in this class, and which one applies is decided by
 what the frame is:

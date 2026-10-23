@@ -1417,6 +1417,9 @@ public sealed partial class WorldTransferEscrow {
             if (request.Members[index].Mobility is not { } mobility) {
                 return $"traveler {(index + 1)} carries no stable mobility identity";
             }
+            if (mobility.Epoch == ulong.MaxValue) {
+                return $"traveler {(index + 1)} mobility epoch cannot advance";
+            }
             if (!reservationIncarnations.Add(item: mobility.Incarnation)) {
                 return $"traveler {(index + 1)} repeats mobility incarnation {mobility.Incarnation}";
             }
@@ -1465,10 +1468,15 @@ public sealed partial class WorldTransferEscrow {
         var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)request.SourceRateHz));
         var destinationStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)destinationRate));
         var remainingSourceSteps = (request.DeadlineSourceTick - request.SourceTick);
-        var remainingEngineTicks = checked((remainingSourceSteps * sourceStepTicks));
-        var destinationSteps = checked((((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks));
-
-        deadline = checked(((m_server.NextInputTick - 1UL) + destinationSteps));
+        // The source supplies both the interval and the rate. Widen before multiplication and rounding so a
+        // well-formed hostile frame receives a refusal, rather than escaping the wire door as an overflow.
+        var remainingEngineTicks = (((UInt128)remainingSourceSteps) * sourceStepTicks);
+        var destinationSteps = (((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks);
+        var destinationDeadline = (((UInt128)(m_server.NextInputTick - 1UL)) + destinationSteps);
+        if (destinationDeadline > ulong.MaxValue) {
+            return "source lease deadline exceeds the destination tick range";
+        }
+        deadline = ((ulong)destinationDeadline);
         return null;
     }
     // Installs the lease a recorded arrival bound without deciding its reservation again. The commit stood under the

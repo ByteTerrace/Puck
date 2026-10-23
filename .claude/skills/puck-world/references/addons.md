@@ -36,10 +36,15 @@ doors.
 ## The row, mounting, and the prepare/commit transaction
 
 `WorldAddonRow(Name, ModulePath, Hash, Fuel, Enabled, Requests?,
-MemoryWatches?, Revision)`. `Hash` is REQUIRED (`sha256-64/<16 hex>`): an
+MemoryWatches?, Revision)`. `Hash` is REQUIRED (`sha256/<64 lowercase hex>`): an
 unpinned guest makes state depend on a file on disk — a determinism hole
 before a security one. The hash is verified BEFORE descriptor decode, so
-the pin covers the channel table too; a mismatch is a load fault. `Revision`
+the pin covers the channel table too; a mismatch is a load fault. Source-size and pin checks
+precede WAT conversion and compilation. Both the authored integrity pin and compile cache use
+the full SHA-256 identity. One 16 MiB memory and one bounded table are admitted;
+hidden extra resources cannot multiply that budget. The
+[scripting resource contract](../../../../docs/reference/scripting.md#loading-ticking-faulting)
+owns the exact limits and native-compiler limitations. `Revision`
 (`ulong`, default 0) is the instance-revision token: any change from what a
 currently-mounted guest was prepared under means fresh guest instantiation,
 even when every other field is unchanged — the document-authored equivalent

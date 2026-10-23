@@ -7,6 +7,7 @@ namespace Puck.Scripting;
 /// against. The engine is built from a locked deterministic <c>Config</c> — fuel counting on,
 /// threads and SIMD off, NaN canonicalization on, Cranelift at a pinned optimization level — so a
 /// module's fuel-halt point and numerics are reproducible across runs.
+/// Only one 32-bit linear memory is admitted; GC heaps and typed function references are disabled.
 /// </summary>
 public sealed class ScriptingEngine : IDisposable {
     private readonly Engine m_engine;
@@ -26,6 +27,10 @@ public sealed class ScriptingEngine : IDisposable {
         return WasmtimeSignals.WithoutSignalHandlers(config: new Config())
             .WithFuelConsumption(enable: true)
             .WithWasmThreads(enable: false)
+            .WithMultiMemory(enable: false)
+            .WithMemory64(enable: false)
+            .WithGc(enable: false)
+            .WithFunctionReferences(enable: false)
             .WithSIMD(enable: false)
             .WithRelaxedSIMD(
             deterministic: false,
