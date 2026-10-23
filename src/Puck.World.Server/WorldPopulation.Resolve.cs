@@ -53,8 +53,7 @@ public sealed partial class WorldPopulation {
         m_rigidVelocityCeiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters,
-            channelCount: m_channels.ChannelCount
+            registers: definition.TargetRegisters
         );
         // The LIVE row list — a curve-follow producer's per-tick Evaluate reads m_curveRows[CurveIndex].Compiled
         // straight off this reference, so a curve upsert (which reassigns definition.Curves and re-runs Rebuild)

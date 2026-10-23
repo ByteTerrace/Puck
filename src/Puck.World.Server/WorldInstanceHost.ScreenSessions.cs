@@ -371,23 +371,20 @@ public sealed partial class WorldInstanceHost {
 
         var channels = new ChannelValues();
 
-        for (var ordinal = 0; (ordinal < source.Channels.Count); ordinal++) {
-            if (source.Channels[ordinal] is not { } channel) {
-                continue;
-            }
+        var sourceChannels = WorldChannelTable.For(definition: source);
+        var targetChannels = WorldChannelTable.For(definition: destination);
 
-            for (var target = 0; (target < destination.Channels.Count); target++) {
-                if (
-                    (destination.Channels[target] is { } named) &&
-                    string.Equals(
-                    a: named.Name,
-                    b: channel.Name,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    channels[target] = forward.Intent[ordinal];
+        for (var index = 0; (index < sourceChannels.ChannelCount); index++) {
+            var address = sourceChannels.Address(declaration: index);
 
-                    break;
+            if (targetChannels.TryGetOrdinal(name: sourceChannels.Name(ordinal: address)!, ordinal: out var target)) {
+                if ((sourceChannels.Shape(ordinal: address) == ChannelShape.Relative) || (targetChannels.Shape(ordinal: target) == ChannelShape.Relative)) {
+                    if ((sourceChannels.Shape(ordinal: address) == ChannelShape.Relative) && (targetChannels.Shape(ordinal: target) == ChannelShape.Relative) &&
+                        (sourceChannels.RelativeUnit(ordinal: address) == targetChannels.RelativeUnit(ordinal: target))) {
+                        channels.SetRelative(ordinal: target, value: targetChannels.ClampRelative(ordinal: target, raw: forward.Intent.Channels.Relative(ordinal: address).Value));
+                    }
+                } else {
+                    channels[target] = targetChannels.Quantize(ordinal: target, value: forward.Intent[address]);
                 }
             }
         }

@@ -785,6 +785,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: state.ChannelTimerValues
         );
+        WriteLongArray(writer: writer, values: state.RelativeRemainders);
         writer.WriteString(value: state.BodyMotionProgramName);
         WriteIntentSource(
             writer: writer,
@@ -901,6 +902,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "channel timer values",
             reader: ref reader
         );
+        var relativeRemainders = ReadLongArray(field: "relative input residue", reader: ref reader);
         var bodyMotionProgramName = reader.ReadString(
             field: "body motion program name",
             maxBytes: MaxStringBytes
@@ -1056,6 +1058,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarRampRemainder: planarRampRemainder,
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
+            RelativeRemainders: relativeRemainders,
             Source: source,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,

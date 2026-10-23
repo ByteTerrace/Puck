@@ -94,6 +94,7 @@ public static class WorldScheduleCommands {
             "player.join",
             "player.leave",
             "player.row.set",
+            "player.signal",
             "player.state.cell.set",
             "player.state.cell.toggle",
             "source.pointer.clear",

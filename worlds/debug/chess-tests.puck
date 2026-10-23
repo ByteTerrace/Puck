@@ -20,18 +20,18 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
     ticks 150
     seat1: body.press interact
     ticks 5
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 5
     seat1: body.press forward 1
     ticks 4
     seat1: body.press forward 1
     ticks 4
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 150
     seat1: source.pointer.origin 12.1 3 20.5
     seat1: source.pointer.direction 0 -1 0
     ticks 3
-    seat1: body.press boardPick 1 1.0
+    seat1: body.press confirm 1 1.0
     ticks 10
     seat1: source.pointer.origin 12.1 3 20.1
     ticks 190
@@ -57,13 +57,13 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     ticks 150
     seat1: body.press interact
     ticks 5
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 5
-    seat1: body.press select
+    seat1: body.press cancel
     ticks 150
     seat1: body.press strafe -1
     ticks 4
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 5
     seat1: body.press forward 1
     ticks 4
@@ -71,7 +71,7 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     ticks 4
     seat1: body.press forward 1
     ticks 4
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 250
     seat1: body.press forward -1
     ticks 4
@@ -79,13 +79,13 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     ticks 4
     seat1: body.press forward -1
     ticks 4
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 5
     seat1: body.press forward 1
     ticks 4
     seat1: body.press forward 1
     ticks 4
-    seat1: body.press boardPick
+    seat1: body.press confirm
     ticks 200
     seat1: body.press interact
     ticks 10

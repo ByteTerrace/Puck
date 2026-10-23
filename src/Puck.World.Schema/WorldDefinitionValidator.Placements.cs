@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Maths;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 using Puck.SignedDistance;
 using Puck.Text;
 using Puck.Physics.Motion;
@@ -640,7 +641,7 @@ public static partial class WorldDefinitionValidator {
         var drawnLeftToRight = !row.Closed;
 
         for (var index = 0; (index < knots.Count); index++) {
-            drawnLeftToRight &= ((MathF.Cos(x: knots[index].TangentYaw) > 0f) && ((index == 0) || (knots[index].Position.Value.X > knots[index - 1].Position.Value.X)));
+            drawnLeftToRight &= ((MathF.Cos(x: knots[index].TangentYaw) > 0f) && ((index == 0) || (knots[index].Position.Value.X > knots[(index - 1)].Position.Value.X)));
         }
         if (!drawnLeftToRight) {
             errors.Add(item: $"{path} '{name}' is not drawn left to right; a driver curve is open, each knot further along X than the last, each tangent pointing toward +X.");
@@ -1030,7 +1031,7 @@ public static partial class WorldDefinitionValidator {
                 producers: kit.Producers,
                 programs: programs,
                 programRows: programRows,
-                channelNames: allChannelNames,
+                channelNames: new HashSet<string>(collection: definition.Channels.Where(predicate: channel => (channel is { Shape: not ChannelShape.Relative })).Select(selector: channel => channel.Name), comparer: StringComparer.Ordinal),
                 path: $"{path}.producers",
                 errors: errors
             );
@@ -1090,7 +1091,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             // The pad map is the SAME channel-name vocabulary actions key off, resolved at the other destination a
-            // control application can carry a kit to: a screen's booted machine. Any declared channel may bind
+            // control application can carry a kit to: a screen's booted machine. Any declared level channel may bind
             // (a movement role reaches a stick, a composition channel reaches a button), unlike actions, which are
             // composition-only.
             if (kit.PadRaw is not null) {
@@ -1104,6 +1105,9 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
+                    if (definition.Channels.Any(predicate: channel => ((channel is { Shape: ChannelShape.Relative }) && (channel.Name == channelName)))) {
+                        errors.Add(item: $"{path}.pad['{channelName}'] requires a held level, not relative displacement.");
+                    }
                     if (!Enum.IsDefined(value: element)) {
                         errors.Add(item: $"{path}.pad['{channelName}'] element '{element}' is not a defined WorldPadElement.");
                     }

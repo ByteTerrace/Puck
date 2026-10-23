@@ -24,11 +24,11 @@ public sealed class TransferAbortKitWideningLawTests {
     // kit binding at all — see TransferAbortDynamicStateLawTests' own remarks) and the authored channel table agree.
     private const int ForwardOrdinal = 0;
     private const int StrafeOrdinal = 1;
-    private const int SurgeOrdinal = 3; // the ONE composition channel bound to a real kit action below.
+    private const int SurgeOrdinal = ChannelLimits.MaxAxes; // the ONE composition channel bound to a real kit action below.
     private const int TimedPressOrdinal = 11; // likewise, distinct from UntimedPressOrdinal.
     private const int TurnOrdinal = 2;
     private const int UntimedPressOrdinal = 10; // an ordinal NO channel declares — PressChannel needs no binding.
-    private const int UpOrdinal = 4; // the medium kit only — trails "surge" so SurgeOrdinal addresses the same channel in both fixtures.
+    private const int UpOrdinal = 3; // the medium kit only — trails "surge" so SurgeOrdinal addresses the same channel in both fixtures.
 
     private static WorldDefinition BuildDriveKitDocument() {
         var channels = new WorldChannel[] {

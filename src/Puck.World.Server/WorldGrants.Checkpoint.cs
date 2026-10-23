@@ -47,7 +47,7 @@ public sealed partial class WorldGrants {
             Budgets: [.. m_budgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
             EventBudgets: [.. m_eventBudgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
             HoldCeilings: [.. m_holdCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
             PoolCeilings: [.. m_poolCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
             KindMasks: [.. m_kindMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
             WriteMasks: [.. m_writeMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
@@ -143,7 +143,7 @@ public sealed partial class WorldGrants {
             m_holdCeilings[(row.Grantee, row.Capability, row.Subject)] = row.Ceiling;
         }
         foreach (var row in checkpoint.ChannelReach) {
-            m_channelReach[(row.Grantee, row.Capability, row.Subject)] = new ChannelReachMask(Bits: row.Bits);
+            m_channelReach[(row.Grantee, row.Capability, row.Subject)] = row.Reach;
         }
         foreach (var row in checkpoint.PoolCeilings) {
             m_poolCeilings[(row.Grantee, row.Capability, row.Subject)] = RestoreCeilings(rows: row.Ceilings);
@@ -183,7 +183,7 @@ public sealed partial class WorldGrants {
         var rows = new List<(int, long)>();
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if ((ceilings.Support.Bits & (1UL << ordinal)) != 0UL) {
+            if (ceilings.Support.Contains(ordinal: ordinal)) {
                 rows.Add(item: (ordinal, ceilings[ordinal]));
             }
         }
@@ -196,7 +196,7 @@ public sealed partial class WorldGrants {
         foreach (var row in rows) {
             ceilings = ceilings.WithCeiling(
                 ceiling: row.Ceiling,
-                channels: new ChannelConsentMask(Bits: (1UL << row.Ordinal))
+                channels: new ChannelConsentMask(Bits: default(ChannelMask).With(ordinal: row.Ordinal))
             );
         }
 

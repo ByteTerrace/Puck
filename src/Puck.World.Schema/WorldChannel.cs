@@ -91,9 +91,14 @@ public readonly record struct RoleChannelOrdinals(int MoveAdvance, int MoveStraf
 /// <summary>The world's channel table compiled once before simulation: name→ordinal resolution and per-ordinal shape
 /// and threshold — the vocabulary <c>Puck.World.Server.WorldBody</c>'s edge derivation, the binding/press
 /// surfaces, and the addon wire resolve declared channel names against. Validation
-/// (<see cref="WorldDefinitionValidator"/>) has already run by the time this is built. Every declared channel receives
-/// its document-order ordinal; role claims populate a resolved lookup and per-ordinal role mask.</summary>
+/// (<see cref="WorldDefinitionValidator"/>) has already run by the time this is built. Channels receive document-order slots within their own bank; role claims populate a resolved lookup
+/// and per-address role mask.</summary>
 public sealed class WorldChannelTable {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, WorldChannelTable> Tables = new();
+
+    /// <summary>Gets the immutable compiled table associated with a document instance.</summary>
+    public static WorldChannelTable For(WorldDefinition definition) => Tables.GetValue(definition, static row => Compile(channels: row.Channels));
+
     /// <summary>The default binary threshold — <c>One/2</c>, the one threshold at which the flip bound
     /// <c>c ≤ min(T − 1, One − T)</c> collapses to the symmetric <c>c &lt; ½</c> (see
     /// <see cref="FixedContributionFold"/>'s remarks). A world declaring any other threshold is legal and gets the
@@ -103,6 +108,8 @@ public sealed class WorldChannelTable {
     /// back to this rather than null-checking.</summary>
     public static WorldChannelTable Empty { get; } = new WorldChannelTable(ordinals: OrdinalTable.Empty);
 
+    private readonly WorldRelativeChannel?[] m_relative = new WorldRelativeChannel?[ChannelLimits.MaxAxes];
+    private readonly FixedQ3232[] m_relativeLimits = new FixedQ3232[ChannelLimits.MaxAxes];
     private readonly ChannelShape[] m_shapes = new ChannelShape[ChannelLimits.MaxChannels];
     private readonly ChannelFrame[] m_frames = new ChannelFrame[ChannelLimits.MaxChannels];
     private readonly FixedQ4816[] m_thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
@@ -110,11 +117,13 @@ public sealed class WorldChannelTable {
     private readonly bool[] m_roles = new bool[ChannelLimits.MaxChannels];
     private readonly int[] m_roleOrdinals = new int[Enum.GetValues<ChannelRole>().Length];
     // The reverse of m_ordinals — an ordinal's declared name, for a read-back that must name a channel rather
-    // than just its ordinal (player.channels). Null past ChannelCount/at an undeclared ordinal — unlike m_ordinals,
+    // than just its ordinal (player.channels). Null at an undeclared address — unlike m_ordinals,
     // sized to MaxChannels so any in-range ordinal indexes safely without a bounds check of its own.
     private readonly string?[] m_names = new string?[ChannelLimits.MaxChannels];
 
     private readonly OrdinalTable m_ordinals;
+
+    private readonly int[] m_addresses = new int[ChannelLimits.MaxChannels];
 
     private WorldChannelTable(OrdinalTable ordinals) {
         m_ordinals = ordinals;
@@ -124,6 +133,8 @@ public sealed class WorldChannelTable {
         );
     }
 
+    /// <summary>The numeric slots carrying displacement in this layout.</summary>
+    public uint RelativeMask { get; private set; }
     /// <summary>Gets the declared channel count.</summary>
     public int ChannelCount { get; private init; }
     /// <summary>Gets the frame the MoveAdvance/MoveStrafe pair is authored in — the two declare the same frame by
@@ -160,10 +171,21 @@ public sealed class WorldChannelTable {
             ChannelCount = channels.Count,
         };
 
-        for (var ordinal = 0; (ordinal < channels.Count); ordinal++) {
-            var channel = channels[ordinal];
+        var axis = 0;
+        var button = 0;
+
+        for (var index = 0; (index < channels.Count); index++) {
+            var channel = channels[index];
+            var ordinal = ((channel.Shape == ChannelShape.Binary) ? (ChannelLimits.MaxAxes + button++) : axis++);
+
+            table.m_addresses[index] = ordinal;
 
             table.m_shapes[ordinal] = channel.Shape;
+            if (channel.Shape == ChannelShape.Relative) {
+                table.RelativeMask |= (1U << ordinal);
+                table.m_relative[ordinal] = channel.Relative!;
+                table.m_relativeLimits[ordinal] = FixedQ3232.FromDouble(value: channel.Relative!.MaximumPerStep);
+            }
             table.m_frames[ordinal] = channel.Frame;
             table.m_declared[ordinal] = true;
             table.m_names[ordinal] = channel.Name;
@@ -223,6 +245,47 @@ public sealed class WorldChannelTable {
                 : sum
         ));
     }
+    /// <summary>Formats a sample in its declared numeric representation, with its exact raw bits.</summary>
+    public string DescribeValue(in PlayerIntent intent, int ordinal) => ((Shape(ordinal: ordinal) == ChannelShape.Relative)
+        ? $"{intent.Channels.Relative(ordinal: ordinal)}({intent.Channels.Relative(ordinal: ordinal).Value})"
+        : $"{ReadLevel(intent: intent, ordinal: ordinal)}({ReadLevel(intent: intent, ordinal: ordinal).Value})");
+    /// <summary>Gets a displacement unit from its compiled descriptor.</summary>
+    public string RelativeUnit(int ordinal) { RequireRelative(ordinal: ordinal); return m_relative[ordinal]!.Unit; }
+    /// <summary>Gets a relative channel's compiled limit, refusing a level handle.</summary>
+    public FixedQ3232 RelativeLimit(int ordinal) {
+        RequireRelative(ordinal: ordinal);
+        return m_relativeLimits[ordinal];
+    }
+    /// <summary>Quantizes one host displacement after authored sensitivity. No time factor participates.</summary>
+    public FixedQ3232 QuantizeRelative(int ordinal, double sample) {
+        RequireRelative(ordinal: ordinal);
+        return FixedQ3232.FromDouble(value: (sample * m_relative[ordinal]!.Sensitivity));
+    }
+    /// <summary>Reads a normalized level, refusing a displacement descriptor.</summary>
+    public FixedQ4816 ReadLevel(in PlayerIntent intent, int ordinal) {
+        if (!IsDeclared(ordinal: ordinal) || (Shape(ordinal: ordinal) == ChannelShape.Relative)) {
+            throw new ArgumentException(message: "The channel is not a held level.", paramName: nameof(ordinal));
+        }
+        return intent[ordinal];
+    }
+    /// <summary>Reads displacement through its checked descriptor.</summary>
+    public FixedQ3232 ReadRelative(in PlayerIntent intent, int ordinal) {
+        RequireRelative(ordinal: ordinal);
+        return intent.Channels.Relative(ordinal: ordinal);
+    }
+    /// <summary>Saturates a completed widened displacement sum once.</summary>
+    public FixedQ3232 ClampRelative(int ordinal, Int128 raw) {
+        var bound = RelativeLimit(ordinal: ordinal).Value;
+
+        return FixedQ3232.FromRawBits(value: ((long)Int128.Clamp(max: bound, min: -((Int128)bound), value: raw)));
+    }
+
+    private void RequireRelative(int ordinal) {
+        if (!IsDeclared(ordinal: ordinal) || (Shape(ordinal: ordinal) != ChannelShape.Relative)) {
+            throw new ArgumentException(message: "The channel is not a relative displacement.", paramName: nameof(ordinal));
+        }
+    }
+
     /// <summary>Gets a declared channel's movement frame (<see cref="ChannelFrame.World"/> for every channel that
     /// declares none — and for every channel but the MoveAdvance/MoveStrafe pair, where it is meaningless).</summary>
     public ChannelFrame Frame(int ordinal) => m_frames[ordinal];
@@ -239,10 +302,19 @@ public sealed class WorldChannelTable {
     /// <summary>Returns the binary crossing threshold at this ordinal (meaningful only for a <see cref="ChannelShape.Binary"/> channel).</summary>
     public FixedQ4816 Threshold(int ordinal) => m_thresholds[ordinal];
     /// <summary>Resolves a declared channel name to its ordinal.</summary>
-    public bool TryGetOrdinal(string name, out int ordinal) => m_ordinals.TryGetOrdinal(
-        name: name,
-        ordinal: out ordinal
-    );
+    public bool TryGetOrdinal(string name, out int ordinal) {
+        if (m_ordinals.TryGetOrdinal(name: name, ordinal: out var index)) {
+            ordinal = m_addresses[index];
+            return true;
+        }
+        ordinal = -1;
+        return false;
+    }
+    /// <summary>Gets the compiled address of a declaration in document order.</summary>
+    public int Address(int declaration) => m_addresses[declaration];
+    /// <summary>Quantizes a binary contribution after its source fold; numeric values keep their precision.</summary>
+    public FixedQ4816 Quantize(int ordinal, FixedQ4816 value) => ((Shape(ordinal: ordinal) == ChannelShape.Binary)
+        ? ((value >= Threshold(ordinal: ordinal)) ? FixedQ4816.One : FixedQ4816.Zero) : value);
     /// <summary>Resolves a binding channel reference to its authored ordinal. <see cref="ChannelRef"/> carries only
     /// the declared-name arm; see <c>ChannelRef.cs</c>'s remarks.</summary>
     public bool TryGetOrdinal(ChannelRef reference, out int ordinal) {
@@ -271,6 +343,7 @@ public sealed class WorldChannelTable {
 /// or this must be set.</param>
 /// <param name="Threshold">The binary crossing threshold in <c>[0, 1]</c> raw units (binary channels only); <see langword="null"/>
 /// takes <see cref="WorldChannelTable.DefaultBinaryThreshold"/> (<c>One/2</c>).</param>
+/// <param name="Relative">Required units, sensitivity and limit for Relative channels; absent on levels.</param>
 /// <param name="Frame">What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see
 /// <see cref="ChannelFrame"/>); the two roles must declare the same frame, and every other channel leaves it at
 /// <see cref="ChannelFrame.World"/>. Omitted from a saved document at that default.</param>
@@ -281,8 +354,15 @@ public sealed record WorldChannel(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChannelRole? Role = null,
     bool Composition = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Threshold = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ChannelFrame Frame = ChannelFrame.World
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ChannelFrame Frame = ChannelFrame.World,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRelativeChannel? Relative = null
 );
+/// <summary>Units and host sensitivity for a displacement channel. The maximum is applied once after accumulation.</summary>
+/// <param name="Unit">An authored unit name shared by producers and consumers.</param>
+/// <param name="Sensitivity">Units per device sample, applied before host quantization.</param>
+/// <param name="MaximumPerStep">The positive absolute displacement limit in authored units.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldRelativeChannel(string Unit, double Sensitivity, double MaximumPerStep);
 /// <summary>The frame a movement contribution to the MoveAdvance/MoveStrafe pair is authored in — composed by the
 /// seat's client into world axes before it reaches the wire, so the sim never reads a camera pose. A world declares
 /// it once on the pair; the stick's <c>player.move</c> is camera-framed by its own definition, so a world (or a

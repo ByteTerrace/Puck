@@ -829,6 +829,10 @@ public sealed partial class InputRouter : IDisposable {
             // Channel destinations carry one contribution per physical control. Two keys sharing a destination
             // therefore remain independently owned: releasing one cannot erase the other's reassertion or later
             // focus-loss cancellation.
+            if (binding.Relative) {
+                // Each ordered sample already has its own entry. Never reassert it on another tick.
+                continue;
+            }
             if (isContribution) {
                 if (
                     active &&
@@ -1658,6 +1662,7 @@ public sealed partial class InputRouter : IDisposable {
             );
 
             return ScaleThroughChannel(
+                relative: binding.Relative,
                 channelScale: channelScale,
                 sample: componentSample
             );
@@ -1668,6 +1673,7 @@ public sealed partial class InputRouter : IDisposable {
         }
 
         return ScaleThroughChannel(
+            relative: binding.Relative,
             channelScale: channelScale,
             sample: signal.Value.AsAxis1D
         );
@@ -1675,7 +1681,10 @@ public sealed partial class InputRouter : IDisposable {
     // The one axis-through-channel conversion the component and Axis1D branches share: sample times the declared
     // scale in FixedQ4816 (nearest, ties to even), never a float multiply, so a channel's contribution rounds
     // identically regardless of which branch produced the sample.
-    private static CommandValue ScaleThroughChannel(double sample, double channelScale) {
+    private static CommandValue ScaleThroughChannel(double sample, double channelScale, bool relative) {
+        if (relative) {
+            return CommandValue.Axis(value: ((float)(sample * channelScale)));
+        }
         var s = FixedQ4816.FromDouble(value: sample);
         var k = FixedQ4816.FromDouble(value: channelScale);
 

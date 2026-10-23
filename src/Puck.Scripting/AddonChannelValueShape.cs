@@ -15,4 +15,7 @@ public enum AddonChannelValueShape {
     /// <summary>A one-sided analog value: <c>A</c> in <c>[0, One]</c>. Pinned for a future channel; the interim
     /// host table declares none today.</summary>
     Unipolar = 2,
+
+    /// <summary>A Q32.32 displacement in A. The world applies its authored bound after contributions combine.</summary>
+    Relative = 3,
 }

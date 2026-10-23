@@ -170,8 +170,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_definition = definition;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters,
-            channelCount: m_channels.ChannelCount
+            registers: definition.TargetRegisters
         );
         m_composition = composition;
         m_levers = null;
@@ -830,8 +829,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         BeginVersion(version: version);
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters,
-            channelCount: m_channels.ChannelCount
+            registers: definition.TargetRegisters
         );
         m_definitionRevision++;
         m_pendingStateInstall = true;
@@ -1149,7 +1147,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                     bodyIndex: targets[slot],
                     endpoint: endpoint,
                     definition: definition,
-                    intent: seat.HeldIntent()
+                    intent: seat.ConsumeRelative(intent: seat.HeldIntent())
                 )
             );
             var heldChannels = seat.HeldChannels;

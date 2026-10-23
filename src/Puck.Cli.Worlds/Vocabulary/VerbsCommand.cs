@@ -18,8 +18,8 @@ public static class VerbsCommand {
 
     // The affordance echo's command array, the engine's own verbs alone.
     private static List<CommandMetadata>? ReadAffordances(string stdout) {
-        var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(value: AffordancesPrefix, comparisonType: StringComparison.Ordinal));
-        var end = (line?.IndexOf(value: ",\"channels\":", comparisonType: StringComparison.Ordinal) ?? -1);
+        var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(comparisonType: StringComparison.Ordinal, value: AffordancesPrefix));
+        var end = (line?.IndexOf(comparisonType: StringComparison.Ordinal, value: ",\"channels\":") ?? -1);
 
         if (end < 0) {
             return null;

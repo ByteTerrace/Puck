@@ -1125,7 +1125,7 @@ public sealed partial class WorldPopulation {
 
         for (var ordinal = 0; (ordinal < Math.Min(
             val1: state.PreviousChannelBit.Length,
-            val2: m_channels.ChannelCount
+            val2: ChannelLimits.MaxChannels
         )); ordinal++) {
             if (m_channels.Name(ordinal: ordinal) is { } name) {
                 channels.Add(item: new WorldTransferChannelEdge(

@@ -21,7 +21,7 @@ namespace Puck.World.Server.Tests;
 /// <c>IntegrateLocalAttitude</c> already built.
 /// </summary>
 public sealed class LocalAttitudeHoldLawTests {
-    private const int DashOrdinal = 6;
+    private const int DashOrdinal = ChannelLimits.MaxAxes;
     private const int PitchOrdinal = 2;
     private const int RollOrdinal = 3;
 

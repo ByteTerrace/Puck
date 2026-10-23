@@ -57,6 +57,8 @@ public sealed partial class WorldTick {
     // peaks near 2^36, so it stays roughly twenty-seven binary orders below Int64 overflow without a hot-path
     // checked/saturating add.
     private readonly long[] m_untrustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly Int128[] m_relativeTrusted = new Int128[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxAxes)];
+    private readonly Int128[] m_relativeUntrusted = new Int128[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxAxes)];
     private readonly long[] m_trustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     // This tick's contributed HELD-device image per (seat, channel) — a non-owner's composition act (see
     // WorldAddonRuntime.Submit's HeldChannels), accumulated by WorldChannelTable.ComposeHeld's shape-aware rule: a

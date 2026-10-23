@@ -19,9 +19,9 @@ namespace Puck.World.Server.Tests;
 /// analytic-collider fixture cannot reproduce.</remarks>
 public sealed class HoldLawTests {
     private const int ForwardOrdinal = 0;
-    private const int ReleaseOrdinal = 3;
+    private const int ReleaseOrdinal = ChannelLimits.MaxAxes;
     private const int StrafeOrdinal = 1;
-    private const int UpOrdinal = 4;
+    private const int UpOrdinal = 3;
     // The room, in engine coordinates: a floor slab whose top face is y = 0, and a wall standing on it spanning
     // y 0..WallTop with its near face at z = WallFaceZ, square in front of a body at yaw 0 (which faces -Z).
     private const double WallFaceZ = -2.75;

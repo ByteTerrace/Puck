@@ -8,12 +8,14 @@ starting work, and tick or remove an item in the same change that closes it.
 
 The [input channel decision](../decisions/input-channels.md) owns the model,
 migration inventory, genre checks, and each step's completion criteria. The
-runtime still has sixteen uniform channel slots; the design record is complete.
+runtime has 32 numeric slots and 64 packed buttons with shared debug inputs,
+including Q32.32 relative displacement. Authoritative modes and timed history
+remain open.
 
-- [ ] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
+- [x] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
   buttons, separate target-register reach, all consumers and codecs migrated,
   shared debug declarations, and chess `confirm`/`cancel` without Select coupling.
-- [ ] C2 relative input: Q32.32 displacement in the numeric bank, authored
+- [x] C2 relative input: Q32.32 displacement in the numeric bank, authored
   units/sensitivity/bounds, single consumption, and no tick-rate scaling.
 - [ ] C3 authoritative modes: finite state selectors, composed live sets,
   per-combination allocation and permissions, directed family-transition keep

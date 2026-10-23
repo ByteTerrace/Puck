@@ -9079,6 +9079,22 @@
         null
       ]
     },
+    "ChannelMask": {
+      "description": "Independent support masks for the numeric and button banks.",
+      "type": "object",
+      "properties": {
+        "axes": {
+          "description": "One bit per numeric lane.",
+          "type": "integer"
+        },
+        "buttons": {
+          "description": "One bit per button lane.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "title": "ChannelMask"
+    },
     "ShapeNonNullable50": {
       "anyOf": [
         {

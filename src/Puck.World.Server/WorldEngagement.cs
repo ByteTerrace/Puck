@@ -174,14 +174,14 @@ public sealed partial class WorldEngagement {
             return ChannelReachMask.All;
         }
 
-        var bits = 0UL;
+        var bits = default(ChannelMask);
 
         foreach (var name in names) {
             if (channels.TryGetOrdinal(
                 name: name,
                 ordinal: out var ordinal
             )) {
-                bits |= (1UL << ordinal);
+                bits = bits.With(ordinal: ordinal);
             }
         }
 

@@ -1,3 +1,4 @@
+import "inputs"
 // The Moth's suit on and off. `suit` is a body register (state.body) holding 1 while the body wears the mech suit and 0
 // while it is out of it, and the look and kit assignments select by it (`select`), so what she wears and how she moves
 // follow the register: a rule or a replay moves both at the same tick, and a saved world keeps them. The register is
@@ -20,13 +21,7 @@ exports {
   actions [pilotHold]
 }
 
-channels [
-  {
-    composition: true
-    name: "suit"
-    shape: Binary
-  }
-]
+
 
 state {
   body [

@@ -93,6 +93,7 @@ public sealed partial class WorldPopulation {
             actions: kit.Actions,
             actionThresholds: kit.ActionThresholds,
             actionShapes: kit.ActionShapes,
+            channels: kit.Channels,
             roleMask: kit.RoleMask,
             roleOrdinals: kit.RoleOrdinals,
             actionState: kit.ActionState,

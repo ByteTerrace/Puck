@@ -112,7 +112,7 @@ public static class BindingProfile {
         separator: ',',
         values: (activator.Sequence ?? [])
     )}";
-    private static (FrozenDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
+    private static (FrozenDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, Func<ChannelRef, bool>? channelIsRelative, ref int nextActivatorIndex) {
         var entries = (page.Entries ?? []);
         // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
         // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
@@ -210,6 +210,11 @@ public static class BindingProfile {
                 );
             }
 
+            var relative = ((entry.Channel is { } destination) && (channelIsRelative?.Invoke(destination) ?? false));
+
+            if (relative && ((entry.Mode == BindingEntryMode.Toggle) || (entry.Activator is not null))) {
+                throw new ArgumentException(message: $"Page '{page.Id}' relative channel {entry.Channel} cannot toggle or use a held/sequence activator.", paramName: nameof(page));
+            }
             string effectiveCommand;
             CommandValue? effectiveValue;
             float? channelScale;
@@ -402,6 +407,7 @@ public static class BindingProfile {
                 list.Add(item: new CommandBinding(
                     ActivateOn: entry.ActivateOn,
                     ChannelScale: channelScale,
+                    Relative: relative,
                     Command: effectiveCommand,
                     Value: effectiveValue,
                     Component: component,
@@ -508,7 +514,7 @@ public static class BindingProfile {
         int[][] rowHelds,
         int[][] rowChords
     ) {
-        var members = new HashSet<int>([.. rowHelds[rowIndex], .. rowChords[rowIndex]]);
+        var members = new HashSet<int>(collection: [.. rowHelds[rowIndex], .. rowChords[rowIndex]]);
         var openers = new Dictionary<string, BindingPageOpenerView>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var other = 0; (other < effectivePages.Length); other++) {
@@ -520,7 +526,7 @@ public static class BindingProfile {
                 continue;
             }
 
-            var otherMembers = new HashSet<int>([.. rowHelds[other], .. rowChords[other]]);
+            var otherMembers = new HashSet<int>(collection: [.. rowHelds[other], .. rowChords[other]]);
 
             if (
                 (otherMembers.Count != (members.Count + 1)) ||
@@ -833,7 +839,8 @@ public static class BindingProfile {
     /// <returns>The compiled profile.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="document"/> is invalid.</exception>
-    public static CompiledBindingProfile Compile(BindingProfileDocument document, Func<ChannelRef, string>? channelCommandName = null) {
+    /// <param name="channelIsRelative">Resolves displacement destinations, which cannot toggle or carry held samples.</param>
+    public static CompiledBindingProfile Compile(BindingProfileDocument document, Func<ChannelRef, string>? channelCommandName = null, Func<ChannelRef, bool>? channelIsRelative = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         channelCommandName ??= ChannelCommandName;
@@ -1725,6 +1732,7 @@ public static class BindingProfile {
             if (effectivePages[rowIndex] is { } page) {
                 var (table, activators) = BuildTable(
                     channelCommandName: channelCommandName,
+                    channelIsRelative: channelIsRelative,
                     nextActivatorIndex: ref nextActivatorIndex,
                     page: page
                 );
