@@ -2,8 +2,9 @@
 
 Start with the [researcher brief](security-review.md) for orientation, priorities,
 and a first local run. This reference supplies the detailed source map, repaired
-defects, remaining assumptions, and wider test selections. The local Windows preflight
-consists of source review and targeted executable regressions. Deployment exposure,
+defects, remaining assumptions, and wider test selections. The local preflight
+consists of source review and targeted executable regressions on Windows, with
+attestation, networking and release selections also run on Linux in WSL. Deployment exposure,
 cloud policy, sustained fuzzing, and native-runtime exploit resistance need
 separate evidence. Passing these tests is not a security certification.
 
@@ -51,15 +52,17 @@ the receiving effect must commit durably.
 2. **Authorization and disclosure composition.** Follow actions to their final
    receiving world rather than stopping at signature verification. Include live
    grant changes, entity-slot reuse, forwarded commands, and observation after
-   transfer. The existing [open items](../plans/open-items.md#standalone) identify
-   dynamic transform disclosure as a recorded weakness and the authored-binding
-   escalation witness as missing executable evidence. The latter is not a
-   demonstrated bypass. This preflight does not establish closure of either.
+   transfer. Challenge the resolved transform dependencies, runtime privacy
+   checks, and intentional disclosure through a rule's own writes. The authored
+   binding witness installs the real command registry and uses a principal with
+   only a binding-overlay mutation grant; it covers that admission path, not
+   whether every shipped command has the right bindability classification.
 3. **Release crash consistency.** Compare replay-store advancement, staging,
    rollout eligibility, and the install pointer as one recovery problem.
    The recoverable install intent and writer leases have local fault-injection
-   and separate-instance contention cases. Extend these to real process kills,
-   stub rollback races, and storage/power faults: `AtomicFile` flushes file
+   and separate-instance contention cases. Real child-process termination covers
+   both sides of replay reservation and pointer activation. Extend these to
+   stub rollback races and storage/power faults: `AtomicFile` flushes file
    contents before rename, which alone does not establish durable directory
    ordering on every supported filesystem. Verify install-root ownership and
    adversarial symlink/reparse behavior under each supported OS.
@@ -69,7 +72,7 @@ the receiving effect must commit durably.
    fixtures do not prove the deployed configuration.
 5. **Hostile resource use.** Measure aggregate unauthenticated connections,
    authenticated invalid-signature traffic, key enumeration, document depth and
-   expansion, WASM compilation, multiple guest memories, and guest lifetime.
+   expansion, WASM compilation, aggregate guest resources, and guest lifetime.
    Per-message or per-memory caps do not establish an aggregate process budget.
    World pre-admission has a 64-slot limit and a deadline; authenticated
    federation connections have no equivalent active-connection ceiling.
@@ -100,8 +103,11 @@ someone else's private key are different threat models.
 | Release replay retention and comparison | Changing signer discarded the previous signer's persisted mark; racing verification could both accept or lower a mark. | Each signer retains its mark; file-backed compare-and-advance excludes other writers. `ReleaseSequenceStoreTests` and `AttestationReleaseVerifierTests` cover reopen, corruption, and contention. |
 | Release bytes exceeded their contract | HTTP eagerly buffered responses and ignored signed payload lengths; staging trusted cache length implicitly. | Manifest intake has a byte cap; payloads stream under their signed exact length and staging checks size plus SHA-256. `HttpReleaseSourceTests` covers missing length headers, truncation, and excess bytes. |
 | Successive applies could downgrade | The running process's installed version could lag the already updated on-disk pointer. | Apply compares against the current pointer before replacing it. `FileUpdateApplierTests` covers equal and older versions after an apply. |
-| A failed update consumed its sequence | Rollout exclusion, staging failure, or an interrupted install could prevent retrying the same signed release. | Rollout and staging precede a persisted install intent and exact-manifest replay reservation. Recovery revalidates current trust, checks content, and refuses newer marks/pointers. `UpdateInstallTransactionTests` injects failures around reservation and pointer activation. |
+| A failed update consumed its sequence | Rollout exclusion, staging failure, or an interrupted install could prevent retrying the same signed release. | Rollout and staging precede a persisted install intent and exact-manifest replay reservation. Recovery revalidates current trust, checks content, and refuses newer marks/pointers. `UpdateInstallTransactionTests` injects failures and [terminates real updater processes](../../tests/Puck.Launcher.Tests/Release/UpdateInstallTransactionTests.Process.cs) around reservation and pointer activation. |
 | Restaging inherited files outside the signed file set | After an interruption before intent persistence, a replacement signed manifest for the same version could omit a file that remained in the version directory and was activated. This requires two genuinely signed manifests; no local attacker write is needed. | Staging rebuilds the inactive version directory from the complete declared file set under the install lease. `UpdateInstallTransactionTests.InterruptedStage_ReplacementManifestCannotInheritFilesItDoesNotDeclare` fails on the former behavior and passes with cleanup. |
+| Transform dependencies omitted hidden inputs | Authored transforms could use hidden selectors, control conditions or source membership to influence public output. A principal already granted mutation and edit rights could also sort a public row after one of its cells became private. | Resolved dependencies and the shared arena preflight check whole read rows, runtime cell visibility and containing zones before writes. [Compiler/evaluator cases](../../tests/Puck.State.Rules.Tests/TransformDisclosureLawTests.cs) include rollback; [server cases](../../tests/Puck.World.Server.Tests/TransformDisclosureLawTests.cs) exercise a restricted principal and a confined control. This is conservative admission, not precise dynamic taint tracking. |
+| Addon identity used truncated SHA-256 | The compilation cache and authored integrity pins used only the first 64 bits. Distinct approved bytes could alias if such a collision were supplied; no cryptographic collision was generated. | Addon approval pins and cache keys use full SHA-256. [Asset cases](../../tests/Puck.Assets.Tests/BoundedAssetLoadingTests.cs) use synthetic digests with equal short prefixes; [guest cases](../../tests/Puck.World.Server.Tests/AddonGuestLawTests.cs) refuse the former short pin and a changed full-pin suffix, with a valid-pin control. |
+| Addon intake and guest resources lacked combined limits | Whole source files reached native parsing/compilation before a size check. A guest could declare additional hidden memories within each memory's individual ceiling. This requires an authorized addon mount; no ordinary remote-player upload route was found. | Bounded source reads and declaration checks precede native compilation. The store limits instance, memory and table counts and growth; [guest cases](../../tests/Puck.World.Server.Tests/AddonGuestLawTests.cs) include hidden resources, boundary controls and cache-eviction lifetime. Native compiler workspace and aggregate host budgets remain separate questions. |
 
 Install recovery treats a protected local intent as already-authorized work.
 It checks the current trust policy at the original verification instant; expiry
@@ -121,20 +127,34 @@ grants before effects. No host-authority escape was established in those paths.
 `AddonGuestLawTests` and `AddonPrepareGateLawTests` exercise guest confinement
 and mount admission; they do not audit Wasmtime's native implementation.
 
-The remaining resource and identity questions have specific entry points:
+`WasmModuleLoader.Load` requests a bounded asset read and checks the full
+authored SHA-256 pin before parsing or cache lookup. Source and converted binary
+each have a 16 MiB ceiling. Imports and excessive declared memory/table
+resources refuse before native compilation. One guest store admits one instance,
+one 32-bit memory up to 16 MiB, and one table up to 65,536 elements, including
+growth. GC heaps, typed function references and multiple memories are disabled.
+The [scripting reference](../reference/scripting.md) owns these limits.
 
-- `WasmModuleLoader.Load` reads and compiles the whole module before mount
-  admission. Its cache limits entries, not source bytes, compiler work, or code
-  bytes. Execution fuel does not bound compilation.
-- `AddonInstance.Instantiate` limits each memory to 16 MiB. Multiple memories,
-  tables, and compiled code need an aggregate budget. Existing tests deliberately
-  accept an additional hidden memory within its individual ceiling.
-- The module cache uses `AssetContentHash`, the first 64 bits of SHA-256, as its
-  sole identity. A collision would alias modules; no collision or poisoning
-  exploit was generated. The inspected mounting route comes from an authored
-  document and local assets under operator control. No ordinary remote-player
-  upload-to-mount route was established. Treat the truncated hash as a
-  determinism identifier when reviewing hostile-code approval.
+The remaining resource questions have specific entry points:
+
+- WAT conversion and `Module.FromBytes` still execute native code without a
+  proven CPU deadline or peak-workspace bound. Execution fuel covers the guest,
+  not its compiler.
+- Per-store limits and the module cache's entry count do not establish an
+  aggregate retained-byte budget across worlds, guests and compiled modules.
+  Cache eviction retains the lifetime of modules used by active guests; native
+  reclamation is reference/finalizer driven.
+- An expected integrity pin must come from a trusted publication or authoring
+  path. Full SHA-256 identifies approved bytes; it does not decide who may
+  approve an addon. The inspected mount path uses authored documents and local
+  assets; an ordinary remote-player upload-to-mount route was not established.
+
+The [binding-authority witness](../../tests/Puck.World.Presentation.Tests/AuthoredBindingAuthorityLawTests.cs)
+uses a host-stamped addon with exactly one budgeted binding-overlay grant. It
+submits a real mutation naming shipped unbindable `world.grant`, requires refusal
+without changing the document, and applies a bindable control. Weakening the
+guard makes that witness fail. It proves metadata admission, not every command's
+classification or a physical input gesture.
 
 MCP review covers token policy, attachment ownership and retirement, downstream
 authorization, and the local descriptor/HMAC path. No additional authorization
@@ -160,8 +180,10 @@ the relevant build/run pair below from the repository root in Windows
 PowerShell. A successful build must precede each run. The tests supply their
 own temporary state and loopback peers; these selections require no deployed
 world or cloud account. Two Networking cases require Unix and skip on Windows;
-the selected Server cases include a child-process helper that skips when run
-without its parent fixture. Read the test output for any other skip or failure.
+the selected Server, Presentation and Release cases include child-process helpers
+that skip when run without their parent fixtures. The parents run them explicitly.
+On Linux, the Windows ACL case skips instead. Read the test output for any other
+skip or failure.
 
 ```powershell
 dotnet build tests/Puck.Networking.Tests -c Release -nodeReuse:false
@@ -174,7 +196,10 @@ dotnet build tests/Puck.Mcp.Tests -c Release -nodeReuse:false
 dotnet tests/Puck.Mcp.Tests/bin/Release/net11.0/Puck.Mcp.Tests.dll --filter-not-trait Category=Gpu --progress off
 
 dotnet build tests/Puck.World.Presentation.Tests -c Release -nodeReuse:false
-dotnet tests/Puck.World.Presentation.Tests/bin/Release/net11.0/Puck.World.Presentation.Tests.dll --filter-class '*FederationTransferLawTests' --filter-class '*FederationOnwardRouteLawTests' --filter-class '*SessionObservationLawTests' --filter-not-trait Category=Gpu --progress off
+dotnet tests/Puck.World.Presentation.Tests/bin/Release/net11.0/Puck.World.Presentation.Tests.dll --filter-class '*FederationTransferLawTests' --filter-class '*FederationOnwardRouteLawTests' --filter-class '*SessionObservationLawTests' --filter-class '*AuthoredBindingAuthorityLawTests' --filter-not-trait Category=Gpu --progress off
+
+dotnet build tests/Puck.State.Rules.Tests -c Release -nodeReuse:false
+dotnet tests/Puck.State.Rules.Tests/bin/Release/net11.0/Puck.State.Rules.Tests.dll --filter-class '*TransformDisclosureLawTests' --progress off
 
 dotnet build tests/Puck.World.Server.Tests -c Release -nodeReuse:false
 dotnet tests/Puck.World.Server.Tests/bin/Release/net11.0/Puck.World.Server.Tests.dll --filter-class '*Admission*' --filter-class '*Grant*' --filter-class '*Disclosure*' --filter-class '*Transfer*' --filter-class '*Recovery*' --filter-class '*SessionPrincipalLawTests' --filter-class '*AddonGuestLawTests' --filter-class '*AddonPrepareGateLawTests' --filter-not-trait Category=Gpu --progress off
@@ -185,8 +210,11 @@ dotnet tests/Puck.World.Azure.Tests/bin/Release/net11.0/Puck.World.Azure.Tests.d
 
 A full presentation or launcher run includes unrelated runtime work. See
 [verification](../../.claude/skills/verification/SKILL.md) for CPU/GPU selection
-and the build-before-run rule. Unix transport behavior, real process-kill
-recovery, and deployed policy need their own environments and experiments.
+and the build-before-run rule. The same attestation, networking and release
+assembly selections run on Linux with the pinned runtime. Child-process tests
+require that runtime's `dotnet` on PATH. WSL results cover those fixtures and
+Linux temporary filesystem operations, not every production Linux distribution,
+filesystem, native package or deployment policy.
 
 The preflight's source searches use ordinary text search after the repository
 search/semantic tools failed in the session. Text matches are navigation aids,

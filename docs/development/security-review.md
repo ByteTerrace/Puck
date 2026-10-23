@@ -5,11 +5,11 @@ independent review of how it decides **who may act, what they may see, and which
 code it may run**. The most useful starting points are world-to-world identity,
 hidden game state, and interrupted software updates.
 
-Local review has repaired several concrete defects and added executable
-regressions. A known disclosure weakness remains open. This brief supports a
-targeted research engagement; deployment security and production readiness still
-need evidence. The [technical reference](security-review-reference.md) has the
-full source map, repaired findings, and remaining assumptions.
+Local review has repaired concrete defects and retained executable regressions. This
+brief helps you challenge the resulting boundaries and their assumptions.
+Deployment security and production readiness still need evidence. The
+[technical reference](security-review-reference.md) has the full source map,
+repaired findings, and remaining questions.
 
 ## A little context
 
@@ -48,45 +48,45 @@ and [binding service](../../src/Puck.Azure.Functions/Services/DefaultBindingServ
 Actual deployed identity, storage, and key-management settings require a separate
 operational review; the local fixtures do not establish those settings.
 
-## Known gaps to carry into the review
+## Questions that still need evidence
 
-**Recorded disclosure weakness.** A transform reads or changes game state.
-Some reads are chosen at runtime and omitted from its declared inputs.
-Separately, the validation does not account for a cell becoming private at
-runtime. Either omission can let hidden state influence public output. For
-example, a public move chosen using a hidden cell can reveal information about
-that cell. The current source still has these omissions. This pass has not
-produced a complete exploit fixture or
-established which player grants make each path reachable. The [open item](../plans/open-items.md#standalone)
-and the source links above give the precise paths; passing disclosure tests do
-not close it.
+**Failure and revocation schedules.** Try interruption during a world transfer,
+then duplicate or reorder requests after reconnection. Check when an existing
+connection loses authority after trust, token validity, or admission policy
+changes. Per-effect permissions and connection authentication are separate
+checks; one does not automatically establish the other.
 
-**Missing authorization evidence.** We still need an executable case showing
-that a non-privileged player allowed to edit input bindings cannot bind a command
-reserved for privileged use. The real command registry must be installed for
-that case to mean anything. This is a test gap, not a demonstrated bypass; it is
-tracked beside the disclosure item.
+**Whole-process resource limits.** Input and guest-resource caps do not bound
+the total number of guests, native compilation work, or authenticated federation
+connections. Review how a hostile authorized caller can accumulate that work.
+These are further engineering and review tasks, not claims that the existing
+limits solve denial of service.
 
-**Unmeasured limits.** Review aggregate connection and WASM compilation/memory
-budgets. Individual messages and guest memories have limits, but those do not
-establish a bound for the whole process. The reference also identifies local
-filesystem assumptions, pending-update recovery policy, and cryptographic
-portability questions.
+**Storage and deployed policy.** Actual process termination is covered by the
+update tests. Storage power loss, directory durability and adversarial
+filesystem links need further experiments. Deployed Azure identity, storage
+and key settings need direct inspection; local generated-key fixtures cannot
+establish them.
 
 ## What has already been checked
 
-The local work covers source review and selected Windows test suites with
+The local work covers source review and selected test suites with
 generated keys, temporary install state, and loopback peers. Repairs cover
 verification limits, reciprocal federation identity, transfer arithmetic,
 caller-bound key renewal, bounded response reads, complete signed release file
-sets, channel checks, and replay-safe update recovery. The [findings table](security-review-reference.md#local-findings-and-regression-cases)
+sets, channel checks, and replay-safe update recovery. Further checks close
+hidden transform inputs and runtime privacy gaps, enforce full addon integrity
+pins and guest-resource limits, and demonstrate binding-command admission with
+the real registry. The [findings table](security-review-reference.md#local-findings-and-regression-cases)
 links each repair to its regression case and states the attacker's prerequisites.
 
 The accompanying commits record exact commands and results. These checks are
 selected suites, not a full security audit or whole-repository test run. They do
-not establish deployed policy, Linux behavior, native-runtime exploit resistance,
-sustained fuzzing, or power-loss durability. Update interruption cases inject
-exceptions; they do not simulate every operating-system or storage failure.
+not establish deployed policy, native-runtime exploit resistance, sustained
+fuzzing, or power-loss durability. Attestation, networking and release cases
+also run under Linux in WSL. The updater cases include both injected exceptions
+and killed child processes at replay-reservation and activation boundaries;
+they do not simulate every operating-system or storage failure.
 
 ## Try a first local run
 
@@ -103,7 +103,9 @@ dotnet build tests/Puck.Launcher.Tests -c Release -nodeReuse:false
 dotnet tests/Puck.Launcher.Tests/bin/Release/net11.0/Puck.Launcher.Tests.dll --filter-namespace Puck.Launcher.Tests.Release --progress off
 ```
 
-Expect the selected cases to pass. A build failure means there is no current
+Expect the selected cases to pass. The release suite skips an explicit child
+helper in its ordinary enumeration; its parent cases run that helper in their
+own processes. A build failure means there is no current
 test result to interpret. The [wider selections](security-review-reference.md#running-local-checks)
 cover federation, admission, key renewal, local control, and addons. Use those
 when they match the boundary you are investigating.
