@@ -128,7 +128,7 @@ stairwell, which is open between floors.
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
-The lift car is a population body (`lift-car`, body 40) whose look draws the
+The lift car is a population body (`lift-car`, body 41) whose look draws the
 cab and which carries the attached solid platform the Moth stands on. Rules move
 it: `liftCall` names the level a pad or command called, `liftTarget` and
 `liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell

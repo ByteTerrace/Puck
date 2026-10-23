@@ -143,6 +143,19 @@ These items belong to no single programme.
 - [ ] Refuse a `garden { … }` expectation that names a document the world does not reference at authoring time (`puck lint`, the language server, `puck compile`). Today `puck test` refuses it when it stages the test world (a usage error naming the document). The compile-time document does not hold the answer: a `references` row can arrive through an imported document composed only at load (the debug world's garden reference comes from `paintings.puck`), and a sibling can be reached through another sibling's references, so a check against the compiled rows would refuse claims that stage fine. It needs the composed document's references, which is the composer's to give.
 - [ ] Make the external prime comparisons reproducible as `puck bench` workloads: primecount 8.8 `-t1` on pi(10^16..10^18) and nth(10^15, 10^16), and machine-prime 1.5.7 `is_prime` per bucket (2^32 to 2^63) and input class (primes, composites with no factor through 163 or 727, random odd words), with agreement checked against a deterministic Miller-Rabin oracle. Both ran from session scratch harnesses on one Zen 4 machine; Intel (Alder Lake) and Zen 2 timings are unmeasured.
 
+## Addon system
+
+The addon system is improved as it is used ([addons](../../.claude/skills/puck-world/references/addons.md)).
+These gaps came up writing the debug world's three guests ([worlds/debug/addons.md](../../worlds/debug/addons.md)).
+
+- [ ] Let a guest read authored data. The gallery guide's exhibit names and notes are copied into `worlds/debug/addons/guide.wat` in the gallery's walking order, so `shapes.puck` and the guest drift apart unless edited together. Either the row carries a text payload the host writes into guest memory at mount (through an optional export pair naming where), or a query verb reads a cell of a state row the guest is granted `Observe` over.
+- [ ] Give federation link events the manifest-order index region events carry: their `A` lane is still the `adjacencies` row's document ordinal, which a guest cannot resolve to a name.
+- [ ] Read more bodies a tick. A pose query answers in four cells, so a 64-cell input ring reads about fifteen bodies a tick, and the watchdog reads the chess pieces four a tick in turn. A batched pose query over every body a guest observes, or an event when a body crosses a height, would let a watchdog check every body every tick.
+- [ ] Wire the per-cell `UpsertStateCell`/`RemoveStateCell` into the addon mutation decoder. A guest rewrites a whole row to change one cell, and an `Edit` row's `verbs:UpsertStateCell,RemoveStateCell` narrowing cannot apply to a guest.
+- [ ] Compare text in a test or rule gate. An `expect` line reads numbers only, so the guide and the watchdog write numeric rows (`guideAt`, `watchdog`) beside their text rows for their tests to read.
+- [ ] Let an agent attached over MCP record a world with addons. A recording with mounted guests must arm before the world's first step, since no checkpoint holds a guest's memory, and an MCP attachment arrives after it, so the World has to start with `replay.record` on stdin. Re-instantiating every guest at the arm, as a drive's boot-image reset now does, would let a recording start from a checkpoint.
+- [ ] Quiet the offline re-drive's narration: `replay.stop` and `replay.verify` print every shadow guest's mount and disclosure lines, so each addon's mount narrates again after a recording.
+
 ## Quarantined gates
 
 While the debug world is the one live world
