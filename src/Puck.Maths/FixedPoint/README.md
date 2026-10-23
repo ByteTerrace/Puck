@@ -278,6 +278,8 @@ that policy: checked throws for a negative rounded raw, saturating clamps it
 to zero, and truncating retains its low sixty-four bits. A negative value
 within half a Q16 raw of zero rounds to zero in every mode. Values on the
 shared grid round-trip exactly wherever both carriers can represent them.
+Both operands implement every direct `INumberBase` from/to hook; conversions
+do not depend on `Create*` falling back to the opposite operand's hook.
 
 Outbound `Half` conversions use the decimal boundary and are correctly rounded
 for these carriers. Every binary16 midpoint is an exact decimal (at most 25
@@ -292,7 +294,10 @@ a finer carrier needs its own proof.
 a zero denominator before handling a zero numerator. `ScaleDecimalWide`
 inherits that shift refusal through the same rounder; its denominator is
 always a positive power of ten. Symmetric inversion refuses a negative
-output shift before internal preconditioning and clears all outputs.
+output shift before internal preconditioning and clears all outputs. Symmetric
+solves do the same in Debug and Release. Inversion computes the combined output
+and preconditioning shift in a wide integer and refuses counts outside `[0, 127]`
+before narrowing it for division.
 
 ---
 

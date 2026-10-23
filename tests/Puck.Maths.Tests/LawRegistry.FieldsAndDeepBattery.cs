@@ -1177,6 +1177,9 @@ internal static partial class LawRegistry {
             id: "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
         ),
         ClaimCase(claim: FixedPointBoundaryClaims.InverseShiftsRefuse, id: "symmetric-solve.inverse-shift-refusal"),
+        ClaimCase(claim: FixedPointBoundaryClaims.SolveShiftsRefuse, id: "symmetric-solve.solve-shift-refusal"),
+        ClaimCase(claim: FixedPointBoundaryClaims.DirectPeerHooksMatchExactScaling, id: "q3232.direct-peer-conversion-hooks"),
+        ClaimCase(claim: FixedPointBoundaryClaims.FrontierDropsRetiredDomains, id: "core.frontier-drops-retired-domains"),
         ClaimCase(claim: FixedPointBoundaryClaims.RationalArgumentsRefuse, id: "core.round-rational-argument-refusals"),
         ClaimCase(claim: FixedPointBoundaryClaims.DecimalShiftRefuses, id: "core.scale-decimal-wide-shift-refusal"),
         ClaimCase(claim: FixedPointBoundaryClaims.SingleRoundsOnce, id: "scalar.explicit-single-rounding"),

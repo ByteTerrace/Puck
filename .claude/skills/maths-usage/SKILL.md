@@ -102,6 +102,10 @@ maps each question to its wing and README section.
   midpoint by `scalar.half-midpoints-vs-exact-oracle`; do not assume that proof covers
   a future finer carrier. Generic `FixedQ3232`/`UFixedQ4816` peers round to the
   target grid before applying checked, saturating or width-truncating policy.
+- **Generic peers support both hooks.** Verify `TryConvertFrom*` and
+  `TryConvertTo*` directly through the derived-interface adapter in the Maths
+  suite. `Create*` falls back to the other operand's hook and can conceal a
+  missing half of the conversion contract.
 - **Gate `PDEP`/`PEXT` on `BitManipulation.HasFastParallelBits`**, never
   `Bmi2.IsSupported`: AMD before Zen 3 (the Steam Deck's Zen 2 included) and
   Hygon's licensed Zen 1 run them in microcode at up to hundreds of cycles.

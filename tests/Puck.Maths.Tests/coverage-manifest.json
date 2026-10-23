@@ -6562,6 +6562,7 @@
     },
     {
       "CoveredBy": [
+        "q3232.direct-peer-conversion-hooks",
         "q3232.grid-and-construction",
         "q3232.unsigned-peer-conversions",
         "scalar.half-midpoints-vs-exact-oracle"
@@ -6919,6 +6920,7 @@
     },
     {
       "CoveredBy": [
+        "q3232.direct-peer-conversion-hooks",
         "q3232.grid-and-construction",
         "q3232.unsigned-peer-conversions",
         "scalar.half-midpoints-vs-exact-oracle"
@@ -7252,6 +7254,7 @@
     },
     {
       "CoveredBy": [
+        "q3232.direct-peer-conversion-hooks",
         "scalar.additive-ops-vs-oracle",
         "scalar.double-projection-vs-oracle",
         "scalar.generic-conversion-modes",
@@ -7792,6 +7795,7 @@
     },
     {
       "CoveredBy": [
+        "q3232.direct-peer-conversion-hooks",
         "scalar.additive-ops-vs-oracle",
         "scalar.culture-token-ambiguity-refused",
         "scalar.double-projection-vs-oracle",
@@ -8817,6 +8821,7 @@
         "symmetric-solve.lossy-rank-one-singular-refuses",
         "symmetric-solve.refusal-leaves-no-stale-output",
         "symmetric-solve.singular-matrices-refuse",
+        "symmetric-solve.solve-shift-refusal",
         "symmetric-solve.solve2-residual-within-envelope",
         "symmetric-solve.solve2-vs-bareiss",
         "symmetric-solve.solve2-vs-oracle"
@@ -8828,6 +8833,7 @@
       "CoveredBy": [
         "symmetric-solve.invert-large-magnitude-envelope-refuses",
         "symmetric-solve.singular-matrices-refuse",
+        "symmetric-solve.solve-shift-refusal",
         "symmetric-solve.solve3-all-cofactors-exact-value",
         "symmetric-solve.solve3-extreme-magnitude-agrees",
         "symmetric-solve.solve3-non-diagonal-exact-value",
@@ -25041,6 +25047,7 @@
     {
       "CoveredBy": [
         "deep.unsigned-scalar-fraction-sweep",
+        "q3232.direct-peer-conversion-hooks",
         "q3232.unsigned-peer-conversions",
         "scalar.generic-conversion-modes",
         "scalar.half-midpoints-vs-exact-oracle",
@@ -25401,6 +25408,7 @@
     {
       "CoveredBy": [
         "deep.unsigned-scalar-fraction-sweep",
+        "q3232.direct-peer-conversion-hooks",
         "q3232.unsigned-peer-conversions",
         "scalar.generic-conversion-modes",
         "scalar.half-midpoints-vs-exact-oracle",

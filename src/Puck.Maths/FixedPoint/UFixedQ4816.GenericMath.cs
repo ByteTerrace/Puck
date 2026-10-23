@@ -144,6 +144,12 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            return FixedPointConvert.TryConvertToChecked<FixedQ3232, UFixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out result);
+        }
+
         if (FixedPointConvert.TryGetFloating(
             result: out var floating,
             value: value
@@ -184,6 +190,12 @@ public readonly partial record struct UFixedQ4816 {
                 : ((ulong)other.Value)));
 
             return true;
+        }
+
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            return FixedPointConvert.TryConvertToSaturating<FixedQ3232, UFixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out result);
         }
 
         if (FixedPointConvert.TryGetFloating(
@@ -228,6 +240,12 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            return FixedPointConvert.TryConvertToTruncating<FixedQ3232, UFixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out result);
+        }
+
         if (FixedPointConvert.TryGetFloating(
             result: out var floating,
             value: value
@@ -264,6 +282,13 @@ public readonly partial record struct UFixedQ4816 {
             result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
 
             return true;
+        }
+
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var supported = FixedPointConvert.TryConvertFromChecked<FixedQ3232, UFixedQ4816>(
+                value: value, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
         }
 
         if (TrySetFloating(
@@ -306,6 +331,13 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var supported = FixedPointConvert.TryConvertFromSaturating<FixedQ3232, UFixedQ4816>(
+                value: value, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
+        }
+
         if (TrySetFloating(
             result: out result,
             value: value
@@ -343,6 +375,13 @@ public readonly partial record struct UFixedQ4816 {
             result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
 
             return true;
+        }
+
+        if (typeof(TOther) == typeof(FixedQ3232)) {
+            var supported = FixedPointConvert.TryConvertFromTruncating<FixedQ3232, UFixedQ4816>(
+                value: value, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
         }
 
         if (FixedPointConvert.IsKnownBclInteger<TOther>()) {
