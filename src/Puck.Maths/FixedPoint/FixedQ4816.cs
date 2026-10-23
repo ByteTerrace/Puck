@@ -326,12 +326,11 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <returns>The real value of <paramref name="value"/> as a <see cref="double"/>; precision may be lost for large magnitudes.</returns>
     public static explicit operator double(FixedQ4816 value) =>
         (value.Value * RawOneInverse);
-    /// <summary>Converts a <see cref="FixedQ4816"/> to the nearest <see cref="float"/>, through the
-    /// <see cref="double"/> conversion: the presentation seam every single-precision readback takes.</summary>
+    /// <summary>Converts a <see cref="FixedQ4816"/> to the nearest <see cref="float"/>, rounding once with ties to even.</summary>
     /// <param name="value">The value to convert.</param>
-    /// <returns><c>(float)(double)value</c>; precision is lost above 2²⁴ raw units of magnitude.</returns>
+    /// <returns>The nearest single-precision value; precision is lost above 2²⁴ raw units of magnitude.</returns>
     public static explicit operator float(FixedQ4816 value) =>
-        ((float)((double)value));
+        MathF.ScaleB(x: ((float)value.Value), n: -FractionBitCount);
     /// <summary>Returns the negation of <paramref name="value"/>, wrapping only at <see cref="MinValue"/>.</summary>
     /// <param name="value">The value to negate.</param>
     /// <returns>The arithmetic negation of <paramref name="value"/>.</returns>

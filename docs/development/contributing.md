@@ -751,6 +751,10 @@ unverified when no device run exists.
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
   again; never test the binaries a failed build left behind.
+- In PowerShell, quote colon-bearing switches forwarded after `--`: use
+  `puck lease heavy --holder <lane> -- dotnet build Puck.slnx -c Release '-nodeReuse:false'`.
+  Without the quotes, PowerShell can hand the child `-nodeReuse:` and `false`
+  as separate arguments, which MSBuild refuses with MSB1041.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with

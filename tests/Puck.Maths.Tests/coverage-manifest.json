@@ -6271,6 +6271,7 @@
     {
       "CoveredBy": [
         "core.scale-decimal-wide-reaches-canonical-core",
+        "core.scale-decimal-wide-shift-refusal",
         "q3232.decimal-conversion-modes"
       ],
       "Id": "Puck.Maths.FixedPointConvert.ScaleDecimalWide(System.Decimal,System.Int32)",
@@ -6278,6 +6279,7 @@
     },
     {
       "CoveredBy": [
+        "core.round-rational-argument-refusals",
         "core.round-rational-scales-ties-and-refuses",
         "dynamics.guard-scale-ties-vs-half-up"
       ],
@@ -6560,7 +6562,9 @@
     },
     {
       "CoveredBy": [
-        "q3232.grid-and-construction"
+        "q3232.grid-and-construction",
+        "q3232.unsigned-peer-conversions",
+        "scalar.half-midpoints-vs-exact-oracle"
       ],
       "Id": "Puck.Maths.FixedQ3232.FromRawBits(System.Int64)",
       "State": "covered"
@@ -6915,7 +6919,9 @@
     },
     {
       "CoveredBy": [
-        "q3232.grid-and-construction"
+        "q3232.grid-and-construction",
+        "q3232.unsigned-peer-conversions",
+        "scalar.half-midpoints-vs-exact-oracle"
       ],
       "Id": "Puck.Maths.FixedQ3232.Value",
       "State": "covered"
@@ -7249,7 +7255,8 @@
         "scalar.additive-ops-vs-oracle",
         "scalar.double-projection-vs-oracle",
         "scalar.generic-conversion-modes",
-        "scalar.grid-and-construction"
+        "scalar.grid-and-construction",
+        "scalar.half-midpoints-vs-exact-oracle"
       ],
       "Id": "Puck.Maths.FixedQ4816.FromRawBits(System.Int64)",
       "State": "covered"
@@ -7790,6 +7797,7 @@
         "scalar.double-projection-vs-oracle",
         "scalar.generic-conversion-modes",
         "scalar.grid-and-construction",
+        "scalar.half-midpoints-vs-exact-oracle",
         "scalar.styled-exponent-compensation",
         "scalar.text-ladder-and-refusals",
         "scalar.text-round-trip"
@@ -7885,7 +7893,7 @@
     {
       "CoveredBy": [
         "scalar.double-projection-vs-oracle",
-        "scalar.float-projection-through-double"
+        "scalar.explicit-single-rounding"
       ],
       "Id": "Puck.Maths.FixedQ4816.op_Explicit(Puck.Maths.FixedQ4816)",
       "State": "covered"
@@ -8784,6 +8792,7 @@
     },
     {
       "CoveredBy": [
+        "symmetric-solve.inverse-shift-refusal",
         "symmetric-solve.invert2-vs-bareiss",
         "symmetric-solve.invert2-vs-oracle"
       ],
@@ -8792,6 +8801,7 @@
     },
     {
       "CoveredBy": [
+        "symmetric-solve.inverse-shift-refusal",
         "symmetric-solve.invert-large-magnitude-envelope-refuses",
         "symmetric-solve.invert3-residual-within-envelope",
         "symmetric-solve.invert3-vs-bareiss",
@@ -25031,7 +25041,9 @@
     {
       "CoveredBy": [
         "deep.unsigned-scalar-fraction-sweep",
+        "q3232.unsigned-peer-conversions",
         "scalar.generic-conversion-modes",
+        "scalar.half-midpoints-vs-exact-oracle",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.construction-and-refusals",
         "unsigned-scalar.div-vs-oracle",
@@ -25389,7 +25401,9 @@
     {
       "CoveredBy": [
         "deep.unsigned-scalar-fraction-sweep",
+        "q3232.unsigned-peer-conversions",
         "scalar.generic-conversion-modes",
+        "scalar.half-midpoints-vs-exact-oracle",
         "scalar.styled-exponent-compensation",
         "unsigned-scalar.checked-operators-refuse",
         "unsigned-scalar.construction-and-refusals",
