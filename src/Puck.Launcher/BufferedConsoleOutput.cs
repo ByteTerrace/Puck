@@ -1,6 +1,7 @@
 using System.Text;
 
 using Puck.Commands;
+using Puck.Hosting;
 
 namespace Puck.Launcher;
 
@@ -21,19 +22,31 @@ namespace Puck.Launcher;
 public sealed class BufferedConsoleOutput : IDisposable {
     private readonly StreamWriter m_errorWriter;
     private readonly StreamWriter m_writer;
+    private readonly HostLog? m_log;
 
     /// <summary>Initializes a new instance of the <see cref="BufferedConsoleOutput"/> class over the process's raw
     /// standard-output and standard-error streams, both UTF-8 without a byte-order mark (stdout buffered, stderr
     /// auto-flushed).</summary>
     public BufferedConsoleOutput() : this(output: Console.OpenStandardOutput(), error: Console.OpenStandardError()) { }
+    /// <summary>Initializes writers over the process's raw standard streams whose refused results are also held in a
+    /// host log, since they bypass <see cref="Console.Error"/>.</summary>
+    /// <param name="log">The log every refused result is appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="log"/> is <see langword="null"/>.</exception>
+    public BufferedConsoleOutput(HostLog log) : this(output: Console.OpenStandardOutput(), error: Console.OpenStandardError(), log: log) {
+        ArgumentNullException.ThrowIfNull(argument: log);
+    }
     /// <summary>Initializes UTF-8 result writers over borrowed streams: stdout is buffered and stderr auto-flushed.
     /// Disposing this output flushes and releases the writers while leaving both streams open.</summary>
     /// <param name="output">The writable destination for accepted command results.</param>
     /// <param name="error">The writable destination for refused command results.</param>
+    /// <param name="log">The host log every refused result is also appended to, or <see langword="null"/> for
+    /// none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="output"/> or <paramref name="error"/> is null.</exception>
-    public BufferedConsoleOutput(Stream output, Stream error) {
+    public BufferedConsoleOutput(Stream output, Stream error, HostLog? log = null) {
         ArgumentNullException.ThrowIfNull(argument: output);
         ArgumentNullException.ThrowIfNull(argument: error);
+
+        m_log = log;
 
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -80,6 +93,7 @@ public sealed class BufferedConsoleOutput : IDisposable {
             record: value,
             writer: m_errorWriter
         );
+        m_log?.Append(stream: HostLogStream.Error, text: value);
     }
     /// <summary>Appends one echoed result to the buffer (not flushed until <see cref="Flush"/>), framed as one
     /// <see cref="ConsoleRecord"/>.</summary>

@@ -96,7 +96,11 @@ public static class LauncherServiceRegistration {
         services.TryAddSingleton<CommandRegistry>();
         // The once-per-frame buffered stdout the pump flushes after each Collect (see BufferedConsoleOutput): the result
         // echoes append into it instead of each paying an AutoFlush syscall, collapsing a piped burst to one write.
-        services.TryAddSingleton<BufferedConsoleOutput>();
+        // A composition root that teed the console (HostLog.CaptureConsole) registers that log first; otherwise host.log
+        // holds only the refusals the buffered output writes.
+        services.TryAddSingleton<HostLog>();
+        services.TryAddSingleton(implementationFactory: static sp => new BufferedConsoleOutput(log: sp.GetRequiredService<HostLog>()));
+        services.AddSingleton<ICommandModule, HostLogCommandModule>();
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<ICommandObserver, SimulationCommandOutputObserver>());
         services.TryAddSingleton(implementationFactory: static provider => {
             var output = provider.GetRequiredService<BufferedConsoleOutput>();
