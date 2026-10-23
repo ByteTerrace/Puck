@@ -1,16 +1,20 @@
-# Git safety for Codex lanes. A Codex lane runs headless, so a `prompt` decision reaches its automatic reviewer,
-# never the owner. What only a lane's own worktree holds (its index and files) goes to that reviewer; what every lane
-# shares (pushes, the stash stack, branch and tag refs, the worktree list, history rewrites) is forbidden, because an
-# approved mistake there destroys another lane's work. A push to `main` deploys and must prompt the owner, so a
-# lane never pushes: its work lands through the lead (AGENTS.md).
+# Git safety for Codex lanes, beside .claude/hooks/agent-policy.ps1 (registered in .codex/hooks.json), which reads
+# global options, combined flags, aliases, wrappers and shell nesting and is the primary guard. These prefix rules
+# repeat the lane column of git-safety's table wherever a prefix of literal words can say it; what one cannot (a
+# bare `git stash` while `git stash list` stays allowed, `git config <key> <value>`, a fetch refspec with a
+# destination, an attached `-C<path>`) is left to the hook. A Codex lane runs headless, so a `prompt` decision
+# reaches its automatic reviewer, never the owner: what only a lane's own worktree holds goes to that reviewer, and
+# what every lane shares is forbidden, because an approved mistake there destroys another lane's work. A lane never
+# pushes; its work lands through the lead.
 
 prefix_rule(
-    pattern = ["git", ["-C", "--git-dir", "--work-tree", "-c"]],
+    pattern = ["git", ["-C", "--git-dir", "--work-tree", "-c", "--namespace", "--config-env"]],
     decision = "forbidden",
-    justification = "A lane runs git in its own worktree; pointing it elsewhere would bypass these rules and reach another lane's work.",
+    justification = "A lane runs git in its own worktree with its own configuration; pointing it elsewhere would bypass these rules and reach another lane's work.",
     match = [
         "git -C ../other stash drop",
         "git --work-tree ../other reset --hard",
+        "git -c alias.p=push p origin main",
     ],
 )
 
@@ -26,23 +30,55 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "stash"],
+    pattern = ["git", ["--no-pager", "-p", "--paginate", "-P", "--no-optional-locks", "--literal-pathspecs", "--no-replace-objects"], "push"],
     decision = "forbidden",
-    justification = "The stash stack is shared by every worktree; set work aside with a WIP commit on your own branch.",
+    justification = "A Codex lane never pushes: leave the work for the lead, who lands and pushes it.",
     match = [
-        "git stash",
-        "git stash pop",
-        "git stash drop",
+        "git --no-pager push --dry-run origin HEAD:main",
     ],
 )
 
 prefix_rule(
-    pattern = ["git", "branch", ["-D", "-d", "--delete", "-f", "--force", "-m", "-M", "-c", "-C"]],
+    pattern = ["git", "stash", ["push", "pop", "apply", "drop", "clear", "save", "store", "create", "branch", "-u", "--include-untracked", "-a", "--all", "-k", "--keep-index", "--no-keep-index", "-p", "--patch", "-S", "--staged", "-m", "--message", "-q", "--quiet", "--pathspec-from-file", "--"]],
     decision = "forbidden",
-    justification = "Branch refs are shared by every lane; the lead deletes or moves branches.",
+    justification = "The stash stack is shared by every worktree; set work aside with a WIP commit on your own branch.",
+    match = [
+        "git stash push -m wip",
+        "git stash pop",
+        "git stash drop",
+    ],
+    not_match = [
+        "git stash list",
+        "git stash show -p",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", ["-D", "-d", "--delete", "-f", "--force", "-m", "-M", "--move", "-c", "-C", "--copy", "-Df", "-fD", "-df", "-fd"]],
+    decision = "forbidden",
+    justification = "Branch refs are shared by every lane; the lead deletes, moves, copies and force-resets branches.",
     match = [
         "git branch -D codex/other",
+        "git branch -Df codex/other",
     ],
+)
+
+prefix_rule(
+    pattern = ["git", "checkout", "-B"],
+    decision = "forbidden",
+    justification = "Resetting a branch by name can overwrite another lane's branch; create a new branch or reset your own with git reset.",
+)
+
+prefix_rule(
+    pattern = ["git", "switch", ["-C", "--force-create"]],
+    decision = "forbidden",
+    justification = "Resetting a branch by name can overwrite another lane's branch; create a new branch or reset your own with git reset.",
+)
+
+prefix_rule(
+    pattern = ["git", ["fetch", "pull"], ["-p", "--prune", "-P", "--prune-tags"]],
+    decision = "forbidden",
+    justification = "Pruning rewrites the remote-tracking refs every lane shares; fetch without --prune and merge.",
 )
 
 prefix_rule(
@@ -55,9 +91,21 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", ["filter-branch", "filter-repo", "update-ref", "replace", "gc", "prune"]],
+    pattern = ["git", ["filter-branch", "filter-repo", "update-ref", "gc", "prune", "repack", "maintenance", "pack-refs", "rebase"]],
     decision = "forbidden",
-    justification = "Rewrites or collects shared history and refs; the lead decides.",
+    justification = "Rewrites or collects shared history, refs and objects; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "replace", ["-d", "--delete", "-f", "--force", "--edit", "--graft", "--convert-graft-file"]],
+    decision = "forbidden",
+    justification = "Replacement refs are shared by every lane; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "symbolic-ref", ["-d", "--delete"]],
+    decision = "forbidden",
+    justification = "Symbolic refs are shared by every lane; the lead decides.",
 )
 
 prefix_rule(
@@ -67,9 +115,61 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "tag", ["-d", "--delete", "-f", "--force"]],
+    pattern = ["git", "tag", ["-d", "--delete", "-f", "--force", "-fa", "-af", "-fs", "-sf"]],
     decision = "forbidden",
-    justification = "Tags are shared by every lane; the lead deletes or moves tags.",
+    justification = "Tags are shared by every lane; the lead deletes and moves tags.",
+)
+
+prefix_rule(
+    pattern = ["git", "remote", ["add", "remove", "rm", "rename", "set-url", "set-head", "set-branches", "prune", "update"]],
+    decision = "forbidden",
+    justification = "Remote configuration is shared by every lane; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "notes", ["add", "copy", "append", "edit", "merge", "remove", "prune"]],
+    decision = "forbidden",
+    justification = "Notes refs are shared by every lane; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "config", ["--unset", "--unset-all", "--add", "--replace-all", "--rename-section", "--remove-section", "-e", "--edit", "set", "unset", "rename-section", "remove-section", "edit"]],
+    decision = "forbidden",
+    justification = "Repository configuration is shared by every lane; read it with --get or --list, and let the lead change it.",
+    not_match = [
+        "git config --get user.name",
+        "git config --list",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["merge", "create"]],
+    decision = "forbidden",
+    justification = "A lane never pushes or merges on the remote: leave the work for the lead.",
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", ["sync", "delete", "rename", "archive"]],
+    decision = "forbidden",
+    justification = "A lane never pushes or merges on the remote: leave the work for the lead.",
+)
+
+prefix_rule(
+    pattern = ["gh", "workflow", "run"],
+    decision = "forbidden",
+    justification = "A workflow run can deploy; leave it for the lead.",
+)
+
+prefix_rule(
+    pattern = ["gh", "release", ["create", "delete", "edit", "upload", "delete-asset"]],
+    decision = "forbidden",
+    justification = "Releases and their tags are shared by every lane; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["gh", "api", ["-X", "--method"], ["POST", "PUT", "PATCH", "DELETE", "post", "put", "patch", "delete"]],
+    decision = "forbidden",
+    justification = "A gh api write can merge or move refs on the remote without a git push; leave it for the lead.",
 )
 
 prefix_rule(
