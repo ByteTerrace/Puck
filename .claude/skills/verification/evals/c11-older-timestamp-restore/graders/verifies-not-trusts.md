@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response verifies from the built result, not from the source file alone, that the restored fix is what the tests ran.
+The response prescribes re-running the law after the rebuild (or using `puck laws prove`) and confirming from the rebuilt test run—not from `git diff` or the source file alone—that the restored fix is what ran.

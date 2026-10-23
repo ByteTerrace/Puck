@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
---render\b
+--(render|cosim|stat-trace|filter)\b

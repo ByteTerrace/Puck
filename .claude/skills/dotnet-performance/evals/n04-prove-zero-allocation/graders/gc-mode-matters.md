@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says background GC can inflate the allocated-bytes counter, which is why test hosts run blocking collections, and that a verdict names the GC mode.
+The response states that GC mode matters for allocation assertions—test hosts run blocking server GC (no background GC) so `GC.GetAllocatedBytesForCurrentThread` stays exact, and `AllocationWindow` or the verdict names the GC mode.

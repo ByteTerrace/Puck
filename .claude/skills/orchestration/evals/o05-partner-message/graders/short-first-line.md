@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-\[render-readback\]\s*(started|progress|done|blocked|question):
+\[(render-readback|<brief[- ]id>)\]\s*(started|progress|done|blocked|question):
