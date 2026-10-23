@@ -11,6 +11,11 @@ Deployment security and production readiness still need evidence. The
 [technical reference](security-review-reference.md) has the full source map,
 repaired findings, and remaining questions.
 
+Azure Front Door is out of scope (the owner's ruling): its configuration is
+correct, including the `api` rule set's handling of the `Authorization` header.
+A finding counts only if it stands without assuming a Front Door
+misconfiguration.
+
 ## A little context
 
 A **world** is a running simulation hosted by a server. Players have a
