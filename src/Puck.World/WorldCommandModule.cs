@@ -225,7 +225,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.fps",
-            description: "Echoes the measured frame rate over the last 2 s, reaching back to the last four frames when they span longer — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target; a renderer that has composed nothing for longer than both the window and four times its longest recent frame reads as stalled. The world's reference desktop contract is 120 FPS under VRR.",
+            description: "Echoes the measured frame rate over the last 2 s, reaching back to the last four frames when they span longer — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target; a renderer that has composed nothing for longer than both the window and four times its longest recent frame reads as stalled. The slowest frame reads the frame-rate bar.",
             valueKind: CommandValueKind.Digital,
             handler: _ => {
                 var (averageFps, worstFps, frameCount, stalledSeconds) = frameRate.Summarize();
