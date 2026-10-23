@@ -70,7 +70,10 @@ $output = @{
 # ask rules that name them: ask for those explicitly.
 if ($command -match '(?s)\bgit\b.*\bpush\b|\bcodex(\.exe)?\s+exec\b') {
     $output['permissionDecision'] = 'ask'
-    $output['permissionDecisionReason'] = "The command moved to $scriptPath contains a git push or a codex exec, which the ask rules cannot see there."
+    # The prompt shows only the `.` line, so the reason carries the lines that asked.
+    $lines = @($command -split "`n" | Where-Object { $_ -match '\bpush\b|\bcodex(\.exe)?\s+exec\b' } |
+        ForEach-Object { $_.Length -gt 300 ? $_.Substring(0, 300) + '...' : $_ })
+    $output['permissionDecisionReason'] = "$scriptPath runs a git push or a codex exec:`n" + ($lines -join "`n")
 }
 
 # Escape non-ASCII so the reply survives whatever encoding the console output uses.
