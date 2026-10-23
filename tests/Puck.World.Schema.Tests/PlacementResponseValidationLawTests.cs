@@ -9,8 +9,8 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// THE LAW: every way of authoring a placement's response facet wrong is refused BY NAME, and the one well-formed
 /// spelling validates. An unknown target creation, an unknown condition field, and a malformed comparison each
-/// refuse; a target creation carrying timeline frames refuses; the facet composing with attach/inhabit/faceSources
-/// refuses.
+/// refuse; a target creation carrying timeline frames refuses; the facet composes with an attachment and refuses
+/// inhabit/faceSources.
 /// <para>Each arm is a denial paired with a control differing in exactly one authored field.</para>
 /// </summary>
 public sealed class PlacementResponseValidationLawTests {
@@ -213,18 +213,18 @@ public sealed class PlacementResponseValidationLawTests {
         );
         Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
-    /// <summary>DENIAL: the facet composing with attach, inhabit, or faceSources. CONTROL: the facet alone.</summary>
+    /// <summary>A response preserves an attachment, while population looks and face sources retain their own
+    /// prototype ownership.</summary>
     [Fact]
-    public void FacetRefusesAlongsideAttachInhabitAndFaceSources() {
-        Laws.Refuses(
+    public void FacetAllowsAttachAndRefusesInhabitAndFaceSources() {
+        Laws.Validates(
             locally: true,
             definition: With(placement: (WellFormed() with {
                 Attach = new WorldPlacementAttach(
                 BodyIndex: 0,
                 LocalOffset: new DocumentVector3(value: Vector3.Zero)
             ),
-            })),
-            needle: "is refused alongside attach/inhabit/faceSources"
+            }))
         );
         Laws.Refuses(
             locally: true,
@@ -235,7 +235,7 @@ public sealed class PlacementResponseValidationLawTests {
                 Source: Puck.World.Protocol.IntentSource.Idle
             ),
             })),
-            needle: "is refused alongside attach/inhabit/faceSources"
+            needle: "is refused alongside inhabit/faceSources"
         );
         Laws.Refuses(
             locally: true,
@@ -245,7 +245,7 @@ public sealed class PlacementResponseValidationLawTests {
                     Source: new WorldScreenSource.None()
                 )],
             })),
-            needle: "is refused alongside attach/inhabit/faceSources"
+            needle: "is refused alongside inhabit/faceSources"
         );
         Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }

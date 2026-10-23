@@ -32,8 +32,9 @@ namespace Puck.World;
 /// The mask travels as data because a field condition reads the server's lattice, which neither a client's document
 /// nor a projection carries; a reader whose disclosure withholds a cell an entry reads is handed the mask without
 /// that entry (<see cref="Disclosed"/>).</para>
-/// <para>Refused together with <see cref="WorldPlacement.Attach"/> and <see cref="WorldPlacement.Inhabit"/> (a
-/// sibling concern owns body locomotion) and <see cref="WorldPlacement.FaceSources"/> (its per-instance overrides
+/// <para>An attached placement keeps its attachment while its prototype responds, so a moving door or indicator
+/// can react to state. Refused together with <see cref="WorldPlacement.Inhabit"/> (a sibling concern owns body
+/// locomotion) and <see cref="WorldPlacement.FaceSources"/> (its per-instance overrides
 /// pin to the creation the row validated against, which a response is free to change). Every response entry's
 /// <see cref="PrototypeId"/>, and the row's authored one, must resolve to a declared, non-animated creation (no
 /// timeline frames) — a response never turns a static stamp into an animated one.</para>

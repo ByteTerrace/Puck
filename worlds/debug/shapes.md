@@ -40,7 +40,7 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | x 10 to 20, z 12 to 34 | The lobby on level 0; each level above has its landing here. The lobby's contents are in the next table |
 | x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
-| x 20 to 70 | The halls: each level's rows run along +X from x = 23, a sign at each row's west end |
+| x 20 to 70 | The halls: each level's rows run along +X from x = 23; section signs hang above the first exhibit, facing the landing down the hall |
 | x 51 to 69.7, z 12.3 to 39.7, level 0 | The painting wing: a partition at x = 51 with a doorway at z 24 to 28, and five portal paintings ([`paintings.md`](paintings.md)). Level 1's floor is holed and railed over the ceiling painting of the endless fall, at (66, 22.6) |
 | South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
 
@@ -50,7 +50,7 @@ west of it.
 
 | Where | What |
 |---|---|
-| (12.4, 16) | The map board, left of the door, facing it: how to get around, the levels and their rows, and the painting wing (`debug.go portals`) |
+| (12.4, 16) | The hanging map board, left of the door, facing it: how to get around, the levels and their rows, and the painting wing (`debug.go portals`) |
 | (12.2, 20), x 11.2 to 13.2, z 19 to 21 | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side |
 | x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
 | West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
@@ -117,8 +117,8 @@ stairwell, which is open between floors.
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
 | Change level on foot | The stairs at the lobby's north-west corner: walk +Z up the first flight, step east on the half landing, walk -Z up the second |
-| Call the lift | Step on the `CALL` pad before the lift door, or `gallery.lift <level>` |
-| Ride the lift | Stand in the car and step on the pad for a level (four along its back wall, numbered 0 to 3 from the west), or `gallery.lift <level>` |
+| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button, or `gallery.lift <level>` |
+| Ride the lift | Stand in the car; approach a numbered button on its back wall and press the context button, or `gallery.lift <level>` |
 | Stand on a level's landing | `gallery.level <level> [body]` |
 | Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
@@ -128,17 +128,31 @@ stairwell, which is open between floors.
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
-The lift car is a population body (`lift-car`, body 40) whose look draws the
-cab and which carries the attached solid platform the Moth stands on. Rules move
-it: `liftCall` names the level a pad or command called, `liftTarget` and
+The lift car is a population body (`lift-car`, the highest population slot) carrying the attached
+solid platform, cab shell and car doors. The shell encloses the car with side
+and back walls and a lit ceiling. Rules move
+it: `liftCall` names the level a button or command called, `liftTarget` and
 `liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell
 `liftAt` of the `liftShaft` topology every tick (`poseCell(…, glide: true)`, a
 continuous move a client interpolates rather than a teleport), so it climbs
 1.875 m/s and stops exactly at each floor. A body standing on the platform rides it up and
-down, grounded the whole way (the analytic contact provider carries a body
-with the attached solid under it; `src/Puck.World.Server/README.md`). The shaft
-has no landing doors: walking into the shaft on a level where the car is not
-drops to the car's roof or the pit.
+down through the analytic provider's attached-box support path
+(`src/Puck.World.Server/README.md`). `hall-tests.puck` checks a level 0 to 2
+ride and grounding on arrival. `liftDoors` closes the car and all landing
+doors before travel starts, then opens the car and only the landing at its
+destination. Each door has two leaves that retract behind the jambs; both
+variants collide as drawn. `liftLevel` records the last level reached and
+drives the display inside the car and beside each landing's call button.
+`galleryPopulation` sets both the debug world's capacity and the highest-slot
+attachment index, keeping the car separate from the chess cursor below it.
+The buttons are unlit wall plates; there are no emissive floor pads. Ceiling
+strips stop outside the enclosed shaft, and the cab's ceiling hides the slabs
+above it.
+
+Section boards hang on two rods from the ceiling above each row's first
+exhibit, with their text facing the landing along -X. Their lower edge is
+2.6 m above the floor, clear of a walking Moth. The lobby map hangs from its
+ceiling too. Individual labels and plaques remain on their plinths.
 
 The gallery's keys live in `hall.puck`'s `gallery-keys` overlay on the debug
 world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and holding `Q`

@@ -121,7 +121,7 @@ commands: galleryCommands
 // board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
 // settles it. Each body's size is its `size` register (size.puck).
 bodies {
-  capacity: 42
+  capacity: galleryPopulation
 }
 
 placements {

@@ -9,7 +9,7 @@
 //   level 2  form and surface: parameter forms, palette channels and wear, warps II
 //   level 3  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames
 //
-// A sign stands at the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
+// A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
 // and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
 // to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it, and the gallery.* commands
 // (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
@@ -18,6 +18,7 @@
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
+let galleryPopulation = 42
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 
 // The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the
@@ -124,8 +125,7 @@ template exhibit(label, extra = [], runs = [], note = "") {
   )
 }
 
-// A row's sign: a post and a board at the row's west end, facing the way the plinths face, naming the row and what it
-// shows.
+// The hanging boards face down the hall toward the landing (-X); plinth labels still face -Z.
 template signPrototypes() {
   for (row, index) in galleryRows {
     prototype $"gallery-sign-{index}" {
@@ -133,19 +133,21 @@ template signPrototypes() {
         name: $"gallery-sign-{index}"
         schema: "puck.creation.v1"
         palette: galleryPalette
-        shape Box "post" {
-          material: 1
-          position [0, 0.8, 0]
-          scale [0.03, 0.8, 0.03]
+        for x in [-0.75, 0.75] {
+          shape Box $"hanger-{x}" {
+            material: 1
+            position [x, 3.66, 0]
+            scale [0.025, 0.54, 0.025]
+          }
         }
         shape Box "board" {
           material: 2
-          position [0, 1.74, 0]
-          scale [0.46, 0.15, 0.015]
+          position [0, 2.9, 0]
+          scale [1.05, 0.3, 0.04]
         }
         textRuns [
-          { text: row.title, position [0, 1.78, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }
-          { text: row.what, position [0, 1.665, 0.015], rotation [0, 0, 0, 1], emHeight: 0.032, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 0.88 }
+          { text: row.title, position [0, 2.99, 0.04], rotation [0, 0, 0, 1], emHeight: 0.14, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
+          { text: row.what, position [0, 2.75, 0.04], rotation [0, 0, 0, 1], emHeight: 0.065, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
         ]
       }
     }
@@ -156,40 +158,37 @@ template signPrototypes() {
       name: "gallery-map"
       schema: "puck.creation.v1"
       palette: galleryPalette
-      shape Box "post-left" {
-        material: 1
-        position [-0.6, 0.75, 0]
-        scale [0.03, 0.75, 0.03]
-      }
-      shape Box "post-right" {
-        material: 1
-        position [0.6, 0.75, 0]
-        scale [0.03, 0.75, 0.03]
+      for x in [-0.6, 0.6] {
+        shape Box $"hanger-{x}" {
+          material: 1
+          position [x, 3.5, 0]
+          scale [0.03, 0.7, 0.03]
+        }
       }
       shape Box "board" {
         material: 2
-        position [0, 1.54, 0]
+        position [0, 2.24, 0]
         scale [0.72, 0.66, 0.015]
       }
-      textRuns: concat(
+      textRuns: map(concat(
         [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
-        [{ text: "stairs and lift at the north-west corner: stand on CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        [{ text: "stairs and lift north-west: press CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
         map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
         map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
         [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
         [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
-      )
+      ), run => { text: run.text, position [run.position[0], (run.position[1] + 0.7), run.position[2]], rotation: run.rotation, emHeight: run.emHeight, depth: run.depth, mode: run.mode, material: run.material, align: run.align, maxWidth: 1.36 })
     }
   }
 }
 
-// Each row's sign stands 2.3 m west of its first exhibit on the row's level, and the map board in the lobby left of the
-// entrance (places.puck's `gallery` spawn stands outside it, facing in).
+// The map hangs left of the entrance; row boards hang above the first exhibit.
 template gallerySignPlacements() {
   for (row, index) in galleryRows {
     placement $"gallery-sign-{index}" {
       prototype: $"gallery-sign-{index}"
-      position [(galleryX - 2.3), galleryFloor[row.level], row.z]
+      position [galleryX, galleryFloor[row.level], row.z]
+      yawDegrees: 90
     }
   }
   placement "gallery-map" {
