@@ -113,12 +113,20 @@ Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 The `.claude/leases/` directory is git-ignored, so the lead creates it once per
-checkout (`mkdir -p`). A Codex lane's sandbox writes only its worktree plus the
-writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
-path per machine), and never `.git`: a Codex lane runs in a worktree under
-`.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
-its changes uncommitted, and the lead commits them
-([`review-passes`](../review-passes/SKILL.md#before-launching)). A resumed
+checkout (`mkdir -p`). Launch a Codex lane with `codex exec --cd <worktree> -m <model> -c
+model_reasoning_effort='"<effort>"' "$(cat <brief>)"` in the background, its
+output to a lane-named log: `.codex/config.toml`'s `puck` permission profile
+then applies, with `approvals_reviewer = "auto_review"` (Codex's counterpart
+of auto mode) and `.codex/rules/git.rules`. A sandbox-denied `git commit`
+escalates and the reviewer approves it, so the lane commits on its own
+branch; every `git push` is forbidden before review, so its work lands through
+the lead. The Codex companion's `task` forces `--sandbox workspace-write`,
+which overrides the profile: a lane launched through it cannot commit, and the
+lead commits its uncommitted changes
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Network
+stays off inside the sandbox with no denial to escalate, so restore a
+worktree before its lane starts. The profile also makes `.claude/leases/`
+writable (an absolute path per machine). A resumed
 Codex session keeps the sandbox it was launched with, so after a sandbox change
 relaunch the lane fresh with a continuation brief rather than `--resume-last`.
 Codex's approval review may refuse a chained `mkdir … && run; rm …` line, so a

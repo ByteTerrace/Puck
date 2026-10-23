@@ -82,7 +82,8 @@
       "Write(/.codex/**)",
       "Read(/.agents/**)",
       "Edit(/.agents/**)",
-      "Write(/.agents/**)"
+      "Write(/.agents/**)",
+      "Bash(codex exec *)"
     ],
     "ask": [
       "Bash(git push * main)",
