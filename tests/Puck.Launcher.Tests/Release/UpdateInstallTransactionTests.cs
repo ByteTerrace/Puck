@@ -314,4 +314,15 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
         Assert.Contains(expectedSubstring: "minimumSupported", actualString: recovered.Detail);
         Assert.Equal(expected: "0.8.0", actual: File.ReadAllText(path: Current));
     }
+
+    [Fact]
+    public async Task Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall() {
+        Directory.CreateDirectory(path: Install);
+        File.WriteAllText(path: Current, contents: "1.0.1-Alpha");
+        Publish(manifest: Manifest(version: "1.0.1-alpha", sequence: 1));
+        var outcome = await Service(installedVersion: "1.0.0", stager: new RefusingStager())
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: outcome.Applied);
+        Assert.Contains(expectedSubstring: "collides", actualString: outcome.Detail, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
 }

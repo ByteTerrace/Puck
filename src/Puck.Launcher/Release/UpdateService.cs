@@ -186,6 +186,8 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         var manifest = intent.Manifest;
         var currentPath = Path.Combine(path1: root, path2: "current");
         var current = File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null;
+        var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
+        var lastGood = File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null;
         var alreadyCurrent = recovering && current == manifest.Version;
         if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
             if (manifest.MinimumSupported is { } minimumSupported &&
@@ -195,6 +197,10 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
             }
+        }
+        if ((!alreadyCurrent && !string.IsNullOrEmpty(value: current) && string.Equals(a: manifest.Version, b: current, comparisonType: StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(value: lastGood) && string.Equals(a: manifest.Version, b: lastGood, comparisonType: StringComparison.OrdinalIgnoreCase))) {
+            return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
         }
 
         // Never restage the running directory, including when an interrupted apply already swapped current.
