@@ -86,6 +86,7 @@ bench-reports/
 .codex/*
 !.codex/config.toml
 !.codex/rules/
+!.codex/hooks.json
 .tmp
 docs/.obsidian
 # Shader compiler outputs and local freshness records; CI packages the bytecode.
