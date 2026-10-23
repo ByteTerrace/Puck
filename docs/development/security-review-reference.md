@@ -125,7 +125,10 @@ someone else's private key are different threat models.
 The `codex-security` follow-up withdrew the unverified WIP before reintroducing
 individually proven changes. Its original prose about pruning and untrimmed stub
 pointer parsing did not match the patch and was removed. The stub whitespace
-change remains withdrawn; the open-items entry records why. Decision-local checks have their own schema regression; remaining review
+change remains withdrawn; the open-items entry records why. Decision-local checks
+have their own schema regression. Full launcher, state-rules, state and world-schema
+suites passed on the merged integration head after fresh Release builds on Windows.
+No World was booted and no GPU or deployment check was performed. Remaining review
 candidates are tracked separately and are not established by these runs.
 
 The SAS trigger uses the authenticated caller's on-behalf-of storage credential.
