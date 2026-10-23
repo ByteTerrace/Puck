@@ -1,7 +1,18 @@
-# Git safety for Codex lanes. A push to `main` deploys to Azure and must prompt the owner (AGENTS.md, "Branches,
-# commits and pushes"). A Codex lane runs headless, so a `prompt` decision here reaches the automatic reviewer, not
-# the owner; every push is therefore forbidden, and a lane's work lands through the lead, whose own pushes to `main`
-# prompt the owner. Destructive local history and worktree commands go to the reviewer rather than running unasked.
+# Git safety for Codex lanes. A Codex lane runs headless, so a `prompt` decision reaches its automatic reviewer,
+# never the owner. What only a lane's own worktree holds (its index and files) goes to that reviewer; what every lane
+# shares (pushes, the stash stack, branch and tag refs, the worktree list, history rewrites) is forbidden, because an
+# approved mistake there destroys another lane's work. A push to `main` deploys and must prompt the owner, so a
+# lane never pushes: its work lands through the lead (AGENTS.md).
+
+prefix_rule(
+    pattern = ["git", ["-C", "--git-dir", "--work-tree", "-c"]],
+    decision = "forbidden",
+    justification = "A lane runs git in its own worktree; pointing it elsewhere would bypass these rules and reach another lane's work.",
+    match = [
+        "git -C ../other stash drop",
+        "git --work-tree ../other reset --hard",
+    ],
+)
 
 prefix_rule(
     pattern = ["git", "push"],
@@ -15,9 +26,56 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", ["reset", "clean", "filter-branch", "filter-repo", "update-ref", "reflog"]],
+    pattern = ["git", "stash"],
+    decision = "forbidden",
+    justification = "The stash stack is shared by every worktree; set work aside with a WIP commit on your own branch.",
+    match = [
+        "git stash",
+        "git stash pop",
+        "git stash drop",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", ["-D", "-d", "--delete", "-f", "--force", "-m", "-M", "-c", "-C"]],
+    decision = "forbidden",
+    justification = "Branch refs are shared by every lane; the lead deletes or moves branches.",
+    match = [
+        "git branch -D codex/other",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "worktree", ["remove", "prune", "move", "add", "lock", "unlock", "repair"]],
+    decision = "forbidden",
+    justification = "The worktree list is shared by every lane; the lead manages worktrees.",
+    match = [
+        "git worktree remove ../other",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["filter-branch", "filter-repo", "update-ref", "replace", "gc", "prune"]],
+    decision = "forbidden",
+    justification = "Rewrites or collects shared history and refs; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "reflog", ["expire", "delete"]],
+    decision = "forbidden",
+    justification = "Discards the shared recovery log; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "tag", ["-d", "--delete", "-f", "--force"]],
+    decision = "forbidden",
+    justification = "Tags are shared by every lane; the lead deletes or moves tags.",
+)
+
+prefix_rule(
+    pattern = ["git", ["reset", "clean", "restore"]],
     decision = "prompt",
-    justification = "Rewrites or discards history or files; the lead decides.",
+    justification = "Discards changes in this lane's own worktree; the reviewer checks it touches only this lane's work.",
     match = [
         "git reset --hard HEAD~1",
         "git clean -fdx",
@@ -25,31 +83,7 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "branch", ["-D", "-d", "--delete", "-f", "--force", "-m", "-M"]],
-    decision = "prompt",
-    justification = "Deletes or moves a branch; the lead decides.",
-)
-
-prefix_rule(
-    pattern = ["git", "worktree", ["remove", "prune", "move"]],
-    decision = "prompt",
-    justification = "Removes or moves a worktree another lane may hold; the lead decides.",
-)
-
-prefix_rule(
-    pattern = ["git", "stash", ["drop", "clear", "pop"]],
-    decision = "prompt",
-    justification = "The stash stack is shared by every worktree; never pop or drop another lane's entry.",
-)
-
-prefix_rule(
     pattern = ["git", "checkout", "--"],
     decision = "prompt",
-    justification = "Discards uncommitted work; the lead decides.",
-)
-
-prefix_rule(
-    pattern = ["git", "restore"],
-    decision = "prompt",
-    justification = "Can discard uncommitted work; the lead decides.",
+    justification = "Discards uncommitted changes in this lane's own worktree; the reviewer checks it touches only this lane's work.",
 )
