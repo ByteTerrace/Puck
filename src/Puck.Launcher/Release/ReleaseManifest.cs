@@ -104,7 +104,7 @@ public static class ReleaseCanonicalizer {
         }
 
         foreach (var segment in segments) {
-            if ((segment.Length == 0) || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
+            if ((segment.Length == 0) || segment.StartsWith(value: ' ') || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
                 return false;
             }
 
@@ -295,9 +295,9 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (string.IsNullOrWhiteSpace(value: document.Channel)) {
+        if (!IsPortablePath(value: document.Channel, allowDirectories: false)) {
             errors.Add(item: new(
-                Message: "a channel is required.",
+                Message: "a channel must be a single portable directory name.",
                 Path: "channel"
             ));
         }

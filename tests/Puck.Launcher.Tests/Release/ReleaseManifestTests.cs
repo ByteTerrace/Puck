@@ -281,6 +281,7 @@ public sealed class ReleaseManifestTests {
     [InlineData(".")]
     [InlineData("..")]
     [InlineData("2.0.0 ")]
+    [InlineData(" 2.0.0")]
     public void Validate_RefusesVersionDirectoryEscape(string version) =>
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Version = version }), filter: error => error.Path == "version");
 
@@ -294,4 +295,12 @@ public sealed class ReleaseManifestTests {
             Payloads = [document.Payloads[0] with { Files = [file, file with { Path = file.Path.ToUpperInvariant() }] }],
         }), filter: error => error.Path == "payloads[0].files[1].path");
     }
+
+    [Theory]
+    [InlineData("../other")]
+    [InlineData("stable/beta")]
+    [InlineData("stable..")]
+    [InlineData(" stable")]
+    public void Validate_RefusesNonPortableChannel(string channel) =>
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => error.Path == "channel");
 }
