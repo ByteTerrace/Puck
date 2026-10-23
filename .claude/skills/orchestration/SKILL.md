@@ -108,12 +108,29 @@ a World or running a WARP bake, a lane runs `puck lease gpu --holder <lane> --wa
 Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
-The `.claude/leases/` directory is git-ignored and created by the verb. A Codex lane's sandbox writes only its worktree plus the
-writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
-path per machine), and never `.git`: a Codex lane runs in a worktree under
-`.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
-its changes uncommitted, and the lead commits them
-([`review-passes`](../review-passes/SKILL.md#before-launching)). A resumed
+The `.claude/leases/` directory is git-ignored and created by the verb. Launch a Codex lane with `codex exec --cd <worktree> -m <model> -c
+model_reasoning_effort='"<effort>"' "$(cat <brief>)"` in the background, its
+output to a lane-named log: `.codex/config.toml`'s `puck` permission profile
+then applies, with `approvals_reviewer = "auto_review"` (Codex's counterpart
+of auto mode) and `.codex/rules/git.rules`. A sandbox-denied `git commit`
+escalates and the reviewer approves it, so the lane commits on its own
+branch; every `git push` is forbidden before review, so its work lands through
+the lead. The Codex companion's `task` forces `--sandbox workspace-write`,
+which overrides the profile: a lane launched through it cannot commit, and the
+lead commits its uncommitted changes
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Under
+`prefer_mxc` the profile gives shell commands network access and live web
+search, and makes `.claude/leases/` writable (an absolute path per machine).
+
+An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
+its worktree, without `--mode`: headless `-p` judges the `--mode auto` flag
+before it signs in and refuses it ("rollout flag off"), while the user-level
+`agentMode: "auto"` applies once it has, on a personal Google account. Its
+rights come from the user-level `~/.gemini/antigravity-cli/settings.json`
+(allow, ask and deny; Antigravity reads no project permission file), its skills
+and `puck` MCP server from the committed `.agents/`. Commands run in its
+terminal sandbox: commits succeed there, the network does not, and a command
+on the ask list (a push to `main`) is refused headless, since it cannot prompt. A resumed
 Codex session keeps the sandbox it was launched with, so after a sandbox change
 relaunch the lane fresh with a continuation brief rather than `--resume-last`.
 A Codex brief uses the same verb, never a hand-chained mkdir/run/remove sequence.
