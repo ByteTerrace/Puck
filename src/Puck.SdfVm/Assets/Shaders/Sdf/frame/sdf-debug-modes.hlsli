@@ -9,5 +9,11 @@
 // Mode 7 shows the sky's cost: its evaluations, hashes and texture loads.
 // Mode 8 shows the ambient occlusion views shades with, after its window filter, in gray; a miss is black.
 // Mode 9 shows the key light's shadow visibility views shades with, after its window filter, in gray; a miss is black.
+// Modes rates and rate-flash are the final image with each rated item tinted by its update tier (SdfUpdateRateCode).
+
+// Whether a mode composes the final image: the final image itself and the tier views, which tint it.
+bool sdfDebugComposesFinal(uint mode) {
+    return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));
+}
 
 #endif

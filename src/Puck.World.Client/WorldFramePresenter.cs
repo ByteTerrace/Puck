@@ -1533,6 +1533,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
         ? SdfMeshCullLevel.Frustum
         : cull);
+    // Each screen's tier code as the graph host's footprints asked for it this frame, or none without a host.
+    private byte[] ScreenRateCodes() {
+        var codes = new byte[SdfProgramBuilder.MaxScreenSurfaces];
+
+        m_graphs?.WriteScreenRateCodes(codes: codes);
+
+        return codes;
+    }
     /// <summary>Returns the rated work a frame rates: none while the frame is held for a settled capture, since a rated
     /// update held from an earlier frame would show an earlier tick in the still, and the session's levers otherwise.</summary>
     /// <param name="rates">The session's rate levers.</param>
@@ -1969,11 +1977,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         // The next pack rates the bodies by the views this frame renders them through.
         m_animator.RateBy(
+            codes: m_settings.RateTints,
             counts: m_settings.RateCounts,
             height: height,
             intervals: m_settings.RateIntervals,
             rate: m_presentationRate,
             rates: m_settings.UpdateRates,
+            readings: m_settings.RateReadings,
             views: m_frameViews
         );
 
@@ -2030,6 +2040,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             TickLocked = TickLocked,
             RateCounts = m_settings.RateCounts,
             RateIntervals = m_settings.RateIntervals,
+            // A tier view's codes: the stamp pool's bodies as its pack this frame rated them, and the screens as the graph
+            // host's footprints asked for them, each copied so the frame keeps its own.
+            SlotRateCodes = (m_settings.RateTints ? m_animator.SlotRateCodes.ToArray() : ReadOnlyMemory<byte>.Empty),
+            ScreenRateCodes = (m_settings.RateTints ? ScreenRateCodes() : ReadOnlyMemory<byte>.Empty),
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,

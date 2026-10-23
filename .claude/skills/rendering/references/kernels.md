@@ -268,10 +268,14 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect`
-selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light) (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect|rates|rate-flash`
+selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light; `rates` is the final image with each item a `world.rates` lever holds tinted by its tier, and `rate-flash` tints each only on the frames it updates) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
-isolates the raster. To see what a shadow cascade sees, place a camera at the
+isolates the raster. The tier views read an `SdfUpdateRateCode` the host writes
+only while one shows (`SdfFrame.SlotRateCodes`, `SdfFrame.ScreenRateCodes`): a
+body's in its slots' position `w`, a screen's or a window's glass in its ripple
+record's state `z`, both zero otherwise, so no other view's bytes or cadence
+move. To see what a shadow cascade sees, place a camera at the
 shaded point looking along the sun direction under `material-id`.
 
 The debug views see the mesh, not the field: no pixel kernel walks the program.

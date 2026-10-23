@@ -286,6 +286,23 @@ public sealed partial class SdfWorldTables {
             return ((length > 0f) ? (1f / length) : 0f);
         }
     }
+    /// <summary>Sets the update tier screen <paramref name="screenIndex"/> shows in a tier view
+    /// (<see cref="DebugViewModes.ShowsRates"/>) for the next produced frame, which rides its ripple record. Pure host-side
+    /// buffer state, so a call that reproduces the code already stored writes nothing.</summary>
+    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="code">The screen's code; <see cref="SdfUpdateRateCode.None"/> outside a tier view.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    public void SetScreenRate(int screenIndex, SdfUpdateRateCode code) {
+        RequireScreenIndex(screenIndex: screenIndex);
+
+        var value = ((float)code);
+
+        m_screenRates[screenIndex] = value;
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in value)),
+            offset: ((screenIndex * ScreenMappingStride) + ScreenRateOffset)
+        );
+    }
     /// <summary>Sets (or clears) the ripple screen <paramref name="screenIndex"/> shows for the next produced frame: the
     /// clock and contacts an opening that opts in refracts its image by. A screen with no ripple shades undistorted.
     /// Pure host-side buffer state, so a call that reproduces the record already stored writes nothing.</summary>
@@ -300,6 +317,8 @@ public sealed partial class SdfWorldTables {
         Span<float> floats = stackalloc float[(SdfScreenRipple.Rows * 4)];
 
         floats.Clear();
+
+        floats[2] = m_screenRates[screenIndex];
 
         if (ripple is { } set) {
             floats[0] = 1f;

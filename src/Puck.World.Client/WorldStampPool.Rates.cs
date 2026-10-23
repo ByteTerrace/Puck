@@ -18,7 +18,20 @@ public sealed partial class WorldStampPool {
     private SdfUpdateRates m_rates;
     private WorkCounterSet? m_rateCounts;
     private SdfUpdateRateIntervals? m_rateIntervals;
+    private SdfUpdateRateReadings? m_rateReadings;
     private PresentationRate m_presentationRate;
+    // Whether the next pack writes its bodies' tiers into m_slotRateCodes, and the codes it wrote, by slot.
+    private bool m_writesRateCodes;
+    private byte[] m_slotRateCodes = [];
+    // The latest pack's bodies' readings, published once it ends, and each body's name in them, by body index.
+    private readonly List<SdfUpdateRateReadings.Reading> m_bodyReadings = [];
+    private readonly Dictionary<int, string> m_bodyNames = [];
+
+    /// <summary>Gets each dynamic-transform slot's <see cref="SdfUpdateRateCode"/> as the latest
+    /// <see cref="PackTransforms"/> wrote it, indexed by slot, while <see cref="RateBy"/> asked for codes: a body-rooted
+    /// registration's slots carry its tier and whether it posed that frame, and every other slot
+    /// <see cref="SdfUpdateRateCode.None"/>. The pool reuses the array on its next pack.</summary>
+    public ReadOnlyMemory<byte> SlotRateCodes => m_slotRateCodes;
 
     /// <summary>Records the views the frame source rendered the pool's world through and the levers it rendered under,
     /// which the next <see cref="PackTransforms"/> rates its bodies by.</summary>
@@ -29,14 +42,19 @@ public sealed partial class WorldStampPool {
     /// <see langword="null"/> for none.</param>
     /// <param name="views">The frame's views.</param>
     /// <param name="height">The pixels down the image the views' regions divide.</param>
+    /// <param name="readings">The readings the pool publishes its rated bodies' sizes and tiers into each pack, or
+    /// <see langword="null"/> for none.</param>
+    /// <param name="codes">Whether each pack writes its bodies' tiers into <see cref="SlotRateCodes"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height) {
+    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         m_rates = rates;
         m_presentationRate = rate;
         m_rateCounts = counts;
         m_rateIntervals = intervals;
+        m_rateReadings = readings;
+        m_writesRateCodes = codes;
         m_rateViews.Clear();
 
         for (var index = 0; (index < views.Count); index++) {
@@ -45,9 +63,14 @@ public sealed partial class WorldStampPool {
     }
     // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, every
     // frame while the lever is off or no view is known yet.
-    private int BodyHertz(Vector3 center, float radius) {
-        if (((m_rates & SdfUpdateRates.Bodies) == 0) || (m_rateViews.Count == 0)) {
-            return SdfUpdateRateTiers.EveryFrameHertz;
+    private int BodyHertz(Vector3 center, float radius) => (((m_rates & SdfUpdateRates.Bodies) == 0)
+        ? SdfUpdateRateTiers.EveryFrameHertz
+        : SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius)));
+    // A body's largest pixels per metre over the views that may see the sphere it reaches, at its nearest point: infinity
+    // when no view is known yet or one holds it at or inside its near plane, zero when none may see it.
+    private float BodyPixelsPerMetre(Vector3 center, float radius) {
+        if (m_rateViews.Count == 0) {
+            return float.PositiveInfinity;
         }
 
         var largest = 0f;
@@ -61,14 +84,55 @@ public sealed partial class WorldStampPool {
             var depth = (Vector3.Dot(vector1: (center - camera.Position), vector2: camera.Forward) - radius);
 
             if (depth <= camera.Near) {
-                return SdfUpdateRateTiers.EveryFrameHertz;
+                return float.PositiveInfinity;
             }
 
             largest = MathF.Max(x: largest, y: (pixels / ((2f * depth) * camera.TanHalfFieldOfView)));
         }
 
-        return SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: largest);
+        return largest;
     }
+    // Starts a pack's tiers: sizes the codes to every slot the pool packs and clears them, and clears the readings.
+    private void BeginRateCodes(int slotBase) {
+        m_bodyReadings.Clear();
+
+        if (!m_writesRateCodes) {
+            return;
+        }
+
+        var length = (slotBase + (m_pool.Length * SlotsPerPlacement));
+
+        if (m_slotRateCodes.Length != length) {
+            m_slotRateCodes = new byte[length];
+        }
+
+        Array.Clear(array: m_slotRateCodes);
+    }
+    // Notes a body-rooted registration's tier after its pack: its reading while the bodies lever rates, and its slots'
+    // code while the pool writes codes.
+    private void NoteRate(Registration live, int rootSlot, int packedSlots, Vector3 center, float radius, bool posed) {
+        if ((live.BodyIndex is not { } body) || ((m_rateReadings is null) && !m_writesRateCodes)) {
+            return;
+        }
+
+        var rated = ((m_rates & SdfUpdateRates.Bodies) != 0);
+        var pixelsPerMetre = (rated ? BodyPixelsPerMetre(center: center, radius: radius) : float.PositiveInfinity);
+        var hertz = (rated ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre) : SdfUpdateRateTiers.EveryFrameHertz);
+
+        if (rated && (m_rateReadings is not null)) {
+            if (!m_bodyNames.TryGetValue(key: body, value: out var name)) {
+                name = $"body:{body}";
+                m_bodyNames[body] = name;
+            }
+
+            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: name, Size: pixelsPerMetre));
+        }
+        if (m_writesRateCodes) {
+            m_slotRateCodes.AsSpan(length: packedSlots, start: rootSlot).Fill(value: ((byte)SdfUpdateRateTiers.CodeOf(hertz: hertz, updated: posed)));
+        }
+    }
+    // Ends a pack's tiers: publishes the bodies' readings.
+    private void EndRateCodes() => m_rateReadings?.Publish(lever: SdfUpdateRates.Bodies, readings: m_bodyReadings);
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
     // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds). The
     // slowest tier since that pack is the one its next interval is recorded under.

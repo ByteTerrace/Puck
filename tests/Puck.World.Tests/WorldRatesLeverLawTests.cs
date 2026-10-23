@@ -1,6 +1,7 @@
 using System.Reflection;
 using Puck.Commands;
 using Puck.SdfVm;
+using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
@@ -13,13 +14,13 @@ namespace Puck.World.Tests;
 /// session lever carrying its flags, without touching the settings itself: the server's grant check applies the lever.
 /// </summary>
 public sealed class WorldRatesLeverLawTests {
-    private static (CommandRegistry Registry, WorldRenderSettings Settings, List<WorldSessionLever> Levers) Rig() {
+    private static (CommandRegistry Registry, WorldRenderSettings Settings, List<WorldSessionLever> Levers) Rig(WorldRenderProbe? probe = null) {
         var settings = new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render);
         var link = DispatchProxy.Create<IServerLink, WorldCullLeverLawTests.LeverRecorder>();
         var levers = ((WorldCullLeverLawTests.LeverRecorder)((object)link)).Levers;
         var module = new WorldRenderLeverCommandModule(
             link: link,
-            renderProbe: null!,
+            renderProbe: probe!,
             server: null!,
             settings: settings
         );
@@ -33,7 +34,7 @@ public sealed class WorldRatesLeverLawTests {
 
         settings.RateCounts.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
         Assert.Equal(
-            expected: "[world.rates: bodies=on views=on screens=on shadow-far=on bodies.posed=0 bodies.held=0 views.rated=0 screens.rated=0 shadow-far.rendered=0 shadow-far.held=1 display=0hz grid=none period-ms: 30hz=33.3 15hz=66.7 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=- screens.30hz=- screens.15hz=- shadow-far.30hz=-]",
+            expected: "[world.rates: bodies=on views=on screens=on shadow-far=on bodies.posed=0 bodies.held=0 views.rated=0 screens.rated=0 shadow-far.rendered=0 shadow-far.held=1 display=0hz grid=none period-ms: 30hz=33.3 15hz=66.7 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=- screens.30hz=- screens.15hz=- shadow-far.30hz=- bodies: - views: - screens: -]",
             actual: registry.Submit(line: "world.rates").Output
         );
 
@@ -41,7 +42,17 @@ public sealed class WorldRatesLeverLawTests {
         settings.RateIntervals.Advance(frameSeconds: (1d / 144d), rate: new Puck.Hosting.PresentationRate(DisplayHertz: 144, GridHertz: 144d));
         settings.RateIntervals.Record(hertz: 15, lever: SdfUpdateRates.Views, seconds: (9d / 144d));
         Assert.EndsWith(
-            expectedEndString: " display=144hz grid=144hz period-ms: 30hz=27.8 15hz=62.5 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=62.5 screens.30hz=- screens.15hz=- shadow-far.30hz=-]",
+            expectedEndString: " display=144hz grid=144hz period-ms: 30hz=27.8 15hz=62.5 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=62.5 screens.30hz=- screens.15hz=- shadow-far.30hz=- bodies: - views: - screens: -]",
+            actualString: registry.Submit(line: "world.rates").Output
+        );
+
+        // Each lever lists the items it rated on the latest frame: a body by its pixels per metre (or near, inside a
+        // view's near plane), a view by its display pixels and a screen by its share of its image's height.
+        settings.RateReadings.Publish(lever: SdfUpdateRates.Bodies, readings: [new(Hertz: 30, Name: "body:3", Size: 24.14d), new(Hertz: 60, Name: "body:1", Size: double.PositiveInfinity)]);
+        settings.RateReadings.Publish(lever: SdfUpdateRates.Views, readings: [new(Hertz: 15, Name: "session", Size: 54.6d)]);
+        settings.RateReadings.Publish(lever: SdfUpdateRates.Screens, readings: [new(Hertz: 30, Name: "deck", Size: 0.625d)]);
+        Assert.EndsWith(
+            expectedEndString: " bodies: body:3=24.1px/m@30hz body:1=near@60hz views: session=55px@15hz screens: deck=0.63x@30hz]",
             actualString: registry.Submit(line: "world.rates").Output
         );
 
@@ -76,6 +87,42 @@ public sealed class WorldRatesLeverLawTests {
         );
         Assert.Equal(expected: SdfUpdateRates.All, actual: settings.UpdateRates);
     }
+    // world.debug-view selects a tier view and the frames carry their tiers while it shows; toggle puts back the final
+    // image, and next steps past the last view to off.
+    [Fact]
+    public void ATierViewCarriesTheFramesTiersWhileItShows() {
+        var probe = new WorldRenderProbe();
+        using var residency = new SdfWorldResidency(
+            brickPoolVoxelCapacity: 0,
+            frameSource: new EmptyFrameSource(),
+            height: 8U,
+            kernels: SdfTestPipelines.Kernels(),
+            name: "world",
+            pipelines: SdfTestPipelines.Cache(),
+            width: 8U
+        );
+
+        probe.Residency = residency;
+
+        var (registry, settings, _) = Rig(probe: probe);
+
+        Assert.Equal(expected: "[world.debug-view: rates]", actual: registry.Submit(line: "world.debug-view toggle rates").Output);
+        Assert.True(condition: settings.RateTints);
+        Assert.Equal(expected: DebugViewModes.Rates, actual: residency.DebugMode);
+        Assert.Equal(expected: "[world.debug-view: rate-flash]", actual: registry.Submit(line: "world.debug-view next").Output);
+        Assert.True(condition: settings.RateTints);
+        Assert.Equal(expected: "[world.debug-view: off]", actual: registry.Submit(line: "world.debug-view next").Output);
+        Assert.False(condition: settings.RateTints);
+        Assert.Equal(expected: "[world.debug-view: rates]", actual: registry.Submit(line: "world.debug-view rates").Output);
+        Assert.Equal(expected: "[world.debug-view: off]", actual: registry.Submit(line: "world.debug-view toggle rates").Output);
+        Assert.False(condition: settings.RateTints);
+        Assert.True(condition: registry.Submit(line: "world.debug-view toggle sideways").IsError);
+    }
+
+    private sealed class EmptyFrameSource : ISdfFrameSource {
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) => throw new InvalidOperationException(message: "No frame is captured.");
+    }
+
     [InlineData("world.rates sideways")]
     [InlineData("world.rates bodies")]
     [InlineData("world.rates wheels on")]

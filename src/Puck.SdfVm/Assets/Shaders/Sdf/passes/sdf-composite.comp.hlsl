@@ -51,7 +51,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 color = litColor.rgb;
     bool geometryOnly = (passGroup.geometryOnly != 0u);
 
-    if ((passGroup.debugMode == 0u) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST)) {
+    if (sdfDebugComposesFinal(passGroup.debugMode) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST)) {
         ViewportData view = sdfSkyPassView();
         float3 direction = sdfSkyPassDirection(view, id.xy);
         float3 origin = view.position.xyz;
@@ -130,8 +130,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The view's exposure maps the luminance it shaded, in nits, to the display before the root's tonemap; a view a
     // window shows applies the window share of it (exposeShare), and the view looking through the window applies the
-    // rest of its own; a debug view leaves it as it is.
-    if (passGroup.debugMode == 0u) {
+    // rest of its own; a debug view leaves it as it is, but for a tier view, which is the final image tinted.
+    if (sdfDebugComposesFinal(passGroup.debugMode)) {
         color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
     }
 

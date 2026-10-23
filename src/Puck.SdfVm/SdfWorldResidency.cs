@@ -890,6 +890,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 luminance: sources.LuminanceOf(screen: screen),
                 screenIndex: screen
             );
+            tables.SetScreenRate(
+                code: ((DebugViewModes.ShowsRates(mode: m_debugMode) && (screen < frame.ScreenRateCodes.Length)) ? ((SdfUpdateRateCode)frame.ScreenRateCodes.Span[screen]) : SdfUpdateRateCode.None),
+                screenIndex: screen
+            );
             tables.SetScreenRipple(
                 ripple: (sources.TryRippleOf(
                     ripple: out var ripple,

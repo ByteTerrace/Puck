@@ -285,6 +285,7 @@ public static class SdfIsaHlsl {
         );
         declarations.Count(name: "SDF_VOLUME_VECTORS_PER_ENTRY", value: SdfVolume.VectorsPerEntry);
         declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
+        declarations.Members<SdfUpdateRateCode>(prefix: "SDF_RATE");
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
         declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
         declarations.Section(title: "The visibility record's identity fields and the record passes' workgroup edge (SdfVisibility).");

@@ -133,7 +133,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
-    if ((p.viewMode != 0) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {
+    if (!sdfDebugComposesFinal((uint)p.viewMode) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {
         coverage = 1.0;
 
         // A debug view passes the composite as it is: a mode that keeps the final shading shows it exposed.

@@ -220,6 +220,14 @@ public sealed record SdfFrame(
     /// <summary>The window the frame's rated work records its intervals between updates into
     /// (<see cref="SdfUpdateRateIntervals"/>), or <see langword="null"/> to record nothing.</summary>
     public SdfUpdateRateIntervals? RateIntervals { get; init; }
+    /// <summary>Each dynamic-transform slot's <see cref="SdfUpdateRateCode"/>, indexed by slot, which a residency showing
+    /// a tier view (<see cref="DebugViewModes.ShowsRates"/>) packs into the slot's position row; a slot past the end
+    /// packs <see cref="SdfUpdateRateCode.None"/>. Empty, the default, tints nothing.</summary>
+    public ReadOnlyMemory<byte> SlotRateCodes { get; init; }
+    /// <summary>Each screen's <see cref="SdfUpdateRateCode"/>, indexed by screen, which a residency showing a tier view
+    /// binds into the screen's record; a screen past the end binds <see cref="SdfUpdateRateCode.None"/>. Empty, the
+    /// default, tints nothing.</summary>
+    public ReadOnlyMemory<byte> ScreenRateCodes { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
     /// passes and re-composites from the retained views output — pixel-identical to a

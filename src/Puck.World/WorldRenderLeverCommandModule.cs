@@ -87,8 +87,30 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         }
 
+        foreach (var lever in (ReadOnlySpan<SdfUpdateRates>)[SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens]) {
+            _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {LeverName(lever: lever)}:");
+
+            var readings = settings.RateReadings.Latest(lever: lever);
+
+            if (readings.Count == 0) {
+                _ = echo.Append(value: " -");
+            }
+            foreach (var reading in readings) {
+                _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {reading.Name}={ReadingSize(lever: lever, size: reading.Size)}@{reading.Hertz}hz");
+            }
+        }
+
         return echo.Append(value: ']').ToString();
     }
+    // A reading's size on screen in its lever's unit: a body's pixels per metre, a view's display pixels high, a screen's
+    // height on the display over its image's.
+    private static string ReadingSize(SdfUpdateRates lever, double size) => (double.IsPositiveInfinity(d: size)
+        ? "near"
+        : (lever switch {
+            SdfUpdateRates.Bodies => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{size:0.0}px/m"),
+            SdfUpdateRates.Views => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{size:0}px"),
+            _ => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{size:0.00}x"),
+        }));
     // A world.rates lever's spelling, as RatesLever reads it.
     private static string LeverName(SdfUpdateRates lever) => lever switch {
         SdfUpdateRates.Bodies => "bodies",
@@ -496,10 +518,17 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
                 separator: '|',
                 value: DebugViewModes.Names
-            )}|next]. next steps to the following view, after the last back to off, so one key cycles them. Depth is the primary-march-only performance probe; off restores final shading. Bindable, so a binding row or an authored command (the debug world's gallery.view) may call it.",
+            )}|next|toggle <mode>]. next steps to the following view, after the last back to off, so one key cycles them; toggle <mode> selects the mode, or off when it is already selected. Depth is the primary-march-only performance probe; off restores final shading. rates is the final image with every item a world.rates lever holds tinted by its tier (30 Hz amber, 15 Hz magenta, every frame untinted), and rate-flash tints each only on the frames it updates. Bindable, so a binding row or an authored command (the debug world's gallery.view) may call it.",
             handler: (_, args) => {
                 if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
+                }
+
+                CommandResult Select(int mode) {
+                    node.DebugMode = mode;
+                    settings.RateTints = DebugViewModes.ShowsRates(mode: mode);
+
+                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
                 }
 
                 if (args.Count == 0) {
@@ -510,9 +539,15 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     (args.Count == 1) &&
                     string.Equals(a: args[0].ToString(), b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)
                 ) {
-                    node.DebugMode = ((node.DebugMode + 1) % DebugViewModes.Count);
+                    return Select(mode: ((node.DebugMode + 1) % DebugViewModes.Count));
+                }
 
-                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
+                if (
+                    (args.Count == 2) &&
+                    args.Is(index: 0, value: "toggle") &&
+                    DebugViewModes.TryParse(name: args[1].ToString(), mode: out var toggled)
+                ) {
+                    return Select(mode: ((node.DebugMode == toggled) ? 0 : toggled));
                 }
 
                 if (
@@ -528,9 +563,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     )}]");
                 }
 
-                node.DebugMode = mode;
-
-                return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
+                return Select(mode: mode);
             }
         );
         yield return CommandDefinition.WithWireArgs(

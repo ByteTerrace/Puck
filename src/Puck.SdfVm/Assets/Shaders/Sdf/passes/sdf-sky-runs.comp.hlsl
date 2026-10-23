@@ -28,7 +28,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST))) {
+    if (seen && (sdfDebugComposesFinal(passGroup.debugMode) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST))) {
         float3 direction = cameraRayDirection(sdfSkyPassView(), (float2(id.xy) + 0.5) / float2(passGroup.skyFieldExtent));
         uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
         float3 base;

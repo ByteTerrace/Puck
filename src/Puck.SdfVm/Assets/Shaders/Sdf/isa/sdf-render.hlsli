@@ -34,6 +34,13 @@
 #define SDF_GRID_OBJECT  2u
 #define SDF_GRID_SURFACE 4u
 
+// Puck.SdfVm.SdfUpdateRateCode.
+#define SDF_RATE_NONE    0u
+#define SDF_RATE_EVERY   1u
+#define SDF_RATE_HALF    2u
+#define SDF_RATE_QUARTER 3u
+#define SDF_RATE_UPDATED 4u
+
 // Puck.SignedDistance.SdfLightKind.
 #define SDF_LIGHT_DIRECTIONAL 0u
 #define SDF_LIGHT_RIM         1u
@@ -120,7 +127,7 @@
 #define SDF_AIR_STEEP_LIMIT                  (-20.0)
 
 // The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
-#define SDF_DEBUG_VIEW_COUNT       11
+#define SDF_DEBUG_VIEW_COUNT       13
 #define SDF_DEBUG_VIEW_OFF         0
 #define SDF_DEBUG_VIEW_DEPTH       1
 #define SDF_DEBUG_VIEW_NORMALS     2
@@ -132,5 +139,7 @@
 #define SDF_DEBUG_VIEW_AO          8
 #define SDF_DEBUG_VIEW_SHADOW      9
 #define SDF_DEBUG_VIEW_INDIRECT    10
+#define SDF_DEBUG_VIEW_RATES       11
+#define SDF_DEBUG_VIEW_RATE_FLASH  12
 
 #endif // SDF_RENDER_HLSLI
