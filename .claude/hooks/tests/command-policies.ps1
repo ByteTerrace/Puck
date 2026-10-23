@@ -40,7 +40,27 @@ $cases = @(
     @('no-coauthor', 'git commit -m "cli: remove Co-Authored-By documentation"', $false),
     @('no-coauthor', 'git log --grep="Co-Authored-By:"', $false),
     @('no-coauthor', 'git show commit -m "Co-Authored-By: example"', $false),
-    @('no-coauthor', 'git -C . commit -m "Co-Authored-By: example"', $true)
+    @('no-coauthor', 'git -C . commit -m "Co-Authored-By: example"', $true),
+    @('git-safety', 'git push origin HEAD:refs/heads/lead/catch-up', $true),
+    @('git-safety', 'git status && git push', $true),
+    @('git-safety', 'git stash', $true),
+    @('git-safety', 'git stash list', $false),
+    @('git-safety', 'git branch -a', $false),
+    @('git-safety', 'git branch -D codex/old', $true),
+    @('git-safety', 'git branch -Df codex/old', $true),
+    @('git-safety', 'git checkout -B lead/catch-up', $true),
+    @('git-safety', 'git switch -C lead/catch-up', $true),
+    @('git-safety', 'git switch -c codex/new', $false),
+    @('git-safety', 'git fetch origin main:main', $true),
+    @('git-safety', 'git fetch --prune', $true),
+    @('git-safety', 'git fetch origin', $false),
+    @('git-safety', 'git worktree list', $false),
+    @('git-safety', 'git worktree remove ../x', $true),
+    @('git-safety', 'git -C ../other status', $true),
+    @('git-safety', 'git rebase main', $true),
+    @('git-safety', 'git commit --file msg.txt', $false),
+    @('git-safety', 'git reset --hard HEAD', $false),
+    @('git-safety', 'echo git push', $false)
 )
 $count = 0
 try {
@@ -69,7 +89,7 @@ try {
             $reply = if ($output.Trim()) { ConvertFrom-Json $output -AsHashtable } else { @{} }
             $denied = ($reply['decision'] -eq 'deny' -or $reply['hookSpecificOutput']?['permissionDecision'] -eq 'deny')
             if ($denied -ne $case[2]) { throw "$shape $($case[0]): expected deny=$($case[2]), got $output for $($case[1])" }
-            if ($shape -eq 'Antigravity' -and -not $denied -and $reply['decision'] -ne 'allow') { throw 'Antigravity requires an explicit allow decision.' }
+            if (-not $denied -and $output.Trim()) { throw "$shape $($case[0]): a passing command must abstain, got $output" }
             "$shape $($case[0]) $(if ($denied) { 'DENY' } else { 'PASS' }): $($case[1].Replace("`n", '\n'))"
             $process.Dispose()
             $count++
