@@ -19,7 +19,8 @@
         "enum": [
           "Bipolar",
           "Unipolar",
-          "Binary"
+          "Binary",
+          "Relative"
         ],
         "title": "ChannelShape"
       },
@@ -65,6 +66,35 @@
         ],
         "default": "World",
         "title": "ChannelFrame"
+      },
+      "relative": {
+        "description": "Required units, sensitivity and limit for Relative channels; absent on levels.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "unit": {
+            "description": "An authored unit name shared by producers and consumers.",
+            "type": "string"
+          },
+          "sensitivity": {
+            "description": "Units per device sample, applied before host quantization.",
+            "type": "number"
+          },
+          "maximumPerStep": {
+            "description": "The positive absolute displacement limit in authored units.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "unit",
+          "sensitivity",
+          "maximumPerStep"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldRelativeChannel"
       }
     },
     "required": [

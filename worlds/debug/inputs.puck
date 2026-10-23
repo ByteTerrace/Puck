@@ -1,0 +1,100 @@
+// Shared semantic input vocabulary. Modules consume names; each action is declared here once.
+schema: "puck.world.definition.v1"
+
+channels [
+  {
+    composition: false
+    frame: Heading
+    name: "forward"
+    role: MoveAdvance
+    shape: Bipolar
+  }
+  {
+    composition: false
+    frame: Heading
+    name: "strafe"
+    role: MoveStrafe
+    shape: Bipolar
+  }
+  {
+    composition: false
+    name: "turn"
+    role: Turn
+    shape: Bipolar
+  }
+  {
+    composition: false
+    name: "faceX"
+    role: FaceX
+    shape: Bipolar
+  }
+  {
+    composition: false
+    name: "faceZ"
+    role: FaceZ
+    shape: Bipolar
+  }
+  {
+    composition: false
+    name: "faceY"
+    role: FaceY
+    shape: Bipolar
+  }
+  {
+    composition: true
+    name: "jump"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "flight"
+    shape: Binary
+  }
+  // Held, it multiplies her speed (the kits' `speed.held`).
+  {
+    composition: true
+    name: "run"
+    shape: Binary
+  }
+  {
+    composition: false
+    name: "rise"
+    role: MoveUp
+    shape: Bipolar
+  }
+  // The pad's start button, which the Moth herself ignores: an engaged machine reads it as its own start.
+  {
+    composition: true
+    name: "start"
+    shape: Binary
+  }
+  // The pad's select button, which the Moth herself ignores: an engaged machine reads it as its own select.
+  {
+    composition: true
+    name: "select"
+    shape: Binary
+  }
+  // The context button, which the Moth herself ignores: beside an engageable screen naming it as its engage channel,
+  // a press engages that screen and the next press leaves it.
+  {
+    composition: true
+    name: "interact"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "suit"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "noclip"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "confirm"
+    shape: Binary
+  }
+  { composition: true, name: "cancel", shape: Binary }
+]

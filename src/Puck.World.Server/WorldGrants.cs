@@ -1265,7 +1265,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     key: (pair.Key, capability, subject),
                     value: out var reach
                 )) {
-                    _ = builder.Append(value: " channels:0x").Append(value: reach.Bits.ToString(format: "x"));
+                    _ = builder.Append(value: " channels:0x").Append(value: $"{reach.Bits.Axes:x}/{reach.Bits.Buttons:x} registers:{reach.Registers:x}");
                 }
 
                 // NAMES, never a hex lane: a read-back an operator cannot decode by eye is a read-back that does

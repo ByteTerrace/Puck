@@ -343,7 +343,8 @@ public sealed partial class WorldBody {
     public void PressChannel(int ordinal, FixedQ4816 value) {
         if (
             (ordinal < 0) ||
-            (ordinal >= ActionLaneCount)
+            (ordinal >= ActionLaneCount) ||
+            (m_channelShapes[ordinal] == ChannelShape.Relative)
         ) {
             return;
         }
@@ -469,13 +470,15 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="channels">The compiled typed input table.</param>
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
         );
+        SetChannelTable(channels: channels);
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,
@@ -755,7 +758,7 @@ public sealed partial class WorldBody {
     public void SetHeldChannels(in PlayerIntent channels) {
         m_transferHeldChannels = default;
         m_hasTransferHeldChannels = false;
-        m_heldChannels = channels;
+        m_heldChannels = WithoutRelative(intent: channels);
     }
     /// <summary>Sets the intent-source axis — <c>body.control</c>'s write and the peer sweep's per-entity half. A
     /// transition drops the staged transient input images (the submitted, producer, and held-lane images), so a stale

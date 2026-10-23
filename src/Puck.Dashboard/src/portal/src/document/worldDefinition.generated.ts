@@ -1074,17 +1074,45 @@ export type CellValueJsonConverterVectorShape = {
   value: number[];
 };
 
-export type ChannelConsentMask = number;
+export type ChannelConsentMask = {
+  /**
+   * The numeric and button banks, one bit per consented channel ordinal.
+   */
+  bits?: ChannelMask;
+};
 
 export type ChannelFrame = "World" | "Camera" | "Heading";
 
-export type ChannelReachMask = number;
+/**
+ * Independent support masks for the numeric and button banks.
+ */
+export type ChannelMask = {
+  /**
+   * One bit per numeric lane.
+   */
+  axes?: number;
+  /**
+   * One bit per button lane.
+   */
+  buttons?: number;
+};
+
+export type ChannelReachMask = {
+  /**
+   * The numeric and button reach banks.
+   */
+  bits?: ChannelMask;
+  /**
+   * Independent target-register reach.
+   */
+  registers?: number;
+};
 
 export type ChannelRef = unknown;
 
 export type ChannelRole = "MoveAdvance" | "MoveStrafe" | "Turn" | "MoveUp" | "Pitch" | "Roll" | "FaceX" | "FaceY" | "FaceZ" | "MoveX" | "MoveY" | "MoveZ";
 
-export type ChannelShape = "Bipolar" | "Unipolar" | "Binary";
+export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative";
 
 export type ClosedBitset256 = unknown;
 
@@ -4413,6 +4441,10 @@ export type WorldChannel = {
    * What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.
    */
   frame?: ChannelFrame;
+  /**
+   * Required units, sensitivity and limit for Relative channels; absent on levels.
+   */
+  relative?: WorldRelativeChannel | null;
 };
 
 export type WorldClock = {
@@ -9363,6 +9395,21 @@ export type WorldReference = {
    * The remote world's own SafeName-shaped id within its owner's account. Required together with Owner; refused alone.
    */
   world?: SafeName | null;
+};
+
+export type WorldRelativeChannel = {
+  /**
+   * An authored unit name shared by producers and consumers.
+   */
+  unit: string;
+  /**
+   * Units per device sample, applied before host quantization.
+   */
+  sensitivity: number;
+  /**
+   * The positive absolute displacement limit in authored units.
+   */
+  maximumPerStep: number;
 };
 
 /**

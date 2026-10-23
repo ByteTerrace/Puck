@@ -46,10 +46,18 @@ EACH of its listed sources independently — an entry surviving at all of its
 sources stays combined, one narrowed to fewer sources by a later layer keeps
 only the ones still its own — first-touch-per-layer so a hold/release pair in
 one layer accumulates.
+A `Relative` channel declares `relative { unit, sensitivity, maximumPerStep }`.
+Bind a scalar source or component such as `mouse.motion.x`; each dispatch adds
+a displacement, and the next admitted submission consumes the sum once.
+The router preserves sample magnitude instead of quantizing it as a normalized
+stick, and no step duration multiplies it. Toggle and held/sequence activators
+are invalid for displacement. `player.signal` drives this same binding path
+without a physical device, including from a test's scheduled `when` block.
+
 The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
 copied. `WorldSeatBindings` compares the filtered composed document plus the
-ordered channel-name map before compiling: a route that presents a new document
+ordered channel definitions before compiling: a route that presents a new document
 instance with identical effective content is a true no-op, preserving held
 commands, chord/page state, and release latches. Live surface: `player.bind`,
 `player.bindings`.

@@ -78,9 +78,7 @@ public sealed class ContextButtonLeaveLawTests {
             targetPrincipal: seat
         ));
 
-        var interactOrdinal = fixture.Server.Definition.Channels
-            .Select(selector: static (channel, index) => (channel.Name, index))
-            .Single(predicate: static entry => (entry.Name == Interact)).index;
+        Assert.True(condition: fixture.Server.Population.Channels.TryGetOrdinal(name: Interact, ordinal: out var interactOrdinal));
 
         // Released: the seat stays captured.
         Step(fixture: fixture, interactOrdinal: interactOrdinal, value: FixedQ4816.Zero);
@@ -98,7 +96,6 @@ public sealed class ContextButtonLeaveLawTests {
         Step(fixture: fixture, interactOrdinal: interactOrdinal, value: Full);
         Assert.False(condition: fixture.Server.Body(index: 0)!.Engaged);
     }
-
     [Fact]
     public void AnEngageChannelTheRoutesKitPlaysAsAPadButtonIsRefusedByName() {
         Assert.True(condition: WorldDefinitionValidator.TryValidate(
@@ -112,8 +109,8 @@ public sealed class ContextButtonLeaveLawTests {
             reason: out var reason
         ));
         Assert.Contains(
-            expectedSubstring: "engageChannel 'interact' is a pad button of kit 'cabinet'",
-            actualString: reason
+            actualString: reason,
+            expectedSubstring: "engageChannel 'interact' is a pad button of kit 'cabinet'"
         );
     }
 }

@@ -15,7 +15,7 @@ public sealed partial class WorldAddonRuntime {
         var composition = default(ChannelValues);
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ++ordinal) {
-            if (!channels.IsRole(ordinal: ordinal)) {
+            if (!channels.IsRole(ordinal: ordinal) && (channels.Shape(ordinal: ordinal) != ChannelShape.Relative)) {
                 composition[ordinal] = values[ordinal];
             }
         }
@@ -91,13 +91,17 @@ public sealed partial class WorldAddonRuntime {
     // channel is DECLARATIVE, this tick only: the host holds no channel state between ticks, so a channel a guest
     // stops emitting reads zero the very next tick, like a seat's own analog clear. The pump already refused a
     // duplicate ordinal within one batch as a protocol fault, so no act can overwrite another's channel here.
-    private static void Fold(MountedAddon addon, int slot, in AddonActSubmission act) {
+    private void Fold(MountedAddon addon, int slot, in AddonActSubmission act) {
         ref var contribution = ref addon.Contributions[slot];
 
         // No hidden negation or axis remapping: the world channel's documented convention IS the wire convention.
         // The Rust guest is the one that must emit the correctly-signed value (see wasm/puck-addon-default) — the
         // old raw-stick negation lived here only because that guest used to speak raw stick space, not the intent's.
-        contribution.Values[act.ChannelOrdinal] = FixedQ4816.FromRawBits(value: act.Value);
+        if (act.Shape == AddonChannelValueShape.Relative) {
+            contribution.Values.SetRelative(ordinal: act.ChannelOrdinal, value: FixedQ3232.FromRawBits(value: act.Value));
+        } else {
+            contribution.Values[act.ChannelOrdinal] = m_server.Population.Channels.Quantize(ordinal: act.ChannelOrdinal, value: FixedQ4816.FromRawBits(value: act.Value));
+        }
     }
     // PUMP POINT 2, per addon. Two passes over the staged acts with the submissions between them: the first resolves
     // handles and accumulates per-body axes, the second answers every ordinal whose body refused. Two passes rather than
@@ -375,7 +379,7 @@ public sealed partial class WorldAddonRuntime {
         var roles = default(ChannelValues);
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ++ordinal) {
-            if (channels.IsRole(ordinal: ordinal)) {
+            if (channels.IsRole(ordinal: ordinal) || (channels.Shape(ordinal: ordinal) == ChannelShape.Relative)) {
                 roles[ordinal] = values[ordinal];
             }
         }

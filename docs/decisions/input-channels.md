@@ -12,9 +12,13 @@ typed packed values, shared action names, composable simulation modes, release
 on a mode switch, and deterministic input history with sub-tick timing. The
 representation and algorithms below refine that direction.
 
-**Implementation status:** this is the target contract. The runtime currently
-has sixteen Q48.16 channel slots, body-derived edges, and presentation binding
-contexts. The [implementation steps](#implementation-steps) track the migration;
+**Implementation status:** C1 and C2 are implemented: 32 numeric slots (Q48.16
+levels or Q32.32 relative displacement), 64 packed buttons, independent target-register
+reach, and shared debug declarations with separate `confirm` and `cancel`.
+Relative input has authored units, sensitivity and bounds, consumes once, and
+conserves fractional scalar conversion residue. Body-derived edges and
+presentation binding contexts remain; C3–C7 describe the target contract. The
+[implementation steps](#implementation-steps) track the remaining work;
 examples using `inputModes`, `inputHistory`, or `inputPatterns` below describe
 new vocabulary, not syntax an existing build accepts.
 
@@ -67,6 +71,44 @@ integrated using the world's step duration.
 An integrating consumer retains any fractional conversion remainder in
 authoritative state, or accumulates its angle in Q32.32 before narrowing. Tiny
 aim samples must not disappear merely because each step rounds to Q48.16.
+
+The relative declaration is explicit:
+
+```puck
+channels [
+  {
+    name: "aimX"
+    shape: Relative
+    composition: true
+    relative { unit: "radians", sensitivity: 0.002, maximumPerStep: 4 }
+  }
+]
+```
+
+A binding names `aimX` and a scalar source such as `mouse.motion.x`. Its scale
+multiplies the physical sample; the channel sensitivity converts that sample to
+its declared unit before Q32.32 quantization. Relative bindings never become
+carried controls, toggle latches, or held/sequence activators. The host drains
+an Int128 sum only when it submits a new routed tick. Source/routing resets drop
+pending displacement. Numeric stick roles keep their existing rate contract;
+relative channels are consumed as displacement through the rule surface.
+
+`channel(seat, name)` reads a scalar displacement for a Relative channel. The
+body converts Q32.32 to Q48.16 once per step, preserving the fractional remainder
+in transfer/checkpoint state, so repeated samples smaller than a scalar unit
+still accumulate. A kit retune preserves that residue when the relative names,
+slots, and units remain unchanged. The raw input image, wire, replay, and named channel inspection
+retain Q32.32. A reader that needs raw precision uses the compiled table's
+checked `ReadRelative` accessor. Timed `body.press` and kit action triggers
+and machine pad maps remain held-level surfaces; a relative channel cannot use
+them or a steering producer's press parameter. A scripted
+binding sample uses `player.signal`, including in a scheduled test.
+
+Multiple trusted relative contributions sum in Int128; a consented pool first
+applies its authored ceiling in displacement units. The final sum saturates once
+to `maximumPerStep`. Relative input never enters the held overlay. A tape
+segment emits its displacement only on its first step. Portal forwarding keeps
+a relative sample only when both named destinations declare the same unit.
 
 Explicit ordered press/release events accompany the held image. Deriving just
 one edge from two images loses a press and release within the same tick. For
@@ -279,7 +321,19 @@ synthesize transitions at the interval boundary. Repeated reads of one device
 sample cannot create repeated presses.
 
 The first typed-storage step uses one mapping for all declared channels and
-does not add unimplemented event fields. Later steps change the current leaf
+does not add unimplemented event fields. Its current leaf writes 32 numeric
+raw words, the packed button word, and the pointer-ray presence/payload. The
+264-byte level payload needs no document to decode. The used-extent prefix and
+mapping metadata arrive with modes. Compiled addresses 0–31 select numeric
+slots and 32–95 select button bits; declaration indices are not addresses.
+
+Source weighting sums in fixed-point scratch and thresholds binary values once
+before packing. Held binary overlays combine by OR; this preserves the existing
+maximum-then-threshold result. The server's contribution pool still evaluates
+its fixed-point ceiling and terminal threshold before writing the packed result.
+Channel support masks carry independent numeric and button banks. Drive reach
+also carries a separate 64-bit target-register bank, so target registers never
+spend input capacity. Later steps change the current leaf
 directly. There is one current format, no dual decoder or retired aliases.
 Tapes affected by a format change are re-recorded by the recording verbs or
 deleted if no longer useful. Generated schema/vocabulary outputs come from
@@ -418,7 +472,8 @@ Held-note rules pair press and release ids and read their separate timestamps.
 
 ## Migration of live documents and consumers
 
-All sixteen live channel rows are accounted for below. The debug package's
+The sixteen original channel rows and the restored cancel action are accounted
+for below. The debug package's
 other worlds inherit the Moth basis or the shared imports; no quarantined world
 is promoted to live status to demonstrate this work.
 

@@ -14,10 +14,10 @@ namespace Puck.World.Server.Tests;
 /// <summary>Law coverage for a kit's tether facet: intent-to-attach determinism, the tether pipeline, checkpoint
 /// continuation, and the validator's channel/grip-composition refusals.</summary>
 public sealed class TetherLawTests {
-    private const int AttachOrdinal = 3;
-    private const int DetachOrdinal = 4;
+    private const int AttachOrdinal = ChannelLimits.MaxAxes;
+    private const int DetachOrdinal = (ChannelLimits.MaxAxes + 1);
     private const int ForwardOrdinal = 0;
-    private const int ReelOrdinal = 5;
+    private const int ReelOrdinal = 3;
 
     private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, TemporaryDirectory stateDirectory) : IDisposable {
         public WorldServer Server { get; } = server;

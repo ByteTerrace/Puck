@@ -119,6 +119,7 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Rigid">The kit's compiled rigid-dynamics facet, or <see langword="null"/> for a locomotion kit.</param>
 /// <param name="Carry">The kit's compiled carry facet, or <see langword="null"/> for a kit that cannot pick up a
 /// rigid body.</param>
+/// <param name="Channels">The compiled typed input table.</param>
 /// <param name="Tether">The kit's compiled tether facet, or <see langword="null"/> for a kit that carries no rope.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
@@ -138,7 +139,8 @@ public readonly record struct FixedWorldKit(
     ulong AutonomousSteeringTicks,
     FixedWorldRigid? Rigid = null,
     FixedWorldCarry? Carry = null,
-    FixedWorldTether? Tether = null
+    FixedWorldTether? Tether = null,
+    WorldChannelTable? Channels = null
 ) {
     /// <summary>Compiles the world's named action-state register file: every <c>state.body</c> declaration in
     /// document order, then every <c>state.identity</c> one.</summary>
@@ -350,6 +352,7 @@ public readonly record struct FixedWorldKit(
             Actions: actions,
             ActionThresholds: thresholds,
             ActionShapes: shapes,
+            Channels: channels,
             Collider: collider,
             BodyContact: kit.BodyContact,
             Mass: FixedQ4816.FromDouble(value: kit.Mass),

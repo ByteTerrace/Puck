@@ -80,6 +80,7 @@ public sealed class SeatController {
     // (bipolar/unipolar/binary). Defaults to the empty table (every composition ordinal falls back to the widest,
     // non-lossy bipolar range) so a seat built before the table is threaded in never silently drops a negative
     // contribution the way a hardcoded [0, One] used to.
+    private readonly Int128[] m_relative = new Int128[ChannelLimits.MaxAxes];
     private WorldChannelTable m_channels = WorldChannelTable.Empty;
 
     /// <summary>The seat-lifetime logical view state shared by input, movement, every renderer, and read-back.</summary>
@@ -97,7 +98,12 @@ public sealed class SeatController {
     /// <see cref="WorldChannelTable.Empty"/>.</summary>
     public WorldChannelTable Channels {
         get => m_channels;
-        set => m_channels = (value ?? WorldChannelTable.Empty);
+        set {
+            var next = (value ?? WorldChannelTable.Empty);
+
+            if (!ReferenceEquals(objA: m_channels, objB: next)) { Array.Clear(array: m_relative); }
+            m_channels = next;
+        }
     }
     /// <summary>Whether the held free-look modifier is active. Camera look continues, but right-stick yaw does not
     /// write body heading and left-stick movement remains relative to authoritative heading until release.</summary>
@@ -108,7 +114,7 @@ public sealed class SeatController {
     /// one ordinal sums in raw <see cref="FixedQ4816"/> storage, then runs through
     /// <see cref="FixedContributionFold.Evaluate"/> once against that ordinal's declared shape
     /// range (bipolar <c>[-One, One]</c>; unipolar or binary <c>[0, One]</c> — a binary channel's PRE-quantization
-    /// pool-clamp domain per its own remarks, since bit-quantization is the server's job, never the client's).</summary>
+    /// pool-clamp domain; the completed source fold applies its threshold before packing).</summary>
     public PlayerIntent HeldChannels {
         get {
             if (m_heldControls.Count == 0) {
@@ -118,7 +124,7 @@ public sealed class SeatController {
             Span<long> raw = stackalloc long[ChannelLimits.MaxChannels];
 
             foreach (var ((_, ordinal), scale) in m_heldControls) {
-                if (m_channels.IsRole(ordinal: ordinal)) {
+                if (m_channels.IsRole(ordinal: ordinal) || (m_channels.Shape(ordinal: ordinal) == ChannelShape.Relative)) {
                     continue;
                 }
 
@@ -140,14 +146,13 @@ public sealed class SeatController {
                     : ChannelShape.Bipolar
                 );
 
-                var (minimum, maximum, _) = WorldChannelTable.CompileFoldShape(
+                var (minimum, maximum, threshold) = WorldChannelTable.CompileFoldShape(
                     shape: shape,
                     threshold: m_channels.Threshold(ordinal: ordinal)
                 );
 
                 // A seat's held device image is the no-pool specialization: zero baseline, the completed raw device
-                // sum in the pool-delta slot, no outside-pool term, and deliberately no binary threshold. Binary is
-                // continuous [0, One] here; authoritative composition performs the terminal bit quantization.
+                // sum in the pool-delta slot and no outside-pool term. Threshold once after that sum, then pack.
                 channels[ordinal] = FixedContributionFold.Evaluate(
                     baseline: FixedQ4816.Zero,
                     poolDeltaRaw: raw[ordinal],
@@ -155,7 +160,7 @@ public sealed class SeatController {
                     poolRadius: null,
                     minimum: minimum,
                     maximum: maximum,
-                    threshold: null,
+                    threshold: threshold,
                     poolClamped: out _
                 );
             }
@@ -163,6 +168,25 @@ public sealed class SeatController {
             return new PlayerIntent(Channels: channels);
         }
     }
+
+    /// <summary>Appends a host sample in dispatch order, quantizing after authored sensitivity.</summary>
+    public void AccumulateRelative(int ordinal, double sample) {
+        m_relative[ordinal] += m_channels.QuantizeRelative(ordinal: ordinal, sample: sample).Value;
+    }
+    /// <summary>Moves pending displacement into one submission and clears it. Called only after routing admits a tick.</summary>
+    public PlayerIntent ConsumeRelative(PlayerIntent intent) {
+        var remaining = m_channels.RelativeMask;
+
+        while (remaining != 0) {
+            var ordinal = BitOperations.TrailingZeroCount(value: remaining);
+
+            remaining &= (remaining - 1);
+            intent = intent.WithRelative(ordinal: ordinal, value: m_channels.ClampRelative(ordinal: ordinal, raw: m_relative[ordinal]));
+            m_relative[ordinal] = 0;
+        }
+        return intent;
+    }
+
     /// <summary>Gets this tick's typed look sample; zero after <see cref="ClearAnalog"/> until routed input refills
     /// it.</summary>
     public SeatLookSample Look => m_look;
@@ -319,12 +343,16 @@ public sealed class SeatController {
     /// <param name="ordinal">The channel ordinal this control contributes to.</param>
     /// <param name="scale">This control's current scale/sample (e.g. <c>+One</c> for W, <c>-One</c> for S on the same "forward" ordinal).</param>
     public void HoldChannel(string? controlId, int ordinal, FixedQ4816 scale) {
+        if (m_channels.Shape(ordinal: ordinal) == ChannelShape.Relative) {
+            throw new ArgumentException(message: "Relative input cannot be held.", paramName: nameof(ordinal));
+        }
         m_heldControls[((controlId ?? string.Empty), ordinal)] = scale;
     }
     /// <summary>Releases every held movement contribution and live-held composition channel. Called when a
     /// possession/engagement latch transitions, when the keyboard leaves this seat (a still-down key's release edge
     /// routes to the keyboard's new slot, so the source would walk forever), and by <c>body.stop</c>'s seat half.</summary>
     public void ReleaseAllHeld() {
+        Array.Clear(array: m_relative);
         // A single Clear covers both movement and composition holds — a still-down Space would otherwise stick the
         // jump channel held, exactly the hazard clearing only the movement set would reintroduce.
         m_heldControls.Clear();

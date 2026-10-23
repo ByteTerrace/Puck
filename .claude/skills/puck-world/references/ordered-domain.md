@@ -209,16 +209,16 @@ rejection and on stdout for an acceptance.
 
 ## Intents — the separate buffer
 
-`PlayerIntent` (`src/Puck.World.Schema/PlayerIntent.cs`) is a fixed 16-slot vector of
-`FixedQ4816` channel values (`ChannelLimits.MaxChannels = 16`). The compiled
-world channel table (`WorldChannelTable`) assigns every declared channel an
-ordinal consecutively, in declaration order, and resolves each role a channel
-claims (`ChannelRole`: `MoveAdvance`, `MoveStrafe`, `Turn`, `MoveUp`, `Pitch`,
-`Roll`, `FaceX`/`FaceY`/`FaceZ`, `MoveX`/`MoveY`/`MoveZ`) to that authored
-ordinal; no role owns a fixed slot, and an ordinal no channel claims reads zero.
-There is no button bitmask — a button is a `Binary`-shaped channel
-(`ChannelShape`: `Bipolar`/`Unipolar`/`Binary`); edges derive from threshold
-crossings against the previous sub-step, never carried.
+`PlayerIntent` (`src/Puck.World.Schema/PlayerIntent.cs`) carries 32 inline
+64-bit numeric lanes and 64 held buttons packed into one `ulong`. Normalized
+levels are Q48.16; Relative displacements are Q32.32 in the same numeric bank. The
+compiled `WorldChannelTable` assigns declaration-order slots independently
+within each bank: addresses 0–31 are numeric and 32–95 are buttons. Names and
+motion roles resolve through that table, never through a declaration index.
+No role owns a fixed slot. `ChannelShape` is `Bipolar`, `Unipolar`, `Binary`, or `Relative`;
+binary values quantize at ingress and edges derive against the previous
+sub-step. Reach and consent have independent numeric/button bit banks; target
+register reach has its own 64-bit bank.
 
 `IntentSubmission(Tick, EntityIndex, Intent, Principal, HeldChannels)`
 enqueues through `IWorldServerHost.EnqueueIntent` into the server's own

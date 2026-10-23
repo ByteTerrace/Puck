@@ -333,8 +333,8 @@ public static partial class WorldSubmissionCodec {
         var subject = WorldWireCodec.ReadSubject(reader: ref reader);
         var exclusive = reader.ReadBoolean();
         var budget = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt16());
-        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => new ChannelReachMask(Bits: r.ReadUInt64()));
-        var consent = reader.ReadOptional(readValue: static (ref WireReader r) => new ChannelConsentMask(Bits: r.ReadUInt64()));
+        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelReach(reader: ref r));
+        var consent = reader.ReadOptional(readValue: static (ref WireReader r) => new ChannelConsentMask(Bits: WorldWireCodec.ReadChannelMask(reader: ref r)));
         var ceiling = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt64());
         var kindMask = reader.ReadOptional(readValue: static (ref WireReader r) => new MutationKindMask(Bits: r.ReadUInt128()));
         var eventBudget = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt16());
@@ -1086,11 +1086,11 @@ public static partial class WorldSubmissionCodec {
         );
         writer.WriteOptional(
             value: grant.Reach,
-            writeValue: static (w, value) => w.WriteUInt64(value: value.Bits)
+            writeValue: static (w, value) => WorldWireCodec.WriteChannelReach(reach: value, writer: w)
         );
         writer.WriteOptional(
             value: grant.Consent,
-            writeValue: static (w, value) => w.WriteUInt64(value: value.Bits)
+            writeValue: static (w, value) => WorldWireCodec.WriteChannelMask(writer: w, mask: value.Bits)
         );
         writer.WriteOptional(
             value: grant.Ceiling,

@@ -654,7 +654,7 @@ public static partial class WorldDefinitionValidator {
         var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
 
         try {
-            var compiled = BindingProfile.Compile(document: composed);
+            var compiled = BindingProfile.Compile(document: composed, channelIsRelative: reference => ((channels is { } table) && table.TryGetOrdinal(ordinal: out var ordinal, reference: reference) && (table.Shape(ordinal: ordinal) == ChannelShape.Relative)));
 
             if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
                 errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling.");
@@ -684,15 +684,21 @@ public static partial class WorldDefinitionValidator {
     // consumer per row (a role XOR a composition trigger); role channels are bipolar only; channel-count ceiling;
     // threshold range on binary rows; body-motion-program role completeness (Grounded needs move-forward/move-strafe/turn,
     // Free needs all six). Returns the composition-channel name set kit Actions maps resolve against; composition
-    // channels carry no shape restriction.
+    // held consumers exclude Relative displacement.
     private static (HashSet<string> AllNames, HashSet<string> CompositionNames) ValidateChannels(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var compositionNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var roleClaims = new Dictionary<ChannelRole, string>();
         var channels = (definition.Channels ?? []);
 
-        if (channels.Count > ChannelLimits.MaxChannels) {
-            errors.Add(item: $"channels declares {channels.Count} rows, exceeding the {ChannelLimits.MaxChannels}-channel ceiling.");
+        var axes = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))).ToArray();
+        var buttons = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))).ToArray();
+
+        if (axes.Length > ChannelLimits.MaxAxes) {
+            errors.Add(item: $"channels numeric bank requires {axes.Length} slots; the maximum is {ChannelLimits.MaxAxes}: {string.Join(separator: ", ", values: axes.Select(selector: channel => channel.Name))}.");
+        }
+        if (buttons.Length > ChannelLimits.MaxButtons) {
+            errors.Add(item: $"channels button bank requires {buttons.Length} slots; the maximum is {ChannelLimits.MaxButtons}: {string.Join(separator: ", ", values: buttons.Select(selector: channel => channel.Name))}.");
         }
 
         for (var index = 0; (index < channels.Count); index++) {
@@ -745,7 +751,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.shape '{channel.Shape}' on channel '{(channel.Name ?? path)}' must be '{ChannelShape.Bipolar}' for role '{role}' — every role channel is a signed axis.");
                 }
             } else {
-                if (!string.IsNullOrWhiteSpace(value: channel.Name)) {
+                if (!string.IsNullOrWhiteSpace(value: channel.Name) && (channel.Shape != ChannelShape.Relative)) {
                     _ = compositionNames.Add(item: channel.Name);
                 }
             }
@@ -757,6 +763,17 @@ public static partial class WorldDefinitionValidator {
                 (channel.Role is not (ChannelRole.MoveAdvance or ChannelRole.MoveStrafe))
             ) {
                 errors.Add(item: $"{path}.frame '{channel.Frame}' is only meaningful on the MoveAdvance/MoveStrafe roles.");
+            }
+
+            if (channel.Shape == ChannelShape.Relative) {
+                if ((channel.Relative is not { } relative) || string.IsNullOrWhiteSpace(value: relative.Unit) ||
+                    !double.IsFinite(d: relative.Sensitivity) || (relative.Sensitivity == 0) ||
+                    !double.IsFinite(d: relative.MaximumPerStep) || (relative.MaximumPerStep <= 0) ||
+                    (relative.MaximumPerStep > 2147483647d) || (relative.MaximumPerStep < (1d / 4294967296d))) {
+                    errors.Add(item: $"{path}.relative requires a unit, finite nonzero sensitivity, and a positive Q32.32 maximumPerStep.");
+                }
+            } else if (channel.Relative is not null) {
+                errors.Add(item: $"{path}.relative is only meaningful on a Relative channel.");
             }
 
             if (channel.Threshold is { } threshold) {

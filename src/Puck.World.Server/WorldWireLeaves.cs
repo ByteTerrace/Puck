@@ -239,7 +239,7 @@ public static class WorldWireLeaves {
         var registers = reader.ReadArray(
             field: "action continuity registers",
             readItem: static (ref WireReader r) => ReadActionRegister(reader: ref r),
-            maximum: ChannelLimits.MaxChannels
+            maximum: WorldAuthorityCheckpointCodec.MaxCollectionCount
         );
 
         return new WorldTransferActionContinuity(

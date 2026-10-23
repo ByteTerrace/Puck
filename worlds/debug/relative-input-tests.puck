@@ -1,0 +1,103 @@
+// Relative device samples are displacement, independent of ticks and held input.
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "relative-input-tests"
+
+channels [
+  { name: "sampleDelta", shape: Relative, composition: true, relative { unit: "units", sensitivity: 0.25, maximumPerStep: 4 } }
+]
+bindingOverlays [
+  {
+    id: "relative-samples"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {chord [], group: "play", page {id: "base", entries [
+              { id: "sampleDelta", channel: "sampleDelta", sources ["mouse.motion.x"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+state {
+  world {
+    row {
+      name: "deltaTotal"
+      kind: "Fixed"
+      cells [{ key: "0", value: "0" }]
+    }
+  }
+}
+rule "accumulate-device-displacement" {
+  when channel(1, sampleDelta) != 0
+  mode: Level
+  deltaTotal[0] += channel(1, sampleDelta)
+}
+
+test "a displacement larger than one is consumed once" {
+  when {
+    ticks 2
+    seat1: player.signal mouse.motion 8 0
+    ticks 12
+  }
+  expect {
+    deltaTotal[0] == 2
+  }
+}
+
+test "opposing samples cancel before the step bound" {
+  when {
+    ticks 2
+    seat1: player.signal mouse.motion 100 0
+    seat1: player.signal mouse.motion -100 0
+    ticks 3
+  }
+  expect {
+    deltaTotal[0] == 0
+  }
+}
+
+test "sub-scalar samples conserve their fractional residue" {
+  when {
+    ticks 2
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    seat1: player.signal mouse.motion 0.000003814697265625 0
+    ticks 1
+    ticks 3
+  }
+  expect {
+    deltaTotal[0] == 0.0000152587890625
+  }
+}

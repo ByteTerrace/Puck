@@ -18,8 +18,8 @@ public static class VerbsCommand {
 
     // The affordance echo's command array, the engine's own verbs alone.
     private static List<CommandMetadata>? ReadAffordances(string stdout) {
-        var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(value: AffordancesPrefix, comparisonType: StringComparison.Ordinal));
-        var end = (line?.IndexOf(value: ",\"channels\":", comparisonType: StringComparison.Ordinal) ?? -1);
+        var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(comparisonType: StringComparison.Ordinal, value: AffordancesPrefix));
+        var end = (line?.IndexOf(comparisonType: StringComparison.Ordinal, value: ",\"channels\":") ?? -1);
 
         if (end < 0) {
             return null;
@@ -64,7 +64,7 @@ public static class VerbsCommand {
 
         return verbs;
     }
-    private static int Run(bool check, bool headlessOnly) {
+    private static int Run(bool check, bool headlessOnly, string? worldArtifact) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -72,8 +72,10 @@ public static class VerbsCommand {
         var runDirectory = Directory.CreateTempSubdirectory(prefix: "puck-verbs-").FullName;
 
         try {
-            if (!WorldArtifactBuild.TryResolve(
-                artifact: out var world,
+            if (!WorldArtifactBuild.TryResolveNamed(
+                named: worldArtifact,
+                path: out var world,
+                lease: out var lease,
                 error: out var error,
                 logDirectory: runDirectory,
                 repositoryRoot: repositoryRoot,
@@ -87,9 +89,9 @@ public static class VerbsCommand {
 
             var verbs = new Dictionary<string, CommandMetadata>(comparer: StringComparer.Ordinal);
 
-            using (world) {
+            using (lease) {
                 foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
-                    if (Boot(artifact: world.Path, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
+                    if (Boot(artifact: world, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
                         return 1;
                     }
 
@@ -133,12 +135,15 @@ public static class VerbsCommand {
         var headlessOnly = new Option<bool>(name: "--headless-only") {
             Description = "Boot headless alone (no GPU) and keep every catalogued verb the headless World does not register.",
         };
+        var worldArtifact = new Option<string?>(name: "--world-artifact") {
+            Description = "Boot this already-built Puck.World.dll; the caller is responsible for building this checkout successfully first.",
+        };
         var command = new Command(
             description: "Generate or check the console verb catalog authored commands are validated against.",
             name: Verb
-        ) { check, headlessOnly };
+        ) { check, headlessOnly, worldArtifact };
 
-        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: check), headlessOnly: parseResult.GetValue(option: headlessOnly)));
+        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: check), headlessOnly: parseResult.GetValue(option: headlessOnly), worldArtifact: parseResult.GetValue(option: worldArtifact)));
 
         return command.Detail(detail: """
             Builds this checkout's Puck.World (Release), boots it over worlds/debug headless and

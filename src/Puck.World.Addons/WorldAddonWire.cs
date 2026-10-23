@@ -121,6 +121,7 @@ internal sealed class WorldAddonChannelResolver(WorldChannelTable channels) : IA
             ChannelShape.Bipolar => AddonChannelValueShape.Bipolar,
             ChannelShape.Unipolar => AddonChannelValueShape.Unipolar,
             ChannelShape.Binary => AddonChannelValueShape.Binary,
+            ChannelShape.Relative => AddonChannelValueShape.Relative,
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(shape),
             actualValue: shape,
