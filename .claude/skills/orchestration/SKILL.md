@@ -315,6 +315,23 @@ Astra brief states its authority and finish line outright. The owner's own Codex
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
+Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
+on the owner's Google AI Ultra plan; launched as below). Its published results
+put it level with Astra overall (Artificial Analysis Intelligence Index about
+53) and ahead on repository issue fixing (DeepSWE), app and UI generation and
+security remediation (CWE-bench), behind Opus and Astra on long terminal-driven
+and long-horizon work (Terminal-bench, FrontierSWE), with a 1M-token context
+and about twice Astra's output per task; most figures are vendor-reported.
+Route it accordingly:
+
+| Give Argon | Keep from Argon |
+|---|---|
+| Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
+| Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
+| Whole-area analysis that needs a large context | Anything that must push, or run an ask-listed git command headless |
+| Portal, dashboard and other TypeScript/UI work | |
+| Research synthesis | |
+
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
