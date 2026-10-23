@@ -738,12 +738,21 @@ public sealed class SdfSampledLattice {
 
         return points;
     }
-    // Whether a sheet passed between two samples of one sign, `value` and `after`, whose neighbours `before` and `further`
-    // lie a step out on either side, all as magnitudes: the field falls toward the pair from both sides by over half
-    // `reach`, the most it changes over a step there, and the falls, extended, meet within a tenth of `reach` of the
-    // surface. `reach` carries the field's own scale, since a field that is no true distance (a scope, a flare, a
-    // non-uniform scale) changes by less, or more, than a step's length over a step.
-    private static bool PassesBetween(float before, float value, float after, float further, float reach) {
+    /// <summary>Returns whether a sheet passed between two samples of one sign, <paramref name="value"/> and
+    /// <paramref name="after"/>, whose neighbours <paramref name="before"/> and <paramref name="further"/> lie a step out
+    /// on either side, all as magnitudes: the field falls toward the pair from both sides by over half
+    /// <paramref name="reach"/>, the most it changes over a step there, and the falls, extended, meet within a tenth of
+    /// <paramref name="reach"/> of the surface. The bake's box narrowing (<c>SdfMeshPathBake.Refine</c>) keeps such a
+    /// pair in the box.</summary>
+    /// <param name="before">The magnitude of the sample a step before the pair.</param>
+    /// <param name="value">The magnitude of the pair's first sample.</param>
+    /// <param name="after">The magnitude of the pair's second sample.</param>
+    /// <param name="further">The magnitude of the sample a step past the pair.</param>
+    /// <param name="reach">The most the field changes over a step there, in the field's own units: a field that is no
+    /// true distance (a scope, a flare, a non-uniform scale) changes by less, or more, than a step's length over a
+    /// step.</param>
+    /// <returns><see langword="true"/> when the falls meet below the surface between the pair.</returns>
+    public static bool PassesBetween(float before, float value, float after, float further, float reach) {
         var fallA = (before - value);
         var fallB = (further - after);
 
