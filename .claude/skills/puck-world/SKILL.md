@@ -241,7 +241,9 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices
 
 ### An agent's World opens no physical device
 
-The owner's ruling: any World an agent boots passes `--devices none`. Without it
+The owner's ruling: any World an agent boots passes `--devices none`; a World the
+owner asked to play in passes `--devices all` explicitly, and the
+`world-devices` hook refuses a boot that names neither. Without the flag
 a windowed World opens every physical controller (GameInput, XInput, HID pads)
 and keeps reading them while its window is in the background, so the owner's
 pad presses drive the agent's test World (one boot opened the owner's Xbox pad

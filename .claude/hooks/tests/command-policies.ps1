@@ -16,6 +16,8 @@ $cases = @(
     @('world-devices', 'Get-Content .claude/launch.json', $false),
     @('world-devices', 'dotnet build src/Puck.World -nodeReuse:false', $false),
     @('world-devices', 'dotnet exec Puck.World.dll', $true),
+    @('world-devices', 'dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices all', $false),
+    @('world-devices', 'dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices some', $true),
     @('world-devices', 'puck lease gpu --holder test -- dotnet Puck.World.dll', $true),
     @('world-devices', 'echo dotnet Puck.World.dll', $false),
     @('no-node-reuse', 'dotnet build src/Puck.Cli', $true),

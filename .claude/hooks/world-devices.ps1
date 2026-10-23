@@ -26,8 +26,8 @@ foreach ($tokens in Get-PolicyInvocations $policy.Command) {
             if ($tail[$j] -match '^--devices=(.*)$') { $devices += $Matches[1] }
             elseif ($tail[$j] -eq '--devices' -and $j + 1 -lt $tail.Count) { $devices += $tail[$j + 1] }
         }
-        if ($devices.Count -eq 0 -or @($devices | Where-Object { $_ -ne 'none' }).Count) {
-            Deny-PolicyCommand $policy 'Puck.World agent boots require --devices none; physical input belongs to the owner. The owner launch configuration is separate.'
+        if ($devices.Count -eq 0 -or @($devices | Where-Object { $_ -notin @('none', 'all') }).Count -or @($devices | Select-Object -Unique).Count -gt 1) {
+            Deny-PolicyCommand $policy 'Puck.World boots name their devices: --devices none for an agent World (physical input belongs to the owner), or --devices all only for a World the owner asked to play in.'
         }
     }
 }
