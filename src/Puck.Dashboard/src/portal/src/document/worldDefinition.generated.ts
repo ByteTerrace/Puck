@@ -3163,7 +3163,7 @@ export type WorldAddonRow = {
    */
   modulePath: string;
   /**
-   * The content-address integrity pin (sha256-64/{16 hex}). required — a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.
+   * The full content integrity pin (sha256/{64 lowercase hex}). Required — a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.
    */
   hash: string;
   /**
