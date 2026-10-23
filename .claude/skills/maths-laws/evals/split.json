@@ -4,7 +4,7 @@
   "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the 3 cases, on case counts only, before any case had been run. A case added later goes to the side the rule gives its name; no case is placed by hand.",
   "train": [
     "ml02-twin-law-shared-kernel",
-    "ml03-ratchet-classified-nowhere",
+    "ml03-structural-law-completeness",
     "ml04-doc-gap-leg"
   ],
   "test": [

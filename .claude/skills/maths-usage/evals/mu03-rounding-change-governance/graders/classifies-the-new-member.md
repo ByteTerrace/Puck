@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response requires the new public member to be classified in the same change, by a law case that names it or by a precise waiver.
+The response says the new public member must land with its classification (a law case or a precise waiver) in the same change.
