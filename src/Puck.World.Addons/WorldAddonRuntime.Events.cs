@@ -61,7 +61,11 @@ public sealed partial class WorldAddonRuntime {
                 Verdict: AddonVerdict.None,
                 Verb: ((byte)verb),
                 A: edge.A,
-                B: edge.B
+                // A region edge names its region by the manifest's own order: the gate above admitted it only because
+                // the manifest requests it.
+                B: ((edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit)
+                    ? addon.RegionOrdinals[edge.GateA]
+                    : edge.B)
             );
             addon.EventCellsDelivered = ((addon.EventCellsDelivered == ulong.MaxValue)
                 ? ulong.MaxValue

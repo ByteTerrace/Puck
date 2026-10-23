@@ -140,7 +140,7 @@ public static class WorldSourceEdits {
             }
         } else if ((before is JsonArray first) && (after is JsonArray second) && (first.Count == second.Count)) {
             if (WorldDocumentBasis.TryFindRowKey(ambiguity: out _, basis: first, key: out var key, overlay: second) &&
-                first.Where(predicate: (row, index) => !JsonNode.DeepEquals(node1: row![key], node2: second[index]![key])).Any()) {
+                first.Where(predicate: (row, index) => !JsonNode.DeepEquals(node1: WorldDocumentBasis.RowIdentity(key: key, row: row), node2: WorldDocumentBasis.RowIdentity(key: key, row: second[index]))).Any()) {
                 yield return pointer;
                 yield break;
             }
@@ -270,7 +270,7 @@ public static class WorldSourceEdits {
             var prior = -1;
 
             for (var index = 0; (index < before.Count); index++) {
-                if (JsonNode.DeepEquals(node1: before[index]![key], node2: after[next]![key])) { prior = index; break; }
+                if (JsonNode.DeepEquals(node1: WorldDocumentBasis.RowIdentity(key: key, row: before[index]), node2: WorldDocumentBasis.RowIdentity(key: key, row: after[next]))) { prior = index; break; }
             }
             if (prior < 0) { appendFrom = Math.Min(val1: appendFrom, val2: next); continue; }
             if ((prior <= lastMatch) || (appendFrom < next)) { preservesOrder = false; break; }
@@ -328,7 +328,7 @@ public static class WorldSourceEdits {
     }
     private static bool TryRowText(string source, string? sourcePath, WorldCompilation original, JsonObject target, string pointer, JsonArray before, JsonArray after, string key, int index, out string text, out string reason) {
         text = string.Empty;
-        if ((after[index]![key] is JsonValue identity) && identity.TryGetValue<string>(value: out var name) && Puck.State.GeneratedName.IsGenerated(name: name)) {
+        if ((WorldDocumentBasis.RowIdentity(key: key, row: after[index]) is JsonValue identity) && identity.TryGetValue<string>(value: out var name) && Puck.State.GeneratedName.IsGenerated(name: name)) {
             reason = $"row '{name}' has an engine-generated id; rename it to an authored id before saving source, or save a JSON delta with this source as its basis";
             return false;
         }

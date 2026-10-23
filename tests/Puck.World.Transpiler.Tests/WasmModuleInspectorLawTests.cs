@@ -94,7 +94,8 @@ public sealed class WasmModuleInspectorLawTests {
         Assert.Contains(missing.Diagnostics, diagnostic => diagnostic.Code == PuckDiagnosticCodes.AddonHash &&
             diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Message.Contains("was not found", StringComparison.Ordinal));
 
-        foreach (var bytes in new[] { Header, Module(Section(0, [1, (byte)'x', 42])) }) {
+        // WebAssembly text pins its source bytes, the bytes the loader checks before converting them.
+        foreach (var bytes in new[] { Header, Module(Section(0, [1, (byte)'x', 42])), "(module)"u8.ToArray() }) {
             _ = directory.WriteBytes(bytes: bytes, name: "security-content-producer.wasm");
             var compiled = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
                 cancellationToken: TestContext.Current.CancellationToken);

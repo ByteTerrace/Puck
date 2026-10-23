@@ -750,14 +750,16 @@ resolved and folded left to right in list order, then the file's own body last.
 Within either step, authored members override, omitted members inherit, an
 authored `null` clears, `$type`-changed union objects replace wholesale, and
 identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
-both sides—`key` covers a state row's own `cells`) merge by key with
+both sides—`key` covers a state row's own `cells`—or a grant row's
+`grantee`+`capability`+`subject` triple) merge by key with
 `{"…", "$drop": true}` tombstones and a leading `{"$replace": true}` marker for
 wholesale replacement. Between basis and a derived document that relationship is
 a refine (the derived row always wins); between two SIBLING imports it is a
 collision—a same-key row, a same-name object member, or the same list authored
 by both refuses by name UNLESS the importing file's own body also declares that
 same path (the explicit resolution; two imports merely agreeing on an inherited
-value, e.g. through a shared basis, never collides). `WorldDocumentBasis.cs`
+value, e.g. through a shared basis, never collides, and an empty list authors no
+row to collide with). `WorldDocumentBasis.cs`
 owns the merge, the import fold (`TryMergeImports`), and the inverse diff;
 `WorldDefinitionFileSource.cs` resolves the whole basis-and-import graph
 (depth-capped, cycles refused by name, both edge types sharing the one ceiling)

@@ -255,7 +255,8 @@ overriding the layer before it, per the merge rules below).
 Merge rules: objects merge member-wise (recursive), omitted inherits, authored `null` clears, a `$type`-changed
 union object replaces wholesale, and a row list whose rows all carry the settled identity vocabulary (first of
 `id`/`name`/`key`/`index` on every row of BOTH sides — `key` covers a state row's own `cells` and any other list
-keyed the same way) merges BY KEY in basis order — new keys
+keyed the same way — or, for grant rows, the `grantee` + `capability` + `subject` triple taken together, so each
+imported module can author its own grants) merges BY KEY in basis order — new keys
 append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone refuses by name), a leading
 `{"$replace": true}` row replaces wholesale. Any other list replaces wholesale too — notably an overlay's `chords`
 (unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
@@ -273,8 +274,9 @@ import files) UNLESS the importing file's own body ALSO declares that same path 
 the importing file's own body always wins the final override regardless of what the imports disagreed on. Two
 imports agreeing on a value (typically because they share a common ancestor somewhere in their own basis/import
 graphs — a shared basis diamond) never collide; only a genuine disagreement, which can only arise from each side's
-own authored content actually diverging, refuses. See `WorldDocumentBasis.TryMergeImports`'s remarks for the exact
-recursive algorithm.
+own authored content actually diverging, refuses. An empty list an import authors holds no row to collide with, so
+it merges with a sibling's rows rather than refusing (the debug world's `devices.puck` authors `hud { panels [] }`
+beside the addons' panels). See `WorldDocumentBasis.TryMergeImports`'s remarks for the exact recursive algorithm.
 
 The content pin folds every touched file's raw bytes (`ComputeChainContentHash`, length-delimited, derived-first,
 basis chain then each import's own touched bytes in authored order), so editing a template or an imported fragment
