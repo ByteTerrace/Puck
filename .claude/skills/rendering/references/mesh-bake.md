@@ -127,16 +127,23 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   slab between two samples never crosses and is dropped while it still
   collides. Give each storey's floor its own prototype and placement
   (`worlds/debug/hall.puck`), so each is a flat group.
-- **A group of thin strips alone loses strips.** The coarse narrowing
-  (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's finest
-  spacing of the surface, so a 6 cm strip lying between sample rows of a 1.8 m
-  coarse cube is cut out of the box and never bakes, while its neighbour a row
-  lands near survives (`hall.puck`'s light strips, alone in a creation, baked one
-  of four). Keeping samples within half a cell's diagonal keeps every strip but
-  fattens the converged box until the final lattice's samples step over the
-  plates (every hall light group then baked nothing), so the narrowing stands
-  and thin trim joins the large solid it hangs from (`hallStrips` in each slab).
-  The bake caps declared-detail refinement at eight cells per coarse axis.
+- **The coarse narrowing keeps the rows a thin plate lies between.** The
+  narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
+  finest spacing of the surface, beside a sign change, or in a pair of rows a
+  sheet thinner than the spacing passes between
+  (`SdfSampledLattice.SheetsBetween`: the field falls toward the pair from both
+  sides and the falls meet below the surface, measured against the field's own
+  slope), and a final lattice all of one sign refines when that test finds a
+  sheet rather than finishing empty. The pair test is what keeps a 6 cm strip
+  lying between sample rows of a 1.8 m coarse cube in the box while its
+  neighbour a row lands near is kept by the distance test
+  (`SdfMeshPathBakeLawTests`, the plates law: four standalone 48 m strips);
+  keeping samples within half a cell's diagonal instead fattens the converged
+  box until the final lattice steps over the plates and the group bakes
+  nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
+  trim of the solid they hang from, which also keeps a level's lit and dark
+  looks one geometry. The bake caps declared-detail refinement at eight cells
+  per coarse axis.
 - **A body's round sections declare their spacing.** Every pooled instance
   declares detail from its shapes' round sections (`WorldStampPool.BodyDetail`):
   a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle

@@ -725,54 +725,20 @@ public sealed partial class SdfMeshPathBake {
 
         return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
     }
-    // Per sample of a lattice, whether it is one of a pair along an axis the field falls toward from both sides and passes
-    // between (SdfSampledLattice.PassesBetween): a sheet thinner than the spacing that lies between two sample rows, as a
-    // plate under a lattice narrowed to a flat box does. The field's change over a step is measured against its own
-    // steepest step among the four samples, since a bound's field changes by less than a step's length over a step.
-    private static bool[] SheetsBetween(float[] values, (int X, int Y, int Z) dims, Vector3 cell) {
-        var between = new bool[values.Length];
-        ReadOnlySpan<int> counts = [dims.X, dims.Y, dims.Z];
-        ReadOnlySpan<int> strides = [1, dims.X, (dims.X * dims.Y)];
-        ReadOnlySpan<float> spacing = [cell.X, cell.Y, cell.Z];
-
-        for (var axis = 0; (axis < 3); axis++) {
-            var (stride, n, h) = (strides[axis], counts[axis], spacing[axis]);
-
-            if (n < 4) { continue; }
-            for (var start = 0; (start < values.Length); start++) {
-                if (((start / stride) % n) != 0) { continue; }
-                for (var i = 1; ((i + 2) < n); i++) {
-                    var (before, value, after, further) = (values[(start + ((i - 1) * stride))], values[(start + (i * stride))], values[(start + ((i + 1) * stride))], values[(start + ((i + 2) * stride))]);
-                    var inside = (value < 0f);
-
-                    if (((before < 0f) != inside) || ((after < 0f) != inside) || ((further < 0f) != inside)) { continue; }
-
-                    var slope = (MathF.Max(x: MathF.Abs(x: (value - before)), y: MathF.Max(x: MathF.Abs(x: (after - value)), y: MathF.Abs(x: (further - after)))) / h);
-
-                    if (SdfSampledLattice.PassesBetween(after: MathF.Abs(x: after), before: MathF.Abs(x: before), further: MathF.Abs(x: further), reach: (h * slope), value: MathF.Abs(x: value))) {
-                        between[(start + (i * stride))] = true;
-                        between[(start + ((i + 1) * stride))] = true;
-                    }
-                }
-            }
-        }
-
-        return between;
-    }
-    // Whether a sheet passes between any two samples of a lattice (SheetsBetween).
-    private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => Array.IndexOf(array: SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), value: true) >= 0;
+    // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
+    private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => (Array.IndexOf(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), value: true) >= 0);
     // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign, every sample whose
-    // value is within half the lattice's finest spacing of the surface, and every pair of samples along an axis the field
-    // falls toward from both sides and passes between (SdfSampledLattice.PassesBetween: a sheet thinner than the spacing
-    // that lies between two sample rows, as a plate under a lattice narrowed to a flat box, whose long axes are sampled
-    // coarsely, does), widened by one cell along each axis. A group with no such cell has no surface. Once the box stops
-    // shrinking, the group's next lattice is the final one.
+    // value is within half the lattice's finest spacing of the surface, and every pair of samples a sheet thinner than
+    // the spacing passes between (SdfSampledLattice.SheetsBetween: a plate lying between two sample rows of a lattice
+    // narrowed to a flat box, whose long axes are sampled coarsely; kept within half the cell's diagonal instead, the box
+    // stays so fat the final lattice steps over the plate), widened by one cell along each axis. A group with no such
+    // cell has no surface. Once the box stops shrinking, the group's next lattice is the final one.
     private void Refine(Group group, in SdfMeshBakeRequest request, float[] values) {
         var (sx, sy, sz) = request.Dims;
         var near = (0.5f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
         var low = new Vector3(value: float.PositiveInfinity);
         var high = new Vector3(value: float.NegativeInfinity);
-        var between = SheetsBetween(cell: request.Cell, dims: request.Dims, values: values);
+        var between = SdfSampledLattice.SheetsBetween(cell: request.Cell, dims: request.Dims, values: values);
 
         int Index(int x, int y, int z) => (x + (sx * (y + (sy * z))));
 
@@ -930,9 +896,9 @@ public sealed partial class SdfMeshPathBake {
             return;
         }
 
-        // A lattice all of one sign whose field holds no sheet between its samples (SdfSampledLattice.PassesBetween, the
-        // refinement's own test) has no surface; it finishes here, in the frame its last slab lands. One that does refines
-        // below, and its fine samples cross the sheet.
+        // A lattice all of one sign whose field holds no sheet between its samples (SdfSampledLattice.SheetsBetween) has
+        // no surface; it finishes here, in the frame its last slab lands. One that does refines below, and its fine
+        // samples cross the sheet.
         var inside = false;
         var outside = false;
 

@@ -738,21 +738,58 @@ public sealed class SdfSampledLattice {
 
         return points;
     }
-    /// <summary>Returns whether a sheet passed between two samples of one sign, <paramref name="value"/> and
-    /// <paramref name="after"/>, whose neighbours <paramref name="before"/> and <paramref name="further"/> lie a step out
-    /// on either side, all as magnitudes: the field falls toward the pair from both sides by over half
-    /// <paramref name="reach"/>, the most it changes over a step there, and the falls, extended, meet within a tenth of
-    /// <paramref name="reach"/> of the surface. The bake's box narrowing (<c>SdfMeshPathBake.Refine</c>) keeps such a
-    /// pair in the box.</summary>
-    /// <param name="before">The magnitude of the sample a step before the pair.</param>
-    /// <param name="value">The magnitude of the pair's first sample.</param>
-    /// <param name="after">The magnitude of the pair's second sample.</param>
-    /// <param name="further">The magnitude of the sample a step past the pair.</param>
-    /// <param name="reach">The most the field changes over a step there, in the field's own units: a field that is no
-    /// true distance (a scope, a flare, a non-uniform scale) changes by less, or more, than a step's length over a
-    /// step.</param>
-    /// <returns><see langword="true"/> when the falls meet below the surface between the pair.</returns>
-    public static bool PassesBetween(float before, float value, float after, float further, float reach) {
+    /// <summary>Returns, per sample of a lattice, whether it is one of a pair along an axis that a sheet or gap thinner
+    /// than the spacing passes between: the four samples along the line are of one sign, the field falls toward the pair
+    /// from both sides and the falls, extended, meet below the surface between them (as <see cref="Refine"/> tests a
+    /// coarse cell's line). The field's change over a step is measured against its own steepest step among the four,
+    /// since a bound's field changes by less than a step's length over a step. A plate lying between two sample rows of
+    /// a lattice whose long axes are sampled coarsely is found this way where no edge changes sign.</summary>
+    /// <param name="values">The lattice's values, x fastest.</param>
+    /// <param name="dims">The samples along each axis.</param>
+    /// <param name="cell">The spacing along each axis, in world units.</param>
+    /// <returns>One flag per sample, set on both samples of every such pair.</returns>
+    /// <exception cref="ArgumentException"><paramref name="values"/> does not hold <paramref name="dims"/>'s
+    /// samples.</exception>
+    public static bool[] SheetsBetween(ReadOnlySpan<float> values, (int X, int Y, int Z) dims, Vector3 cell) {
+        if (values.Length != ((dims.X * dims.Y) * dims.Z)) {
+            throw new ArgumentException(message: $"The lattice holds {values.Length} values for {dims.X}×{dims.Y}×{dims.Z} samples.", paramName: nameof(values));
+        }
+
+        var between = new bool[values.Length];
+        ReadOnlySpan<int> counts = [dims.X, dims.Y, dims.Z];
+        ReadOnlySpan<int> strides = [1, dims.X, (dims.X * dims.Y)];
+        ReadOnlySpan<float> spacing = [cell.X, cell.Y, cell.Z];
+
+        for (var axis = 0; (axis < 3); axis++) {
+            var (stride, n, h) = (strides[axis], counts[axis], spacing[axis]);
+
+            if (n < 4) { continue; }
+            for (var start = 0; (start < values.Length); start++) {
+                if (((start / stride) % n) != 0) { continue; }
+                for (var i = 1; ((i + 2) < n); i++) {
+                    var (before, value, after, further) = (values[(start + ((i - 1) * stride))], values[(start + (i * stride))], values[(start + ((i + 1) * stride))], values[(start + ((i + 2) * stride))]);
+                    var inside = (value < 0f);
+
+                    if (((before < 0f) != inside) || ((after < 0f) != inside) || ((further < 0f) != inside)) { continue; }
+
+                    var slope = (MathF.Max(x: MathF.Abs(x: (value - before)), y: MathF.Max(x: MathF.Abs(x: (after - value)), y: MathF.Abs(x: (further - after)))) / h);
+
+                    if (PassesBetween(after: MathF.Abs(x: after), before: MathF.Abs(x: before), further: MathF.Abs(x: further), reach: (h * slope), value: MathF.Abs(x: value))) {
+                        between[(start + (i * stride))] = true;
+                        between[(start + ((i + 1) * stride))] = true;
+                    }
+                }
+            }
+        }
+
+        return between;
+    }
+    // Whether a sheet passed between two samples of one sign, `value` and `after`, whose neighbours `before` and `further`
+    // lie a step out on either side, all as magnitudes: the field falls toward the pair from both sides by over half
+    // `reach`, the most it changes over a step there, and the falls, extended, meet within a tenth of `reach` of the
+    // surface. `reach` carries the field's own scale, since a field that is no true distance (a scope, a flare, a
+    // non-uniform scale) changes by less, or more, than a step's length over a step.
+    private static bool PassesBetween(float before, float value, float after, float further, float reach) {
         var fallA = (before - value);
         var fallB = (further - after);
 
