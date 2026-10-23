@@ -266,19 +266,12 @@ Route each brief to the cheapest role that fits it (the owner's ruling): a
 brief with a known cause or a specified result, such as content, a document
 change, a world edit or a fix with a repro, goes to `implementer`, even when it
 is large. `specialist` is for an unknown cause or a design call across projects.
-`principal` (Fable) is used very sparingly, only when absolutely needed (the
-owner's ruling). The problems the table names go to Astra first, and to
-`principal` only after Astra and `specialist` have failed on the lane, or when
-the owner asks for it. When a lane on a cheaper role stalls, escalate that lane;
-never start on the expensive role because a brief is long. Codex and
-Antigravity are part of the same lineup, and both get work in every working
-session (the owner's ruling):
-- Sol is a peer of `implementer` and takes the same briefs.
-- Astra takes what `principal` would.
-- Argon takes review, audit, security and research lanes.
-
-Spread implementer briefs across `implementer` and Sol, so both families' slots
-stay busy. Concept art and
+`principal` is for the problems the table names and nothing else. When a lane on
+a cheaper role stalls, escalate that lane; never start on the expensive role
+because a brief is long. Codex is part of the same lineup: Sol is a peer of
+`implementer` and takes the same briefs, and Astra is comparable to `principal`
+and takes only what `principal` would. Spread implementer briefs across
+`implementer` and Sol, so both families' slots stay busy. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
 verdicts decide which to keep, and a Claude partner writes the brief and
