@@ -307,6 +307,12 @@ public sealed class SdfMeshIrradiance {
                     continue;
                 }
 
+                var probePoint = (new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing);
+                var toward = (probePoint - position);
+                var distance = toward.Length();
+
+                if ((distance > 1.0e-3f) && (m_scene is { } scene) && !scene.Unblocked(direction: (toward / distance), maximum: distance, origin: position)) { continue; }
+
                 var weight = ((((offset.X > 0f) ? fraction.X : (1f - fraction.X)) * ((offset.Y > 0f) ? fraction.Y : (1f - fraction.Y))) * ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z)));
 
                 if (weight <= 0f) {
@@ -636,8 +642,6 @@ public sealed class SdfMeshIrradiance {
         Span<float> total = stackalloc float[6];
         Span<float> sky = stackalloc float[6];
         Span<Vector3> radiance = stackalloc Vector3[6];
-        Span<float> depth = stackalloc float[6];
-        Span<int> depthRays = stackalloc int[6];
         var backFaces = 0;
 
         for (var ray = 0; (ray < layout.Rays); ray++) {
@@ -661,10 +665,6 @@ public sealed class SdfMeshIrradiance {
                 total[axis] += weight;
                 if (open) { sky[axis] += weight; }
                 radiance[axis] += (light * weight);
-                if (weight >= SdfMeshIrradianceProbe.DepthCone) {
-                    depth[axis] += ((hit ? distance : lighting.Reach) * weight);
-                    depthRays[axis]++;
-                }
             }
         }
 
@@ -678,13 +678,11 @@ public sealed class SdfMeshIrradiance {
             Sweeps: (sweep + 1)
         );
 
-        // Each axis's depth is the farther of the cone's mean travel along the axis and the axis ray's own: a slab across
-        // the axis answers its exact distance either way, a wall beside the probe that cuts the cone short leaves the
-        // axis ray's, and a small object on the axis leaves the cone's.
+        // Visibility stores the first blocker. An open ray beside a wall cannot extend its blocking depth.
         for (var axis = 0; (axis < 6); axis++) {
             var along = (scene.Intersect(origin: origin, direction: Axes[axis], maximum: lighting.Reach, distance: out var axisDistance, material: out _, normal: out _) ? axisDistance : lighting.Reach);
 
-            probe.Depth[axis] = MathF.Max(x: along, y: ((depthRays[axis] > 0) ? (depth[axis] / depthRays[axis]) : lighting.Reach));
+            probe.Depth[axis] = along;
             if (total[axis] <= 0f) { continue; }
             probe.Sky[axis] = (sky[axis] / total[axis]);
             probe.Radiance[axis] = (radiance[axis] / total[axis]);
@@ -764,13 +762,16 @@ public sealed class SdfMeshIrradiance {
     }
     // The light a surface receives from the cached probes about it, as the views pass reads the volume
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the eight probes about the point pushed along its normal,
-    // only those inside the window (the volume the views pass holds), each weighted trilinearly, by how far it lies in
-    // front of the surface and by whether the pushed point lies within its depth; the sky visibility and the reflected
-    // light fade to the open sky and to none across the window's last cell, and the open sky answers where no probe
-    // is traced. It reads each probe's own cubes, which the filtered volume averages over its neighbours.
+    // clamped to the window's boundary, each weighted trilinearly, by how far it lies in front of the surface and by
+    // whether the actual pushed point lies within its depth. No answering probe means no measured incoming light.
+    // It reads each probe's own cubes, which the filtered volume averages over its neighbours.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
         var pushed = (point + (normal * (SdfMeshIrradianceProbe.NormalBias * layout.Spacing)));
-        var sample = ((pushed / layout.Spacing) - new Vector3(value: 0.5f));
+        var sample = Vector3.Clamp(
+            value1: ((pushed / layout.Spacing) - new Vector3(value: 0.5f)),
+            min: new Vector3(x: low.X, y: low.Y, z: low.Z),
+            max: new Vector3(x: (low.X + layout.Dims.X - 1), y: (low.Y + layout.Dims.Y - 1), z: (low.Z + layout.Dims.Z - 1))
+        );
         var floor = new Vector3(x: MathF.Floor(sample.X), y: MathF.Floor(sample.Y), z: MathF.Floor(sample.Z));
         var fraction = (sample - floor);
         var squared = (normal * normal);
@@ -780,7 +781,6 @@ public sealed class SdfMeshIrradiance {
         Span<uint> cornerNeighbours = stackalloc uint[8];
         var cornerProbes = new Corners();
         var anyFront = false;
-        var held = false;
 
         for (var corner = 0; (corner < 8); corner++) {
             var offset = new Vector3(x: (corner & 1), y: ((corner >> 1) & 1), z: ((corner >> 2) & 1));
@@ -806,7 +806,6 @@ public sealed class SdfMeshIrradiance {
             var facing = ((length > 0f) ? ((Vector3.Dot(vector1: (toward / length), vector2: normal) + 1f) * 0.5f) : 1f);
             var weight = ((((weights.X * weights.Y) * weights.Z) * ((facing * facing) + 0.2f)) * DepthVisibility(probe: probe, toward: (pushed - probePoint)));
 
-            held = true;
             if (weight <= 0f) { continue; }
 
             cornerProbes[corner] = probe;
@@ -835,21 +834,11 @@ public sealed class SdfMeshIrradiance {
             total += cornerWeights[corner];
         }
 
-        var inside = Vector3.Min(
-            value1: (sample - new Vector3(x: low.X, y: low.Y, z: low.Z)),
-            value2: (new Vector3(x: ((low.X + layout.Dims.X) - 1), y: ((low.Y + layout.Dims.Y) - 1), z: ((low.Z + layout.Dims.Z) - 1)) - sample)
-        );
-        var fade = float.Clamp(max: 1f, min: 0f, value: MathF.Min(x: inside.X, y: MathF.Min(x: inside.Y, y: inside.Z)));
-
-        // Probes about the point that all stand across a wall or slab from it say nothing about it but that it is
-        // enclosed: it takes no indirect light rather than the open sky.
         if (total <= 0f) {
-            return (held ? (skyIrradiance * (1f - fade)) : skyIrradiance);
+            return Vector3.Zero;
         }
 
-        var visibility = (1f + (fade * ((sky / total) - 1f)));
-
-        return ((skyIrradiance * visibility) + ((bounce / total) * fade));
+        return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
     // Scales each of the eight corner probes' weights (zero for one that does not answer) by how much of the other
     // answering probes' weight it sees and is seen by across the lattice (their neighbour bits), faded in from MutualLow

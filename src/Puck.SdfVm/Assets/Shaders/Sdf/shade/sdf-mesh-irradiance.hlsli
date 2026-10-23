@@ -45,7 +45,7 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 }
 
 // The eight probes about a surface point, gathered once a pixel: each corner's slot address (SdfMeshProbeNone where the
-// probe takes no part) and weight, whether it lies in front of the surface, and the fade across the volume's last cell.
+// probe takes no part) and weight, and whether it lies in front of the surface.
 // A corner's weight is its trilinear share times how far it lies in front of the surface times whether the pushed
 // point lies within the probe's depth along each axis (sdfMeshProbeDepthVisibility), times the share of the other
 // answering probes it sees (sdfMeshProbeMutualShares); a probe of another cell, an unwritten one or one inside geometry
@@ -76,10 +76,6 @@ struct SdfMeshProbes {
     bool front[8];
     // Whether any probe lies in front; when none does, the probes behind answer.
     bool anyFront;
-    // Whether any traced probe stands about the point, answering or not: when every one stands across a wall or slab
-    // from it, the point is enclosed and takes no indirect light, rather than the open sky no traced probe means.
-    bool held;
-    float fade;
 };
 
 // Whether a gathered probe answers: one in front of the surface, or one behind it when none lies in front.
@@ -149,8 +145,6 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     sdfMeshIrradiance.GetDimensions(count, stride);
 
     probes.anyFront = false;
-    probes.held = false;
-    probes.fade = 0.0;
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
@@ -161,13 +155,12 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     }
 
     float3 pushed = (position + (normal * (SDF_MESH_IRRADIANCE_NORMAL_BIAS * spacing)));
-    float3 lattice = ((pushed / spacing) - 0.5);
+    // Extend the boundary probes only as far as their visibility permits. The true receiver position, never the
+    // clamped lookup, is tested against their blocking depths, so leaving the window cannot invent open sky.
+    float3 lattice = clamp(((pushed / spacing) - 0.5), (float3)low, (float3)(low + dims - 1));
     float3 base = floor(lattice);
     float3 fraction = (lattice - base);
     int3 first = int3(base);
-    float3 inside = min((lattice - (float3)low), ((float3)(low + dims - 1) - lattice));
-
-    probes.fade = saturate(min(inside.x, min(inside.y, inside.z)));
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
         int3 cell = (first + offset);
@@ -189,7 +182,6 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         float facing = ((distance > 0.0) ? ((dot((toward / distance), normal) + 1.0) * 0.5) : 1.0);
         float weight = (((axes.x * axes.y * axes.z) * ((facing * facing) + 0.2)) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
-        probes.held = true;
         if (weight <= 0.0) {
             continue;
         }
@@ -207,15 +199,14 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     return probes;
 }
 // The sky visibility and reflected radiance the gathered probes hold, seen along `direction` (the normal for the light a
-// surface receives, the mirror direction for the light it reflects). Fades to the open sky and no reflected light across
-// the last cell of the volume, and answers that where no probe is traced; where traced probes stand about the point but
-// none answers, every one across a wall or slab from it, the point is enclosed and sees no sky.
+// surface receives, the mirror direction for the light it reflects). A point with no answering probe has no measured
+// incoming light. The boundary gather extrapolates only the light its probes' blocking depths permit.
 void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance) {
     float sky = 0.0;
     float3 reflected = 0.0;
     float total = 0.0;
 
-    skyVisibility = 1.0;
+    skyVisibility = 0.0;
     radiance = 0.0;
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         if (!sdfMeshProbeAnswers(probes, corner)) {
@@ -230,16 +221,14 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
         total += probes.weight[corner];
     }
     if (total <= 0.0) {
-        skyVisibility = (probes.held ? (1.0 - probes.fade) : 1.0);
         return;
     }
 
-    skyVisibility = lerp(1.0, (sky / total), probes.fade);
-    radiance = ((reflected / total) * probes.fade);
+    skyVisibility = (sky / total);
+    radiance = (reflected / total);
 }
 // The visibility of a light of the lights table at the surface: the share of the gathered probes whose centre sees it,
-// so a fixture lights nothing through the wall or slab between them; one where no probe takes part, and fading to one
-// across the volume's last cell.
+// so a fixture lights nothing through the wall or slab between them; one where no probe takes part.
 float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     uint word = (SDF_MESH_IRRADIANCE_LIGHTS_WORD + (lightIndex >> 5u));
     uint bit = (1u << (lightIndex & 31u));
@@ -262,7 +251,7 @@ float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
         return 1.0;
     }
 
-    return lerp(1.0, (visible / total), probes.fade);
+    return (visible / total);
 }
 // The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance about
 // the normal): the live sky's irradiance over pi under the volume's sky visibility, when the sky source is

@@ -875,8 +875,15 @@ distance to a wall or slab across the axis, and a point a few centimetres past
 it takes nothing from the probe, because a point where a wall meets a floor
 lies level with the floor's surface, only the floor's thickness from a probe
 under it. A point every probe about it stands across a wall or slab from is
-enclosed and takes no indirect light; only a point no probe has traced takes
-the open sky. A probe also gives way to the other probes about a point in
+enclosed and takes no indirect light. An untraced point has no measured
+indirect light either: missing coverage says nothing about sky visibility.
+Outside the camera's window the lookup clamps to boundary probes, while their
+depth tests use the actual receiver position. This extends their light only
+as far as their visibility supports, without a transition to unoccluded sky.
+Each depth keeps its axis ray's first blocker; open rays beside it never
+extend that limit. The CPU exposure meter traces visibility from the camera
+to each probe so a thin partition cannot import another room's meter reading.
+A probe also gives way to the other probes about a point in
 proportion to how few of them it sees, by the neighbour sight lines the trace
 already casts for the filter, so a probe outside a wall whose axis looks in
 through a window lights nothing inside. Each probe's cubes are averaged with the

@@ -29,13 +29,9 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The words holding the light visibility bits: one bit a record of the lights table.</summary>
     public const int LightWords = 4;
     /// <summary>The first of the three words holding the depth cube: how far, in metres, the probe sees along each axis
-    /// before geometry, the farther of the ray cast along the axis and the mean distance along the axis that its rays
-    /// within <see cref="DepthCone"/> of it travel, an open ray counting the trace's reach, as six halves in the cube's
-    /// axis order. A slab or wall across the axis answers its exact distance.</summary>
+    /// before the first geometry on that axis, an open ray counting the trace's reach, as six halves in the cube's
+    /// axis order. Rays beside the axis cannot extend its blocking depth.</summary>
     public const int DepthWord = 17;
-    /// <summary>The cosine of the half angle of the cone about each axis whose rays the depth cube averages: 35
-    /// degrees.</summary>
-    public const float DepthCone = 0.81915204f;
     /// <summary>The distance, in metres, over which a probe's weight at a point fades to nothing as the point's distance
     /// along an axis passes the probe's depth there: a probe across a wall or slab lights nothing beyond it. It is
     /// thinner than the thinnest floor, so a probe under a floor finish lights nothing on the wall standing on

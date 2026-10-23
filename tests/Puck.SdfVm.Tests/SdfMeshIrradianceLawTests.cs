@@ -175,5 +175,21 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _));
         Assert.True(condition: (lit > 0f));
         Assert.True(condition: (dark < (0.01f * lit)));
+
+        // The camera can approach the slab without reading the lit probes beyond it.
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _));
+        Assert.True(condition: (nearSlab < (0.01f * lit)));
+    }
+
+    [Fact]
+    public void AnOpeningBesideAnAxisDoesNotEraseItsFirstBlocker() {
+        var frame = Frame() with {
+            IndirectBounces = 0,
+            MeshDraws = [Draw(mesh: Box(low: new Vector3(x: 1f, y: 0.4f, z: 0.4f), high: new Vector3(x: 1.1f, y: 0.6f, z: 0.6f)))],
+        };
+        var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
+        var probe = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
+
+        Assert.InRange(actual: Half(high: false, word: probe[SdfMeshIrradianceProbe.DepthWord]), low: 0.499f, high: 0.501f);
     }
 }
