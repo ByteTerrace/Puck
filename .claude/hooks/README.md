@@ -39,8 +39,10 @@ Only the Claude lead is ever asked; a Codex or Antigravity reply is deny or
 nothing. Codex runs a hook only once its definition is trusted through `/hooks`,
 and a changed definition is reviewed again. While `.claude/settings.json` still
 registers `world-devices.ps1`, `no-node-reuse.ps1` and `no-coauthor.ps1` one by
-one, each of those is a wrapper that runs its one policy through the dispatcher;
-they go once the settings register `agent-policy.ps1`. See the
+one, each of those is a wrapper that runs its one policy through the dispatcher,
+naming the tool from the payload's shape. Codex runs the definition the owner
+trusted, which also names those three, until the new one is trusted; the
+wrappers go once neither registration names them. See the
 [Codex hook contract](https://learn.chatgpt.com/docs/hooks); Antigravity's
 bundled `agy-customizations/docs/hooks.md` owns its contract.
 
